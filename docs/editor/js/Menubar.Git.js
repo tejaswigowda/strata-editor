@@ -344,7 +344,8 @@ class GitLoadDialog {
 				const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
 				const file = await ghGet( apiPath, cfg.pat );
 				const json = JSON.parse( atob( file.content.replace( /\n/g, '' ) ) );
-				editor.fromJSON( json );
+				editor.clear();
+				await editor.fromJSON( json );
 				status.textContent = strings.getKey( 'menubar/git/load/success' );
 				setTimeout( () => this.close(), 800 );
 
