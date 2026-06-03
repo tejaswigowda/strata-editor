@@ -6,12 +6,12 @@ import { SetRotationCommand } from './commands/SetRotationCommand.js';
 import { SetScaleCommand } from './commands/SetScaleCommand.js';
 import { SetMaterialColorCommand } from './commands/SetMaterialColorCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
-import { AI_MODELS, SYSTEM_PROMPT } from './AIPrompt.js';
-import { extractCode, buildMessages } from './AIUtils.js';
+import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT } from './AIPrompt.js';
+import { extractCode, buildMessages, buildQAMessages, sceneContextString } from './AIUtils.js';
 import { AIEngine, getModelList } from './AIEngine.js';
 import { objectToJS, sceneToJS } from './scene/codegen.js';
 import { sceneEqual } from './scene/sceneEqual.js';
-import { summarizeScene as summarizeSceneFull } from './scene/summarize.js';
+import { summarizeScene as summarizeSceneFull, getSize, getTopY, getWorldCenter } from './scene/summarize.js';
 import { booleanUnion, booleanSubtract, booleanIntersect } from './mesh/ops/boolean.js';
 import { mirrorMesh } from './mesh/ops/mirror.js';
 import { arrayDuplicate } from './mesh/ops/array.js';
@@ -376,7 +376,72 @@ function Shell( editor ) {
 				subdivide:        ( mesh, iterations )                    => subdivide( editor, mesh, iterations ),
 
 				// Diagnostic: print the registered op schema
-				listOps:          () => opsSchema(),
+				listOps: () => opsSchema(),
+
+				// ── Spatial helpers ───────────────────────────────────────────────────
+				// These are the correct way to reason about world-space dimensions;
+				// reading raw geometry params ignores scale transforms.
+
+				// {x,y,z} world-space bounding box size of any Object3D
+				getSize: ( obj ) => getSize( obj ),
+
+				// Y coordinate of the top face in world space — use for "place on top of"
+				getTopY: ( obj ) => getTopY( obj ),
+
+				// World-space center point of an Object3D's bounding box
+				getCenter: ( obj ) => getWorldCenter( obj ),
+
+				// Move `child` so it rests on top of `target` (no overlap)
+				placeOnTop: function ( child, target ) {
+
+					if ( ! child || ! target ) throw new Error( 'placeOnTop: two Object3D args required' );
+					const halfH   = getSize( child ).y / 2;
+					const topY    = getTopY( target );
+					child.position.y = topY + halfH;
+
+				},
+
+				// ── Scene Q&A ─────────────────────────────────────────────────────────
+				// askScene(question) — ask the AI a natural-language question about the
+				// scene. Answer streams into the shell as text; nothing is executed.
+				askScene: function ( question ) {
+
+					if ( ! aiEngine.ready ) {
+
+						appendOutput( 'AI not loaded — click "Load AI" first.', 'error' );
+						return;
+
+					}
+
+					const messages = buildQAMessages( SCENE_QA_PROMPT, editor, String( question ) );
+					appendOutput( '? ' + question, 'ai-prompt' );
+
+					const streamDiv = document.createElement( 'div' );
+					streamDiv.className = 'shell-line shell-ai-stream';
+					output.appendChild( streamDiv );
+
+					aiEngine.stream( messages, {
+						maxTokens: 300,
+						temperature: 0.2,
+						onToken: ( _delta, full ) => {
+
+							streamDiv.textContent = full + ' ▌';
+							output.scrollTop = output.scrollHeight;
+
+						},
+					} ).then( answer => {
+
+						streamDiv.remove();
+						appendOutput( answer, 'result' );
+
+					} ).catch( err => {
+
+						streamDiv.remove();
+						appendOutput( 'Q&A error: ' + err.message, 'error' );
+
+					} );
+
+				},
 			};
 
 			// Build a named-parameter function so every scope var is a local;
@@ -406,8 +471,8 @@ function Shell( editor ) {
 
 	// ── AI execution — calls execute() directly (identical binding) ───────────
 
-	// Stream AI tokens into a live output div, remove when done, return extracted code.
-	async function streamToOutput( messages ) {
+	// Stream AI tokens into a live output div. Returns raw full text.
+	async function streamRaw( messages ) {
 
 		const streamDiv = document.createElement( 'div' );
 		streamDiv.className = 'shell-line shell-ai-stream';
@@ -421,7 +486,14 @@ function Shell( editor ) {
 		} );
 
 		streamDiv.remove();
-		return extractCode( fullText );
+		return fullText;
+
+	}
+
+	// Stream and extract code block (for code-gen path).
+	async function streamToOutput( messages ) {
+
+		return extractCode( await streamRaw( messages ) );
 
 	}
 
@@ -434,28 +506,43 @@ function Shell( editor ) {
 
 		}
 
-		appendOutput( '(AI) ' + userPrompt, 'ai-prompt' );
+		const isQA = userPrompt.startsWith( '?' );
+		const question = isQA ? userPrompt.slice( 1 ).trim() : userPrompt;
+
+		appendOutput( ( isQA ? '? ' : '(AI) ' ) + question, 'ai-prompt' );
 		aiStatus.textContent = 'thinking…';
 		aiInput.disabled = true;
 
 		try {
 
-			const messages = buildMessages( SYSTEM_PROMPT, editor, userPrompt );
-			const code     = await streamToOutput( messages );
-			const result   = execute( code );
+			if ( isQA ) {
 
-			if ( ! result.ok ) {
+				// Q&A mode — stream plain-text answer, do not execute
+				const messages = buildQAMessages( SCENE_QA_PROMPT, editor, question );
+				const answer   = await streamRaw( messages );
+				appendOutput( answer, 'result' );
 
-				appendOutput( '⟳ error — retrying with context…', 'info' );
+			} else {
 
-				const retryMessages = [
-					...messages,
-					{ role: 'assistant', content: code },
-					{ role: 'user', content: 'That threw: ' + result.error + '\n\nFix the code. Output corrected JavaScript only.' },
-				];
+				// Code-gen mode — normal path
+				const messages = buildMessages( SYSTEM_PROMPT, editor, question );
+				const code     = await streamToOutput( messages );
+				const result   = execute( code );
 
-				const retryCode = await streamToOutput( retryMessages );
-				execute( retryCode );
+				if ( ! result.ok ) {
+
+					appendOutput( '⟳ error — retrying with context…', 'info' );
+
+					const retryMessages = [
+						...messages,
+						{ role: 'assistant', content: code },
+						{ role: 'user', content: 'That threw: ' + result.error + '\n\nFix the code. Output corrected JavaScript only.' },
+					];
+
+					const retryCode = await streamToOutput( retryMessages );
+					execute( retryCode );
+
+				}
 
 			}
 
@@ -644,6 +731,8 @@ function Shell( editor ) {
 
 	appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand  SetMaterialColorCommand  SetValueCommand', 'info' );
 	appendOutput( 'scene lookup: findObject(name)  findAll(name)  findOfType(type)  findNear(mesh,radius)  summarize()', 'info' );
+	appendOutput( 'spatial: getSize(obj)  getTopY(obj)  getCenter(obj)  placeOnTop(child,target)', 'info' );
+	appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
 	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
 	appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)  — type listOps() for schema', 'info' );
 

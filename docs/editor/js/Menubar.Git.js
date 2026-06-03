@@ -12,30 +12,95 @@ import { sceneContextString } from './scene/summarize.js';
 // Returns a plain string — no code, no markdown.
 
 const COMMIT_MSG_SYSTEM = `You write git commit messages for 3D scene files. Rules:
-- Output ONLY the commit message — a single line, no quotes, no trailing period.
-- Imperative mood ("Add red box", "Remove ground plane", "Arrange 5 columns").
+- Output ONLY the message — a single line, no quotes, no trailing period.
+- Imperative mood: "Add red box", "Remove sphere", "Reposition tree group".
 - Max 72 characters.
-- Be specific: mention the notable objects, colors, or arrangements in the scene.
-- If the scene is empty, say "Initialize empty scene".`;
+- When a diff is provided, base the message on the CHANGES, not the full scene.
+- When no diff is provided, summarise the scene contents briefly.
+- If the scene is empty, write "Initialize empty scene".`;
+
+const LS_LAST_CTX_KEY = 'git-last-scene-ctx';
+
+// ── Scene diff ────────────────────────────────────────────────────────────────
+// Parses the JS-comment context lines and returns a compact change summary.
+
+function diffContextStrings( oldCtx, newCtx ) {
+
+	function parseNames( ctx ) {
+
+		// Each object line looks like:  // [selected] "Name" Mesh ...
+		// or                            // "Name" Group ...
+		const map = new Map();
+
+		ctx.split( '\n' ).forEach( line => {
+
+			if ( ! line.startsWith( '// ' ) ) return;
+			if ( line.includes( 'Camera at(' ) ) return;
+
+			// Remove [selected] marker before comparing so selection state is ignored
+			const normalised = line.replace( '\[selected\] ', '' );
+			const m = normalised.match( /^\/\/ "([^"]+)"/ );
+			if ( m ) map.set( m[ 1 ], normalised );
+
+		} );
+
+		return map;
+
+	}
+
+	const before = parseNames( oldCtx );
+	const after  = parseNames( newCtx );
+
+	const added    = [ ...after.keys() ].filter( k => ! before.has( k ) );
+	const removed  = [ ...before.keys() ].filter( k => ! after.has( k ) );
+	const modified = [ ...after.keys() ].filter( k => before.has( k ) && before.get( k ) !== after.get( k ) );
+
+	const parts = [];
+	if ( added.length )    parts.push( 'Added: '    + added.map( n => `"${ n }"` ).join( ', ' ) );
+	if ( removed.length )  parts.push( 'Removed: '  + removed.map( n => `"${ n }"` ).join( ', ' ) );
+	if ( modified.length ) parts.push( 'Modified: ' + modified.map( n => `"${ n }"` ).join( ', ' ) );
+
+	return parts.length ? parts.join( '\n' ) : null;
+
+}
+
+// ── Message generation ────────────────────────────────────────────────────────
 
 async function generateCommitMessage( editor ) {
 
 	const ai = editor.aiEngine;
 	if ( ! ai || ! ai.ready ) return null;
 
-	const sceneCtx = sceneContextString( editor );
+	const currentCtx = sceneContextString( editor );
+	const lastCtx    = localStorage.getItem( LS_LAST_CTX_KEY );
+	const diff       = lastCtx ? diffContextStrings( lastCtx, currentCtx ) : null;
+
+	let userContent;
+
+	if ( diff ) {
+
+		userContent = 'Changes since last commit:\n' + diff
+			+ '\n\nCurrent scene:\n' + currentCtx
+			+ '\n\nCommit message:';
+
+	} else {
+
+		userContent = 'Scene (first commit):\n' + currentCtx + '\n\nCommit message:';
+
+	}
 
 	const messages = [
 		{ role: 'system', content: COMMIT_MSG_SYSTEM },
-		{ role: 'user',   content: 'Scene:\n' + sceneCtx + '\n\nCommit message:' },
+		{ role: 'user',   content: userContent },
 	];
 
 	const raw = await ai.complete( messages, { maxTokens: 80, temperature: 0.3 } );
 
-	// Strip any accidental quotes, backticks, or leading "commit:" prefixes the model may emit
 	return raw.trim()
 		.replace( /^["'`]+|["'`]+$/g, '' )
 		.replace( /^\s*commit[:\s]+/i, '' )
+		.replace( /^(message|msg)[:\s]+/i, '' )
+		.split( '\n' )[ 0 ]      // first line only
 		.slice( 0, 72 )
 		.trim();
 
@@ -346,6 +411,10 @@ class GitLoadDialog {
 				const json = JSON.parse( atob( file.content.replace( /\n/g, '' ) ) );
 				editor.clear();
 				await editor.fromJSON( json );
+
+				// Establish baseline so the first commit after load diffs correctly
+				localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+
 				status.textContent = strings.getKey( 'menubar/git/load/success' );
 				setTimeout( () => this.close(), 800 );
 
@@ -522,6 +591,10 @@ class GitCommitDialog {
 				if ( sha ) payload.sha = sha;
 
 				await ghPut( apiPath, payload, cfg.pat );
+
+				// Snapshot current context so the next commit can diff against it
+				localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+
 				status.textContent = strings.getKey( 'menubar/git/commit/success' );
 				setTimeout( () => this.close(), 800 );
 

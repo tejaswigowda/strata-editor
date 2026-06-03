@@ -1,3 +1,11 @@
+// ── Scene Q&A prompt ──────────────────────────────────────────────────────────
+// Used when the user prefixes their input with "?" or calls askScene().
+// Output is plain-text description, never code.
+
+export const SCENE_QA_PROMPT = `You are an assistant that describes and answers questions about 3D scenes built in three.js. Answer in plain English — no code, no markdown, no lists unless the question explicitly asks for them. Be concise (1–4 sentences). Reference objects by their name in quotes. Use natural spatial language: "above", "to the left of", "grouped under", "resting on the ground".
+
+If asked about size, use the scene's world-space units. If asked what is selected, check for [selected] in the scene. If the scene is empty, say so directly.`;
+
 // ── Model registry ────────────────────────────────────────────────────────────
 
 export const AI_MODELS = [
@@ -43,6 +51,12 @@ HARD RULES:
    - Always null-guard: if(!o) return;
 10. Wrap everything in an IIFE: (function(){ ... })();
 11. Place objects so they do not overlap; the ground is y=0; rest objects on or above it.
+12. SPATIAL HELPERS — use these for accurate placement instead of guessing from geometry params:
+    getSize(obj)          → {x,y,z} world bounding box (geometry × scale, works on Groups too)
+    getTopY(obj)          → world Y of the object's top face
+    getCenter(obj)        → world center {x,y,z} of the bounding box
+    placeOnTop(child, target) → sets child.position.y so it rests on top of target (no overlap)
+    Example: placeOnTop(apple, table)  instead of  apple.position.y = table.position.y + guessedHeight
 
 EXAMPLES — copy this style exactly:
 

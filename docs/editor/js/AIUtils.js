@@ -3,6 +3,8 @@
 
 import { summarizeScene as _summarizeScene, sceneContextString } from './scene/summarize.js';
 
+export { sceneContextString };
+
 export function summarizeScene( editor ) {
 
 	return _summarizeScene( editor );
@@ -28,6 +30,19 @@ export function extractCode( text ) {
 // if the JS string exceeds the token budget.
 
 const CTX_CHAR_LIMIT = 1800; // ~450 tokens for a 1.5B model
+
+// ── Q&A message builder ───────────────────────────────────────────────────────
+// Used for plain-text scene interrogation (no code generation).
+
+export function buildQAMessages( qaSystemPrompt, editor, question ) {
+
+	const ctx = sceneContextString( editor );
+	return [
+		{ role: 'system', content: qaSystemPrompt },
+		{ role: 'user',   content: 'Scene:\n' + ctx + '\n\nQuestion: ' + question },
+	];
+
+}
 
 export function buildMessages( systemPrompt, editor, userPrompt ) {
 

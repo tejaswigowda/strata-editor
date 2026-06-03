@@ -1,4 +1,4 @@
-// ── summarize.js ──────────────────────────────────────────────────────────────
+// ── summarize.js + spatial helpers ───────────────────────────────────────────
 // Two representations of the live scene for AI context injection:
 //
 //   summarizeScene(editor)     — structured object (backward-compat, used by tests)
@@ -28,7 +28,67 @@ function colorHex( color ) {
 
 }
 
-// Key shape params only — omit segment counts (noise for small models)
+// ── World-space size helpers ──────────────────────────────────────────────────
+
+/**
+ * World-space bounding box size of any Object3D (handles Groups too).
+ * Uses THREE.Box3 for accuracy. Returns null if the object has no geometry.
+ */
+function worldSize( obj ) {
+
+	const THREE = window.THREE;
+	if ( ! THREE ) return null;
+
+	const box = new THREE.Box3().setFromObject( obj );
+	if ( box.isEmpty() ) return null;
+
+	const size = new THREE.Vector3();
+	box.getSize( size );
+	return size;
+
+}
+
+/**
+ * World-space Y coordinate of the top face of an Object3D's bounding box.
+ * Useful for "place on top of" operations.
+ */
+export function getTopY( obj ) {
+
+	const THREE = window.THREE;
+	if ( ! THREE ) return obj.position.y;
+
+	const box = new THREE.Box3().setFromObject( obj );
+	return box.isEmpty() ? obj.position.y : box.max.y;
+
+}
+
+/**
+ * World-space center of an Object3D's bounding box.
+ */
+export function getWorldCenter( obj ) {
+
+	const THREE = window.THREE;
+	if ( ! THREE ) return obj.position.clone();
+
+	const box    = new THREE.Box3().setFromObject( obj );
+	const center = new THREE.Vector3();
+	box.getCenter( center );
+	return center;
+
+}
+
+/**
+ * World-space bounding box size {x, y, z} of an Object3D.
+ * Returns {x:0,y:0,z:0} for empty objects.
+ */
+export function getSize( obj ) {
+
+	const s = worldSize( obj );
+	return s ? { x: s.x, y: s.y, z: s.z } : { x: 0, y: 0, z: 0 };
+
+}
+
+// ── Key shape params only — omit segment counts (noise for small models)
 const KEY_PARAMS = {
 	BoxGeometry:          [ 'width', 'height', 'depth' ],
 	SphereGeometry:       [ 'radius' ],
@@ -89,6 +149,10 @@ export function sceneContextString( editor ) {
 			parts.push( 'Mesh' );
 			const gs = geomSummary( obj.geometry );
 			if ( gs ) parts.push( gs );
+
+			// World size: geometry dims × scale — lets AI reason about placement
+			const ws = worldSize( obj );
+			if ( ws ) parts.push( 'size(' + r2( ws.x ) + ',' + r2( ws.y ) + ',' + r2( ws.z ) + ')' );
 			if ( obj.material ) {
 
 				if ( obj.material.color ) parts.push( 'color:' + colorHex( obj.material.color ) );
