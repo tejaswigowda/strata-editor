@@ -570,6 +570,7 @@ function Strings( config ) {
 			'menubar/git': 'Git',
 			'menubar/git/settings': 'Settings…',
 			'menubar/git/load': 'Load Scene',
+			'menubar/git/compare': 'Compare with Remote…',
 			'menubar/git/commit': 'Commit Scene',
 			'menubar/git/cancel': 'Cancel',
 			'menubar/git/no_settings': 'No repository configured — open Git → Settings first.',

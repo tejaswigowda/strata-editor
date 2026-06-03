@@ -5,6 +5,8 @@
 
 import { UIPanel, UIRow, UIText, UIButton, UIHorizontalRule } from './libs/ui.js';
 import { sceneContextString } from './scene/summarize.js';
+import { diffScenes } from './SceneDiff.js';
+import { MergeViewport } from './MergeViewport.js';
 
 // ── Commit-message generation ─────────────────────────────────────────────────
 // Uses the already-loaded local AI engine (editor.aiEngine) to generate a
@@ -135,8 +137,13 @@ function parseRepo( url ) {
 
 async function ghGet( path, token ) {
 
-	const res = await fetch( `https://api.github.com${ path }`, {
+	// Append a timestamp to bust GitHub CDN caches after a recent commit.
+	const sep = path.includes( '?' ) ? '&' : '?';
+	const url = `https://api.github.com${ path }${ sep }_ts=${ Date.now() }`;
+
+	const res = await fetch( url, {
 		headers: { Authorization: `Bearer ${ token }`, Accept: 'application/vnd.github+json' },
+		cache: 'no-store',   // bypass browser HTTP cache
 	} );
 
 	if ( ! res.ok ) throw new Error( `GitHub ${ res.status }: ${ await res.text() }` );
@@ -204,6 +211,53 @@ function MenubarGit( editor ) {
 
 	} );
 	options.add( option );
+
+	// Compare with remote (merge conflict viewport)
+
+	option = new UIRow();
+	option.setClass( 'option' );
+	option.setTextContent( strings.getKey( 'menubar/git/compare' ) );
+	option.onClick( async () => {
+
+		const cfg    = loadSettings();
+		const parsed = parseRepo( cfg.repoUrl );
+
+		if ( ! parsed || ! cfg.pat ) {
+
+			alert( strings.getKey( 'menubar/git/no_settings' ) );
+			return;
+
+		}
+
+		const banner = document.createElement( 'div' );
+		banner.style.cssText = 'position:fixed;top:40px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:6px 16px;border-radius:4px;z-index:9999;font:12px monospace;';
+		banner.textContent = `Fetching ${ parsed.owner }/${ parsed.repo }…`;
+		document.body.appendChild( banner );
+
+		try {
+
+			const apiPath  = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
+			const file     = await ghGet( apiPath, cfg.pat );
+			const remote   = JSON.parse( atob( file.content.replace( /\n/g, '' ) ) );
+			const local    = editor.scene.toJSON();
+			const diff     = diffScenes( local, remote );
+
+			banner.remove();
+
+			const mv = new MergeViewport( editor, local, remote, diff );
+			await mv.open();
+
+		} catch ( err ) {
+
+			banner.remove();
+			alert( `Compare failed: ${ err.message }` );
+
+		}
+
+	} );
+	options.add( option );
+
+	options.add( new UIHorizontalRule() );
 
 	// Commit scene
 
@@ -610,6 +664,80 @@ class GitCommitDialog {
 	}
 
 	close() { this.dom.remove(); }
+
+}
+
+// ── Auto-load on page start ───────────────────────────────────────────────────
+// Called from index.html after editor.storage.get() completes.
+// If a GitHub repo is configured, fetches the scene file and replaces whatever
+// the local autosave restored. Fails silently so the editor still opens normally
+// when offline or when credentials have expired.
+
+export async function autoLoadFromGit( editor ) {
+
+	// User explicitly chose File → New — respect that choice for this reload.
+	if ( localStorage.getItem( 'git-skip-autoload' ) ) {
+
+		localStorage.removeItem( 'git-skip-autoload' );
+		return;
+
+	}
+
+	const cfg    = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl );
+
+	if ( ! parsed || ! cfg.pat ) return;  // not configured
+
+	const banner = _showBanner( `Loading scene from ${ parsed.owner }/${ parsed.repo }…` );
+
+	try {
+
+		const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
+		const file    = await ghGet( apiPath, cfg.pat );
+		const json    = JSON.parse( atob( file.content.replace( /\n/g, '' ) ) );
+
+		editor.clear();
+		await editor.fromJSON( json );
+
+		// Establish diff baseline for the next commit
+		localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+
+		_showBanner( `✓ Scene loaded from ${ parsed.owner }/${ parsed.repo }`, 2500 );
+
+	} catch ( err ) {
+
+		_showBanner( `Git auto-load failed: ${ err.message }`, 4000 );
+
+	} finally {
+
+		banner.remove();
+
+	}
+
+}
+
+// Transient status banner — appears at top of viewport, fades out automatically
+function _showBanner( text, durationMs = 0 ) {
+
+	const el = document.createElement( 'div' );
+
+	el.textContent = text;
+	el.style.cssText = [
+		'position:fixed', 'top:32px', 'left:50%', 'transform:translateX(-50%)',
+		'background:rgba(0,0,0,0.75)', 'color:#fff', 'font:12px/1.6 monospace',
+		'padding:6px 14px', 'border-radius:4px', 'z-index:99999',
+		'pointer-events:none', 'transition:opacity 0.4s',
+	].join( ';' );
+
+	document.body.appendChild( el );
+
+	if ( durationMs > 0 ) {
+
+		setTimeout( () => { el.style.opacity = '0'; setTimeout( () => el.remove(), 450 ); }, durationMs );
+
+	}
+
+	return el;
 
 }
 

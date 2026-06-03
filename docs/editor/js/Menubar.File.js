@@ -20,86 +20,22 @@ function MenubarFile( editor ) {
 	options.setClass( 'options' );
 	container.add( options );
 
-	// New Project
+	// New Project — single item, confirms then clears to empty scene
 
-	const newProjectSubmenuTitle = new UIRow().setTextContent( strings.getKey( 'menubar/file/new' ) ).addClass( 'option' ).addClass( 'submenu-title' );
-	newProjectSubmenuTitle.onMouseOver( function () {
-
-		const { top, right } = this.dom.getBoundingClientRect();
-		const { paddingTop } = getComputedStyle( this.dom );
-		newProjectSubmenu.setLeft( right + 'px' );
-		newProjectSubmenu.setTop( top - parseFloat( paddingTop ) + 'px' );
-		newProjectSubmenu.setDisplay( 'block' );
-
-	} );
-	newProjectSubmenuTitle.onMouseOut( function () {
-
-		newProjectSubmenu.setDisplay( 'none' );
-
-	} );
-	options.add( newProjectSubmenuTitle );
-
-	const newProjectSubmenu = new UIPanel().setPosition( 'fixed' ).addClass( 'options' ).setDisplay( 'none' );
-	newProjectSubmenuTitle.add( newProjectSubmenu );
-
-	// New Project / Empty
-
-	let option = new UIRow().setTextContent( strings.getKey( 'menubar/file/new/empty' ) ).setClass( 'option' );
+	let option = new UIRow().setTextContent( strings.getKey( 'menubar/file/new' ) ).setClass( 'option' );
 	option.onClick( function () {
 
 		if ( confirm( strings.getKey( 'prompt/file/open' ) ) ) {
 
 			editor.clear();
+			localStorage.setItem( 'git-skip-autoload', '1' );
 
 		}
 
 	} );
-	newProjectSubmenu.add( option );
+	options.add( option );
 
-	//
-
-	newProjectSubmenu.add( new UIHorizontalRule() );
-
-	// New Project / ...
-
-	const examples = [
-		{ title: 'menubar/file/new/Arkanoid', file: 'arkanoid.app.json' },
-		{ title: 'menubar/file/new/Camera', file: 'camera.app.json' },
-		{ title: 'menubar/file/new/Particles', file: 'particles.app.json' },
-		{ title: 'menubar/file/new/Pong', file: 'pong.app.json' },
-		{ title: 'menubar/file/new/Shaders', file: 'shaders.app.json' }
-	];
-
-	const loader = new FileLoader();
-
-	for ( let i = 0; i < examples.length; i ++ ) {
-
-		( function ( i ) {
-
-			const example = examples[ i ];
-
-			const option = new UIRow();
-			option.setClass( 'option' );
-			option.setTextContent( strings.getKey( example.title ) );
-			option.onClick( function () {
-
-				if ( confirm( strings.getKey( 'prompt/file/open' ) ) ) {
-
-					loader.load( 'examples/' + example.file, function ( text ) {
-
-						editor.clear();
-						editor.fromJSON( JSON.parse( text ) );
-
-					} );
-
-				}
-
-			} );
-			newProjectSubmenu.add( option );
-
-		} )( i );
-
-	}
+	const loader = new FileLoader(); // kept: used by Open and Save paths below
 
 	// Open
 

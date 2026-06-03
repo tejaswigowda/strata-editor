@@ -274,7 +274,90 @@ function Shell( editor ) {
 				SpotLight:            window.THREE.SpotLight,
 				Color:                window.THREE.Color,
 				Vector3:              window.THREE.Vector3,
+				Vector2:              window.THREE.Vector2,
 				Euler:                window.THREE.Euler,
+
+				// ── Extended geometry ──────────────────────────────────────────────────
+				LatheGeometry:        window.THREE.LatheGeometry,
+				TubeGeometry:         window.THREE.TubeGeometry,
+				CapsuleGeometry:      window.THREE.CapsuleGeometry,
+				ExtrudeGeometry:      window.THREE.ExtrudeGeometry,
+				ShapeGeometry:        window.THREE.ShapeGeometry,
+				Shape:                window.THREE.Shape,
+				Path:                 window.THREE.Path,
+				CatmullRomCurve3:     window.THREE.CatmullRomCurve3,
+				QuadraticBezierCurve3: window.THREE.QuadraticBezierCurve3,
+				CubicBezierCurve3:    window.THREE.CubicBezierCurve3,
+
+				// ── PBR materials ──────────────────────────────────────────────────────
+				MeshPhysicalMaterial: window.THREE.MeshPhysicalMaterial,
+
+				// ── Procedural texture helpers ─────────────────────────────────────────
+				// makeTexture(fn, size) — fn(ctx, size) draws on a 2D canvas; returns CanvasTexture
+				makeTexture: ( fn, size = 256 ) => {
+
+					const c = document.createElement( 'canvas' );
+					c.width = c.height = size;
+					fn( c.getContext( '2d' ), size );
+					const tex = new window.THREE.CanvasTexture( c );
+					tex.wrapS = tex.wrapT = window.THREE.RepeatWrapping;
+					return tex;
+
+				},
+
+				// makeCheckerTex(size, dark, light, tiles) — checker board texture
+				// color args accept 0xRRGGBB numbers or CSS strings
+				makeCheckerTex: ( size = 256, dark = 0x111111, light = 0xeeeeee, tiles = 8 ) => {
+
+					const toCSS = v => typeof v === 'number' ? '#' + v.toString( 16 ).padStart( 6, '0' ) : v;
+					const c = document.createElement( 'canvas' );
+					c.width = c.height = size;
+					const ctx = c.getContext( '2d' );
+					const s = size / tiles;
+
+					for ( let y = 0; y < tiles; y ++ ) {
+
+						for ( let x = 0; x < tiles; x ++ ) {
+
+							ctx.fillStyle = ( x + y ) % 2 === 0 ? toCSS( dark ) : toCSS( light );
+							ctx.fillRect( x * s, y * s, s, s );
+
+						}
+
+					}
+
+					const tex = new window.THREE.CanvasTexture( c );
+					tex.wrapS = tex.wrapT = window.THREE.RepeatWrapping;
+					return tex;
+
+				},
+
+				// makeGridTex(size, lineColor, divisions, bgColor) — grid lines texture
+				makeGridTex: ( size = 256, lineColor = 0xffffff, divisions = 8, bgColor = 0x111111 ) => {
+
+					const toCSS = v => typeof v === 'number' ? '#' + v.toString( 16 ).padStart( 6, '0' ) : v;
+					const c = document.createElement( 'canvas' );
+					c.width = c.height = size;
+					const ctx = c.getContext( '2d' );
+					ctx.fillStyle = toCSS( bgColor );
+					ctx.fillRect( 0, 0, size, size );
+					ctx.strokeStyle = toCSS( lineColor );
+					ctx.lineWidth = 1;
+					const step = size / divisions;
+
+					for ( let i = 0; i <= divisions; i ++ ) {
+
+						ctx.beginPath(); ctx.moveTo( i * step, 0 );      ctx.lineTo( i * step, size ); ctx.stroke();
+						ctx.beginPath(); ctx.moveTo( 0,         i * step ); ctx.lineTo( size,    i * step ); ctx.stroke();
+
+					}
+
+					const tex = new window.THREE.CanvasTexture( c );
+					tex.wrapS = tex.wrapT = window.THREE.RepeatWrapping;
+					return tex;
+
+				},
+
 				// ── Codegen / round-trip helpers ───────────────────────────────────────
 				// showJS()  — generate + print JS for the selected object (or full scene)
 				showJS: function ( target ) {
@@ -766,6 +849,8 @@ function Shell( editor ) {
 	appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
 	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
 	appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)', 'info' );
+	appendOutput( 'organic geometry: LatheGeometry(pts,segs)  TubeGeometry(curve,…)  ExtrudeGeometry(shape,{})  CatmullRomCurve3(pts)', 'info' );
+	appendOutput( 'PBR textures: makeTexture(fn,size)  makeCheckerTex(sz,dark,light,tiles)  makeGridTex(sz,color,divs,bg)  + MeshPhysicalMaterial', 'info' );
 	appendOutput( 'edit mode: enterEditMode()  exitEditMode()  extrude(d)  inset(t)  bevel(t)  deleteFaces()  weld(eps)  planarUV(axis)  boxUV()  — Tab to toggle', 'info' );
 
 	return container;

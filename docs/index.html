@@ -73,6 +73,7 @@
 			import { AnimationResizer } from './editor/js/AnimationResizer.js';
 			import { Animation } from './editor/js/Animation.js';
 			import { Shell } from './editor/js/Shell.js';
+			import { autoLoadFromGit } from './editor/js/Menubar.Git.js';
 
 			import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
@@ -166,6 +167,10 @@
 						editor.selectByUuid( selected );
 
 					}
+
+					// If a GitHub repo is configured, load the scene from it.
+					// Runs after local autosave is restored so GitHub always wins.
+					await autoLoadFromGit( editor );
 
 				} );
 
