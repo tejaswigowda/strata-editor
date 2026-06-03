@@ -427,10 +427,110 @@ hr {
 	z-index: 90;
 }
 
+#shell-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 10px;
+	background: #111;
+	border-bottom: 1px solid #333;
+	flex-shrink: 0;
+	font-family: Helvetica, Arial, sans-serif;
+	font-size: 12px;
+}
+
+#shell-header-title {
+	color: #7ec8e3;
+	font-weight: bold;
+	flex-shrink: 0;
+}
+
+#shell-model-select {
+	background: #222;
+	color: #ccc;
+	border: 1px solid #444;
+	border-radius: 3px;
+	font-size: 11px;
+	padding: 2px 4px;
+	flex: 1;
+	min-width: 0;
+}
+
+#shell-load-btn {
+	background: #2a4a7f;
+	color: #fff;
+	border: none;
+	border-radius: 3px;
+	font-size: 11px;
+	padding: 3px 8px;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+#shell-load-btn:disabled { opacity: 0.5; cursor: default; }
+#shell-load-btn:hover:not(:disabled) { background: #3a6aaf; }
+
+#shell-ai-status {
+	color: #6a9;
+	font-size: 11px;
+	flex-shrink: 0;
+	min-width: 0;
+	max-width: 260px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: right;
+}
+
+#shell-progress-wrap {
+	height: 3px;
+	background: #1e2235;
+	flex-shrink: 0;
+}
+
+#shell-progress-bar {
+	height: 100%;
+	background: linear-gradient(90deg, #7c3aed, #a78bfa);
+	width: 0%;
+	transition: width 0.3s;
+}
+
 #shell-output {
 	flex: 1;
 	overflow-y: auto;
 	padding: 8px 12px 4px;
+	user-select: text;
+	-webkit-user-select: text;
+}
+
+#shell-ai-row {
+	display: flex;
+	align-items: center;
+	padding: 5px 12px;
+	border-top: 1px solid #2a2a3e;
+	background: #12122a;
+	flex-shrink: 0;
+}
+
+#shell-ai-input {
+	flex: 1;
+	background: transparent;
+	border: none;
+	color: #c9d1d9;
+	font-family: Helvetica, Arial, sans-serif;
+	font-size: 13px;
+	outline: none;
+	padding: 0;
+}
+
+#shell-ai-input::placeholder { color: #444; }
+#shell-ai-input:disabled { opacity: 0.4; }
+
+.shell-ai-label {
+	color: #c9a227;
+	font-family: Helvetica, Arial, sans-serif;
+	font-weight: bold;
+	margin-right: 8px;
 }
 
 #shell-input-row {
@@ -470,16 +570,28 @@ hr {
 }
 
 .shell-line {
-	padding: 1px 0;
+	padding: 1px 2px;
 	line-height: 1.5;
 	white-space: pre-wrap;
 	word-break: break-all;
+	cursor: pointer;
+	border-radius: 2px;
 }
 
-.shell-cmd    { color: #bbb; }
-.shell-result { color: #79c0ff; }
-.shell-error  { color: #ff6b6b; }
-.shell-info   { color: #6a737d; font-style: italic; }
+.shell-line:hover {
+	background: rgba(255,255,255,0.05);
+}
+
+.shell-line.shell-copied {
+	background: rgba(120,200,100,0.18);
+}
+
+.shell-cmd       { color: #bbb; }
+.shell-result    { color: #79c0ff; }
+.shell-error     { color: #ff6b6b; }
+.shell-info      { color: #6a737d; font-style: italic; }
+.shell-ai-prompt { color: #c9a227; font-style: italic; }
+.shell-ai-stream { color: #7a8099; font-style: italic; white-space: pre-wrap; word-break: break-all; }
 
 #menubar {
 	position: absolute;
