@@ -110,6 +110,18 @@ function MenubarView( editor ) {
 	} );
 	options.add( option );
 
+	// Show JS for selection
+
+	option = new UIRow();
+	option.setClass( 'option' );
+	option.setTextContent( strings.getKey( 'menubar/view/showJS' ) );
+	option.onClick( function () {
+
+		signals.showJSForSelection.dispatch();
+
+	} );
+	options.add( option );
+
 	//
 
 	options.add( new UIHorizontalRule() );

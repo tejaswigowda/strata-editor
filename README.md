@@ -62,12 +62,13 @@ Open with **View → JS Shell**.
 | `scene` | THREE.Scene | Active scene |
 | `camera` | THREE.Camera | Active camera |
 | `renderer` | THREE.WebGLRenderer | Renderer |
-| `AddObjectCommand` | Command | Add object to undo stack |
-| `RemoveObjectCommand` | Command | Remove object via undo stack |
-| `SetPositionCommand` | Command | Move object via undo stack |
-| `SetRotationCommand` | Command | Rotate object via undo stack |
-| `SetScaleCommand` | Command | Scale object via undo stack |
+| `AddObjectCommand`, `RemoveObjectCommand`, `SetPositionCommand`, `SetRotationCommand`, `SetScaleCommand` | Command | Undo-stack commands |
 | `BoxGeometry`, `SphereGeometry`, … | Constructor | All documented primitives, no `THREE.` prefix needed |
+| `showJS(obj?)` | Function | Print executable JS for `obj` (or selected, or full scene) |
+| `objectToJS(obj)` | Function | Generate JS for a single Object3D → `{ code, lossy, lossyReasons }` |
+| `sceneToJS()` | Function | Generate JS for entire scene |
+| `sceneEqual(jsonA, jsonB, eps?)` | Function | Semantic equality check for round-trip tests |
+| `summarize()` | Function | Return compact JSON scene snapshot |
 
 ### Shell examples
 
@@ -81,7 +82,49 @@ editor.execute(new SetPositionCommand(editor, editor.selected, new THREE.Vector3
 
 // Inspect scene
 scene.children.map(c => c.name)
+
+// Export selected object as executable JS (click output line to copy)
+showJS()
+
+// Round-trip test: generate JS, execute it, compare JSON
+var result = sceneToJS();
+// paste result.code into shell, then:
+// sceneEqual(originalJSON, editor.scene.toJSON())
 ```
+
+---
+
+## Bidirectional Scene Representation (JS ↔ JSON)
+
+The editor maintains a **two-form** scene representation:
+
+```
+EXECUTABLE JS                    THREE.JS JSON
+─────────────                    ─────────────
+Loops, procedural geometry       Serialized state snapshot
+Easy for AI to write             Easy for AI to read
+Human readable                   Machine diffable / git-friendly
+```
+
+**The four conversions:**
+
+| # | Direction | Implementation |
+|---|-----------|----------------|
+| 1 | JS → Scene | Shell `execute()` — existing single execution surface |
+| 2 | Scene → JSON | `scene.toJSON()` (three.js native) |
+| 3 | JSON → Scene | `new THREE.ObjectLoader().parse(json)` (three.js native) |
+| 4 | Scene → JS | **`codegen.js`** — the build (see below) |
+
+**Round-trip tests (in-shell):**
+```js
+// Test B: Scene → JS → execute → check equality
+var snap1 = editor.scene.toJSON();
+var js    = sceneToJS();         // generate JS
+// paste js.code and run, then:
+sceneEqual(snap1, editor.scene.toJSON())  // { equal: true, differences: [] }
+```
+
+**Lossy boundary:** If a geometry cannot be reconstructed from constructor args (custom `BufferGeometry`, `ExtrudeGeometry`, etc.) the codegen emits a clearly-flagged JSON-load fallback — never silently wrong code. Check `result.lossy` and `result.lossyReasons`.
 
 ---
 
@@ -89,11 +132,17 @@ scene.children.map(c => c.name)
 
 ```
 docs/editor/js/
-  AIEngine.js   — WebLLM wrapper: init(), stream(), complete()
-  AIPanel.js    — (planned) sidebar panel UI
-  AIPrompt.js   — SYSTEM_PROMPT + few-shot examples + model registry
-  AIUtils.js    — summarizeScene(), extractCode(), buildMessages()
-  Shell.js      — REPL UI + single execute() surface wiring AI and human input
+  AIEngine.js       — WebLLM wrapper: init(), stream(), complete()
+  AIPrompt.js       — SYSTEM_PROMPT + few-shot examples + model registry
+  AIUtils.js        — extractCode(), buildMessages()  (summarize delegates to scene/)
+  Shell.js          — REPL UI + single execute() surface wiring AI and human input
+  scene/
+    serialize.js    — thin wrappers: sceneToJSON(), jsonToObject(), cloneViaJSON()
+    summarize.js    — canonical compact scene reader (used by AI + shell)
+    geometryParams.js — per-geometry-type constructor-arg tables + deriveArgs()
+    materialProps.js  — material prop emit maps, defaults, materialToOptions()
+    codegen.js      — Scene/JSON → executable JS  (Conversion 4)
+    sceneEqual.js   — semantic equality for round-trip tests
 ```
 
 ### Design principles
@@ -115,6 +164,8 @@ docs/editor/js/
 ✅ Qwen2.5-Coder models + constrained prompt + few-shot examples
 ✅ Scene summariser + injection into every AI request
 ✅ Error-feedback retry loop (one auto-correction pass)
+✅ Bidirectional scene representation (JS ↔ JSON): codegen + round-trip tests
+✅ View → Show JS for Selection (codegen exposed in menu)
 ⬜ Git integration (Octokit.js in-browser, AI-generated commit messages)
 ⬜ Merge-conflict viewport (dual-render conflicting object states)
 ```
@@ -130,8 +181,15 @@ docs/
     js/
       AIEngine.js     ← WebLLM wrapper
       AIPrompt.js     ← system prompt + model registry
-      AIUtils.js      ← scene summariser, code extractor
+      AIUtils.js      ← code extractor, message builder
       Shell.js        ← REPL + AI bridge
+      scene/
+        serialize.js      ← toJSON / ObjectLoader wrappers
+        summarize.js      ← canonical compact scene reader
+        geometryParams.js ← geometry constructor-arg tables
+        materialProps.js  ← material prop emit maps
+        codegen.js        ← Scene/JSON → executable JS
+        sceneEqual.js     ← semantic equality for round-trip tests
   build/              ← three.js module builds
   examples/jsm/       ← three.js addons
 ```

@@ -4,9 +4,19 @@ import { RemoveObjectCommand } from './commands/RemoveObjectCommand.js';
 import { SetPositionCommand } from './commands/SetPositionCommand.js';
 import { SetRotationCommand } from './commands/SetRotationCommand.js';
 import { SetScaleCommand } from './commands/SetScaleCommand.js';
+import { SetMaterialColorCommand } from './commands/SetMaterialColorCommand.js';
+import { SetValueCommand } from './commands/SetValueCommand.js';
 import { AI_MODELS, SYSTEM_PROMPT } from './AIPrompt.js';
-import { summarizeScene, extractCode, buildMessages } from './AIUtils.js';
-import { AIEngine } from './AIEngine.js';
+import { extractCode, buildMessages } from './AIUtils.js';
+import { AIEngine, getModelList } from './AIEngine.js';
+import { objectToJS, sceneToJS } from './scene/codegen.js';
+import { sceneEqual } from './scene/sceneEqual.js';
+import { summarizeScene as summarizeSceneFull } from './scene/summarize.js';
+import { booleanUnion, booleanSubtract, booleanIntersect } from './mesh/ops/boolean.js';
+import { mirrorMesh } from './mesh/ops/mirror.js';
+import { arrayDuplicate } from './mesh/ops/array.js';
+import { subdivide } from './mesh/ops/subdivide.js';
+import { serializeForAI as opsSchema } from './mesh/ops/index.js';
 
 
 
@@ -29,14 +39,48 @@ function Shell( editor ) {
 
 	const modelSelect = document.createElement( 'select' );
 	modelSelect.id = 'shell-model-select';
-	AI_MODELS.forEach( m => {
 
-		const opt = document.createElement( 'option' );
-		opt.value = m.id;
-		opt.textContent = m.label;
-		modelSelect.appendChild( opt );
+	// Populate from WebLLM's full built-in model registry (same pattern as webllm-eg).
+	// Each option shows: model_id -- X.X GB  (or MB for small models)
+	function fmtVram( mb ) {
 
-	} );
+		if ( mb == null ) return '';
+		if ( mb >= 1024 ) return '  \u2014  ' + ( mb / 1024 ).toFixed( 1 ) + ' GB';
+		return '  \u2014  ' + Math.round( mb ) + ' MB';
+
+	}
+
+	// Keywords that identify code-generation models
+	const CODE_KEYWORDS = [ 'coder', 'code', 'deepseek', 'starcoder', 'codellama', 'codestral' ];
+
+	getModelList()
+		.filter( m => CODE_KEYWORDS.some( kw => m.model_id.toLowerCase().includes( kw ) ) )
+		.forEach( m => {
+
+			const opt = document.createElement( 'option' );
+			opt.value = m.model_id;
+			opt.textContent = m.model_id + fmtVram( m.vram_required_MB );
+			modelSelect.appendChild( opt );
+
+		} );
+
+	// Default to a preferred coder model if present in the list
+	const PREFERRED = [
+		'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',
+		'Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC',
+		'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+		'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+	];
+	for ( const p of PREFERRED ) {
+
+		const found = [ ...modelSelect.options ].find( o => o.value === p );
+		if ( found ) { modelSelect.value = p; break; }
+
+	}
+
+	// Restore previously used model (weights already cached in browser)
+	const _savedModel = localStorage.getItem( 'shell-ai-model' );
+	if ( _savedModel ) modelSelect.value = _savedModel;
 
 	const loadBtn = document.createElement( 'button' );
 	loadBtn.id = 'shell-load-btn';
@@ -117,6 +161,9 @@ function Shell( editor ) {
 
 	const aiEngine = new AIEngine();
 
+	// Expose on editor so other modules (e.g. Menubar.Git) can use the loaded engine
+	editor.aiEngine = aiEngine;
+
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
 	function appendOutput( text, type ) {
@@ -187,9 +234,13 @@ function Shell( editor ) {
 				get camera()   { return editor.camera; },
 				get renderer() { return editor.renderer; },
 				AddObjectCommand,
-				RemoveObjectCommand,			SetPositionCommand,
-			SetRotationCommand,
-			SetScaleCommand,				// three.js primitives — available without THREE. prefix
+				RemoveObjectCommand,
+				SetPositionCommand,
+				SetRotationCommand,
+				SetScaleCommand,
+				SetMaterialColorCommand,
+				SetValueCommand,
+				// three.js primitives — available without THREE. prefix
 				BoxGeometry:          window.THREE.BoxGeometry,
 				SphereGeometry:       window.THREE.SphereGeometry,
 				CylinderGeometry:     window.THREE.CylinderGeometry,
@@ -213,6 +264,119 @@ function Shell( editor ) {
 				SpotLight:            window.THREE.SpotLight,
 				Color:                window.THREE.Color,
 				Vector3:              window.THREE.Vector3,
+				Euler:                window.THREE.Euler,
+				// ── Codegen / round-trip helpers ───────────────────────────────────────
+				// showJS()  — generate + print JS for the selected object (or full scene)
+				showJS: function ( target ) {
+
+					const obj = target ?? editor.selected;
+
+					if ( ! obj ) {
+
+						const result = sceneToJS( editor );
+						appendOutput( result.code, 'result' );
+						if ( result.lossy ) appendOutput( '⚠ Lossy fallback used: ' + result.lossyReasons.join( '; ' ), 'error' );
+						return result;
+
+					}
+
+					const result = objectToJS( obj );
+					appendOutput( result.code, 'result' );
+					if ( result.lossy ) appendOutput( '⚠ Lossy fallback used: ' + result.lossyReasons.join( '; ' ), 'error' );
+					return result;
+
+				},
+				objectToJS,
+				sceneToJS:  () => sceneToJS( editor ),
+				sceneEqual,
+				summarize:  () => summarizeSceneFull( editor ),
+
+				// ── Scene object lookup ────────────────────────────────────────────────
+				// findObject(query) — find the first scene object whose name contains
+				// `query` (case-insensitive). Falls back to editor.selected if no match.
+				// Returns null if nothing found at all.
+				// findObject(query) — first object whose name matches (exact then substring)
+				findObject: function ( query ) {
+
+					if ( ! query ) return editor.selected;
+					const q = String( query ).toLowerCase().trim();
+					let exact = null, sub = null;
+
+					editor.scene.traverse( function ( obj ) {
+
+						const name = ( obj.name || '' ).toLowerCase();
+						if ( ! exact && name === q ) exact = obj;
+						if ( ! sub   && name.includes( q ) ) sub = obj;
+
+					} );
+
+					return exact || sub || null;
+
+				},
+
+				// findAll(query) — every object whose name contains query
+				findAll: function ( query ) {
+
+					const q   = String( query ).toLowerCase().trim();
+					const out = [];
+
+					editor.scene.traverse( function ( obj ) {
+
+						if ( ( obj.name || '' ).toLowerCase().includes( q ) ) out.push( obj );
+
+					} );
+
+					return out;
+
+				},
+
+				// findOfType(type) — first object of a given three.js type string
+				// e.g. findOfType('Mesh'), findOfType('DirectionalLight'), findOfType('Group')
+				findOfType: function ( type ) {
+
+					const t = String( type ).toLowerCase();
+					let found = null;
+
+					editor.scene.traverse( function ( obj ) {
+
+						if ( ! found && obj.type.toLowerCase() === t ) found = obj;
+
+					} );
+
+					return found;
+
+				},
+
+				// findNear(mesh, radius) — all scene objects within radius of mesh's world position
+				findNear: function ( mesh, radius ) {
+
+					if ( ! mesh || ! mesh.position ) throw new Error( 'findNear: first arg must be an Object3D' );
+					const r2 = radius * radius;
+					const out = [];
+
+					editor.scene.traverse( function ( obj ) {
+
+						if ( obj === mesh ) return;
+						if ( obj.position.distanceToSquared( mesh.position ) <= r2 ) out.push( obj );
+
+					} );
+
+					return out;
+
+				},
+
+				// ── Modeling ops (M1/M2) — same surface for UI and AI ─────────────────
+				// Closures capture `editor` so the AI can call them without it.
+
+				booleanUnion:     ( meshA, meshB, keepInputs )            => booleanUnion( editor, meshA, meshB, keepInputs ),
+				booleanSubtract:  ( meshA, meshB, keepInputs )            => booleanSubtract( editor, meshA, meshB, keepInputs ),
+				booleanIntersect: ( meshA, meshB, keepInputs )            => booleanIntersect( editor, meshA, meshB, keepInputs ),
+				mirrorMesh:       ( mesh, axis )                          => mirrorMesh( editor, mesh, axis ),
+				arrayDuplicate:   ( mesh, count, ox, oy, oz )             => arrayDuplicate( editor, mesh, count, ox, oy, oz ),
+				subdivide:        ( mesh, iterations )                    => subdivide( editor, mesh, iterations ),
+
+				// Diagnostic: print the registered op schema
+				listOps:          () => opsSchema(),
 			};
 
 			// Build a named-parameter function so every scope var is a local;
@@ -276,8 +440,7 @@ function Shell( editor ) {
 
 		try {
 
-			const sceneCtx = summarizeScene( editor );
-			const messages = buildMessages( SYSTEM_PROMPT, sceneCtx, userPrompt );
+			const messages = buildMessages( SYSTEM_PROMPT, editor, userPrompt );
 			const code     = await streamToOutput( messages );
 			const result   = execute( code );
 
@@ -337,6 +500,7 @@ function Shell( editor ) {
 			loadBtn.textContent = '✓ AI';
 			aiInput.disabled = false;
 			aiInput.focus();
+			localStorage.setItem( 'shell-ai-model', modelSelect.value );
 			appendOutput( 'AI ready — model: ' + modelSelect.value, 'info' );
 
 		} catch ( err ) {
@@ -446,9 +610,42 @@ function Shell( editor ) {
 
 	} );
 
+	// ── Show JS for selection signal ──────────────────────────────────────────
+	// Triggered from View → Show JS for Selection.
+	// Ensures the shell is visible, then runs showJS() for the selected object.
+
+	signals.showJSForSelection.add( function () {
+
+		// Make shell visible
+		container.setDisplay( '' );
+
+		const obj = editor.selected;
+
+		if ( ! obj ) {
+
+			appendOutput( '// No object selected — generating JS for entire scene:', 'info' );
+			const result = sceneToJS( editor );
+			appendOutput( result.code, 'result' );
+			if ( result.lossy ) appendOutput( '⚠ Lossy fallback used: ' + result.lossyReasons.join( '; ' ), 'error' );
+			return;
+
+		}
+
+		appendOutput( `// Generated JS for: "${obj.name || obj.type}"  uuid: ${obj.uuid.slice( 0, 8 )}`, 'info' );
+		const result = objectToJS( obj );
+		appendOutput( result.code, 'result' );
+		if ( result.lossy ) appendOutput( '⚠ Lossy fallback used: ' + result.lossyReasons.join( '; ' ), 'error' );
+
+		output.scrollTop = output.scrollHeight;
+
+	} );
+
 	// ── Welcome message ───────────────────────────────────────────────────────
 
-	appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand', 'info' );
+	appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand  SetMaterialColorCommand  SetValueCommand', 'info' );
+	appendOutput( 'scene lookup: findObject(name)  findAll(name)  findOfType(type)  findNear(mesh,radius)  summarize()', 'info' );
+	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
+	appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)  — type listOps() for schema', 'info' );
 
 	return container;
 

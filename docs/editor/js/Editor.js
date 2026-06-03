@@ -98,7 +98,8 @@ function Editor() {
 
 		morphTargetsUpdated: new Signal(),
 
-		toggleShell: new Signal()
+		toggleShell:          new Signal(),
+		showJSForSelection:   new Signal()
 
 	};
 

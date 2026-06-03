@@ -1,8 +1,20 @@
 // ── WebLLM engine wrapper ─────────────────────────────────────────────────────
-// Lazy-loads @mlc-ai/web-llm from CDN on first init() call.
+// Imports @mlc-ai/web-llm from CDN at module load so that
+// prebuiltAppConfig.model_list is available immediately for populating the UI.
+// Model WEIGHTS are only downloaded when init() is called.
 // Caching is handled automatically by WebLLM via the browser's Cache Storage API.
 
-const WEBLLM_CDN = 'https://esm.run/@mlc-ai/web-llm';
+import * as webllm from 'https://esm.run/@mlc-ai/web-llm';
+
+/**
+ * Returns the full WebLLM model registry.
+ * Each entry has { model_id, vram_required_MB, ... }.
+ */
+export function getModelList() {
+
+	return webllm.prebuiltAppConfig.model_list;
+
+}
 
 export class AIEngine {
 
@@ -25,14 +37,21 @@ export class AIEngine {
 	 */
 	async init( modelId, onProgress ) {
 
+		// If this model is already loaded, return immediately
+		if ( this._engine !== null && this.modelId === modelId ) {
+
+			if ( onProgress ) onProgress( { text: 'already loaded', progress: 1 } );
+			return;
+
+		}
+
 		this.loading = true;
 
 		try {
 
-			const { CreateMLCEngine } = await import( WEBLLM_CDN );
-
-			this._engine = await CreateMLCEngine( modelId, {
+			this._engine = await webllm.CreateMLCEngine( modelId, {
 				initProgressCallback: onProgress,
+				appConfig: webllm.prebuiltAppConfig,
 			} );
 
 			this.modelId = modelId;
