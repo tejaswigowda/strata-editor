@@ -534,10 +534,7 @@ class GitCommitDialog {
 		msgRow.dom.appendChild( msgInput );
 		body.appendChild( msgRow.dom );
 
-		// ── AI generation hint ────────────────────────────────────────────────
-		const aiHint = document.createElement( 'div' );
-		aiHint.style.cssText = 'font-size:11px;opacity:0.6;margin:-2px 0 6px 120px;';
-		body.appendChild( aiHint );
+		// (hint div removed — placeholder on msgInput carries the state)
 
 		// ── Target / status line ──────────────────────────────────────────────
 		const status = document.createElement( 'div' );
@@ -570,45 +567,30 @@ class GitCommitDialog {
 
 			msgInput.value = '';
 			msgInput.disabled = true;
-			msgInput.placeholder = strings.getKey( 'menubar/git/commit/generating' );
-			aiHint.textContent = strings.getKey( 'menubar/git/commit/ai_hint' );
+			msgInput.placeholder = '…';
 			commitBtn.dom.disabled = true;
 
 			generateCommitMessage( editor ).then( msg => {
 
 				msgInput.disabled = false;
 				commitBtn.dom.disabled = false;
-
-				if ( msg ) {
-
-					msgInput.value = msg;
-					aiHint.textContent = strings.getKey( 'menubar/git/commit/ai_done' );
-
-				} else {
-
-					msgInput.value = 'Update scene';
-					aiHint.textContent = '';
-
-				}
-
+				msgInput.value = msg || 'Update scene';
+				msgInput.placeholder = strings.getKey( 'menubar/git/commit/placeholder' );
 				msgInput.focus();
 				msgInput.select();
 
 			} ).catch( () => {
 
 				msgInput.disabled = false;
-				msgInput.value = 'Update scene';
 				commitBtn.dom.disabled = false;
-				aiHint.textContent = '';
+				msgInput.value = 'Update scene';
+				msgInput.placeholder = strings.getKey( 'menubar/git/commit/placeholder' );
 
 			} );
 
 		} else {
 
 			msgInput.value = 'Update scene';
-			aiHint.textContent = ai
-				? strings.getKey( 'menubar/git/commit/ai_not_loaded' )
-				: '';
 
 		}
 

@@ -591,10 +591,6 @@ function Strings( config ) {
 			'menubar/git/commit/placeholder': 'Update scene',
 			'menubar/git/commit/confirm': 'Commit',
 			'menubar/git/commit/success': 'Committed ✓',
-			'menubar/git/commit/generating': 'Generating message…',
-			'menubar/git/commit/ai_hint': 'AI is writing a commit message — edit freely before committing.',
-			'menubar/git/commit/ai_done': 'AI-generated — edit freely.',
-			'menubar/git/commit/ai_not_loaded': 'Load an AI model in the JS Shell to auto-generate messages.',
 			'menubar/git/error/no_repo': 'No valid GitHub repository URL configured.',
 			'menubar/git/error/no_pat': 'No access token configured.',
 

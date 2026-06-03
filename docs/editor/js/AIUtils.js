@@ -29,7 +29,8 @@ export function extractCode( text ) {
 // read this more naturally than raw JSON.  Falls back to a compact JSON summary
 // if the JS string exceeds the token budget.
 
-const CTX_CHAR_LIMIT = 1800; // ~450 tokens for a 1.5B model
+// System prompt is ~900 tokens; leave ~900 for context + user message in a 4096 window
+const CTX_CHAR_LIMIT = 900; // ~225 tokens
 
 // ── Q&A message builder ───────────────────────────────────────────────────────
 // Used for plain-text scene interrogation (no code generation).
@@ -51,9 +52,9 @@ export function buildMessages( systemPrompt, editor, userPrompt ) {
 
 	if ( ctxStr.length > CTX_CHAR_LIMIT ) {
 
-		// Fall back to compact JSON summary, capped at 15 objects
+		// Fall back to compact JSON summary, capped at 8 objects
 		const summary = _summarizeScene( editor );
-		const compact = { ...summary, objects: summary.objects.slice( 0, 15 ), truncated: true };
+		const compact = { ...summary, objects: summary.objects.slice( 0, 8 ), truncated: true };
 		try {
 			ctxStr = JSON.stringify( compact );
 		} catch {
