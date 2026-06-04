@@ -27,6 +27,11 @@ import { weld }        from './mesh/ops/weld.js';
 import { planarUV, boxUV } from './mesh/ops/uv.js';
 import { SceneIntelligence, findByDescription, describeObject, listCandidates, resolvePartAI } from './intelligence/sceneIndex.js';
 import { colorToName } from './intelligence/colorName.js';
+import { whatsVisible, whatsAt } from './intelligence/gpuPick.js';
+import { snapshotScene, sceneDiff, confirmChange, diffSummary } from './intelligence/observe.js';
+import { buildIndex, retrieveForPrompt, findAPI } from './ai/apiIndex.js';
+import { validateCode } from './ai/validate.js';
+import { runAgentic } from './ai/agentLoop.js';
 
 // Map common shape words to the substring found in geometry.type, so findObject
 // can resolve "red sphere" even when the object's name carries neither word.
@@ -191,6 +196,9 @@ function Shell( editor ) {
 
 	// Scene intelligence — derives descriptors on import, resolves NL part queries
 	editor.sceneIntelligence = new SceneIntelligence( editor );
+
+	// Build the local API index (Technique 2 RAG) so generation references real signatures
+	buildIndex();
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -551,6 +559,14 @@ function Shell( editor ) {
 				// resolvePartAI(text) — async Path A + LLM disambiguation → {node, confidence, method}
 				resolvePartAI: ( text ) => resolvePartAI( editor, text ),
 
+				// ── Agentic grounding tools (no vision model) ─────────────────────────
+				// findAPI(text) — retrieve REAL API signatures (anti-hallucination)
+				findAPI: ( text ) => findAPI( text ).map( h => h.sig ).join( '\n' ),
+				// whatsVisible() — GPU color-pick: on-screen objects by coverage
+				whatsVisible: () => whatsVisible( editor ),
+				// whatsAt(x,y) — GPU color-pick: object under a viewport pixel
+				whatsAt: ( x, y ) => whatsAt( editor, x, y ),
+
 				// ── Modeling ops (M1/M2) — same surface for UI and AI ─────────────────
 				// Closures capture `editor` so the AI can call them without it.
 
@@ -731,25 +747,27 @@ function Shell( editor ) {
 
 			} else {
 
-				// Code-gen mode — normal path
-				const messages = buildMessages( SYSTEM_PROMPT, editor, question );
-				const code     = await streamToOutput( messages );
-				const result   = execute( code );
+				// Code-gen mode — bounded agentic loop:
+				// generate → validate (real API index) → execute → observe → fix.
+				const apiHints = retrieveForPrompt( question );
+				const messages = buildMessages( SYSTEM_PROMPT, editor, question, apiHints );
 
-				if ( ! result.ok ) {
-
-					appendOutput( '⟳ error — retrying with context…', 'info' );
-
-					const retryMessages = [
-						...messages,
-						{ role: 'assistant', content: code },
-						{ role: 'user', content: 'That threw: ' + result.error + '\n\nFix the code. Output corrected JavaScript only.' },
-					];
-
-					const retryCode = await streamToOutput( retryMessages );
-					execute( retryCode );
-
-				}
+				await runAgentic( {
+					editor,
+					messages,
+					intent: question,
+					maxRetries: 3,
+					deps: {
+						streamCode:    streamToOutput,
+						execute,
+						appendOutput,
+						validateCode,
+						snapshotScene,
+						sceneDiff,
+						confirmChange,
+						diffSummary,
+					},
+				} );
 
 			}
 
@@ -936,6 +954,7 @@ function Shell( editor ) {
 	appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand  SetMaterialColorCommand  SetValueCommand', 'info' );
 	appendOutput( 'scene lookup: findObject(name)  findAll(name)  findOfType(type)  findNear(mesh,radius)  summarize()', 'info' );
 	appendOutput( 'scene intelligence: findByDescription("right arm of the red person")  describeObject(o)  listCandidates(text)  resolvePartAI(text)', 'info' );
+	appendOutput( 'agentic tools: findAPI(text)  whatsVisible()  whatsAt(x,y)  — AI requests run a bounded generate→validate→execute→observe→fix loop', 'info' );
 	appendOutput( 'spatial: getSize(obj)  getTopY(obj)  getCenter(obj)  placeOnTop(child,target)', 'info' );
 	appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
 	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );

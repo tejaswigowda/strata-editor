@@ -22,6 +22,7 @@ GLOBALS (no THREE. prefix needed):
   Objects:  Mesh Group Line Points DirectionalLight PointLight AmbientLight SpotLight
   Math:     Color Vector3 Vector2 Euler
   Lookup:   findObject(q) findAll(q) findOfType(t) findNear(m,r) findByDescription(text)
+  Ground:   whatsVisible() whatsAt(x,y) findAPI(text)  (screen picking + real-signature lookup)
   Spatial:  getSize(o) getTopY(o) getCenter(o) placeOnTop(child,target)
   Textures: makeTexture(fn,sz) makeCheckerTex(sz,dark,light,tiles) makeGridTex(sz,color,divs,bg)
   Modeling: booleanUnion(a,b) booleanSubtract(a,b) booleanIntersect(a,b) mirrorMesh(m,axis) arrayDuplicate(m,n,dx,dy,dz) subdivide(m,iters)

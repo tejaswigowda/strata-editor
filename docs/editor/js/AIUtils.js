@@ -45,7 +45,7 @@ export function buildQAMessages( qaSystemPrompt, editor, question ) {
 
 }
 
-export function buildMessages( systemPrompt, editor, userPrompt ) {
+export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '' ) {
 
 	// Prefer the JS-comment representation — the model "speaks" JS
 	let ctxStr = sceneContextString( editor );
@@ -63,9 +63,12 @@ export function buildMessages( systemPrompt, editor, userPrompt ) {
 
 	}
 
+	// Inject retrieved REAL API signatures ahead of the request (Technique 2 RAG)
+	const apiBlock = apiHints ? apiHints + '\n\n' : '';
+
 	return [
 		{ role: 'system', content: systemPrompt },
-		{ role: 'user',   content: 'Scene:\n' + ctxStr + '\n\nRequest: ' + userPrompt },
+		{ role: 'user',   content: apiBlock + 'Scene:\n' + ctxStr + '\n\nRequest: ' + userPrompt },
 	];
 
 }
