@@ -28,6 +28,58 @@ function colorHex( color ) {
 
 }
 
+// ── glTF name decoding ────────────────────────────────────────────────────────
+// glTF exporters escape spaces/punctuation as _NNN_ (zero-padded decimal char
+// code), e.g. "Tail_032Light" → "Tail Light" (32 = space). Decode only printable
+// ASCII so legitimate suffixes like "Object_001" (ctrl char) are left untouched.
+export function decodeName( s ) {
+
+	if ( ! s ) return s;
+	return String( s ).replace( /_(\d{3})_?/g, ( m, n ) => {
+
+		const c = parseInt( n, 10 );
+		return ( c >= 32 && c <= 126 ) ? String.fromCharCode( c ) : m;
+
+	} );
+
+}
+
+// Collect a mesh's material name(s), decoded, de-duplicated.
+function materialNames( obj ) {
+
+	const mats = Array.isArray( obj.material ) ? obj.material : [ obj.material ];
+	const names = [];
+	for ( const m of mats ) {
+
+		if ( m && m.name ) {
+
+			const d = decodeName( m.name );
+			if ( d && ! names.includes( d ) ) names.push( d );
+
+		}
+
+	}
+
+	return names;
+
+}
+
+// Decoded, lowercased searchable label = node name + material name(s).
+// Used by findObject so material labels are matchable, not just node names.
+export function searchableLabel( obj ) {
+
+	let s = decodeName( obj.name || '' );
+	if ( obj.isMesh ) {
+
+		const mn = materialNames( obj );
+		if ( mn.length ) s += ' ' + mn.join( ' ' );
+
+	}
+
+	return s.toLowerCase();
+
+}
+
 // ── World-space size helpers ──────────────────────────────────────────────────
 
 /**
@@ -141,7 +193,7 @@ export function sceneContextString( editor ) {
 		count ++;
 
 		const sel    = ( obj === selected ) ? '[selected] ' : '';
-		const name   = '"' + ( obj.name || '?' ) + '"';
+		const name   = '"' + decodeName( obj.name || '?' ) + '"';
 		const parts  = [ sel + name ];
 
 		if ( obj.isMesh ) {
@@ -149,6 +201,11 @@ export function sceneContextString( editor ) {
 			parts.push( 'Mesh' );
 			const gs = geomSummary( obj.geometry );
 			if ( gs ) parts.push( gs );
+
+			// Material name(s) — often the only meaningful label on a GLB part
+			// (nodes are "Object_12" but the material is "Tail Light").
+			const mn = materialNames( obj );
+			if ( mn.length ) parts.push( 'mat:"' + mn.join( '/' ) + '"' );
 
 			// World size: geometry dims × scale — lets AI reason about placement
 			const ws = worldSize( obj );
@@ -164,7 +221,11 @@ export function sceneContextString( editor ) {
 			}
 			if ( obj.material ) {
 
-				if ( obj.material.color ) parts.push( 'color:' + colorHex( obj.material.color ) );
+				// Prefer the descriptor's texture-sampled color: baseColorFactor is
+				// often white on GLBs while the real color lives in the texture.
+				const descColor = obj.userData?.descriptors?.color;
+				if ( descColor && descColor.hex ) parts.push( 'color:' + descColor.hex + '(' + descColor.base + ')' );
+				else if ( obj.material.color ) parts.push( 'color:' + colorHex( obj.material.color ) );
 				const { opacity = 1, metalness, roughness, emissive } = obj.material;
 				if ( opacity < 0.99 ) parts.push( 'opacity:' + r2( opacity ) );
 				if ( metalness != null && metalness > 0.01 ) parts.push( 'metal:' + r2( metalness ) );
@@ -213,6 +274,21 @@ export function sceneContextString( editor ) {
 		if ( obj.parent && obj.parent !== scene ) {
 
 			parts.push( '[in:' + ( obj.parent.name || obj.parent.type ) + ']' );
+
+		}
+
+		// Compact descriptor tag (scene intelligence) — region/shape/color/pair.
+		// Lets the AI map "right arm of the red person" to a node by reasoning.
+		const d = obj.userData && obj.userData.descriptors;
+		if ( d ) {
+
+			const tag = [];
+			const reg = [ d.region.x, d.region.y, d.region.z ].filter( r => r !== 'center' );
+			if ( reg.length ) tag.push( reg.join( '/' ) );
+			if ( d.shape && d.shape !== 'blocky' ) tag.push( d.shape );
+			if ( d.color && d.color.base ) tag.push( d.color.base );
+			if ( d.pair ) tag.push( 'pair-' + d.pair.side );
+			if ( tag.length ) parts.push( 'desc(' + tag.join( ',' ) + ')' );
 
 		}
 

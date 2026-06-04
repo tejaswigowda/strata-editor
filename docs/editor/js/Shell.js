@@ -5,13 +5,14 @@ import { SetPositionCommand } from './commands/SetPositionCommand.js';
 import { SetRotationCommand } from './commands/SetRotationCommand.js';
 import { SetScaleCommand } from './commands/SetScaleCommand.js';
 import { SetMaterialColorCommand } from './commands/SetMaterialColorCommand.js';
+import { SetMaterialCommand } from './commands/SetMaterialCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
 import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT } from './AIPrompt.js';
 import { extractCode, buildMessages, buildQAMessages, sceneContextString } from './AIUtils.js';
 import { AIEngine, getModelList } from './AIEngine.js';
 import { objectToJS, sceneToJS } from './scene/codegen.js';
 import { sceneEqual } from './scene/sceneEqual.js';
-import { summarizeScene as summarizeSceneFull, getSize, getTopY, getWorldCenter } from './scene/summarize.js';
+import { summarizeScene as summarizeSceneFull, getSize, getTopY, getWorldCenter, searchableLabel } from './scene/summarize.js';
 import { booleanUnion, booleanSubtract, booleanIntersect } from './mesh/ops/boolean.js';
 import { mirrorMesh } from './mesh/ops/mirror.js';
 import { arrayDuplicate } from './mesh/ops/array.js';
@@ -24,6 +25,20 @@ import { bevel }       from './mesh/ops/bevel.js';
 import { deleteFaces } from './mesh/ops/delete.js';
 import { weld }        from './mesh/ops/weld.js';
 import { planarUV, boxUV } from './mesh/ops/uv.js';
+import { SceneIntelligence, findByDescription, describeObject, listCandidates, resolvePartAI } from './intelligence/sceneIndex.js';
+import { colorToName } from './intelligence/colorName.js';
+
+// Map common shape words to the substring found in geometry.type, so findObject
+// can resolve "red sphere" even when the object's name carries neither word.
+const TYPE_WORDS = {
+	sphere: 'sphere', ball: 'sphere',
+	box: 'box', cube: 'box',
+	cylinder: 'cylinder', tube: 'cylinder',
+	cone: 'cone',
+	plane: 'plane',
+	torus: 'torus', donut: 'torus', ring: 'ring',
+	capsule: 'capsule', circle: 'circle',
+};
 
 
 
@@ -174,6 +189,9 @@ function Shell( editor ) {
 	// Edit Mode controller — shared across toolbar, shell, and AI
 	editor.editModeController = new EditModeController( editor );
 
+	// Scene intelligence — derives descriptors on import, resolves NL part queries
+	editor.sceneIntelligence = new SceneIntelligence( editor );
+
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
 	function appendOutput( text, type ) {
@@ -249,6 +267,7 @@ function Shell( editor ) {
 				SetRotationCommand,
 				SetScaleCommand,
 				SetMaterialColorCommand,
+				SetMaterialCommand,
 				SetValueCommand,
 				// three.js primitives — available without THREE. prefix
 				BoxGeometry:          window.THREE.BoxGeometry,
@@ -385,25 +404,66 @@ function Shell( editor ) {
 				summarize:  () => summarizeSceneFull( editor ),
 
 				// ── Scene object lookup ────────────────────────────────────────────────
-				// findObject(query) — find the first scene object whose name contains
-				// `query` (case-insensitive). Falls back to editor.selected if no match.
-				// Returns null if nothing found at all.
-				// findObject(query) — first object whose name matches (exact then substring)
+				// findObject(query) — best-matching object, scored across NAME, material
+				// COLOR, and geometry TYPE in one pass. So "green cube" picks the right
+				// cube AND "red sphere" resolves even when the name carries neither word
+				// (color is on the material, shape is in geometry.type).
+				// Weights: exact name ≫ whole-phrase name > geometry type > color > name word.
 				findObject: function ( query ) {
 
 					if ( ! query ) return editor.selected;
 					const q = String( query ).toLowerCase().trim();
-					let exact = null, sub = null;
+					const words = q.split( /\s+/ ).filter( Boolean );
+
+					let exact = null;
+					let best = null, bestScore = 0;
 
 					editor.scene.traverse( function ( obj ) {
 
-						const name = ( obj.name || '' ).toLowerCase();
-						if ( ! exact && name === q ) exact = obj;
-						if ( ! sub   && name.includes( q ) ) sub = obj;
+						// Decoded node name + material name(s) — matches GLB parts whose
+						// only meaningful label is the material ("Tail Light" on "Object_12").
+						const name = searchableLabel( obj );
+						let score = 0;
+
+						if ( name ) {
+
+							if ( ! exact && name === q ) exact = obj;
+							if ( name.includes( q ) ) score += 100 + q.length;   // whole phrase
+							else for ( const w of words ) if ( name.includes( w ) ) score += 8;
+
+						}
+
+						if ( obj.isMesh ) {
+
+							// Geometry type ("sphere" → SphereGeometry)
+							const gtype = ( obj.geometry && obj.geometry.type || '' ).toLowerCase();
+							for ( const w of words ) {
+
+								const hint = TYPE_WORDS[ w ];
+								if ( hint && gtype.includes( hint ) ) score += 12;
+
+							}
+
+							// Material color name ("red" → red material)
+							const mat = Array.isArray( obj.material ) ? obj.material[ 0 ] : obj.material;
+							if ( mat && mat.color ) {
+
+								const base = colorToName( mat.color ).base;
+								for ( const w of words ) {
+
+									if ( w === base || ( w === 'grey' && base === 'gray' ) ) score += 6;
+
+								}
+
+							}
+
+						}
+
+						if ( score > bestScore ) { bestScore = score; best = obj; }
 
 					} );
 
-					return exact || sub || null;
+					return exact || ( bestScore > 0 ? best : null );
 
 				},
 
@@ -457,6 +517,39 @@ function Shell( editor ) {
 					return out;
 
 				},
+
+				// ── Scene intelligence — natural-language part resolution ─────────────
+				// Deterministic geometry+color+symmetry descriptors; ambiguous cases
+				// can be disambiguated by the loaded LLM via resolvePartAI (async).
+
+				// findByDescription(text) — best node for a NL part reference (sync, free).
+				// Returns the node directly when confident, else logs candidates and
+				// returns the top node (check .userData for confidence via describeObject).
+				findByDescription: function ( text ) {
+
+					const r = findByDescription( editor, text );
+
+					if ( r.method === 'merged' ) { appendOutput( 'ℹ ' + r.message, 'info' ); return null; }
+					if ( r.method === 'none' )   { appendOutput( 'ℹ No node matched: "' + text + '"', 'info' ); return null; }
+
+					if ( r.method === 'ambiguous' ) {
+
+						appendOutput( '⚠ Ambiguous — candidates: ' + r.candidates.map( c => ( c.node.name || c.node.uuid.slice( 0, 6 ) ) + ' (' + c.reasons.join( '+' ) + ')' ).join( ', ' ), 'info' );
+
+					}
+
+					return r.node;
+
+				},
+
+				// describeObject(node) — derived descriptor bundle (region/shape/color/pair)
+				describeObject: ( node ) => describeObject( editor, node ?? editor.selected ),
+
+				// listCandidates(text) — ranked candidates [{node, score, reasons}]
+				listCandidates: ( text ) => listCandidates( editor, text ),
+
+				// resolvePartAI(text) — async Path A + LLM disambiguation → {node, confidence, method}
+				resolvePartAI: ( text ) => resolvePartAI( editor, text ),
 
 				// ── Modeling ops (M1/M2) — same surface for UI and AI ─────────────────
 				// Closures capture `editor` so the AI can call them without it.
@@ -842,6 +935,7 @@ function Shell( editor ) {
 
 	appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand  SetMaterialColorCommand  SetValueCommand', 'info' );
 	appendOutput( 'scene lookup: findObject(name)  findAll(name)  findOfType(type)  findNear(mesh,radius)  summarize()', 'info' );
+	appendOutput( 'scene intelligence: findByDescription("right arm of the red person")  describeObject(o)  listCandidates(text)  resolvePartAI(text)', 'info' );
 	appendOutput( 'spatial: getSize(obj)  getTopY(obj)  getCenter(obj)  placeOnTop(child,target)', 'info' );
 	appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
 	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
