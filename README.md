@@ -24,6 +24,9 @@ Requires **Chrome 113+** (WebGPU). Verify at [webgpureport.org](https://webgpure
 | **No build step** | Serve `docs/` as-is. Plain ES modules, importmap, no bundler. |
 | **JS Shell** | Interactive REPL — a tab in the right sidebar (**View → JS Shell**). Same scope as the AI. |
 | **One execution surface** | AI-generated and human-typed code run through the same `execute()` binding — same undo stack, same error handling, no second path. |
+| **Agentic loop** | AI requests run a bounded **generate → validate → execute → observe → fix** loop — the model checks its own output against the real API and the resulting scene change, and self-corrects. |
+| **No API hallucination** | Real command/op/material/geometry signatures are indexed locally and injected before generation + linted after, killing invented classes and wrong arguments. |
+| **Model-free scene grounding** | GPU color-picking answers "what's visible / what's under this point" from the renderer — no vision model. |
 | **Scene Q&A** | Ask the AI about the scene in plain English (prefix with `?`). No code generated or run. |
 | **Modeling ops** | Boolean CSG, mirror, array, subdivision — undoable and AI-callable. |
 | **Edit Mode** | Half-edge mesh editing: vertex/edge/face selection, extrude, inset, bevel, delete, weld, UV projection. |
@@ -134,6 +137,14 @@ planarUV(axis='y')  boxUV()
 selectFaces(...ids)  selectVertices(...ids)  selectEdges(...ids)
 ```
 
+### Agentic grounding tools
+
+```js
+findAPI('set material color')   // retrieve the REAL signatures for an intent (anti-hallucination)
+whatsVisible()                  // GPU color-pick: visible objects ranked by screen area
+whatsAt(400, 300)               // GPU color-pick: object under a viewport pixel
+```
+
 ### Codegen & Q&A
 
 ```js
@@ -188,6 +199,26 @@ Resolves natural-language part references against imported GLBs whose nodes are 
 **Resolution** is cheap-first: a deterministic rule match (free, offline) handles most queries; ambiguous ones build a compact, pre-filtered descriptor table and ask the loaded LLM to disambiguate. Never silently wrong — returns confidence and ranked candidates, and detects single merged-mesh GLBs (no per-part nodes) and says so.
 
 The AI scene context is enriched with compact `desc(region,shape,color,pair)` tags so the main code-gen model can map "right arm of the red person" → node by reasoning, with zero extra inference.
+
+---
+
+## Reliable AI assist (the agentic loop)
+
+Instead of "generate code and hope," every AI request runs a bounded, self-correcting loop — all on-device, no extra models:
+
+```
+generate → validate → execute → observe → fix   (max 3 retries, every action on the undo stack)
+```
+
+1. **Retrieve real APIs.** A local index of the actual command/op/material/geometry signatures (rebuilt at load, so it never goes stale) is searched by intent and injected *before* generation — the model sees the real `AddObjectCommand(editor, object)` and the real `metalness` key instead of guessing.
+2. **Validate.** Generated code is statically linted against that index *before* running — invented classes (`Tree3D`), wrong command arity (a stray position arg), and bad material keys (`metal:1`) are caught and fed back as precise corrections.
+3. **Execute** through the single shell surface (`editor.execute` → undo stack).
+4. **Observe.** The scene is snapshotted before/after and diffed (added / removed / moved / scaled / recolored). The loop reports `✓ 1 recolored` — or, if a change was expected and *nothing* happened (usually a missed lookup), feeds that back for one corrective retry.
+5. **Bounded & reversible.** Retries are hard-capped; every autonomous action is undoable; ambiguous/destructive ops surface candidates rather than guess.
+
+**Scene grounding without a vision model.** Beyond the scene graph and descriptors, GPU color-picking renders each object in a unique ID color offscreen and reads pixels — giving `whatsVisible()` (what's on screen, by area) and `whatsAt(x, y)` (what's under a point). Deterministic, reuses the existing renderer, no download.
+
+The net effect: real APIs (no hallucination), the right object (grounding), and a verified result (observation) — entirely on-device.
 
 ---
 
