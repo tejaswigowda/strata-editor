@@ -111,6 +111,10 @@ RULES:
 21. LINES / NETS / WIRES — there is NO BufferGeometry, LineSegments, or Line-from-curve
    in scope. To draw a line/net/path use lineFromPoints([[x,y,z],…], color) → returns a
    Line; name it and add it like any object. NEVER use new Line(curve,…) or new BufferGeometry().
+22. PLACE APART + RIGHT SHAPE — for "X and Y" (bat and ball, cup and saucer) put each at
+   DISTINCT positions, NEVER the same coordinates (they would overlap). Pick shape-appropriate
+   primitives: long thin things (bat, pole, sword, bottle, bone) = CylinderGeometry or an
+   elongated Box — NOT a cube; round things = SphereGeometry.
 
 EXAMPLES:
 

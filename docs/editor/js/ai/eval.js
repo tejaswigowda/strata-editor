@@ -63,6 +63,10 @@ export const EVAL_PROMPTS = [
 	{ prompt: 'make the paddles red and blue', tier: 'material', expect: { minObjects: 0, distinctColors: 2 },
 		setup: "(function(){const pl=new Mesh(new BoxGeometry(0.3,0.2,2),new MeshStandardMaterial({color:0xffffff}));pl.name='Paddle Left';pl.position.set(-3,0.1,0);editor.execute(new AddObjectCommand(editor,pl));const pr=new Mesh(new BoxGeometry(0.3,0.2,2),new MeshStandardMaterial({color:0xffffff}));pr.name='Paddle Right';pr.position.set(3,0.1,0);editor.execute(new AddObjectCommand(editor,pr));})();" },
 
+	// Layout — "X and Y" must be placed APART (not co-located) with shape-appropriate
+	// primitives (a bat is elongated, not a cube). Spatial axis catches co-location.
+	{ prompt: 'make a bat and ball',      tier: 'layout',        expect: { minObjects: 2 } },
+
 	// Off-domain — open generalization. A traffic intersection is NOT a chessboard.
 	{ prompt: 'make a small kitchen',     tier: 'off-domain',    expect: { minObjects: 3 } },
 	{ prompt: 'make a traffic intersection', tier: 'off-domain', expect: { minObjects: 3, noChessTemplate: true } },
@@ -115,6 +119,22 @@ export function scoreSpatial( objects, expect = {} ) {
 	// Resting-on-ground: lowest object bottom shouldn't sink far below y=0.
 	const lowestBottom = Math.min( ...objects.map( o => o.pos[ 1 ] - o.size[ 1 ] / 2 ) );
 	if ( lowestBottom < - 0.25 ) reasons.push( 'object sits below the ground plane' );
+
+	// Co-location (tier-1 geometric check): two objects at ~the same centroid with
+	// intersecting bounding boxes — "bat and ball" placed at one spot. Conservative
+	// (near-identical centre on every axis) so distinct/adjacent parts don't trip it.
+	for ( let a = 0; a < objects.length && ! reasons.includes( 'co-located' ); a ++ ) {
+
+		for ( let b = a + 1; b < objects.length; b ++ ) {
+
+			const A = objects[ a ], B = objects[ b ];
+			const sameSpot = [ 0, 1, 2 ].every( k =>
+				Math.abs( A.pos[ k ] - B.pos[ k ] ) < Math.max( 0.05, Math.min( A.size[ k ], B.size[ k ] ) * 0.25 ) );
+			if ( sameSpot ) { reasons.push( 'objects co-located at the same spot — space them apart' ); break; }
+
+		}
+
+	}
 
 	// Flat layouts: must spread in X-Z, not stand up in X-Y (the chess-wall bug).
 	if ( expect.flat ) {

@@ -516,6 +516,58 @@ document.getElementById('shell-model-select').value = 'gpt-4';
 await askExternal('ollama:codellama', 'Create a cylinder');
 ```
 
+## Using External Models via UI Dropdown
+
+External API models (Ollama, OpenAI, Claude) now appear in the model selection dropdown in the editor UI. This provides a convenient way to switch between local and cloud models without using the REPL.
+
+### Step-by-step
+
+1. **Start dev mode with external APIs configured:**
+
+```bash
+# Terminal 1: Start Ollama (optional)
+ollama serve
+
+# Terminal 2: Start editor server with dev mode enabled
+export OPENAI_API_KEY="sk-..."  # if using OpenAI
+export ANTHROPIC_API_KEY="sk-ant-..."  # if using Claude
+DEV=1 node server.js
+```
+
+2. **In the editor, look at the model dropdown:**
+
+You'll see two groups:
+- **WebLLM Models** (browser-based, always available)
+- **─── External APIs ───** (separator)
+- **External Models** (Ollama, OpenAI, Claude - if configured)
+
+3. **Select an external model and load it:**
+
+```
+1. Click on a model from External APIs section (e.g., "gpt-4")
+2. Click "Load AI" button
+3. The editor detects the external model and checks `/api/health`
+4. Start typing a prompt and send - it routes through askExternal()
+```
+
+### Example: Using Claude via Dropdown
+
+```
+1. Export ANTHROPIC_API_KEY, start server with DEV=1
+2. Dropdown now shows: "claude-3-5-sonnet-20241022 (Claude)"
+3. Select it, click "Load AI"
+4. Type prompt: "Create a blue rotating sphere with reflection"
+5. Send - response appears in output with generated code
+```
+
+### Automatic Model Discovery
+
+The dropdown is populated dynamically from `/api/models` endpoint:
+- Returns WebLLM models (always) + external APIs (if configured)
+- External models show source label: (Ollama), (OpenAI), (Claude)
+- Only models with healthy endpoints appear
+- Automatically updates when server restarts
+
 ## Next Steps
 
 - Integrate external models into the AI agentic loop (not just Q&A)

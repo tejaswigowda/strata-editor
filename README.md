@@ -14,6 +14,17 @@ npx serve docs       # local dev — or point GitHub Pages at docs/
 
 Requires **Chrome 113+** (WebGPU). Verify at [webgpureport.org](https://webgpureport.org).
 
+**With external AI models (Ollama, OpenAI, Claude):**
+
+```bash
+# Terminal 1: Start server with dev mode enabled
+export ANTHROPIC_API_KEY="sk-ant-..."  # or OPENAI_API_KEY
+DEV=1 node server.js
+
+# Terminal 2: Open http://127.0.0.1:5500 in Chrome
+# External models now appear in the model dropdown
+```
+
 ---
 
 ## Features
@@ -41,11 +52,25 @@ Requires **Chrome 113+** (WebGPU). Verify at [webgpureport.org](https://webgpure
 
 Select a model from the shell header and click **Load AI**. Weights download once and cache in browser storage.
 
+### Browser-based models (WebLLM)
+
 | Label | Model ID | Size | Notes |
 |-------|----------|------|-------|
 | **Default** | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` | ~1 GB | Fast; best for structural/edit (see routing) |
 | **Power** | `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | ~4.5 GB | Best at decomposition; needs ≥8 GB VRAM |
 | **Lite** | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | ~900 MB | Weak / integrated GPUs only |
+
+### External API models (Dev Mode)
+
+Enable with `DEV=1 node server.js` to add:
+
+| Provider | Models | Setup | Notes |
+|----------|--------|-------|-------|
+| **Ollama** | Any installed model (codellama, neural-chat, mistral, etc.) | `ollama serve` in another terminal | Local; no API key needed |
+| **OpenAI** | gpt-4, gpt-4-turbo, gpt-3.5-turbo | `export OPENAI_API_KEY="sk-..."` | Cloud; best for complex code |
+| **Anthropic** | claude-3-5-sonnet, claude-3-opus, claude-3-haiku | `export ANTHROPIC_API_KEY="sk-ant-..."` | Cloud; excellent for 3D generation |
+
+External models appear in the dropdown **below** WebLLM models (marked with source: Ollama, OpenAI, Claude).
 
 On load the engine requests an **8192-token context window** (overriding the 4096
 default) so the system prompt + RAG hints + retry history have headroom; it falls
@@ -89,7 +114,7 @@ tier            | struct | spatial | semantic | distinct | prompt
 | Axis | Checks |
 |------|--------|
 | **struct** | ran clean — IIFE, named, `AddObjectCommand`, no repetition loop / prose / overflow |
-| **spatial** | flat things lie flat (X-Z), objects rest on/above the ground (no X-Y walls, no negative Y) |
+| **spatial** | flat things lie flat (X-Z), objects rest on/above the ground (no X-Y walls, no negative Y), and "X and Y" objects are placed apart (no co-location/overlap) |
 | **semantic** | has the expected parts — and they are *distinct*, not N identical boxes |
 | **distinct** | not over-fit (a non-chess "board" doesn't emit the chess template) and recolors yield the requested distinct colors |
 
@@ -101,6 +126,16 @@ Run `evalAI()` after any prompt change, and on both tiers to set routing. The
 validation + translated-feedback layer (undefined-helper, duplicate-`const`,
 `.add()`-on-Material, shared-material clone-on-write) is **model-independent** — it
 caught and let the 7B *recover* the same bug classes it catches on the 1.5B.
+
+### External API Model Selection
+
+In dev mode, external models are auto-discovered and listed in the dropdown:
+
+1. Select a model from the **External APIs** section (e.g., Claude, OpenAI, Ollama)
+2. Click **Load AI** — the editor checks health instead of downloading weights
+3. Type a prompt and send — it routes through the selected external API
+
+No keys are exposed; all API communication stays server-side. See [Dev Mode](#dev-mode-external-apis) for setup details.
 
 ---
 
@@ -209,6 +244,107 @@ showJS(obj?)   objectToJS(obj)   sceneToJS()   sceneEqual(a, b)   summarize()
 askScene('which object is tallest?')      // plain-text answer
 makeCheckerTex(512, 0x222, 0xccc, 16)     makeGridTex(512, 0x0f8, 12)   makeTexture(fn, size)
 ```
+
+### External AI Models (Dev Mode)
+
+```js
+getAvailableModels()        // fetch and list all available models (WebLLM + external)
+await askExternal('gpt-4', 'Create a red sphere')      // query an external model
+await checkApiHealth()      // verify external services are running
+```
+
+**Example: Using Claude for 3D modeling**
+
+```js
+// When ANTHROPIC_API_KEY is set and DEV=1:
+const code = await askExternal(
+  'claude-3-5-sonnet-20241022',
+  'Create a kitchen with a table and 4 chairs'
+);
+// Response is printed to output; copy-paste code into shell to run
+```
+
+### Third-party APIs (console)
+
+`fetchAPI(url, options?)` calls any HTTP API and returns the parsed body (JSON → object,
+otherwise text). A plain-object `body` is auto-JSON-encoded. `await` it from the shell:
+
+```js
+// GET → build a scene from live data
+const items = await fetchAPI('https://api.example.com/products');
+items.forEach((it, i) => {
+  const m = new Mesh(new BoxGeometry(1,1,1), new MeshStandardMaterial({ color: it.color }));
+  m.name = it.name; m.position.set(i * 1.5, 0.5, 0);
+  editor.execute(new AddObjectCommand(editor, m));
+});
+
+// POST with auth + JSON body
+await fetchAPI('https://api.example.com/save', {
+  method: 'POST',
+  headers: { Authorization: 'Bearer ' + token },
+  body: { scene: sceneToJS().code },
+});
+```
+
+> **Sovereignty note.** `fetchAPI` is the one helper that leaves the device — the request
+> hits the network and the target must allow CORS. Everything else (inference, scene state,
+> intelligence) stays on-device. Keep API keys in a variable you control; don't hard-code
+> secrets into saved scenes (they'd be committed via Git).
+
+---
+
+## Dev Mode: External APIs
+
+**Dev mode enables optional integration with Ollama, OpenAI, and Anthropic Claude** — keeping the editor sovereign by default (browser-only) while allowing developers to use more powerful models when needed.
+
+### Setup
+
+```bash
+# Enable dev mode + set API keys
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENAI_API_KEY="sk-..."
+DEV=1 node server.js
+
+# Optional: Start Ollama in another terminal
+ollama serve
+```
+
+**What happens:**
+- `/api/models` endpoint returns all available models (WebLLM + external)
+- External models appear in the editor dropdown
+- `/api/health` checks if services are running
+- `/api/chat` proxies requests to the selected model
+
+### Security
+
+- **API keys stay server-side only.** Never sent to the browser or logged.
+- **Request validation** — content-type check, request size limits, model validation
+- **Response sanitization** — generic error messages, no service internals exposed
+- **No caching** — API responses never cached; sensitive endpoints not exposed
+
+Full security details in [DEV_MODE_API.md](DEV_MODE_API.md).
+
+### Models in Dropdown
+
+When dev mode is enabled, the model dropdown shows:
+
+```
+Qwen2.5-Coder 1.5B     (WebLLM - browser)
+Qwen2.5-Coder 7B       (WebLLM - browser)
+─── External APIs ───
+codellama              (Ollama)
+gpt-4                  (OpenAI)
+claude-3-5-sonnet      (Claude)
+```
+
+### Using External Models
+
+1. **Select** a model from the dropdown
+2. **Click "Load AI"** — editor checks if the service is healthy
+3. **Type a prompt** and send — routed to the selected model
+4. **Response appears** in the output panel
+
+All code execution still goes through the same command pattern (undoable).
 
 ---
 
@@ -339,11 +475,17 @@ sceneEqual(snap, editor.scene.toJSON())   // { equal:true, differences:[] }
 ## Architecture
 
 ```
+server.js              — Static file server + API proxy (dev mode)
+  /api/models          — List WebLLM + external models (Ollama, OpenAI, Claude)
+  /api/chat            — Proxy requests to external LLMs
+  /api/health          — Check service availability
+
 docs/editor/js/
   AIEngine.js          — WebLLM wrapper: init() (8192-window override+fallback), stream(), complete(), interrupt()
   AIPrompt.js          — SYSTEM_PROMPT, buildSystemPrompt(), SCENE_QA_PROMPT, model registry, few-shot examples
   AIUtils.js           — extractCode() (fenced-only, prose never runs), buildMessages(), token helpers
   Shell.js             — REPL UI + single execute() surface; Stop-AI; evalAI(); instantiates the controllers
+                          External model discovery, askExternal(), getAvailableModels()
   ai/
     apiIndex.js        — local RAG: curated command/op signatures + full three.js API (tern typedefs)
     threejsApi.js      — AUTO-GENERATED three.js API index (scripts/genThreeApi.cjs)
@@ -402,8 +544,12 @@ docs/editor/js/
 ✅  Agentic-loop hardening: actionable error translation, duplicate-const / undefined-helper / shared-material lint, intent-preserving + stop-on-identical retries
 ✅  Local three.js API RAG (tern typedefs) · 8192-token window w/ fallback · Stop-AI button
 ✅  Standing eval harness (evalAI, 4-axis rubric + overfit canaries) · two-tier routing
-⬜  M6: AI selectByCriteria + deeper natural-language mesh editing
-⬜  M7: glTF / OBJ export of edited meshes back through the recipe pipeline
+✅  M6: AI selection criteria (selectTopFaces, selectFacingUp, selectBoundaryEdges)
+✅  Dev mode: Optional external APIs (Ollama, OpenAI, Claude) · dropdown model selection · askExternal() REPL function
+⬜  M7: glTF / OBJ import helpers + recipe-aware export
+⬜  M8: Advanced texture/UV tools, material property setters, texture baking
 ⬜  Optional vision layer (precise nouns, OCR) — separate spec, needs a model
 ⬜  PWA / WebXR / Electron packaging
+⬜  Streaming responses for better UX
+⬜  Integration tests for external models
 ```

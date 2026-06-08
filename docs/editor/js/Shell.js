@@ -92,6 +92,52 @@ function Shell( editor ) {
 
 		} );
 
+	// Load external API models (Ollama, OpenAI, Claude) if available
+	( async () => {
+
+		try {
+
+			const res = await fetch( '/api/models' );
+			const data = await res.json();
+
+			if ( data.models && data.models.length > 0 ) {
+
+				// Add separator for external models
+				const webllmCount = modelSelect.options.length;
+				if ( webllmCount > 0 ) {
+
+					const sep = document.createElement( 'option' );
+					sep.disabled = true;
+					sep.textContent = '─── External APIs ───';
+					modelSelect.appendChild( sep );
+
+				}
+
+				// Add each external model
+				data.models.forEach( m => {
+
+					// Skip WebLLM models (already in dropdown)
+					if ( m.source === 'webllm' ) return;
+
+					const opt = document.createElement( 'option' );
+					opt.value = m.id;
+					opt.dataset.source = m.source;  // Store the source for later
+					opt.textContent = m.label;
+					modelSelect.appendChild( opt );
+
+				} );
+
+			}
+
+		} catch ( e ) {
+
+			// External API check failed, silently continue with WebLLM only
+			console.debug( 'External models not available', e.message );
+
+		}
+
+	} )();
+
 	// Default to a preferred coder model if present in the list
 	const PREFERRED = [
 		'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',
@@ -875,7 +921,7 @@ function Shell( editor ) {
 		// rather than asking the model to "build" the literal text (e.g. evalAI()).
 		if ( /^\s*evalAI\s*\(/.test( userPrompt ) ) { evalAI(); return; }
 
-		if ( ! aiEngine.ready ) {
+		if ( ! aiEngine.ready && ! _usingExternalAPI ) {
 
 			appendOutput( 'AI not loaded — click "Load AI" first.', 'error' );
 			return;
@@ -894,7 +940,14 @@ function Shell( editor ) {
 
 		try {
 
-			if ( isQA ) {
+			if ( _usingExternalAPI ) {
+
+				// External API mode (Ollama, OpenAI, Claude)
+				const response = await askExternal( modelSelect.value, question );
+				// askExternal already appends output via appendOutput()
+				if ( aiAborted ) appendOutput( '■ Stopped by user.', 'info' );
+
+			} else if ( isQA ) {
 
 				// Q&A mode — stream plain-text answer, do not execute
 				const messages = buildQAMessages( SCENE_QA_PROMPT, editor, question );
@@ -1064,9 +1117,9 @@ function Shell( editor ) {
 
 	stopBtn.addEventListener( 'click', function () {
 
-		if ( ! aiEngine.ready ) return;
+		if ( ! aiEngine.ready && ! _usingExternalAPI ) return;
 		aiAborted = true;
-		aiEngine.interrupt();
+		if ( aiEngine.ready ) aiEngine.interrupt();
 		stopBtn.disabled = true;
 		aiStatus.textContent = 'stopping…';
 
@@ -1074,34 +1127,70 @@ function Shell( editor ) {
 
 	// ── Load AI button ────────────────────────────────────────────────────────
 
+	let _usingExternalAPI = false;  // Flag to track if we're using external API
+
 	loadBtn.addEventListener( 'click', async function () {
 
 		if ( aiEngine.ready || aiEngine.loading ) return;
+
+		const selectedModel = modelSelect.value;
+		const isExternal = [ 'ollama:', 'gpt-', 'claude-' ].some( prefix => selectedModel.startsWith( prefix ) );
+
 		loadBtn.disabled = true;
 		modelSelect.disabled = true;
-		aiStatus.textContent = 'loading…';
-		progressWrap.style.display = 'block';
+		aiStatus.textContent = isExternal ? 'checking…' : 'loading…';
+		progressWrap.style.display = isExternal ? 'none' : 'block';
 		progressBar.style.width = '0%';
 
 		try {
 
-			await aiEngine.init( modelSelect.value, ( p ) => {
+			if ( isExternal ) {
 
-				const pct = Math.round( ( p.progress || 0 ) * 100 );
-				progressBar.style.width = pct + '%';
-				aiStatus.textContent = p.text ?? ( pct + '%' );
+				// External API: just verify health and mark as ready
+				const healthRes = await fetch( '/api/health' );
+				const health = await healthRes.json();
 
-			} );
+				// Check if the selected API source is available
+				const source = selectedModel.startsWith( 'ollama:' ) ? 'ollama' : selectedModel.startsWith( 'gpt-' ) ? 'openai' : 'claude';
+				if ( health.services[ source ] !== 'running' && health.services[ source ] !== 'configured' ) {
 
-			progressBar.style.width = '100%';
-			setTimeout( () => { progressWrap.style.display = 'none'; }, 600 );
-			aiStatus.textContent = 'ready';
-			loadBtn.textContent = '✓ AI';
-			aiInput.disabled = false;
-			aiInput.focus();
-			localStorage.setItem( 'shell-ai-model', modelSelect.value );
-			appendOutput( 'AI ready — model: ' + modelSelect.value +
-				'  (context window: ' + ( aiEngine.contextWindow || 'default' ) + ' tokens)', 'info' );
+					throw new Error( `${source} API not configured or not running` );
+
+				}
+
+				aiStatus.textContent = 'ready';
+				loadBtn.textContent = '✓ AI';
+				aiInput.disabled = false;
+				aiInput.focus();
+				_usingExternalAPI = true;
+				localStorage.setItem( 'shell-ai-model', selectedModel );
+				appendOutput( 'AI ready — model: ' + selectedModel + '  (external API)', 'info' );
+
+			} else {
+
+				// WebLLM: standard loading
+				progressWrap.style.display = 'block';
+
+				await aiEngine.init( selectedModel, ( p ) => {
+
+					const pct = Math.round( ( p.progress || 0 ) * 100 );
+					progressBar.style.width = pct + '%';
+					aiStatus.textContent = p.text ?? ( pct + '%' );
+
+				} );
+
+				progressBar.style.width = '100%';
+				setTimeout( () => { progressWrap.style.display = 'none'; }, 600 );
+				aiStatus.textContent = 'ready';
+				loadBtn.textContent = '✓ AI';
+				aiInput.disabled = false;
+				aiInput.focus();
+				_usingExternalAPI = false;
+				localStorage.setItem( 'shell-ai-model', selectedModel );
+				appendOutput( 'AI ready — model: ' + selectedModel +
+					'  (context window: ' + ( aiEngine.contextWindow || 'default' ) + ' tokens)', 'info' );
+
+			}
 
 		} catch ( err ) {
 
@@ -1109,6 +1198,7 @@ function Shell( editor ) {
 			aiStatus.textContent = 'failed';
 			loadBtn.disabled = false;
 			modelSelect.disabled = false;
+			_usingExternalAPI = false;
 			appendOutput( 'AI load error: ' + err.message, 'error' );
 
 		}
@@ -1245,7 +1335,7 @@ function Shell( editor ) {
 	appendOutput( 'agentic tools: findAPI(text)  whatsVisible()  whatsAt(x,y)  — AI requests run a bounded generate→validate→execute→observe→fix loop', 'info' );
 	appendOutput( 'spatial: getSize(obj)  getTopY(obj)  getCenter(obj)  placeOnTop(child,target)', 'info' );
 	appendOutput( '3rd-party API: const d = await fetchAPI(url[, {method,headers,body}])  — JSON→object (network/CORS apply)', 'info' );
-	appendOutput( 'dev API (--dev mode): getAvailableModels()  askExternal(model,q)  checkApiHealth()  — Ollama + OpenAI support', 'info' );
+	appendOutput( 'dev API (--dev mode): External models (Ollama, OpenAI, Claude) appear in model dropdown when available  — select and click "Load AI"', 'info' );
 	appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
 	appendOutput( 'AI eval: evalAI() runs the standing eval set (pong/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
 	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );

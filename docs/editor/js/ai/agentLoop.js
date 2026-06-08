@@ -96,6 +96,29 @@ function translateError( raw ) {
 
 }
 
+// First pair of objects placed at nearly the same position (overlap heads-up).
+// snapshot objects carry pos:[x,y,z]; no size needed — near-identical centres are
+// the "bat and ball at one spot" signal. Returns [nameA, nameB] or null.
+function colocatedPair( objs, eps = 0.1 ) {
+
+	for ( let a = 0; a < objs.length; a ++ ) {
+
+		for ( let b = a + 1; b < objs.length; b ++ ) {
+
+			const A = objs[ a ].pos, B = objs[ b ].pos;
+			if ( Math.abs( A[ 0 ] - B[ 0 ] ) < eps && Math.abs( A[ 1 ] - B[ 1 ] ) < eps && Math.abs( A[ 2 ] - B[ 2 ] ) < eps ) {
+
+				return [ objs[ a ].name, objs[ b ].name ];
+
+			}
+
+		}
+
+	}
+	return null;
+
+}
+
 // Distinct named colors mentioned in a request — used by C5 to know how many
 // different colors the user asked for ("red and blue" → 2).
 const COLOR_WORDS = [ 'red', 'green', 'blue', 'yellow', 'orange', 'purple', 'cyan',
@@ -275,6 +298,14 @@ export async function runAgentic( { editor, messages, intent, deps, maxRetries =
 			}
 
 		}
+
+		// Tier-1 geometric observe: surface co-located objects (added at nearly the
+		// same spot → they overlap). Non-blocking — a heads-up, not a retry (placement
+		// quality is the planning ceiling; the prompt rule + Power tier handle it).
+		const addedNames = new Set( diff.added );
+		const addedObjs = [ ...after.values() ].filter( o => addedNames.has( o.name ) );
+		const colo = colocatedPair( addedObjs );
+		if ( colo ) appendOutput( `⚠ "${ colo[ 0 ] }" and "${ colo[ 1 ] }" are at nearly the same spot — space objects apart so they don't overlap.`, 'info' );
 
 		appendOutput( '✓ ' + diffSummary( diff ), 'info' );
 		return { ok: true, diff, attempts: attempt + 1 };
