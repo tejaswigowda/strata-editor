@@ -1,7 +1,6 @@
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
-const url  = require('url');
 
 const PORT  = parseInt(process.argv[2] || '5500', 10);
 const ROOT  = path.join(__dirname, 'docs');
@@ -377,8 +376,10 @@ function mime(file) {
 }
 
 const server = http.createServer((req, res) => {
-  const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
+  // WHATWG URL API (url.parse is non-standard and security-prone). Only the
+  // pathname is needed for routing; a fixed base satisfies the absolute-URL
+  // requirement since req.url is always an origin-relative path.
+  const pathname = new URL(req.url, 'http://localhost').pathname;
 
   // ── API Routes (Dev Mode) ──────────────────────────────────────────────
   if (pathname === '/api/models' && req.method === 'GET') {
