@@ -23,6 +23,9 @@ export class AIEngine {
 		this._engine  = null;
 		this.loading  = false;
 		this.modelId  = null;
+		this._externalAPIReady = false;  // Flag for external API mode
+		this._externalStream = null;    // Override stream() for external APIs
+		this._externalInterrupt = null; // Override interrupt() for external APIs
 
 		// Desired context window. Qwen2.5 supports far more than the 4096 the
 		// prebuilt MLC config defaults to; a larger window gives the prompt + RAG +
@@ -34,8 +37,8 @@ export class AIEngine {
 
 	}
 
-	/** True once a model has been loaded successfully. */
-	get ready() { return this._engine !== null; }
+	/** True once a model has been loaded successfully (WebLLM or external). */
+	get ready() { return this._engine !== null || this._externalAPIReady; }
 
 	// ── Interrupt ─────────────────────────────────────────────────────────────
 	/**
@@ -45,6 +48,13 @@ export class AIEngine {
 	 */
 	interrupt() {
 
+		// External API interrupt (if overridden)
+		if ( this._externalInterrupt ) {
+			this._externalInterrupt();
+			return;
+		}
+
+		// WebLLM interrupt
 		if ( this._engine && typeof this._engine.interruptGenerate === 'function' ) {
 
 			this._engine.interruptGenerate();
@@ -119,6 +129,11 @@ export class AIEngine {
 	 */
 	async stream( messages, { onToken, maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0 } = {} ) {
 
+		// External API stream (if overridden)
+		if ( this._externalStream ) {
+			return this._externalStream( messages, { onToken, maxTokens, temperature } );
+		}
+
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
 
 		// A SMALL frequency penalty nudges against pathological token loops without
@@ -157,6 +172,11 @@ export class AIEngine {
 	 */
 	async complete( messages, { maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0 } = {} ) {
 
+		// External API stream (if overridden) — use it for complete too
+		if ( this._externalStream ) {
+			return this._externalStream( messages, { maxTokens, temperature } );
+		}
+
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
 
 		const reply = await this._engine.chat.completions.create( {
@@ -169,6 +189,34 @@ export class AIEngine {
 		} );
 
 		return reply.choices[ 0 ].message.content;
+
+	}
+
+	// ── External API support ──────────────────────────────────────────────────
+	/**
+	 * Set up external API mode. Call this to configure aiEngine for Ollama/OpenAI/Claude.
+	 * @param {string}   modelId        External model identifier (e.g. "claude-3-5-sonnet-...")
+	 * @param {Function} streamFn       async function(messages, opts) that returns full response
+	 * @param {Function} interruptFn    function() for interrupt
+	 */
+	setExternalAPI( modelId, streamFn, interruptFn ) {
+
+		this.modelId = modelId;
+		this.contextWindow = 8192;
+		this._externalStream = streamFn;
+		this._externalInterrupt = interruptFn;
+		this._externalAPIReady = true;
+
+	}
+
+	/**
+	 * Clear external API mode (e.g., when switching models).
+	 */
+	clearExternalAPI() {
+
+		this._externalAPIReady = false;
+		this._externalStream = null;
+		this._externalInterrupt = null;
 
 	}
 

@@ -95,20 +95,20 @@ async function handleApiModels(res) {
     // Claude API (Anthropic) - if ANTHROPIC_API_KEY env var set
     if (process.env.ANTHROPIC_API_KEY) {
       models.push({
-        id: 'claude-3-5-sonnet-20241022',
-        label: 'Claude 3.5 Sonnet (Anthropic)',
+        id: 'claude-opus-4-8',
+        label: 'Claude Opus 4.8 (Anthropic)',
         source: 'anthropic',
         vram_required_MB: 0
       });
       models.push({
-        id: 'claude-3-opus-20250219',
-        label: 'Claude 3 Opus (Anthropic)',
+        id: 'claude-sonnet-4-6',
+        label: 'Claude Sonnet 4.6 (Anthropic)',
         source: 'anthropic',
         vram_required_MB: 0
       });
       models.push({
-        id: 'claude-3-haiku-20250307',
-        label: 'Claude 3 Haiku (Anthropic)',
+        id: 'claude-haiku-4-5-20251001',
+        label: 'Claude Haiku 4.5 (Anthropic)',
         source: 'anthropic',
         vram_required_MB: 0
       });
@@ -237,33 +237,76 @@ async function handleApiChat(req, res) {
         }
 
         try {
-          // Claude uses a different message format: convert from OpenAI format
-          const claudeMessages = messages.map(m => ({
-            role: m.role,
-            content: m.content
-          }));
+          // Claude API 2023-06-01: requires top-level 'system' parameter, not in messages array
+          let systemPrompt = '';
+          const claudeMessages = [];
 
-          const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'x-api-key': process.env.ANTHROPIC_API_KEY,
-              'anthropic-version': '2023-06-01',
-              'content-type': 'application/json'
-            },
-            body: JSON.stringify({
-              model: model,
-              max_tokens: max_tokens || 2048,
-              messages: claudeMessages,
-              temperature: temperature
-            }),
-            timeout: 30000
-          });
+          for (const msg of messages) {
+            if (msg.role === 'system') {
+              systemPrompt = msg.content;
+            } else {
+              claudeMessages.push({
+                role: msg.role,
+                content: msg.content
+              });
+            }
+          }
+
+          const requestBody = {
+            model: model,
+            max_tokens: max_tokens || 2048,
+            messages: claudeMessages
+          };
+
+          // Newer Claude models (Opus 4.8+) deprecate the temperature parameter.
+          // Only include it for models that still accept it.
+          if (!/^claude-opus-4-[78]/.test(model)) {
+            requestBody.temperature = temperature;
+          }
+
+          // Add system parameter if we have system content
+          if (systemPrompt) {
+            requestBody.system = systemPrompt;
+          }
+
+          console.log('[Claude Request]', JSON.stringify({ model, messageCount: claudeMessages.length, maxTokens: max_tokens, hasSystem: !!systemPrompt }));
+
+          // Retry on 429 (rate limit) with backoff, respecting retry-after header.
+          let claudeRes;
+          const maxRetries = 5;
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json'
+              },
+              body: JSON.stringify(requestBody),
+              timeout: 30000
+            });
+
+            if (claudeRes.status !== 429 || attempt === maxRetries) break;
+
+            // Honor server-provided retry-after (seconds); fall back to exponential backoff.
+            const retryAfter = parseFloat(claudeRes.headers.get('retry-after'));
+            const waitMs = Number.isFinite(retryAfter)
+              ? Math.ceil(retryAfter * 1000)
+              : Math.min(2000 * Math.pow(2, attempt), 30000);
+            console.warn(`[Claude 429] rate limited, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+            await new Promise(r => setTimeout(r, waitMs));
+          }
 
           // Don't expose raw Claude error responses
           if (!claudeRes.ok) {
-            console.error('[Claude Error]', claudeRes.status);
-            const statusErr = { 401: 'Authentication failed', 429: 'Rate limited', 500: 'Service error' }[claudeRes.status] || 'API error';
-            res.writeHead(claudeRes.status, { 'Content-Type': 'application/json' });
+            const errData = await claudeRes.json().catch(() => ({}));
+            console.error('[Claude Error]', claudeRes.status, 'Model:', model, 'Error:', errData.error || errData);
+            const statusErr = { 401: 'Authentication failed', 404: 'Model not found', 429: 'Rate limited', 500: 'Service error' }[claudeRes.status] || 'API error';
+            const headers = { 'Content-Type': 'application/json' };
+            // Forward retry-after so the client can back off precisely.
+            const retryAfter = claudeRes.headers.get('retry-after');
+            if (claudeRes.status === 429 && retryAfter) headers['Retry-After'] = retryAfter;
+            res.writeHead(claudeRes.status, headers);
             res.end(JSON.stringify({ error: statusErr }));
             return;
           }

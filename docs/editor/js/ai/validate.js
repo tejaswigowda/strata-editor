@@ -25,6 +25,71 @@ const JS_GLOBALS = new Set( [
 	'console', 'structuredClone', 'Float32Array', 'Uint8Array', 'Uint16Array', 'Uint32Array',
 ] );
 
+// Replace comment bodies with spaces (string/template-literal aware) so prose
+// inside `// …` and `/* … */` can't be mistaken for code. Keeps offsets stable
+// by emitting an equal run of spaces (newlines preserved) — used by the
+// call-expression scan so a comment like `// Stem (a cylinder)` isn't read as a
+// call to `Stem(`. Single/double-quoted string CONTENTS are blanked too, so a
+// CSS/canvas color string like `'rgba(255,0,0,1)'` isn't read as a call to
+// `rgba(`. Template literals are left intact (their `${ … }` holds real code).
+function stripComments( code ) {
+
+	let out = '';
+	const n = code.length;
+	let i = 0;
+
+	while ( i < n ) {
+
+		const ch = code[ i ];
+
+		if ( ch === '"' || ch === "'" ) {
+
+			const q = ch; out += ch; i ++;
+			while ( i < n && code[ i ] !== q ) {
+
+				if ( code[ i ] === '\\' && i + 1 < n ) { out += '  '; i += 2; continue; }
+				out += ' '; i ++;
+
+			}
+			if ( i < n ) { out += code[ i ]; i ++; }
+			continue;
+
+		}
+		if ( ch === '`' ) {
+
+			const q = ch; out += ch; i ++;
+			while ( i < n && code[ i ] !== q ) {
+
+				out += code[ i ];
+				if ( code[ i ] === '\\' && i + 1 < n ) { i ++; out += code[ i ]; }
+				i ++;
+
+			}
+			if ( i < n ) { out += code[ i ]; i ++; }
+			continue;
+
+		}
+		if ( ch === '/' && code[ i + 1 ] === '/' ) {
+
+			while ( i < n && code[ i ] !== '\n' ) { out += ' '; i ++; }
+			continue;
+
+		}
+		if ( ch === '/' && code[ i + 1 ] === '*' ) {
+
+			i += 2; out += '  ';
+			while ( i < n && ! ( code[ i ] === '*' && code[ i + 1 ] === '/' ) ) { out += code[ i ] === '\n' ? '\n' : ' '; i ++; }
+			if ( i < n ) { out += '  '; i += 2; }
+			continue;
+
+		}
+		out += ch; i ++;
+
+	}
+	return out;
+
+}
+
 // Collect identifiers DECLARED within a snippet (function names, var bindings,
 // function/arrow parameters) so calls to them aren't mistaken for undefined.
 function declaredNames( code ) {
@@ -84,6 +149,33 @@ function duplicateConsts( code ) {
 		if ( ch === '/' && code[ i + 1 ] === '*' ) { i += 2; while ( i < n && ! ( code[ i ] === '*' && code[ i + 1 ] === '/' ) ) i ++; i += 2; continue; }
 		if ( ch === '{' ) { stack.push( new Set() ); i ++; continue; }
 		if ( ch === '}' ) { if ( stack.length > 1 ) stack.pop(); i ++; continue; }
+
+		// `for (…)` header declarations (`for (let i …)`) are loop-scoped, not part
+		// of the enclosing block — sibling for-loops legitimately reuse `let i`. Skip
+		// the whole balanced header so its const/let aren't registered as block dups.
+		if ( ch === 'f' && /^for\b/.test( code.slice( i, i + 4 ) ) && ! ( code[ i - 1 ] && /[\w$]/.test( code[ i - 1 ] ) ) ) {
+
+			let j = i + 3;
+			while ( j < n && /\s/.test( code[ j ] ) ) j ++;
+			if ( code[ j ] === '(' ) {
+
+				let depth = 0;
+				while ( j < n ) {
+
+					const c = code[ j ];
+					if ( c === '"' || c === "'" || c === '`' ) { const q = c; j ++; while ( j < n && code[ j ] !== q ) { if ( code[ j ] === '\\' ) j ++; j ++; } j ++; continue; }
+					if ( c === '/' && code[ j + 1 ] === '/' ) { while ( j < n && code[ j ] !== '\n' ) j ++; continue; }
+					if ( c === '/' && code[ j + 1 ] === '*' ) { j += 2; while ( j < n && ! ( code[ j ] === '*' && code[ j + 1 ] === '/' ) ) j ++; j += 2; continue; }
+					if ( c === '(' ) depth ++;
+					else if ( c === ')' ) { depth --; if ( depth === 0 ) { j ++; break; } }
+					j ++;
+
+				}
+				i = j; continue;
+
+			}
+
+		}
 
 		if ( ch === 'c' || ch === 'l' ) {
 
@@ -256,17 +348,19 @@ export function validateCode( code ) {
 	// 1e. Undefined function call (B3) — the backWall() bug. Flag a bare call to a
 	//     name that is not a JS keyword/global, not a known scope helper/class, and
 	//     not declared in the snippet. Method calls (preceded by ".") and `new X(`
-	//     constructors are excluded.
-	const declared = declaredNames( code );
+	//     constructors are excluded. Comments are stripped first so prose like
+	//     `// Stem (a cylinder)` isn't read as a call to an undefined Stem().
+	const noComments = stripComments( code );
+	const declared = declaredNames( noComments );
 	const reportedUndef = new Set();
 	const callRe = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g;
 	let cm;
-	while ( ( cm = callRe.exec( code ) ) !== null ) {
+	while ( ( cm = callRe.exec( noComments ) ) !== null ) {
 
 		const name = cm[ 1 ];
 		if ( reportedUndef.has( name ) ) continue;
 		if ( JS_KEYWORDS.has( name ) ) continue;
-		if ( /\bnew\s+$/.test( code.slice( 0, cm.index ) ) ) continue; // constructor
+		if ( /\bnew\s+$/.test( noComments.slice( 0, cm.index ) ) ) continue; // constructor
 		if ( declared.has( name ) || SCOPE_FUNCTIONS.has( name ) || JS_GLOBALS.has( name )
 			|| ALLOWED_CLASSES.has( name ) ) continue;
 
@@ -304,6 +398,44 @@ export function validateCode( code ) {
 	if ( dups.length ) {
 
 		issues.push( `"${ dups[ 0 ] }" is declared more than once in the same scope (SyntaxError). For repeated objects use a for-loop with INDEXED names (const item=…; item.name=\`Cabinet \${i+1}\`) or give each a UNIQUE name — never redeclare the same const.` );
+
+	}
+
+	// 1h. position/rotation/scale .set() arity + below-ground Y (the monopoly and
+	//     air-hockey/traffic bugs). Vector3/Euler.set is (x, y, z): a 2-arg call —
+	//     e.g. position.set(4.5, -4+i) meaning an X-Z spot — lands the 2nd value in
+	//     Y and leaves Z stale (often NaN), so tiles sink below the floor AND stack
+	//     at one point. A pure NEGATIVE Y literal also buries the object below the
+	//     ground plane (the prompt forbids y<0). Scanned on the comment/string-
+	//     stripped source so prose and color strings can't trip it.
+	const setRe = /\.\s*(position|rotation|scale)\s*\.\s*set\s*\(/g;
+	let st;
+	while ( ( st = setRe.exec( noComments ) ) !== null ) {
+
+		const prop = st[ 1 ];
+		const open = setRe.lastIndex - 1;
+		const close = matchParen( noComments, open );
+		if ( close < 0 ) continue;
+		const setArgs = topLevelArgs( noComments.slice( open + 1, close ) );
+
+		if ( setArgs.length === 2 ) {
+
+			issues.push( `.${ prop }.set() called with 2 args — Vector3.set is (x, y, z). The 2nd value lands in Y (not Z) and Z stays unset (NaN), burying objects below the floor and stacking them at one spot. For an X-Z placement pass an explicit Y: .${ prop }.set(x, y, z).` );
+
+		} else if ( prop === 'position' && setArgs.length >= 2 && /^-\s*\d*\.?\d+$/.test( setArgs[ 1 ] ) ) {
+
+			issues.push( `.position.set( …, ${ setArgs[ 1 ] }, … ) puts the object below the ground plane (negative Y). Nothing sits below y=0 — set Y to HALF the object's height so it rests on the floor.` );
+
+		}
+
+	}
+
+	// 1h-bis. Direct `obj.position.y = <negative literal>` — same below-ground bug.
+	const negY = /\.\s*position\s*\.\s*y\s*=\s*-\s*\d*\.?\d+/g;
+	let ny;
+	while ( ( ny = negY.exec( noComments ) ) !== null ) {
+
+		issues.push( `${ ny[ 0 ].replace( /\s+/g, '' ).replace( /^\./, '' ) } puts the object below the ground plane. Use a Y >= 0 (half the object's height) so it rests on y=0.` );
 
 	}
 

@@ -120,17 +120,53 @@ export function scoreSpatial( objects, expect = {} ) {
 	const lowestBottom = Math.min( ...objects.map( o => o.pos[ 1 ] - o.size[ 1 ] / 2 ) );
 	if ( lowestBottom < - 0.25 ) reasons.push( 'object sits below the ground plane' );
 
-	// Co-location (tier-1 geometric check): two objects at ~the same centroid with
-	// intersecting bounding boxes — "bat and ball" placed at one spot. Conservative
-	// (near-identical centre on every axis) so distinct/adjacent parts don't trip it.
+	// Co-location (tier-1 geometric check): two objects occupying essentially the
+	// SAME volume — "bat and ball" dropped at one point. We measure real bounding-
+	// box overlap AND size comparability, not just centroid distance. Centroid-only
+	// flags correct geometry: perpendicular thin parts that merely CROSS (grid
+	// lines, intersecting roads) share a centre, and a thin overlay resting ON a
+	// surface (a line on a board) is fully inside the larger box. Both are valid.
+	// Flag only when two COMPARABLY-SIZED, BLOCKY objects substantially overlap.
+	const boxVol = o => Math.max( o.size[ 0 ], 1e-4 ) * Math.max( o.size[ 1 ], 1e-4 ) * Math.max( o.size[ 2 ], 1e-4 );
+	const flatness = o => {
+
+		const d = o.size.map( x => Math.abs( x ) );
+		return Math.min( ...d ) / Math.max( ...d, 1e-6 );
+
+	};
 	for ( let a = 0; a < objects.length && ! reasons.includes( 'co-located' ); a ++ ) {
 
 		for ( let b = a + 1; b < objects.length; b ++ ) {
 
 			const A = objects[ a ], B = objects[ b ];
-			const sameSpot = [ 0, 1, 2 ].every( k =>
-				Math.abs( A.pos[ k ] - B.pos[ k ] ) < Math.max( 0.05, Math.min( A.size[ k ], B.size[ k ] ) * 0.25 ) );
-			if ( sameSpot ) { reasons.push( 'objects co-located at the same spot — space them apart' ); break; }
+
+			// Axis-aligned bounding-box overlap volume.
+			let overlap = 1;
+			for ( let k = 0; k < 3; k ++ ) {
+
+				const aLo = A.pos[ k ] - A.size[ k ] / 2, aHi = A.pos[ k ] + A.size[ k ] / 2;
+				const bLo = B.pos[ k ] - B.size[ k ] / 2, bHi = B.pos[ k ] + B.size[ k ] / 2;
+				overlap *= Math.max( 0, Math.min( aHi, bHi ) - Math.max( aLo, bLo ) );
+
+			}
+			if ( overlap <= 0 ) continue;
+
+			const volA = boxVol( A ), volB = boxVol( B );
+			const smaller = Math.min( volA, volB );
+			const buriedFrac = overlap / smaller;          // how deep the smaller is inside the other
+			const sizeRatio = smaller / Math.max( volA, volB ); // 1 = identical size, →0 = sliver-vs-bulk
+			const smallerFlat = flatness( volA <= volB ? A : B ); // is the smaller a thin layer/plate?
+
+			// Stacked-at-one-spot ⇒ comparable sizes AND the smaller is mostly buried
+			// AND the smaller is BLOCKY. Crossings have low buriedFrac; thin overlays/
+			// details (plates, lines, rails, legs laid on a larger flat object) have
+			// low sizeRatio OR low flatness — both are intentional surface/layer detail.
+			if ( buriedFrac > 0.5 && sizeRatio > 0.25 && smallerFlat >= 0.2 ) {
+
+				reasons.push( 'objects co-located at the same spot — space them apart' );
+				break;
+
+			}
 
 		}
 

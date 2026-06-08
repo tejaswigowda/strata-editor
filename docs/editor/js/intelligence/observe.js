@@ -19,6 +19,24 @@ function colorHexOf( obj ) {
 
 }
 
+// Own size of an object from its geometry bounding box (scaled). null for groups
+// / geometry-less objects. Used by the co-location heads-up to exempt thin
+// surface/layer detail sitting on a larger flat object.
+function objSize( obj ) {
+
+	const g = obj.geometry;
+	if ( ! g ) return null;
+	if ( ! g.boundingBox ) g.computeBoundingBox();
+	const bb = g.boundingBox;
+	if ( ! bb ) return null;
+	return [
+		( bb.max.x - bb.min.x ) * Math.abs( obj.scale.x ),
+		( bb.max.y - bb.min.y ) * Math.abs( obj.scale.y ),
+		( bb.max.z - bb.min.z ) * Math.abs( obj.scale.z ),
+	];
+
+}
+
 /**
  * @param {Editor} editor
  * @returns {Map<string, object>}  uuid → { name, type, pos, scale, color }
@@ -36,6 +54,8 @@ export function snapshotScene( editor ) {
 			pos:   [ r3( obj.position.x ), r3( obj.position.y ), r3( obj.position.z ) ],
 			scale: [ r3( obj.scale.x ), r3( obj.scale.y ), r3( obj.scale.z ) ],
 			color: colorHexOf( obj ),
+			parent: obj.parent ? obj.parent.uuid : null,
+			size:  objSize( obj ),
 		} );
 
 	} );

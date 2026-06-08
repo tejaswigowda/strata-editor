@@ -71,8 +71,20 @@ export function extractCode( text ) {
 	}
 
 	// 2. An opening fence with no matching close = truncated/unterminated output.
-	//    Don't guess at partial code — extraction failure.
-	if ( raw.indexOf( '```' ) !== - 1 ) return '';
+	//    Before giving up, try to salvage a BALANCED IIFE from the post-fence
+	//    body: if the fenced code happens to be complete (a balanced (function(){…})())
+	//    even though the closing ``` was cut off (e.g. max_tokens truncation that
+	//    clipped only the trailing fence), it's safe to run. extractIIFE returns ''
+	//    unless the parens balance, so genuinely incomplete code is still rejected.
+	const openFence = raw.lastIndexOf( '```' );
+	if ( openFence !== - 1 ) {
+
+		const afterFence = stripLangTag( raw.slice( openFence + 3 ).replace( /^[a-zA-Z]*[ \t]*\r?\n?/, '' ) );
+		const salvaged = extractIIFE( afterFence );
+		if ( salvaged ) return salvaged;
+		return '';
+
+	}
 
 	// 3. No fences. Strip a stray language tag, then recover a balanced IIFE, or
 	//    accept the text ONLY if it begins as code. Prose never passes.

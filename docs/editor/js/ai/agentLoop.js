@@ -96,21 +96,63 @@ function translateError( raw ) {
 
 }
 
-// First pair of objects placed at nearly the same position (overlap heads-up).
-// snapshot objects carry pos:[x,y,z]; no size needed — near-identical centres are
-// the "bat and ball at one spot" signal. Returns [nameA, nameB] or null.
-function colocatedPair( objs, eps = 0.1 ) {
+// First pair of SIBLING objects that actually occupy the same volume (overlap
+// heads-up). Mirrors the eval scorer's geometry: real AABB overlap, not centroid
+// proximity. Rules:
+//   • geometry-only — a Group/Light has no own geometry; its position is a bare
+//     origin that says nothing about where its contents sit, so it is skipped.
+//   • sibling-only — only compare objects that share the same parent, so a Group
+//     is NEVER compared against its own children (parent-vs-child coincides at the
+//     group origin and is not an overlap).
+//   • blocky-and-buried — flag only when two comparably-sized, BLOCKY objects
+//     substantially overlap. Thin overlays/details (plates, lines, rails, legs on
+//     a larger flat object) and mere crossings are intentional, not collisions.
+// snapshot objects carry pos:[x,y,z], parent:uuid|null, size:[w,h,d]|null.
+// Returns [nameA, nameB] or null.
+function boxVol( s ) {
+
+	return Math.max( 1e-6, s[ 0 ] ) * Math.max( 1e-6, s[ 1 ] ) * Math.max( 1e-6, s[ 2 ] );
+
+}
+
+// Flatness of a box: smallest dimension over largest. A plate/line/decal is flat
+// (≪ 0.2); a cube/sphere is ~1.
+function flatness( s ) {
+
+	const dims = s.map( d => Math.abs( d ) );
+	return Math.min( ...dims ) / Math.max( ...dims, 1e-6 );
+
+}
+
+function colocatedPair( objs ) {
 
 	for ( let a = 0; a < objs.length; a ++ ) {
 
 		for ( let b = a + 1; b < objs.length; b ++ ) {
 
-			const A = objs[ a ].pos, B = objs[ b ].pos;
-			if ( Math.abs( A[ 0 ] - B[ 0 ] ) < eps && Math.abs( A[ 1 ] - B[ 1 ] ) < eps && Math.abs( A[ 2 ] - B[ 2 ] ) < eps ) {
+			const A = objs[ a ], B = objs[ b ];
 
-				return [ objs[ a ].name, objs[ b ].name ];
+			// Geometry-only and sibling-only (see header).
+			if ( ! A.size || ! B.size ) continue;
+			if ( ( A.parent ?? null ) !== ( B.parent ?? null ) ) continue;
+
+			// Real axis-aligned bounding-box overlap volume.
+			let overlap = 1;
+			for ( let k = 0; k < 3; k ++ ) {
+
+				const aLo = A.pos[ k ] - A.size[ k ] / 2, aHi = A.pos[ k ] + A.size[ k ] / 2;
+				const bLo = B.pos[ k ] - B.size[ k ] / 2, bHi = B.pos[ k ] + B.size[ k ] / 2;
+				overlap *= Math.max( 0, Math.min( aHi, bHi ) - Math.max( aLo, bLo ) );
 
 			}
+			if ( overlap <= 0 ) continue;
+
+			const volA = boxVol( A.size ), volB = boxVol( B.size );
+			const buriedFrac = overlap / Math.min( volA, volB );      // smaller mostly inside the other?
+			const sizeRatio = Math.min( volA, volB ) / Math.max( volA, volB ); // comparably sized?
+			const smallFlat = flatness( volA <= volB ? A.size : B.size ); // smaller is blocky, not a layer?
+
+			if ( buriedFrac > 0.5 && sizeRatio > 0.25 && smallFlat >= 0.2 ) return [ A.name, B.name ];
 
 		}
 

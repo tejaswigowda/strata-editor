@@ -83,6 +83,15 @@ export class EditModeController {
 
 		} );
 
+		// Keep the overlay aligned when the edited mesh is transformed (gizmo or a
+		// position/rotation/scale command) — otherwise the handles drift away from
+		// the real object until the next edit action.
+		editor.signals.objectChanged.add( ( object ) => {
+
+			if ( this.active && object === this.mesh ) this.updateOverlay();
+
+		} );
+
 	}
 
 	// ── Public API ────────────────────────────────────────────────────────────
@@ -320,10 +329,14 @@ export class EditModeController {
 
 		}
 
-		// Position overlay at the mesh's world transform
-		this._overlay.position.copy( this.mesh.position );
-		this._overlay.rotation.copy( this.mesh.rotation );
-		this._overlay.scale.copy( this.mesh.scale );
+		// Align the overlay with the mesh's WORLD transform. The overlay lives in
+		// sceneHelpers (an identity-transform scene), and its vertices are the mesh's
+		// LOCAL coordinates — so it must carry the mesh's full world matrix. Copying
+		// only the mesh's LOCAL position/rotation/scale left the handles offset from
+		// the real object whenever the mesh was nested in a Group (or under any
+		// transformed ancestor). Decompose matrixWorld so nested meshes line up.
+		this.mesh.updateWorldMatrix( true, false );
+		this.mesh.matrixWorld.decompose( this._overlay.position, this._overlay.quaternion, this._overlay.scale );
 
 		this.editor.signals.sceneRendered.dispatch();
 
@@ -363,7 +376,9 @@ export class EditModeController {
 			const hes = this.em.faceHalfEdges( hit.faceIndex );
 			if ( hes.length === 3 ) {
 
-				const ray = hit.point;
+				// hit.point is WORLD space; EM vertices are LOCAL. Compare in the mesh's
+				// local frame so transformed/nested meshes pick the right edge.
+				const ray = this.mesh.worldToLocal( hit.point.clone() );
 				let bestHe = hes[ 0 ], bestDist = Infinity;
 
 				for ( const he of hes ) {

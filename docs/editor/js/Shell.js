@@ -766,100 +766,121 @@ function Shell( editor ) {
 				// scene. Answer streams into the shell as text; nothing is executed.
 				askScene: function ( question ) {
 
-					if ( ! aiEngine.ready ) {
+				if ( ! aiEngine.ready ) {
 
-						appendOutput( 'AI not loaded — click "Load AI" first.', 'error' );
-						return;
+					appendOutput( 'AI not loaded — click "Load AI" first.', 'error' );
+					return;
 
-					}
+				}
 
-					const messages = buildQAMessages( SCENE_QA_PROMPT, editor, String( question ) );
-					appendOutput( '? ' + question, 'ai-prompt' );
+				const messages = buildQAMessages( SCENE_QA_PROMPT, editor, String( question ) );
+				appendOutput( '? ' + question, 'ai-prompt' );
 
-					const streamDiv = document.createElement( 'div' );
-					streamDiv.className = 'shell-line shell-ai-stream';
-					output.appendChild( streamDiv );
+				const streamDiv = document.createElement( 'div' );
+				streamDiv.className = 'shell-line shell-ai-stream';
+				output.appendChild( streamDiv );
 
-					aiEngine.stream( messages, {
-						maxTokens: 300,
-						temperature: 0.2,
-						onToken: ( _delta, full ) => {
+				aiEngine.stream( messages, {
+					maxTokens: 300,
+					temperature: 0.2,
+					onToken: ( _delta, full ) => {
 
-							streamDiv.textContent = full + ' ▌';
-							output.scrollTop = output.scrollHeight;
+						streamDiv.textContent = full + ' ▌';
+						output.scrollTop = output.scrollHeight;
 
-						},
-					} ).then( answer => {
+					},
+				} ).then( answer => {
 
-						streamDiv.remove();
-						appendOutput( answer, 'result' );
+					streamDiv.remove();
+					appendOutput( answer, 'result' );
 
-					} ).catch( err => {
+				} ).catch( err => {
 
-						streamDiv.remove();
-						appendOutput( 'Q&A error: ' + err.message, 'error' );
+					streamDiv.remove();
+					appendOutput( 'Q&A error: ' + err.message, 'error' );
 
-					} );
+				} );
 
 				},
 
-				// ── External API Helpers (Dev Mode) ───────────────────────────────────
+				// ── Get available models ──────────────────────────────────────────────
 				// getAvailableModels() — fetch list of available models (WebLLM + APIs)
 				getAvailableModels: async function () {
+
 					try {
-						const res = await fetch('/api/models');
+
+						const res = await fetch( '/api/models' );
 						const data = await res.json();
-						console.table(data.models.map(m => ({
+						console.table( data.models.map( m => ( {
 							id: m.id,
 							label: m.label,
 							source: m.source,
-							vram: m.vram_required_MB ? `${m.vram_required_MB}MB` : 'N/A'
-						})));
+							vram: m.vram_required_MB ? `${ m.vram_required_MB }MB` : 'N/A'
+						} ) ) );
 						return data;
-					} catch (e) {
-						appendOutput('Error fetching models: ' + e.message, 'error');
+
+					} catch ( e ) {
+
+						appendOutput( 'Error fetching models: ' + e.message, 'error' );
 						return null;
+
 					}
+
 				},
 
-				// askExternal(model, question) — ask an external API (Ollama, OpenAI)
-				askExternal: async function (model, question) {
+				// ── Ask external model ────────────────────────────────────────────────
+				// askExternal(model, question) — ask an external API (Ollama, OpenAI, Claude)
+				askExternal: async function ( model, question ) {
+
 					try {
-						const messages = [{ role: 'user', content: question }];
-						const res = await fetch('/api/chat', {
+
+						const messages = [ { role: 'user', content: question } ];
+						const res = await fetch( '/api/chat', {
 							method: 'POST',
 							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 2000 })
-						});
+							body: JSON.stringify( { model, messages, temperature: 0.7, max_tokens: 2000 } )
+						} );
 						const data = await res.json();
-						
+
 						// Handle both Ollama and OpenAI response formats
-						const answer = data.message?.content || data.choices?.[0]?.message?.content || data.error;
-						appendOutput(answer || 'No response', answer ? 'output' : 'error');
+						const answer = data.message?.content || data.choices?.[ 0 ]?.message?.content || data.error;
+						appendOutput( answer || 'No response', answer ? 'output' : 'error' );
 						return answer;
-					} catch (e) {
-						appendOutput('Error querying model: ' + e.message, 'error');
+
+					} catch ( e ) {
+
+						appendOutput( 'Error querying model: ' + e.message, 'error' );
 						return null;
+
 					}
+
 				},
 
+				// ── Check API health ──────────────────────────────────────────────────
 				// checkApiHealth() — verify external services are running
 				checkApiHealth: async function () {
+
 					try {
-						const res = await fetch('/api/health');
+
+						const res = await fetch( '/api/health' );
 						const health = await res.json();
-						console.log('🔍 API Health:', health);
+						console.log( '🔍 API Health:', health );
 						return health;
-					} catch (e) {
-						appendOutput('API health check failed: ' + e.message, 'error');
+
+					} catch ( e ) {
+
+						appendOutput( 'API health check failed: ' + e.message, 'error' );
 						return null;
+
 					}
+
 				},
 
 				// ── Eval harness ──────────────────────────────────────────────────────
 				// evalAI([prompts]) — run the standing eval set through the agentic
 				// loop and print a 3-axis (structure/spatial/semantic) pass/fail table.
 				evalAI: function ( prompts ) { return evalAI( prompts ); },
+
 			};
 
 			// Build a named-parameter function so every scope var is a local;
@@ -921,7 +942,7 @@ function Shell( editor ) {
 		// rather than asking the model to "build" the literal text (e.g. evalAI()).
 		if ( /^\s*evalAI\s*\(/.test( userPrompt ) ) { evalAI(); return; }
 
-		if ( ! aiEngine.ready && ! _usingExternalAPI ) {
+		if ( ! aiEngine.ready ) {
 
 			appendOutput( 'AI not loaded — click "Load AI" first.', 'error' );
 			return;
@@ -940,14 +961,7 @@ function Shell( editor ) {
 
 		try {
 
-			if ( _usingExternalAPI ) {
-
-				// External API mode (Ollama, OpenAI, Claude)
-				const response = await askExternal( modelSelect.value, question );
-				// askExternal already appends output via appendOutput()
-				if ( aiAborted ) appendOutput( '■ Stopped by user.', 'info' );
-
-			} else if ( isQA ) {
+			if ( isQA ) {
 
 				// Q&A mode — stream plain-text answer, do not execute
 				const messages = buildQAMessages( SCENE_QA_PROMPT, editor, question );
@@ -1117,17 +1131,15 @@ function Shell( editor ) {
 
 	stopBtn.addEventListener( 'click', function () {
 
-		if ( ! aiEngine.ready && ! _usingExternalAPI ) return;
+		if ( ! aiEngine.ready ) return;
 		aiAborted = true;
-		if ( aiEngine.ready ) aiEngine.interrupt();
+		aiEngine.interrupt();
 		stopBtn.disabled = true;
 		aiStatus.textContent = 'stopping…';
 
 	} );
 
 	// ── Load AI button ────────────────────────────────────────────────────────
-
-	let _usingExternalAPI = false;  // Flag to track if we're using external API
 
 	loadBtn.addEventListener( 'click', async function () {
 
@@ -1146,7 +1158,7 @@ function Shell( editor ) {
 
 			if ( isExternal ) {
 
-				// External API: just verify health and mark as ready
+				// External API: verify health and set up via aiEngine
 				const healthRes = await fetch( '/api/health' );
 				const health = await healthRes.json();
 
@@ -1158,11 +1170,79 @@ function Shell( editor ) {
 
 				}
 
+				// Set up external API with unified interface
+				const streamFn = async ( messages, opts = {} ) => {
+
+					// Retry on 429 (rate limit) with backoff so a transient limit never
+					// returns empty (which the agentic loop would mistake for "no code
+					// block" and waste a retry). The server also retries upstream; this
+					// is the client-side safety net for sustained eval throughput.
+					const maxRateRetries = 6;
+					for ( let attempt = 0; ; attempt ++ ) {
+
+						const res = await fetch( '/api/chat', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify( {
+								model: selectedModel,
+								messages,
+								temperature: opts.temperature ?? 0.7,
+								// Cloud models bill by actual output tokens and stop at
+								// end_turn, so a generous cap costs nothing for short replies
+								// but prevents mid-code-block truncation (an unterminated
+								// fence makes the extractor correctly reject the output).
+								// The 600-token default is tuned for memory-bound WebLLM;
+								// it's far too low for verbose cloud models.
+								max_tokens: Math.max( opts.maxTokens ?? 0, 4096 )
+							} )
+						} );
+
+						const data = await res.json().catch( () => ( {} ) );
+
+						// Rate limited — wait and retry (don't surface as a code failure).
+						if ( res.status === 429 && attempt < maxRateRetries ) {
+
+							const retryAfter = parseFloat( res.headers.get( 'retry-after' ) );
+							const waitMs = Number.isFinite( retryAfter )
+								? Math.ceil( retryAfter * 1000 )
+								: Math.min( 2000 * Math.pow( 2, attempt ), 30000 );
+							if ( opts.onToken ) opts.onToken( '', `⏳ rate limited — waiting ${ Math.round( waitMs / 1000 ) }s…` );
+							await new Promise( r => setTimeout( r, waitMs ) );
+							continue;
+
+						}
+
+						// Surface other API/transport errors as exceptions so the loop
+						// reports them instead of mistaking an error string for "no code".
+						if ( ! res.ok || data.error ) {
+
+							const msg = data.error || `HTTP ${ res.status }`;
+							const err = new Error( msg );
+							err.status = res.status;
+							throw err;
+
+						}
+
+						// Handle both Ollama and OpenAI response formats
+						const answer = data.message?.content || data.choices?.[ 0 ]?.message?.content || '';
+
+						// Call onToken callback if provided (for streaming UI)
+						if ( opts.onToken ) opts.onToken( '', answer );
+
+						return answer;
+
+					}
+
+				};
+
+				const interruptFn = () => {}; // No-op for external APIs
+
+				aiEngine.setExternalAPI( selectedModel, streamFn, interruptFn );
+
 				aiStatus.textContent = 'ready';
 				loadBtn.textContent = '✓ AI';
 				aiInput.disabled = false;
 				aiInput.focus();
-				_usingExternalAPI = true;
 				localStorage.setItem( 'shell-ai-model', selectedModel );
 				appendOutput( 'AI ready — model: ' + selectedModel + '  (external API)', 'info' );
 
@@ -1185,7 +1265,6 @@ function Shell( editor ) {
 				loadBtn.textContent = '✓ AI';
 				aiInput.disabled = false;
 				aiInput.focus();
-				_usingExternalAPI = false;
 				localStorage.setItem( 'shell-ai-model', selectedModel );
 				appendOutput( 'AI ready — model: ' + selectedModel +
 					'  (context window: ' + ( aiEngine.contextWindow || 'default' ) + ' tokens)', 'info' );
@@ -1198,7 +1277,6 @@ function Shell( editor ) {
 			aiStatus.textContent = 'failed';
 			loadBtn.disabled = false;
 			modelSelect.disabled = false;
-			_usingExternalAPI = false;
 			appendOutput( 'AI load error: ' + err.message, 'error' );
 
 		}

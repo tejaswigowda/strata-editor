@@ -231,6 +231,9 @@ export function sceneContextString( editor ) {
 				if ( metalness != null && metalness > 0.01 ) parts.push( 'metal:' + r2( metalness ) );
 				if ( roughness != null && Math.abs( roughness - 1 ) > 0.01 ) parts.push( 'rough:' + r2( roughness ) );
 				if ( emissive && emissive.getHex() > 0 ) parts.push( 'emissive:' + colorHex( emissive ) );
+				// Texture flag — a base map MULTIPLIES the color, so a solid recolor is
+				// masked unless the map is cleared (see prompt rule 11).
+				if ( obj.material.map ) parts.push( 'textured' );
 
 			}
 
