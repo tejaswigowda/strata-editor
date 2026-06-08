@@ -91,6 +91,28 @@ async function handleApiModels(res) {
         vram_required_MB: 0
       });
     }
+
+    // Claude API (Anthropic) - if ANTHROPIC_API_KEY env var set
+    if (process.env.ANTHROPIC_API_KEY) {
+      models.push({
+        id: 'claude-3-5-sonnet-20241022',
+        label: 'Claude 3.5 Sonnet (Anthropic)',
+        source: 'anthropic',
+        vram_required_MB: 0
+      });
+      models.push({
+        id: 'claude-3-opus-20250219',
+        label: 'Claude 3 Opus (Anthropic)',
+        source: 'anthropic',
+        vram_required_MB: 0
+      });
+      models.push({
+        id: 'claude-3-haiku-20250307',
+        label: 'Claude 3 Haiku (Anthropic)',
+        source: 'anthropic',
+        vram_required_MB: 0
+      });
+    }
   }
 
   setSecurityHeaders(res);
@@ -206,6 +228,71 @@ async function handleApiChat(req, res) {
           res.writeHead(502, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'OpenAI service error' }));
         }
+      } else if (model.startsWith('claude-')) {
+        // Validate that API key is configured before proceeding
+        if (!process.env.ANTHROPIC_API_KEY) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Claude not configured' }));
+          return;
+        }
+
+        try {
+          // Claude uses a different message format: convert from OpenAI format
+          const claudeMessages = messages.map(m => ({
+            role: m.role,
+            content: m.content
+          }));
+
+          const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+              'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: model,
+              max_tokens: max_tokens || 2048,
+              messages: claudeMessages,
+              temperature: temperature
+            }),
+            timeout: 30000
+          });
+
+          // Don't expose raw Claude error responses
+          if (!claudeRes.ok) {
+            console.error('[Claude Error]', claudeRes.status);
+            const statusErr = { 401: 'Authentication failed', 429: 'Rate limited', 500: 'Service error' }[claudeRes.status] || 'API error';
+            res.writeHead(claudeRes.status, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: statusErr }));
+            return;
+          }
+
+          const data = await claudeRes.json();
+          // Convert Claude response format to OpenAI-compatible format for consistent client handling
+          const compatibleResponse = {
+            id: data.id,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: model,
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: data.content[0].text
+                },
+                finish_reason: data.stop_reason === 'end_turn' ? 'stop' : data.stop_reason
+              }
+            ]
+          };
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(compatibleResponse));
+        } catch (e) {
+          console.error('[Claude Error]', e.message);
+          res.writeHead(502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Claude service error' }));
+        }
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unknown model source' }));
@@ -233,6 +320,9 @@ async function handleApiHealth(res) {
 
     // Only indicate that OpenAI is configured, never expose the key or any details
     health.services.openai = process.env.OPENAI_API_KEY ? 'configured' : 'not configured';
+
+    // Only indicate that Claude/Anthropic is configured, never expose the key or any details
+    health.services.claude = process.env.ANTHROPIC_API_KEY ? 'configured' : 'not configured';
   }
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -316,11 +406,12 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`Serving docs/ at http://127.0.0.1:${PORT}`);
   if (DEV) {
     console.log('✓ Dev mode enabled');
-    console.log('  /api/models  — List available models (WebLLM + Ollama + OpenAI)');
+    console.log('  /api/models  — List available models (WebLLM + Ollama + OpenAI + Claude)');
     console.log('  /api/chat    — Proxy chat requests to local/remote APIs');
     console.log('  /api/health  — Check health of external services');
-    console.log('  • Ollama:    http://127.0.0.1:11434 (optional)');
-    console.log('  • OpenAI:    OPENAI_API_KEY env var (optional)');
+    console.log('  • Ollama:     http://127.0.0.1:11434 (optional)');
+    console.log('  • OpenAI:     OPENAI_API_KEY env var (optional)');
+    console.log('  • Claude:     ANTHROPIC_API_KEY env var (optional)');
   }
   console.log('Press Ctrl+C to stop.');
 });

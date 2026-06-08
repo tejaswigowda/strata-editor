@@ -112,6 +112,37 @@ await getAvailableModels();
 await askExternal('gpt-4', 'What are the coordinates of the red cube?');
 ```
 
+## Using Claude (Anthropic)
+
+### 1. Get API Key
+
+- Go to [console.anthropic.com](https://console.anthropic.com)
+- Sign up or log in
+- Navigate to API keys section
+- Create a new API key
+
+### 2. Set API Key
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+DEV=1 node server.js
+```
+
+### 3. Use in Editor
+
+```javascript
+await getAvailableModels();
+// Now lists claude-3-5-sonnet, claude-3-opus, claude-3-haiku
+
+await askExternal('claude-3-5-sonnet-20241022', 'Generate a blue sphere with a reflection');
+```
+
+### Model Choices
+
+- **claude-3-5-sonnet** - Best balance of speed & quality (recommended for code)
+- **claude-3-opus** - Most capable, slower, higher cost
+- **claude-3-haiku** - Fastest, cheapest, good for simple tasks
+
 ## API Endpoints
 
 ### GET /api/models
@@ -215,6 +246,9 @@ await askExternal('ollama:codellama', 'Create a red sphere');
 // Using OpenAI
 await askExternal('gpt-4', 'What objects are in the scene?');
 
+// Using Claude
+await askExternal('claude-3-5-sonnet-20241022', 'Generate a spiral staircase');
+
 // Get response
 const answer = await askExternal('ollama:neural-chat', 'Explain quantum computing');
 ```
@@ -245,17 +279,28 @@ await askExternal('ollama:neural-chat', 'In brief, how many objects are in the s
 ### Use Multiple Models for Comparison
 
 ```javascript
-// Get local and cloud responses
+// Get responses from different providers
 const local = await askExternal('ollama:codellama', 'Is a CatmullRomCurve3 a curve or a surface?');
-const cloud = await askExternal('gpt-4', 'Is a CatmullRomCurve3 a curve or a surface?');
+const openai = await askExternal('gpt-4', 'Is a CatmullRomCurve3 a curve or a surface?');
+const claude = await askExternal('claude-3-5-sonnet-20241022', 'Is a CatmullRomCurve3 a curve or a surface?');
 ```
 
-### Generate Code with OpenAI, Execute Locally
+### Generate Code with Claude, Execute Locally
 
 ```javascript
-// Use GPT-4 to generate three.js code
-const code = await askExternal('gpt-4', 'Create a star made of 5 BoxGeometries arranged in a circle');
+// Use Claude 3.5 Sonnet (great at code generation)
+const code = await askExternal('claude-3-5-sonnet-20241022', 'Create a blue cone that slowly rotates. Use BoxGeometry for the base.');
 // Copy-paste the generated code into the REPL to run it
+```
+
+### Quick Prototyping: Ollama → Claude
+
+```javascript
+// 1. Start with fast local Ollama for ideation
+await askExternal('ollama:neural-chat', 'What are fun 3D scene ideas?');
+
+// 2. Use Claude for refined code generation
+const finalCode = await askExternal('claude-3-5-sonnet-20241022', 'Generate a pyramid with 4 tiers using BoxGeometry');
 ```
 
 ## Configuration
@@ -268,6 +313,9 @@ export DEV=1
 
 # OpenAI API key
 export OPENAI_API_KEY="sk-..."
+
+# Anthropic (Claude) API key
+export ANTHROPIC_API_KEY="sk-ant-..."
 
 # Custom Ollama endpoint (optional)
 export OLLAMA_ENDPOINT="http://192.168.1.100:11434"
@@ -342,6 +390,110 @@ Cross-Origin-Resource-Policy: cross-origin
    - `0` for deterministic code generation
    - `0.7-1.0` for creative/varied responses
 4. **Consider context length**: Ollama models have limits (usually 2048 tokens)
+
+## Using Claude for 3D Modeling
+
+### Why Claude for three.js?
+
+- **Excellent code generation**: Understands three.js patterns and best practices
+- **Complex scene generation**: Can handle multi-part geometry and positioning
+- **Descriptive → Code**: Turns English descriptions into working three.js code
+- **Refinement loops**: Good at iterating and improving code based on feedback
+
+### Complete Workflow Example
+
+```bash
+# 1. Start with Claude configured
+export ANTHROPIC_API_KEY="sk-ant-..."
+DEV=1 node server.js
+```
+
+In the editor REPL:
+
+```javascript
+// Check Claude is available
+const models = await getAvailableModels();
+console.log(models.models.filter(m => m.source === 'anthropic'));
+
+// Generate a kitchen scene with Claude
+const kitchenScene = await askExternal(
+  'claude-3-5-sonnet-20241022',
+  `Create a kitchen scene in three.js with:
+   - A rectangular table (brown) at y=1
+   - 4 legs (dark brown cylinders)
+   - A counter along the back wall (gray)
+   - 3 cabinets above the counter (light wood)
+   Use BoxGeometry for the table and cabinets, CylinderGeometry for legs.`
+);
+
+// Claude generates the code - copy and paste result into REPL
+// (The response will be formatted JavaScript code you can run directly)
+```
+
+### Claude Strengths for 3D
+
+**Modeling complex hierarchies:**
+```javascript
+await askExternal('claude-3-5-sonnet-20241022', `
+  Create a car in three.js where:
+  - Body is a stretched box (2, 1, 4) painted red
+  - Wheels are cylinders (0.5 radius, 0.2 height) painted black
+  - Positioned at the 4 corners
+  - Everything is grouped under one "car" Group
+  Use proper positioning and hierarchy (wheels as children of body group).
+`);
+```
+
+**Generating procedural patterns:**
+```javascript
+await askExternal('claude-3-5-sonnet-20241022', `
+  Create a checkered floor using repeated BoxGeometries:
+  - 10x10 grid of squares
+  - Alternating red and white colors
+  - Each square 0.5 units wide
+  - Use a for loop to generate them efficiently
+`);
+```
+
+**Material and lighting setup:**
+```javascript
+await askExternal('claude-3-5-sonnet-20241022', `
+  Set up professional 3D rendering with:
+  - A DirectionalLight from top-left at (10, 20, 10)
+  - An AmbientLight for general illumination
+  - A MeshPhysicalMaterial on the main object with:
+    - metalness = 0.8
+    - roughness = 0.2
+    - iridescence = 0.5
+`);
+```
+
+### Performance Tips with Claude
+
+1. **Be specific about geometry**: Name exact geometries (BoxGeometry, CylinderGeometry)
+2. **Provide positioning**: Include y-coordinates, spacing, and layout
+3. **Mention performance concerns**: If you need optimization for large scenes
+4. **Ask for explanations**: Claude can explain three.js concepts if you ask
+
+### Iterating with Claude
+
+```javascript
+// Generate initial version
+let scene = await askExternal('claude-3-5-sonnet-20241022', 'Create a simple pyramid');
+
+// Ask for improvements
+let improved = await askExternal('claude-3-5-sonnet-20241022', `
+  Improve the pyramid by:
+  - Making it gold-colored with metallic shine
+  - Adding a rotating animation (use Math.sin)
+  - Centering it at origin
+`);
+
+// Further refinement
+let final = await askExternal('claude-3-5-sonnet-20241022', `
+  The pyramid code - add anti-aliasing and make the material more reflective
+`);
+```
 
 ## Switching Between APIs
 
