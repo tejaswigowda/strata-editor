@@ -49,6 +49,12 @@ export function extrude( em, selection, { distance = 1 } = {} ) {
 }
 
 registerOp( 'extrude', {
+	description: 'Extrude selected faces along their normal by distance units',
+	params: { 'distance?': 'number=1' },
+	example: 'extrude(em, selection, { distance: 2 })',
+} );
+
+registerOp( 'extrude', {
 	description: 'Extrude selected faces along their normal',
 	params: { 'distance?': 'number=1' },
 	example: 'extrude(em, selection, { distance: 2 })',

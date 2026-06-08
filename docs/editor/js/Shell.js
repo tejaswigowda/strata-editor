@@ -7,7 +7,7 @@ import { SetScaleCommand } from './commands/SetScaleCommand.js';
 import { SetMaterialColorCommand } from './commands/SetMaterialColorCommand.js';
 import { SetMaterialCommand } from './commands/SetMaterialCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
-import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT } from './AIPrompt.js';
+import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT, buildSystemPrompt } from './AIPrompt.js';
 import { extractCode, buildMessages, buildQAMessages, sceneContextString } from './AIUtils.js';
 import { AIEngine, getModelList } from './AIEngine.js';
 import { objectToJS, sceneToJS } from './scene/codegen.js';
@@ -32,6 +32,7 @@ import { snapshotScene, sceneDiff, confirmChange, diffSummary } from './intellig
 import { buildIndex, retrieveForPrompt, findAPI } from './ai/apiIndex.js';
 import { validateCode } from './ai/validate.js';
 import { runAgentic } from './ai/agentLoop.js';
+import { EVAL_PROMPTS, runEval, formatTable, shouldSuggestPower } from './ai/eval.js';
 
 // Map common shape words to the substring found in geometry.type, so findObject
 // can resolve "red sphere" even when the object's name carries neither word.
@@ -113,12 +114,19 @@ function Shell( editor ) {
 	loadBtn.id = 'shell-load-btn';
 	loadBtn.textContent = 'Load AI';
 
+	const stopBtn = document.createElement( 'button' );
+	stopBtn.id = 'shell-stop-btn';
+	stopBtn.textContent = '■ Stop AI';
+	stopBtn.title = 'Stop the current AI generation';
+	stopBtn.style.display = 'none';
+
 	const aiStatus = document.createElement( 'span' );
 	aiStatus.id = 'shell-ai-status';
 
 	header.appendChild( headerTitle );
 	header.appendChild( modelSelect );
 	header.appendChild( loadBtn );
+	header.appendChild( stopBtn );
 	header.appendChild( aiStatus );
 	container.dom.appendChild( header );
 
@@ -185,6 +193,10 @@ function Shell( editor ) {
 	const history = [];
 	let historyIndex = - 1;
 	let savedInput = '';
+
+	// Set true when the user clicks "Stop AI"; checked by the agentic loop so it
+	// halts after the current (interrupted) generation rather than retrying.
+	let aiAborted = false;
 
 	const aiEngine = new AIEngine();
 
@@ -601,6 +613,47 @@ function Shell( editor ) {
 				selectEdges:    ( ...ids ) => { const emc = editor.editModeController; if ( emc.active ) { emc.selection.setMode( 'edge' ); ids.forEach( id => emc.selection.add( id ) ); emc.updateOverlay(); } },
 				clearSelection: ()         => { const emc = editor.editModeController; if ( emc.active ) { emc.selection.clear(); emc.updateOverlay(); } },
 
+				// ── Selection criteria (M6) ──────────────────────────────────────────────
+				// Programmatic selection for AI-driven modeling
+				selectTopFaces: ( count = 1 ) => {
+					const emc = editor.editModeController;
+					if ( ! emc.active ) return;
+					emc.selection.setMode( 'face' );
+					emc.selection.clear();
+					const em = emc.em;
+					const faces = em.faces.filter( f => f ).map( f => ( {
+						id: f.id,
+						centerY: em.faceCenter( f.id ).y,
+					} ) ).sort( ( a, b ) => b.centerY - a.centerY ).slice( 0, count );
+					faces.forEach( f => emc.selection.add( f.id ) );
+					emc.updateOverlay();
+				},
+				selectFacingUp: ( threshold = 0.1 ) => {
+					const emc = editor.editModeController;
+					if ( ! emc.active ) return;
+					emc.selection.setMode( 'face' );
+					emc.selection.clear();
+					const em = emc.em;
+					em.faces.forEach( f => {
+						if ( f ) {
+							const n = em.faceNormal( f.id );
+							if ( n.y >= threshold ) emc.selection.add( f.id );
+						}
+					} );
+					emc.updateOverlay();
+				},
+				selectBoundaryEdges: () => {
+					const emc = editor.editModeController;
+					if ( ! emc.active ) return;
+					emc.selection.setMode( 'edge' );
+					emc.selection.clear();
+					const em = emc.em;
+					em.halfEdges.forEach( he => {
+						if ( he.twin === - 1 ) emc.selection.add( Math.min( he.id, he.id ) );
+					} );
+					emc.updateOverlay();
+				},
+
 				// ── Spatial helpers ───────────────────────────────────────────────────
 				// These are the correct way to reason about world-space dimensions;
 				// reading raw geometry params ignores scale transforms.
@@ -621,6 +674,20 @@ function Shell( editor ) {
 					const halfH   = getSize( child ).y / 2;
 					const topY    = getTopY( target );
 					child.position.y = topY + halfH;
+
+				},
+
+				// lineFromPoints(points, color) → a Line through the given points.
+				// Hides the BufferGeometry/LineBasicMaterial plumbing (neither is a
+				// shell global) so nets / wires / paths have one blessed, working path.
+				// points: array of Vector3 or [x,y,z] triples. Returns the Line (unadded).
+				lineFromPoints: function ( points, color = 0xffffff ) {
+
+					const T = window.THREE;
+					const pts = ( points || [] ).map( p => p && p.isVector3 ? p : new T.Vector3( p[ 0 ], p[ 1 ], p[ 2 ] ) );
+					if ( pts.length < 2 ) throw new Error( 'lineFromPoints: need at least 2 points' );
+					const geom = new T.BufferGeometry().setFromPoints( pts );
+					return new T.Line( geom, new T.LineBasicMaterial( { color } ) );
 
 				},
 
@@ -665,6 +732,11 @@ function Shell( editor ) {
 					} );
 
 				},
+
+				// ── Eval harness ──────────────────────────────────────────────────────
+				// evalAI([prompts]) — run the standing eval set through the agentic
+				// loop and print a 3-axis (structure/spatial/semantic) pass/fail table.
+				evalAI: function ( prompts ) { return evalAI( prompts ); },
 			};
 
 			// Build a named-parameter function so every scope var is a local;
@@ -722,6 +794,10 @@ function Shell( editor ) {
 
 	async function runAI( userPrompt ) {
 
+		// REPL helpers accidentally typed into the AI box → route to the JS surface
+		// rather than asking the model to "build" the literal text (e.g. evalAI()).
+		if ( /^\s*evalAI\s*\(/.test( userPrompt ) ) { evalAI(); return; }
+
 		if ( ! aiEngine.ready ) {
 
 			appendOutput( 'AI not loaded — click "Load AI" first.', 'error' );
@@ -735,6 +811,9 @@ function Shell( editor ) {
 		appendOutput( ( isQA ? '? ' : '(AI) ' ) + question, 'ai-prompt' );
 		aiStatus.textContent = 'thinking…';
 		aiInput.disabled = true;
+		aiAborted = false;
+		stopBtn.disabled = false;
+		stopBtn.style.display = '';
 
 		try {
 
@@ -744,19 +823,26 @@ function Shell( editor ) {
 				const messages = buildQAMessages( SCENE_QA_PROMPT, editor, question );
 				const answer   = await streamRaw( messages );
 				appendOutput( answer, 'result' );
+				if ( aiAborted ) appendOutput( '■ Stopped by user.', 'info' );
 
 			} else {
 
 				// Code-gen mode — bounded agentic loop:
 				// generate → validate (real API index) → execute → observe → fix.
 				const apiHints = retrieveForPrompt( question );
-				const messages = buildMessages( SYSTEM_PROMPT, editor, question, apiHints );
+				const systemPrompt = buildSystemPrompt( opsSchema() );
+				const messages = buildMessages( systemPrompt, editor, question, apiHints );
 
-				await runAgentic( {
+				const beforeMeshes = new Set();
+				editor.scene.traverse( o => { if ( o.isMesh ) beforeMeshes.add( o.uuid ); } );
+
+				const res = await runAgentic( {
 					editor,
 					messages,
 					intent: question,
 					maxRetries: 3,
+					shouldAbort:   () => aiAborted,
+					tokenBudget:   aiTokenBudget(),
 					deps: {
 						streamCode:    streamToOutput,
 						execute,
@@ -769,6 +855,21 @@ function Shell( editor ) {
 					},
 				} );
 
+				// D1 — compositional ceiling: a complex real-world object that came
+				// back as a single primitive likely needs the Power tier's world
+				// knowledge. Surface a hint (don't force-escalate).
+				if ( res && res.ok && ! aiAborted ) {
+
+					let addedMeshes = 0;
+					editor.scene.traverse( o => { if ( o.isMesh && ! beforeMeshes.has( o.uuid ) ) addedMeshes ++; } );
+					if ( shouldSuggestPower( question, addedMeshes, isPowerModel() ) ) {
+
+						appendOutput( '💡 This looks like a multi-part object but only one shape was built. Try the "Power" model (7B) for richer decomposition.', 'info' );
+
+					}
+
+				}
+
 			}
 
 		} catch ( err ) {
@@ -777,13 +878,122 @@ function Shell( editor ) {
 
 		} finally {
 
-			aiStatus.textContent = 'ready';
+			aiStatus.textContent = aiAborted ? 'stopped' : 'ready';
+			stopBtn.style.display = 'none';
 			aiInput.disabled = false;
 			aiInput.focus();
 
 		}
 
 	}
+
+	// True when a Power-class (≥7B) model is loaded — used by the D1 routing hint.
+	function isPowerModel() {
+
+		return /\b\d{2,}B\b|7B|13B|34B|70B/i.test( aiEngine.modelId || '' );
+
+	}
+
+	// Input-token budget for the agentic loop, derived from the loaded model's
+	// actual context window (reserve ~650 for the model's output). Returns
+	// undefined before a window is known, so the loop falls back to its default.
+	function aiTokenBudget() {
+
+		const w = aiEngine.contextWindow;
+		return w ? Math.max( 2000, w - 650 ) : undefined;
+
+	}
+
+	// ── Eval harness (Change Set E) ────────────────────────────────────────────
+	// Runs the standing eval set through the real agentic loop and prints a 3-axis
+	// pass/fail table. REPL: evalAI()  or  evalAI(EVAL_PROMPTS.slice(0,3)).
+	async function evalAI( prompts = EVAL_PROMPTS ) {
+
+		if ( ! aiEngine.ready ) { appendOutput( 'AI not loaded — click "Load AI" first.', 'error' ); return; }
+
+		appendOutput( `Running eval set (${ prompts.length } prompts) on ${ aiEngine.modelId }…`, 'info' );
+
+		// One prompt → structured per-axis inputs. Drives the SAME loop as runAI so
+		// the eval measures real behaviour, not a separate path.
+		async function generate( prompt ) {
+
+			const before = new Set();
+			editor.scene.traverse( o => { if ( o.isMesh ) before.add( o.uuid ); } );
+
+			const apiHints = retrieveForPrompt( prompt );
+			const systemPrompt = buildSystemPrompt( opsSchema() );
+			const messages = buildMessages( systemPrompt, editor, prompt, apiHints );
+
+			// Capture the final generated code (for the not-overfit axis).
+			let lastCode = '';
+			const streamCode = async ( msgs ) => { lastCode = await streamToOutput( msgs ); return lastCode; };
+
+			const res = await runAgentic( {
+				editor, messages, intent: prompt, maxRetries: 3, tokenBudget: aiTokenBudget(),
+				deps: { streamCode, execute, appendOutput,
+					validateCode, snapshotScene, sceneDiff, confirmChange, diffSummary },
+			} );
+
+			const execOk = !! ( res && res.ok );
+			const objects = [];
+			let partCount = 0;
+			editor.scene.traverse( o => {
+
+				if ( o.isMesh && ! before.has( o.uuid ) ) {
+
+					partCount ++;
+					const s = getSize( o );
+					const c = getWorldCenter( o );
+					objects.push( { size: [ s.x, s.y, s.z ], pos: [ c.x, c.y, c.z ] } );
+
+				}
+
+			} );
+
+			// Distinct material colours across ALL scene meshes (for the recolor /
+			// shared-material axis — both paddles green ⇒ count 1 ⇒ fail).
+			const colors = new Set();
+			editor.scene.traverse( o => {
+
+				if ( o.isMesh && o.material && o.material.color ) colors.add( o.material.color.getHex() );
+
+			} );
+
+			// hadCode reflects whether code was actually extracted (so a thrown but
+			// extracted snippet reads "threw on execute", not "no code extracted");
+			// validate/exec collapse to the loop's ok result (it only succeeds when
+			// validation + execution both passed).
+			return { hadCode: lastCode.length > 0, validateOk: execOk, execOk, objects, partCount,
+				code: lastCode, distinctColorCount: colors.size };
+
+		}
+
+		const results = await runEval( {
+			prompts,
+			deps: {
+				generate,
+				clearScene: () => { editor.clear(); },
+				seed: ( code ) => { execute( code ); },
+				log: ( line ) => appendOutput( line, 'info' ),
+			},
+		} );
+
+		appendOutput( formatTable( results ), 'result' );
+		return results;
+
+	}
+
+	// ── Stop AI button ─────────────────────────────────────────────────────────
+
+	stopBtn.addEventListener( 'click', function () {
+
+		if ( ! aiEngine.ready ) return;
+		aiAborted = true;
+		aiEngine.interrupt();
+		stopBtn.disabled = true;
+		aiStatus.textContent = 'stopping…';
+
+	} );
 
 	// ── Load AI button ────────────────────────────────────────────────────────
 
@@ -813,7 +1023,8 @@ function Shell( editor ) {
 			aiInput.disabled = false;
 			aiInput.focus();
 			localStorage.setItem( 'shell-ai-model', modelSelect.value );
-			appendOutput( 'AI ready — model: ' + modelSelect.value, 'info' );
+			appendOutput( 'AI ready — model: ' + modelSelect.value +
+				'  (context window: ' + ( aiEngine.contextWindow || 'default' ) + ' tokens)', 'info' );
 
 		} catch ( err ) {
 
@@ -957,11 +1168,13 @@ function Shell( editor ) {
 	appendOutput( 'agentic tools: findAPI(text)  whatsVisible()  whatsAt(x,y)  — AI requests run a bounded generate→validate→execute→observe→fix loop', 'info' );
 	appendOutput( 'spatial: getSize(obj)  getTopY(obj)  getCenter(obj)  placeOnTop(child,target)', 'info' );
 	appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
+	appendOutput( 'AI eval: evalAI() runs the standing eval set (pong/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
 	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
 	appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)', 'info' );
 	appendOutput( 'organic geometry: LatheGeometry(pts,segs)  TubeGeometry(curve,…)  ExtrudeGeometry(shape,{})  CatmullRomCurve3(pts)', 'info' );
 	appendOutput( 'PBR textures: makeTexture(fn,size)  makeCheckerTex(sz,dark,light,tiles)  makeGridTex(sz,color,divs,bg)  + MeshPhysicalMaterial', 'info' );
 	appendOutput( 'edit mode: enterEditMode()  exitEditMode()  extrude(d)  inset(t)  bevel(t)  deleteFaces()  weld(eps)  planarUV(axis)  boxUV()  — Tab to toggle', 'info' );
+	appendOutput( 'selection criteria (M6): selectTopFaces(count)  selectFacingUp(threshold)  selectBoundaryEdges()  selectFaces(…ids)  selectVertices(…ids)  selectEdges(…ids)  clearSelection()', 'info' );
 
 	return container;
 

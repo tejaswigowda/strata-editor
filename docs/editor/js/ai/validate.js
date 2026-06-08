@@ -8,7 +8,108 @@
 // HIGH-CONFIDENCE only: we never block legitimate code. Each issue is a precise,
 // actionable string fed back to the model for correction.
 
-import { ALLOWED_CLASSES, COMMAND_ARITY, MATERIAL_KEYS, buildIndex } from './apiIndex.js';
+import { ALLOWED_CLASSES, COMMAND_ARITY, MATERIAL_KEYS, SCOPE_FUNCTIONS, buildIndex } from './apiIndex.js';
+
+// JS keywords that can be followed by "(" but are not function calls.
+const JS_KEYWORDS = new Set( [
+	'if', 'for', 'while', 'switch', 'catch', 'return', 'typeof', 'function', 'await',
+	'do', 'else', 'instanceof', 'void', 'delete', 'yield', 'in', 'of', 'new', 'case',
+	'throw', 'with', 'super', 'async',
+] );
+
+// Bare JS built-in globals that may be called without a receiver.
+const JS_GLOBALS = new Set( [
+	'Math', 'JSON', 'Object', 'Array', 'String', 'Number', 'Boolean', 'Date', 'RegExp',
+	'Map', 'Set', 'WeakMap', 'WeakSet', 'Promise', 'Symbol', 'BigInt', 'Error',
+	'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'encodeURIComponent', 'decodeURIComponent',
+	'console', 'structuredClone', 'Float32Array', 'Uint8Array', 'Uint16Array', 'Uint32Array',
+] );
+
+// Collect identifiers DECLARED within a snippet (function names, var bindings,
+// function/arrow parameters) so calls to them aren't mistaken for undefined.
+function declaredNames( code ) {
+
+	const declared = new Set();
+	const addParams = list => {
+
+		for ( const p of String( list ).split( ',' ) ) {
+
+			const id = p.trim().replace( /[=:].*$/, '' ).replace( /^\.\.\./, '' ).trim();
+			if ( /^[A-Za-z_$][\w$]*$/.test( id ) ) declared.add( id );
+
+		}
+
+	};
+
+	for ( const m of code.matchAll( /function\s*\*?\s*([A-Za-z_$][\w$]*)?\s*\(([^)]*)\)/g ) ) {
+
+		if ( m[ 1 ] ) declared.add( m[ 1 ] );
+		addParams( m[ 2 ] );
+
+	}
+	for ( const m of code.matchAll( /(?:\(([^)]*)\)|([A-Za-z_$][\w$]*))\s*=>/g ) ) {
+
+		if ( m[ 1 ] !== undefined ) addParams( m[ 1 ] ); else if ( m[ 2 ] ) declared.add( m[ 2 ] );
+
+	}
+	for ( const m of code.matchAll( /(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g ) ) declared.add( m[ 1 ] );
+
+	return declared;
+
+}
+
+// Find const/let names declared TWICE IN THE SAME BLOCK SCOPE (a SyntaxError:
+// "Identifier 'x' has already been declared"). Tracks brace scopes so sibling
+// blocks / loop bodies that legitimately reuse a name are NOT flagged. Skips
+// strings and comments so their braces/keywords don't perturb the scope stack.
+function duplicateConsts( code ) {
+
+	const dups = new Set();
+	const stack = [ new Set() ];
+	const n = code.length;
+	let i = 0;
+
+	while ( i < n ) {
+
+		const ch = code[ i ];
+
+		if ( ch === '"' || ch === "'" || ch === '`' ) {
+
+			const q = ch; i ++;
+			while ( i < n && code[ i ] !== q ) { if ( code[ i ] === '\\' ) i ++; i ++; }
+			i ++; continue;
+
+		}
+		if ( ch === '/' && code[ i + 1 ] === '/' ) { while ( i < n && code[ i ] !== '\n' ) i ++; continue; }
+		if ( ch === '/' && code[ i + 1 ] === '*' ) { i += 2; while ( i < n && ! ( code[ i ] === '*' && code[ i + 1 ] === '/' ) ) i ++; i += 2; continue; }
+		if ( ch === '{' ) { stack.push( new Set() ); i ++; continue; }
+		if ( ch === '}' ) { if ( stack.length > 1 ) stack.pop(); i ++; continue; }
+
+		if ( ch === 'c' || ch === 'l' ) {
+
+			const prev = code[ i - 1 ];
+			if ( ! ( prev && /[\w$]/.test( prev ) ) ) {
+
+				const m = /^(?:const|let)\s+([A-Za-z_$][\w$]*)/.exec( code.slice( i, i + 64 ) );
+				if ( m ) {
+
+					const name = m[ 1 ];
+					const cur = stack[ stack.length - 1 ];
+					if ( cur.has( name ) ) dups.add( name ); else cur.add( name );
+					i += m[ 0 ].length; continue;
+
+				}
+
+			}
+
+		}
+
+		i ++;
+
+	}
+	return [ ...dups ];
+
+}
 
 // THREE-ish suffixes/patterns that make an unknown `new X()` a likely halluc.
 const SUSPECT = /(?:Geometry|Material|Light|Loader|Camera|Helper|Texture|Controls)$|\d/;
@@ -58,6 +159,23 @@ export function validateCode( code ) {
 	if ( ! ALLOWED_CLASSES.size ) buildIndex();
 	const issues = [];
 
+	// 0. Direct scene mutation bypasses the undo stack — always forbidden.
+	if ( /\bscene\s*\.\s*(?:add|remove)\s*\(/.test( code ) ) {
+
+		issues.push( 'scene.add()/scene.remove() bypasses the undo stack — use editor.execute(new AddObjectCommand(editor, obj)) / new RemoveObjectCommand(editor, obj) instead.' );
+
+	}
+
+	// 0b. Renderer-"clear" hallucination — "clear/empty/reset the scene" must REMOVE
+	//     objects, not touch the render buffer. The small model reaches for
+	//     Cache.clear / CanvasRenderer / WebGLRenderer.clear / setClearColor, which
+	//     don't exist in scope and don't empty the scene.
+	if ( /\b(?:CanvasRenderer|WebGLRenderer)\b|\bCache\s*\.\s*clear|setClearColor/.test( code ) ) {
+
+		issues.push( "To clear/empty the scene, REMOVE its objects — do NOT call renderer/Cache clear methods (not in scope): scene.children.filter(o=>o.type!=='Camera').forEach(o=>editor.execute(new RemoveObjectCommand(editor,o)));" );
+
+	}
+
 	// 1. Every `new X(` constructor
 	const ctor = /new\s+([A-Za-z_$][\w$]*)\s*\(/g;
 	let m;
@@ -85,6 +203,107 @@ export function validateCode( code ) {
 			issues.push( `${ name } called with ${ args.length } args but takes ${ arity }: ${ sig }. Set position/rotation on the object BEFORE adding — these commands have no transform argument.` );
 
 		}
+
+	}
+
+	// 1c. .add() on a Material/Geometry variable (B1) — the g.add() class of bug.
+	//     Collect vars assigned to `new *Material(` / `new *Geometry(`, then flag any
+	//     `<thatVar>.add(` call. Only Group/Object3D/Mesh have .add().
+	const nonAddable = new Set();
+	const declRe = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+([A-Za-z_$][\w$]*)\s*\(/g;
+	let d;
+	while ( ( d = declRe.exec( code ) ) !== null ) {
+
+		if ( /(?:Material|Geometry)$/.test( d[ 2 ] ) ) nonAddable.add( d[ 1 ] );
+
+	}
+	const addRe = /([A-Za-z_$][\w$]*)\s*\.\s*add\s*\(/g;
+	let a;
+	while ( ( a = addRe.exec( code ) ) !== null ) {
+
+		if ( nonAddable.has( a[ 1 ] ) ) {
+
+			issues.push( `"${ a[ 1 ] }" is a Material/Geometry — it has no .add(). To group objects: const group=new Group(); group.add(mesh); then editor.execute(new AddObjectCommand(editor, group)).` );
+
+		}
+
+	}
+
+	// 1d. Constructed-but-never-added Mesh/Group (B2) — the dropped-paddle bug.
+	//     A Mesh/Group that is never passed to AddObjectCommand AND never added to a
+	//     group (.add(name)) is silently lost. Flag it (only when the program is
+	//     building a scene, i.e. it uses AddObjectCommand at all).
+	if ( /\bAddObjectCommand\b/.test( code ) ) {
+
+		const objRe = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+(?:Mesh|Group)\s*\(/g;
+		let o;
+		while ( ( o = objRe.exec( code ) ) !== null ) {
+
+			const name = o[ 1 ];
+			const esc = name.replace( /[$]/g, '\\$&' );
+			const addedToScene = new RegExp( 'AddObjectCommand\\s*\\([^)]*\\b' + esc + '\\b' ).test( code );
+			const addedToGroup = new RegExp( '\\.\\s*add\\s*\\(\\s*' + esc + '\\b' ).test( code );
+			if ( ! addedToScene && ! addedToGroup ) {
+
+				issues.push( `"${ name }" is created but never added — pass it to editor.execute(new AddObjectCommand(editor, ${ name })) or add it to a group with group.add(${ name }).` );
+
+			}
+
+		}
+
+	}
+
+	// 1e. Undefined function call (B3) — the backWall() bug. Flag a bare call to a
+	//     name that is not a JS keyword/global, not a known scope helper/class, and
+	//     not declared in the snippet. Method calls (preceded by ".") and `new X(`
+	//     constructors are excluded.
+	const declared = declaredNames( code );
+	const reportedUndef = new Set();
+	const callRe = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g;
+	let cm;
+	while ( ( cm = callRe.exec( code ) ) !== null ) {
+
+		const name = cm[ 1 ];
+		if ( reportedUndef.has( name ) ) continue;
+		if ( JS_KEYWORDS.has( name ) ) continue;
+		if ( /\bnew\s+$/.test( code.slice( 0, cm.index ) ) ) continue; // constructor
+		if ( declared.has( name ) || SCOPE_FUNCTIONS.has( name ) || JS_GLOBALS.has( name )
+			|| ALLOWED_CLASSES.has( name ) ) continue;
+
+		reportedUndef.add( name );
+		issues.push( `"${ name }" is not a defined function or class. Do NOT call helpers you haven't defined — inline the geometry: new Mesh(new <Geometry>(...), material).` );
+
+	}
+
+	// 1f. Defines a function but never runs it (B4) — the clear-scene bug. If the
+	//     snippet declares named functions, runs no IIFE, and never invokes any of
+	//     them, nothing executes.
+	const declFns = [ ...code.matchAll( /function\s+([A-Za-z_$][\w$]*)\s*\(/g ) ].map( x => x[ 1 ] );
+	if ( declFns.length ) {
+
+		const hasIIFE = /\}\s*\)\s*\(/.test( code ); // ...})(  — function expr immediately called
+		const invoked = declFns.some( n => {
+
+			const esc = n.replace( /[$]/g, '\\$&' );
+			// `name(` that is NOT the declaration `function name(`
+			return new RegExp( '(?<!function\\s)(?<![.\\w$])' + esc + '\\s*\\(' ).test( code );
+
+		} );
+		if ( ! hasIIFE && ! invoked ) {
+
+			issues.push( 'Code defines a function but never runs it. Wrap the body in an IIFE: (function(){ ... })();  so it executes immediately.' );
+
+		}
+
+	}
+
+	// 1g. Duplicate const/let in the same scope (B7) — the kitchen bug. This is a
+	//     SyntaxError; catch it pre-execution so the retry fixes it (with the loop
+	//     instruction) instead of amputating the scene to make it run.
+	const dups = duplicateConsts( code );
+	if ( dups.length ) {
+
+		issues.push( `"${ dups[ 0 ] }" is declared more than once in the same scope (SyntaxError). For repeated objects use a for-loop with INDEXED names (const item=…; item.name=\`Cabinet \${i+1}\`) or give each a UNIQUE name — never redeclare the same const.` );
 
 	}
 

@@ -15,28 +15,213 @@
 //   • Observation only triggers a retry on the safe "nothing happened" signal
 //     (diff.total === 0), never on fuzzy value mismatch (avoids retry storms).
 //   • Hard cap on iterations — never runaway-loop the local model.
+//   • Retry context is CODE-ONLY and SHORT (B2/B3): each retry sees the original
+//     request + a one-line error + a truncated snippet of the LAST attempt only.
+//     Earlier failed attempts are never stacked, so context can't snowball into
+//     a window overflow. A pre-call token-budget guard trims/aborts before MLC's
+//     hard throw.
+
+import { estimateTokens, truncateForContext } from '../AIUtils.js';
 
 export const DEFAULT_MAX_RETRIES = 3;
 
-export async function runAgentic( { editor, messages, intent, deps, maxRetries = DEFAULT_MAX_RETRIES } ) {
+// Default input-token budget when the caller doesn't know the model's window —
+// leaves ~600 for output below a 4096 window. Callers should pass an explicit
+// tokenBudget derived from the loaded model's actual context window.
+const DEFAULT_TOKEN_BUDGET = 3500;
+
+// Collapse any error/feedback into a single short line for the retry prompt.
+function oneLine( s, max = 200 ) {
+
+	const line = String( s || '' ).replace( /\s+/g, ' ' ).trim();
+	return line.length > max ? line.slice( 0, max ) + '…' : line;
+
+}
+
+// Strict code-only retry prompt (B2): forbids prose, names the failure in 1 line.
+// C6: instruct the model to FIX the error while KEEPING every intended object —
+// the failure mode was "recovering" by deleting most of the scene so the code runs.
+function retryPrompt( errorSummary ) {
+
+	return 'Your previous output failed: ' + oneLine( errorSummary ) + '.\n' +
+		'Fix ONLY that error. KEEP every object from your previous attempt — do NOT ' +
+		'remove or reduce content to make it run; output the FULL corrected scene.\n' +
+		'Output ONLY a single corrected JavaScript block wrapped in ```js … ```.\n' +
+		'No explanation. No prose. No comments. Code only.';
+
+}
+
+// Error-translation table (C1): a 1.5B model can't act on "g.add is not a
+// function" — it CAN act on a concrete instruction. Map known runtime errors to
+// actionable, teaching feedback before feeding them back.
+function translateError( raw ) {
+
+	const e = String( raw || '' );
+	let m;
+
+	if ( ( m = e.match( /([A-Za-z_$][\w$]*)\.add is not a function/ ) ) ) {
+
+		return `'${ m[ 1 ] }' is not a Group/Object3D, so it has no .add(). To group objects: ` +
+			`const group=new Group(); group.add(mesh); then editor.execute(new AddObjectCommand(editor, group)).`;
+
+	}
+
+	if ( ( m = e.match( /([A-Za-z_$][\w$]*) is not a constructor/ ) ) ) {
+
+		return `'${ m[ 1 ] }' is not a real three.js class. Use only documented primitives ` +
+			`(BoxGeometry, SphereGeometry, CylinderGeometry, ConeGeometry, TorusGeometry, PlaneGeometry, Group, Mesh).`;
+
+	}
+
+	if ( ( m = e.match( /([A-Za-z_$][\w$]*) is not defined/ ) ) ) {
+
+		return `'${ m[ 1 ] }' is not a defined function or variable. Do NOT call helpers you ` +
+			`haven't defined — inline the geometry: new Mesh(new <Geometry>(...), material).`;
+
+	}
+
+	if ( /Unexpected end of input|Unexpected identifier|Unexpected token/.test( e ) ) {
+
+		return 'Your code was incomplete or contained prose. Output ONLY a single complete (function(){ ... })(); block.';
+
+	}
+
+	if ( /Cannot read propert(?:y|ies) of (?:undefined|null)/.test( e ) ) {
+
+		return "You referenced an object that doesn't exist. Use findObject('name') to locate existing objects, or create the object first.";
+
+	}
+
+	return e;
+
+}
+
+// Distinct named colors mentioned in a request — used by C5 to know how many
+// different colors the user asked for ("red and blue" → 2).
+const COLOR_WORDS = [ 'red', 'green', 'blue', 'yellow', 'orange', 'purple', 'cyan',
+	'magenta', 'white', 'black', 'gray', 'grey', 'brown', 'pink' ];
+function countColorWords( intent ) {
+
+	const p = String( intent || '' ).toLowerCase();
+	return new Set( COLOR_WORDS.filter( c => new RegExp( '\\b' + c + '\\b' ).test( p ) ) ).size;
+
+}
+
+// "No effect" observation translation (C2). "Nothing changed" is as uninformative
+// as a raw error — name the likely CAUSE so the model can act on it.
+function diagnoseNoEffect( code, reason ) {
+
+	const hasIIFE = /\}\s*\)\s*\(/.test( code );
+	if ( /function\s+[A-Za-z_$][\w$]*\s*\(/.test( code ) && ! hasIIFE ) {
+
+		return 'Your code defined a function but never ran it. Wrap the body in an IIFE ' +
+			'(function(){ ... })(); so it runs immediately.';
+
+	}
+	if ( /RemoveObjectCommand|\.remove\s*\(|\bclear\b/i.test( code ) ) {
+
+		return 'Nothing matched for removal — confirm there are non-camera objects in the scene ' +
+			'(scene.children.filter(o=>o.type!=="Camera")) before removing.';
+
+	}
+	if ( /findObject|findByDescription|findAll|\.filter\s*\(|editor\.selected/.test( code ) ) {
+
+		return "The code ran but changed nothing — a lookup likely returned no object. Verify the " +
+			"target exists with findObject('name') using the FULL descriptive phrase (color + shape).";
+
+	}
+	return 'The code ran but the scene did not change, though a change was expected (' + reason +
+		'). Re-check the target lookup and that an AddObject/Set command actually executes.';
+
+}
+
+export async function runAgentic( { editor, messages, intent, deps, maxRetries = DEFAULT_MAX_RETRIES, shouldAbort, tokenBudget = DEFAULT_TOKEN_BUDGET } ) {
 
 	const { streamCode, execute, appendOutput, validateCode, snapshotScene, sceneDiff, confirmChange, diffSummary } = deps;
 
-	const convo = [ ...messages ];
+	const aborted = () => typeof shouldAbort === 'function' && shouldAbort();
+
+	// Original system + user request. NEVER mutated — retries rebuild from this so
+	// failed generations are never carried forward (B3).
+	const baseMessages = [ ...messages ];
+
+	// Most-recent failed attempt only: { code, error }. null on the first pass.
+	let lastFail = null;
 
 	for ( let attempt = 0; attempt <= maxRetries; attempt ++ ) {
 
+		// User clicked Stop — don't kick off another generation/retry.
+		if ( aborted() ) {
+
+			appendOutput( '■ Stopped by user.', 'info' );
+			return { ok: false, aborted: true, attempts: attempt };
+
+		}
+
+		// ── Build a fresh, bounded retry context (no accumulation) ───────────
+		let convo = baseMessages;
+		if ( lastFail ) {
+
+			convo = [
+				...baseMessages,
+				{ role: 'assistant', content: truncateForContext( lastFail.code ) },
+				{ role: 'user', content: retryPrompt( lastFail.error ) },
+			];
+
+			// Pre-call token-budget guard (B3): drop the snippet, then abort rather
+			// than letting MLC throw a raw context-window overflow.
+			if ( estimateTokens( convo ) > tokenBudget ) {
+
+				convo = [ ...baseMessages, { role: 'user', content: retryPrompt( lastFail.error ) } ];
+
+				if ( estimateTokens( convo ) > tokenBudget ) {
+
+					appendOutput( 'Aborting — prompt exceeds the context window even after trimming.', 'error' );
+					return { ok: false, attempts: attempt };
+
+				}
+
+			}
+
+		}
+
 		const code = await streamCode( convo );
+
+		// User clicked Stop mid-generation — bail before running partial code.
+		if ( aborted() ) {
+
+			appendOutput( '■ Stopped by user.', 'info' );
+			return { ok: false, aborted: true, attempts: attempt + 1 };
+
+		}
+
+		// ── 0. Extraction guard (B1) — no executable code came back ──────────
+		if ( ! code ) {
+
+			if ( attempt >= maxRetries ) break;
+			appendOutput( `⟳ no code block — retrying (${ attempt + 1 }/${ maxRetries })…`, 'info' );
+			lastFail = { code: '', error: 'no code block found — output only a fenced JS block, no prose' };
+			continue;
+
+		}
+
+		// ── C4. Stop retrying on byte-identical output ───────────────────────
+		// If the model reproduces the exact same code, the feedback failed to move
+		// it — burning the remaining retries won't help. Surface and stop.
+		if ( lastFail && code === lastFail.code ) {
+
+			appendOutput( '⊘ Model repeated identical code — feedback did not help. Stopping. ' +
+				'Try rephrasing, or the Power (7B) model for complex requests.', 'error' );
+			return { ok: false, identical: true, attempts: attempt + 1 };
+
+		}
 
 		// ── 1. Static validation against the real API index ──────────────────
 		const v = validateCode( code );
 		if ( ! v.ok && attempt < maxRetries ) {
 
 			appendOutput( '⚠ API check: ' + v.issues.join( '  |  ' ), 'info' );
-			convo.push( { role: 'assistant', content: code } );
-			convo.push( { role: 'user', content:
-				'Before running, these API problems were detected:\n- ' + v.issues.join( '\n- ' ) +
-				'\nOutput corrected JavaScript only.' } );
+			lastFail = { code, error: 'API problems: ' + v.issues.join( '; ' ) };
 			continue;
 
 		}
@@ -49,9 +234,7 @@ export async function runAgentic( { editor, messages, intent, deps, maxRetries =
 
 			if ( attempt >= maxRetries ) break;
 			appendOutput( `⟳ error — retrying (${ attempt + 1 }/${ maxRetries })…`, 'info' );
-			convo.push( { role: 'assistant', content: code } );
-			convo.push( { role: 'user', content:
-				'That threw: ' + result.error + '\nFix the code. Output corrected JavaScript only.' } );
+			lastFail = { code, error: translateError( result.error ) };
 			continue;
 
 		}
@@ -66,11 +249,30 @@ export async function runAgentic( { editor, messages, intent, deps, maxRetries =
 		if ( ! conf.ok && diff.total === 0 && attempt < maxRetries ) {
 
 			appendOutput( `⟳ no effect (${ conf.reason }) — retrying (${ attempt + 1 }/${ maxRetries })…`, 'info' );
-			convo.push( { role: 'assistant', content: code } );
-			convo.push( { role: 'user', content:
-				'The code ran but the scene did not change, though a change was expected (' + conf.reason + '). ' +
-				'The target object was probably not found — re-check the lookup (findObject / findByDescription with the full descriptive phrase). Output corrected JavaScript only.' } );
+			lastFail = { code, error: diagnoseNoEffect( code, conf.reason ) };
 			continue;
+
+		}
+
+		// C5 — verify RESULT matches intent, not just that a command ran. If the
+		// request named ≥2 distinct colors but the recolored objects collapsed to
+		// fewer distinct colors, they share a material (last write wins). With B′1's
+		// clone-on-write this normally can't happen, so this is a safe backstop that
+		// only fires on a genuine collision.
+		const wantColors = countColorWords( intent );
+		if ( wantColors >= 2 && diff.recolored.length >= 2 && attempt < maxRetries ) {
+
+			const recolored = diff.recolored;
+			const distinct = new Set(
+				[ ...after.values() ].filter( o => recolored.includes( o.name ) ).map( o => o.color )
+			).size;
+			if ( distinct < wantColors ) {
+
+				appendOutput( `⟳ colors collapsed to ${ distinct } (asked ${ wantColors }) — retrying (${ attempt + 1 }/${ maxRetries })…`, 'info' );
+				lastFail = { code, error: 'you recolored multiple objects but they SHARE one material, so all show the same color. Give each its OWN material (new Material per mesh) before setting colors, then set each distinct color.' };
+				continue;
+
+			}
 
 		}
 

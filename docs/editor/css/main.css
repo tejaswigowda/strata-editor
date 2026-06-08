@@ -487,6 +487,21 @@ hr {
 #shell-load-btn:disabled { opacity: 0.5; cursor: default; }
 #shell-load-btn:hover:not(:disabled) { background: #3a6aaf; }
 
+#shell-stop-btn {
+	background: #7f2a2a;
+	color: #fff;
+	border: none;
+	border-radius: 3px;
+	font-size: 11px;
+	padding: 3px 10px;
+	cursor: pointer;
+	order: 4;
+	flex: 0 0 auto;
+}
+
+#shell-stop-btn:disabled { opacity: 0.5; cursor: default; }
+#shell-stop-btn:hover:not(:disabled) { background: #af3a3a; }
+
 #shell-progress-wrap {
 	height: 3px;
 	background: #1e2235;

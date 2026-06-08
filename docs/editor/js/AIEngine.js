@@ -24,10 +24,34 @@ export class AIEngine {
 		this.loading  = false;
 		this.modelId  = null;
 
+		// Desired context window. Qwen2.5 supports far more than the 4096 the
+		// prebuilt MLC config defaults to; a larger window gives the prompt + RAG +
+		// retry history real headroom. Applied as an override at load, with fallback.
+		this.desiredContextWindow = 8192;
+		// Actual window in effect after load (override value, or conservative
+		// fallback if the compiled model rejected the override).
+		this.contextWindow = null;
+
 	}
 
 	/** True once a model has been loaded successfully. */
 	get ready() { return this._engine !== null; }
+
+	// ── Interrupt ─────────────────────────────────────────────────────────────
+	/**
+	 * Interrupt the in-flight generation. The active stream/complete call ends
+	 * gracefully, resolving with whatever text was produced so far. Safe to call
+	 * when nothing is running — it's a no-op.
+	 */
+	interrupt() {
+
+		if ( this._engine && typeof this._engine.interruptGenerate === 'function' ) {
+
+			this._engine.interruptGenerate();
+
+		}
+
+	}
 
 	// ── Initialise ────────────────────────────────────────────────────────────
 	/**
@@ -47,12 +71,30 @@ export class AIEngine {
 
 		this.loading = true;
 
+		const engineCfg = {
+			initProgressCallback: onProgress,
+			appConfig: webllm.prebuiltAppConfig,
+		};
+
 		try {
 
-			this._engine = await webllm.CreateMLCEngine( modelId, {
-				initProgressCallback: onProgress,
-				appConfig: webllm.prebuiltAppConfig,
-			} );
+			// Try the larger window first (3rd arg = per-chat ChatOptions override).
+			try {
+
+				this._engine = await webllm.CreateMLCEngine( modelId, engineCfg, {
+					context_window_size: this.desiredContextWindow,
+				} );
+				this.contextWindow = this.desiredContextWindow;
+
+			} catch ( err ) {
+
+				// The compiled model lib may not accept a larger window (or uses a
+				// sliding window). Fall back to the model's default config.
+				if ( onProgress ) onProgress( { text: 'large context unavailable — using default window…', progress: 0 } );
+				this._engine = await webllm.CreateMLCEngine( modelId, engineCfg );
+				this.contextWindow = 4096; // conservative known-safe default
+
+			}
 
 			this.modelId = modelId;
 
@@ -75,14 +117,22 @@ export class AIEngine {
 	 * @param {number}   [opts.maxTokens]
 	 * @param {number}   [opts.temperature]
 	 */
-	async stream( messages, { onToken, maxTokens = 600, temperature = 0.1 } = {} ) {
+	async stream( messages, { onToken, maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0 } = {} ) {
 
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
 
+		// A SMALL frequency penalty nudges against pathological token loops without
+		// suppressing the legitimate repetition that real code needs (every object
+		// repeats `editor.execute(new AddObjectCommand(...))`). presence_penalty is
+		// kept at 0 — it punishes a token for appearing at all, which made the model
+		// DROP the last added object. Runaway loops are bounded by max_tokens + the
+		// "never spam near-duplicate objects" prompt rule instead.
 		const chunks = await this._engine.chat.completions.create( {
 			messages,
 			temperature,
 			max_tokens: maxTokens,
+			frequency_penalty: frequencyPenalty,
+			presence_penalty: presencePenalty,
 			stream: true,
 		} );
 
@@ -105,7 +155,7 @@ export class AIEngine {
 	 * Run inference and return the full response as a single string.
 	 * Used for retry correction passes where live display isn't needed.
 	 */
-	async complete( messages, { maxTokens = 600, temperature = 0.1 } = {} ) {
+	async complete( messages, { maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0 } = {} ) {
 
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
 
@@ -113,6 +163,8 @@ export class AIEngine {
 			messages,
 			temperature,
 			max_tokens: maxTokens,
+			frequency_penalty: frequencyPenalty,
+			presence_penalty: presencePenalty,
 			stream: false,
 		} );
 

@@ -43,9 +43,64 @@ Select a model from the shell header and click **Load AI**. Weights download onc
 
 | Label | Model ID | Size | Notes |
 |-------|----------|------|-------|
-| **Default** | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` | ~1 GB | Recommended |
-| **Power** | `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | ~4.5 GB | Best quality, needs ≥8 GB VRAM |
+| **Default** | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` | ~1 GB | Fast; best for structural/edit (see routing) |
+| **Power** | `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | ~4.5 GB | Best at decomposition; needs ≥8 GB VRAM |
 | **Lite** | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | ~900 MB | Weak / integrated GPUs only |
+
+On load the engine requests an **8192-token context window** (overriding the 4096
+default) so the system prompt + RAG hints + retry history have headroom; it falls
+back to 4096 automatically if the compiled model rejects the larger window. The
+shell prints the window in effect (`AI ready — … (context window: N tokens)`).
+
+---
+
+## Model tiers — which to use when
+
+Backed by a standing 19-prompt eval (`evalAI()`, below) scored on four axes, run
+1.5B vs 7B side-by-side. **The 7B is not a strict upgrade — route by task type.**
+
+| Use the **1.5B Default** for | Use the **7B Power** for |
+|---|---|
+| taught + near-neighbor scenes (pong, ping-pong) | multi-part decomposition (air-hockey w/ goals, desk lamp = base+stem+shade, net, bench) |
+| flat structural grids (chess, tiled floor, fence, staircase) | knowledge edits where details matter (correct color names, correct "clear scene") |
+| lookup / edit (scale, delete, recolor) | requests the 1.5B returns as a single primitive |
+
+**Why not always 7B:** it has the world-knowledge to decompose, but it
+**over-engineers simple flat layouts into vertical X-Y walls** and **over-reaches
+for unsupported APIs** (`BufferGeometry`), so it *regresses* the simple
+structural/near-neighbor cases the 1.5B nails. The shell already surfaces a
+`💡 try the Power model` hint when a compositional request comes back as one
+primitive (`shouldSuggestPower` in `ai/eval.js`).
+
+**Neither tier handles** (flagged by the eval, not yet solved): obscure board
+layouts — backgammon / go / monopoly both fall back to the chess alternating-grid
+template (a knowledge gap, not a size gap) — and reliably keeping furniture above
+the ground plane.
+
+### Eval harness — `evalAI()`
+
+Type `evalAI()` in the JS shell (works from either input row) to run the standing
+prompt set through the **real agentic loop** and print a 4-axis pass/fail table:
+
+```
+tier            | struct | spatial | semantic | distinct | prompt
+```
+
+| Axis | Checks |
+|------|--------|
+| **struct** | ran clean — IIFE, named, `AddObjectCommand`, no repetition loop / prose / overflow |
+| **spatial** | flat things lie flat (X-Z), objects rest on/above the ground (no X-Y walls, no negative Y) |
+| **semantic** | has the expected parts — and they are *distinct*, not N identical boxes |
+| **distinct** | not over-fit (a non-chess "board" doesn't emit the chess template) and recolors yield the requested distinct colors |
+
+The `distinct` axis exists because earlier 3-axis runs scored a chessboard-shaped
+"traffic intersection" as a triple-pass — the gauge read green over a known fault.
+Canary prompts (backgammon/go/monopoly) + an overfit detector make it visible.
+
+Run `evalAI()` after any prompt change, and on both tiers to set routing. The
+validation + translated-feedback layer (undefined-helper, duplicate-`const`,
+`.add()`-on-Material, shared-material clone-on-write) is **model-independent** — it
+caught and let the 7B *recover* the same bug classes it catches on the 1.5B.
 
 ---
 
@@ -103,6 +158,8 @@ getSize(obj)               // → {x,y,z} bounding box dimensions (geometry × s
 getTopY(obj)               // → world Y of the top face
 getCenter(obj)             // → world-space bounding box centre
 placeOnTop(child, target)  // sets child.position.y to rest on top of target
+lineFromPoints(pts, color) // → a Line through pts (Vector3[] or [x,y,z][]) — nets/wires/paths,
+                           //   hides the BufferGeometry/LineBasicMaterial plumbing
 ```
 
 ### Scene intelligence (descriptive part resolution)
@@ -211,7 +268,7 @@ generate → validate → execute → observe → fix   (max 3 retries, every ac
 ```
 
 1. **Retrieve real APIs.** A local index of the actual command/op/material/geometry signatures (rebuilt at load, so it never goes stale) is searched by intent and injected *before* generation — the model sees the real `AddObjectCommand(editor, object)` and the real `metalness` key instead of guessing.
-2. **Validate.** Generated code is statically linted against that index *before* running — invented classes (`Tree3D`), wrong command arity (a stray position arg), and bad material keys (`metal:1`) are caught and fed back as precise corrections.
+2. **Validate.** Generated code is statically linted against that index *before* running — invented classes (`Tree3D`), wrong command arity (a stray position arg), bad material keys (`metal:1`), undefined helper calls (`backWall()`), `.add()` on a Material/Geometry, duplicate-`const` redeclaration, `scene.add()` bypass, and constructed-but-never-added objects are all caught and fed back as **actionable** corrections (the fix, not the raw symptom). Identical re-tries stop early instead of looping.
 3. **Execute** through the single shell surface (`editor.execute` → undo stack).
 4. **Observe.** The scene is snapshotted before/after and diffed (added / removed / moved / scaled / recolored). The loop reports `✓ 1 recolored` — or, if a change was expected and *nothing* happened (usually a missed lookup), feeds that back for one corrective retry.
 5. **Bounded & reversible.** Retries are hard-capped; every autonomous action is undoable; ambiguous/destructive ops surface candidates rather than guess.
@@ -283,10 +340,16 @@ sceneEqual(snap, editor.scene.toJSON())   // { equal:true, differences:[] }
 
 ```
 docs/editor/js/
-  AIEngine.js          — WebLLM wrapper: init(), stream(), complete()
-  AIPrompt.js          — SYSTEM_PROMPT, SCENE_QA_PROMPT, model registry, few-shot examples
-  AIUtils.js           — extractCode(), buildMessages(), buildQAMessages()
-  Shell.js             — REPL UI + single execute() surface; instantiates the controllers
+  AIEngine.js          — WebLLM wrapper: init() (8192-window override+fallback), stream(), complete(), interrupt()
+  AIPrompt.js          — SYSTEM_PROMPT, buildSystemPrompt(), SCENE_QA_PROMPT, model registry, few-shot examples
+  AIUtils.js           — extractCode() (fenced-only, prose never runs), buildMessages(), token helpers
+  Shell.js             — REPL UI + single execute() surface; Stop-AI; evalAI(); instantiates the controllers
+  ai/
+    apiIndex.js        — local RAG: curated command/op signatures + full three.js API (tern typedefs)
+    threejsApi.js      — AUTO-GENERATED three.js API index (scripts/genThreeApi.cjs)
+    validate.js        — static lint (hallucination / arity / undefined-call / dup-const / shared-material …)
+    agentLoop.js       — generate→validate→execute→observe→fix; error translation; intent-preserving retries
+    eval.js            — standing eval set + 4-axis rubric + overfit canaries + routing heuristic
   Menubar.Git.js       — Git settings/load/commit, auto-load, raw fetch, diff messages
   SceneDiff.js         — semantic scene diff (added/removed/modified)
   MergeViewport.js     — split-screen conflict review + resolution
@@ -336,6 +399,9 @@ docs/editor/js/
 ✅  Scene intelligence: descriptors + symmetry + texture color + findByDescription
 ✅  Git: settings / load / commit · auto-load on open · AI diff commit messages
 ✅  Merge-conflict viewport (dual-render + AI-assisted resolution)
+✅  Agentic-loop hardening: actionable error translation, duplicate-const / undefined-helper / shared-material lint, intent-preserving + stop-on-identical retries
+✅  Local three.js API RAG (tern typedefs) · 8192-token window w/ fallback · Stop-AI button
+✅  Standing eval harness (evalAI, 4-axis rubric + overfit canaries) · two-tier routing
 ⬜  M6: AI selectByCriteria + deeper natural-language mesh editing
 ⬜  M7: glTF / OBJ export of edited meshes back through the recipe pipeline
 ⬜  Optional vision layer (precise nouns, OCR) — separate spec, needs a model

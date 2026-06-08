@@ -14,6 +14,7 @@
 
 import { PARAM_ORDER } from '../scene/geometryParams.js';
 import { listOps, registerOp } from '../mesh/ops/index.js';
+import { THREEJS_API } from './threejsApi.js';
 
 // ── Curated, hand-verified facts (the source of truth the model must follow) ──
 
@@ -57,6 +58,7 @@ const MATERIALS = [
 	{ name: 'MeshBasicMaterial',    sig: 'new MeshBasicMaterial({color, map, wireframe})', use: 'unlit material' },
 	{ name: 'MeshPhongMaterial',    sig: 'new MeshPhongMaterial({color, shininess, specular})', use: 'shiny material' },
 	{ name: 'MeshLambertMaterial',  sig: 'new MeshLambertMaterial({color})', use: 'matte material' },
+	{ name: 'LineBasicMaterial',    sig: 'new LineBasicMaterial({color})', use: 'material for Line objects' },
 ];
 
 // THREE classes exposed as globals (no THREE. prefix). Source of truth for
@@ -70,14 +72,30 @@ const CORE_CLASSES = [
 
 // ── Index state ───────────────────────────────────────────────────────────────
 
-let _chunks = [];                  // [{ name, kind, sig, use, text, terms }]
+let _chunks = [];                  // [{ name, kind, sig, use, text, terms, source }]
 export const ALLOWED_CLASSES = new Set();
 
-function _addChunk( name, kind, sig, use ) {
+// Callable helper globals the shell exposes to generated code (functions, not
+// classes). Used by validate.js (B3) to tell a real global from an invented
+// helper like backWall(). Op-registry names are merged in at buildIndex().
+export const SCOPE_FUNCTIONS = new Set( [
+	'findObject', 'findAll', 'findOfType', 'findNear', 'findByDescription',
+	'whatsVisible', 'whatsAt', 'findAPI', 'getSize', 'getTopY', 'getCenter', 'placeOnTop',
+	'makeTexture', 'makeCheckerTex', 'makeGridTex', 'lineFromPoints', 'summarize', 'describeObject',
+	'listCandidates', 'resolvePartAI', 'askScene', 'colorToName', 'evalAI',
+	'enterEditMode', 'exitEditMode', 'extrude', 'inset', 'bevel', 'deleteFaces', 'weld', 'planarUV', 'boxUV',
+	'booleanUnion', 'booleanSubtract', 'booleanIntersect', 'mirrorMesh', 'arrayDuplicate', 'subdivide',
+	'objectToJS', 'sceneToJS', 'sceneEqual', 'showJS',
+] );
+
+// source: 'curated' (hand-verified, authoritative) | 'three' (tern typedefs).
+// Curated chunks outrank tern chunks on ties so the command/material/geometry
+// signatures the editor actually exposes stay at the top of retrieval.
+function _addChunk( name, kind, sig, use, source = 'curated' ) {
 
 	const text = `${ name } — ${ kind }\n  ${ sig }${ use ? '\n  // ' + use : '' }`;
 	const terms = ( name + ' ' + ( use || '' ) + ' ' + sig ).toLowerCase();
-	_chunks.push( { name, kind, sig, use, text, terms } );
+	_chunks.push( { name, kind, sig, use, text, terms, source } );
 
 }
 
@@ -105,6 +123,24 @@ export function buildIndex() {
 		const ps = Object.entries( op.params || {} ).map( ( [ k, v ] ) => `${ k }: ${ v }` ).join( ', ' );
 		_addChunk( op.name, 'op', `${ op.name }(${ ps })`, op.description );
 		// ops are functions in scope, not classes — not added to ALLOWED_CLASSES
+		SCOPE_FUNCTIONS.add( op.name );
+
+	}
+
+	// Full three.js API (tern typedefs) — instance methods and properties with docs.
+	// RETRIEVAL ONLY: NOT added to ALLOWED_CLASSES (most three.js classes are not
+	// shell globals — validation must stay tied to what the scope provides).
+	//
+	// CRITICAL: skip CONSTRUCTOR signatures (`new X(...)`) for classes that are NOT
+	// exposed as globals. Surfacing `new BufferGeometry()` / `new SplineCurve()` /
+	// `new Clock()` told a capable model to "use these EXACTLY", and then the code
+	// failed at validate/runtime because those classes don't exist in scope (the
+	// observed ping-pong-table / net failure). Method/property hints stay — they're
+	// invoked on real instances the scene already has (e.g. mesh.geometry).
+	for ( const c of THREEJS_API ) {
+
+		if ( c.kind === 'three-class' && ! ALLOWED_CLASSES.has( c.name ) ) continue;
+		_addChunk( c.name, c.kind, c.sig, c.use, 'three' );
 
 	}
 
@@ -114,17 +150,35 @@ export function buildIndex() {
 
 // ── Retrieval (keyword tier — deterministic, no model) ────────────────────────
 
+// Common words that cause spurious substring hits ("the" → "Lathe…") — skipped
+// during scoring. Intent verbs (add/move/rotate…) are handled by TOPIC_HINTS.
+const STOPWORDS = new Set( [
+	'the', 'and', 'for', 'with', 'this', 'that', 'from', 'into', 'onto', 'your', 'you',
+	'please', 'make', 'want', 'need', 'some', 'all', 'any', 'new', 'put', 'use', 'using',
+	'about', 'over', 'under', 'near', 'next', 'are', 'was', 'has', 'its', 'out', 'off',
+	'degrees', 'degree', 'deg', 'units', 'unit', 'one', 'two',
+	// Intent verbs — mapped to commands by TOPIC_HINTS; as bare terms they exact-match
+	// every .add()/.remove() method and drown out the relevant geometry/material chunk.
+	'add', 'create', 'place', 'spawn', 'remove', 'delete', 'move',
+] );
+
 function _score( chunk, queryTerms ) {
 
 	let s = 0;
+	const lname = chunk.name.toLowerCase();
 	for ( const t of queryTerms ) {
 
-		if ( ! t ) continue;
-		if ( chunk.name.toLowerCase() === t ) s += 10;
-		if ( chunk.name.toLowerCase().includes( t ) ) s += 5;
+		if ( ! t || t.length < 3 || STOPWORDS.has( t ) || /^\d+$/.test( t ) ) continue;
+		// Match the member tail too, so "rotation"/"lookat" hit "Object3D.rotation".
+		const tail = lname.includes( '.' ) ? lname.slice( lname.lastIndexOf( '.' ) + 1 ) : lname;
+		if ( lname === t || tail === t ) s += 10;
+		else if ( tail.includes( t ) ) s += 5;
+		else if ( lname.includes( t ) ) s += 3;
 		if ( chunk.terms.includes( t ) ) s += 1;
 
 	}
+	// Curated, hand-verified chunks outrank tern typedefs on ties.
+	if ( s > 0 && chunk.source === 'curated' ) s += 3;
 	return s;
 
 }
@@ -170,6 +224,8 @@ export function retrieveForPrompt( text, n = 6 ) {
 
 	const hits = findAPI( text, n );
 	if ( ! hits.length ) return '';
+	// Signatures only — kept lean to protect the small model's context window.
+	// Full docs are available on demand via the findAPI() tool, not injected here.
 	return 'REAL API SIGNATURES (use these EXACTLY — do not invent variants):\n'
 		+ hits.map( h => '  ' + h.sig ).join( '\n' );
 
