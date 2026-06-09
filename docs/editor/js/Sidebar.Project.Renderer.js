@@ -104,6 +104,60 @@ function SidebarProjectRenderer( editor ) {
 
 	//
 
+	// Build a WebGLRenderer, retrying with progressively more permissive attributes.
+	// Software/ANGLE setups (llvmpipe, SwiftShader) often reject the default context
+	// but accept one with failIfMajorPerformanceCaveat:false and no antialias, or a
+	// hand-created WebGL2/WebGL1 context. We try those before giving up.
+
+	function createWebGLRenderer( antialias ) {
+
+		const attempts = [
+			{ antialias: antialias, logarithmicDepthBuffer: true },
+			{ antialias: false, logarithmicDepthBuffer: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false },
+		];
+
+		let lastError = null;
+
+		for ( const params of attempts ) {
+
+			try {
+
+				return new THREE.WebGLRenderer( params );
+
+			} catch ( error ) {
+
+				lastError = error;
+
+			}
+
+		}
+
+		// Last resort: hand-create a context ourselves (webgl2 → webgl) with the
+		// performance-caveat guard relaxed, and hand it to the renderer.
+
+		const canvas = document.createElement( 'canvas' );
+		const contextAttributes = { antialias: false, failIfMajorPerformanceCaveat: false, powerPreference: 'low-power' };
+		const context = canvas.getContext( 'webgl2', contextAttributes ) ||
+			canvas.getContext( 'webgl', contextAttributes );
+
+		if ( context !== null ) {
+
+			try {
+
+				return new THREE.WebGLRenderer( { canvas: canvas, context: context, logarithmicDepthBuffer: false } );
+
+			} catch ( error ) {
+
+				lastError = error;
+
+			}
+
+		}
+
+		throw lastError || new Error( 'WebGL context could not be created.' );
+
+	}
+
 	async function createRenderer() {
 
 		const rendererType = rendererTypeSelect.getValue();
@@ -120,7 +174,7 @@ function SidebarProjectRenderer( editor ) {
 
 			} else {
 
-				newRenderer = new THREE.WebGLRenderer( { antialias: antialias, logarithmicDepthBuffer: true } );
+				newRenderer = createWebGLRenderer( antialias );
 
 			}
 

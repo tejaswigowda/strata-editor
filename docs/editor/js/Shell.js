@@ -1416,7 +1416,18 @@ function Shell( editor ) {
 
 			} else {
 
-				// WebLLM: standard loading
+				// WebLLM: standard loading. On-device inference needs working WebGPU
+				// compute — software-emulated GPUs (llvmpipe / SwiftShader on Linux)
+				// expose navigator.gpu but fail to compile compute shaders. Check up
+				// front so we can point the user at the cloud models instead of a
+				// cryptic "Invalid ShaderModule … compute stage" failure mid-load.
+				if ( ! navigator.gpu ) {
+
+					throw new Error( 'WebGPU is not available in this browser, so on-device models can\'t run. ' +
+						'Pick a cloud model (gpt-… / claude-… / ollama:…) instead, or enable WebGPU (chrome://gpu).' );
+
+				}
+
 				progressWrap.style.display = 'block';
 
 				await aiEngine.init( selectedModel, ( p ) => {
@@ -1445,7 +1456,25 @@ function Shell( editor ) {
 			aiStatus.textContent = 'failed';
 			loadBtn.disabled = false;
 			modelSelect.disabled = false;
-			appendOutput( 'AI load error: ' + err.message, 'error' );
+
+			// A failed compute-shader compile (e.g. "Invalid ShaderModule … compute
+			// stage … index_kernel") means WebGPU can't run on this GPU — almost
+			// always a software/emulated driver. Steer the user to the cloud models.
+			const msg = String( err && err.message || err );
+			const isWebGPUFailure = ! isExternal && /shadermodule|compute stage|index_kernel|webgpu|gpu device|createcomputepipeline/i.test( msg );
+
+			if ( isWebGPUFailure ) {
+
+				appendOutput( 'AI load error: on-device model failed to start — this browser/GPU can\'t run WebGPU compute ' +
+					'(common with software rendering such as llvmpipe/SwiftShader on Linux). ' +
+					'Use a cloud model (gpt-…, claude-…, or ollama:…) instead, or enable a hardware GPU at chrome://gpu.\n\n' +
+					'Details: ' + msg, 'error' );
+
+			} else {
+
+				appendOutput( 'AI load error: ' + msg, 'error' );
+
+			}
 
 		}
 
