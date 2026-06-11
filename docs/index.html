@@ -230,6 +230,7 @@
 				event.preventDefault();
 
 				if ( event.dataTransfer.types[ 0 ] === 'text/plain' ) return; // Outliner drop
+				if ( event.dataTransfer.types.includes( 'application/x-stencil' ) ) return; // Stencils drop
 
 				if ( event.dataTransfer.items ) {
 

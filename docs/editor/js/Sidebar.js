@@ -5,6 +5,8 @@ import { SidebarProperties } from './Sidebar.Properties.js';
 import { SidebarProject } from './Sidebar.Project.js';
 import { SidebarSettings } from './Sidebar.Settings.js';
 import { SidebarGit } from './Sidebar.Git.js';
+import { SidebarExport } from './Sidebar.Export.js';
+import { SidebarStencils } from './Sidebar.Stencils.js';
 import { Shell } from './Shell.js';
 
 function Sidebar( editor ) {
@@ -24,12 +26,16 @@ function Sidebar( editor ) {
 	const project = new SidebarProject( editor );
 	const settings = new SidebarSettings( editor );
 	const git = new SidebarGit( editor );
+	const exporter = new SidebarExport( editor );
+	const stencils = new SidebarStencils( editor );
 	const shell = new Shell( editor );
 
 	container.addTab( 'scene', strings.getKey( 'sidebar/scene' ), scene );
 	container.addTab( 'project', strings.getKey( 'sidebar/project' ), project );
 	container.addTab( 'settings', strings.getKey( 'sidebar/settings' ), settings );
 	container.addTab( 'git', strings.getKey( 'menubar/git' ), git );
+	container.addTab( 'export', strings.getKey( 'menubar/file/export' ), exporter );
+	container.addTab( 'stencils', 'Stencils', stencils );
 	// Tab id 'shelltab' must NOT collide with the Shell container's own id 'shell'.
 	container.addTab( 'shelltab', 'Shell', shell );
 	container.select( 'scene' );
