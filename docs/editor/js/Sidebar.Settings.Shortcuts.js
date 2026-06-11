@@ -2,6 +2,8 @@ import { UIPanel, UIText, UIRow, UIInput } from './libs/ui.js';
 
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 import { RemoveObjectCommand } from './commands/RemoveObjectCommand.js';
+import { GroupObjectsCommand } from './commands/GroupObjectsCommand.js';
+import { UngroupObjectsCommand } from './commands/UngroupObjectsCommand.js';
 
 function SidebarSettingsShortcuts( editor ) {
 
@@ -170,6 +172,44 @@ function SidebarSettingsShortcuts( editor ) {
 				if ( editor.selected !== null ) {
 
 					editor.focus( editor.selected );
+
+				}
+
+				break;
+
+			case 'g':
+
+				if ( IS_MAC ? event.metaKey : event.ctrlKey ) {
+
+					event.preventDefault();
+
+					if ( editor.editModeController && editor.editModeController.active ) break;
+
+					if ( event.shiftKey ) {
+
+						// Ungroup the selected container
+
+						const object = editor.selected;
+
+						if ( object !== null && object.parent !== null && object.children.length > 0 ) {
+
+							editor.execute( new UngroupObjectsCommand( editor, object ) );
+
+						}
+
+					} else {
+
+						// Group the current multi-selection
+
+						const objects = editor.getSelectedObjects().filter( o => o !== null && o.parent !== null );
+
+						if ( objects.length >= 2 ) {
+
+							editor.execute( new GroupObjectsCommand( editor, objects ) );
+
+						}
+
+					}
 
 				}
 

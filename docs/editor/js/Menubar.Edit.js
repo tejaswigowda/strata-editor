@@ -7,6 +7,8 @@ import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 import { RemoveObjectCommand } from './commands/RemoveObjectCommand.js';
 import { SetPositionCommand } from './commands/SetPositionCommand.js';
+import { GroupObjectsCommand } from './commands/GroupObjectsCommand.js';
+import { UngroupObjectsCommand } from './commands/UngroupObjectsCommand.js';
 
 function MenubarEdit( editor ) {
 
@@ -144,6 +146,43 @@ function MenubarEdit( editor ) {
 			editor.execute( new RemoveObjectCommand( editor, object ) );
 
 		}
+
+	} );
+	options.add( option );
+
+	options.add( new UIHorizontalRule() );
+
+	// Group
+
+	option = new UIRow();
+	option.setClass( 'option' );
+	option.setTextContent( 'Group' );
+	option.add( new UIText( 'CTRL+G' ).setClass( 'key' ) );
+	option.onClick( function () {
+
+		const objects = editor.getSelectedObjects().filter( o => o !== null && o.parent !== null );
+
+		if ( objects.length < 2 ) return; // need at least two objects to group
+
+		editor.execute( new GroupObjectsCommand( editor, objects ) );
+
+	} );
+	options.add( option );
+
+	// Ungroup
+
+	option = new UIRow();
+	option.setClass( 'option' );
+	option.setTextContent( 'Ungroup' );
+	option.add( new UIText( 'CTRL+SHIFT+G' ).setClass( 'key' ) );
+	option.onClick( function () {
+
+		const object = editor.selected;
+
+		if ( object === null || object.parent === null ) return;
+		if ( object.children.length === 0 ) return;
+
+		editor.execute( new UngroupObjectsCommand( editor, object ) );
 
 	} );
 	options.add( option );

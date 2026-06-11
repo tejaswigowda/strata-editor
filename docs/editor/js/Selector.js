@@ -14,7 +14,7 @@ class Selector {
 
 		// signals
 
-		signals.intersectionsDetected.add( ( intersects ) => {
+		signals.intersectionsDetected.add( ( intersects, additive = false ) => {
 
 			if ( intersects.length > 0 ) {
 
@@ -40,21 +40,31 @@ class Selector {
 
 				}
 
-				// Cycle through objects if the first one is already selected
+				if ( additive ) {
 
-				const index = objects.indexOf( editor.selected );
+					// Toggle the first picked object in the multi-selection
 
-				if ( index !== - 1 && index < objects.length - 1 ) {
-
-					this.select( objects[ index + 1 ] );
+					this.select( objects[ 0 ], true );
 
 				} else {
 
-					this.select( objects[ 0 ] );
+					// Cycle through objects if the first one is already selected
+
+					const index = objects.indexOf( editor.selected );
+
+					if ( index !== - 1 && index < objects.length - 1 ) {
+
+						this.select( objects[ index + 1 ] );
+
+					} else {
+
+						this.select( objects[ 0 ] );
+
+					}
 
 				}
 
-			} else {
+			} else if ( additive === false ) {
 
 				this.select( null );
 
@@ -94,22 +104,60 @@ class Selector {
 
 	}
 
-	select( object ) {
+	select( object, additive = false ) {
 
-		if ( this.editor.selected === object ) return;
+		const editor = this.editor;
+		const selection = editor.selectionMultiple;
 
-		let uuid = null;
+		if ( additive && object !== null ) {
 
-		if ( object !== null ) {
+			// Toggle the object in the current multi-selection
 
-			uuid = object.uuid;
+			const index = selection.indexOf( object );
+
+			if ( index === - 1 ) {
+
+				selection.push( object );
+
+			} else {
+
+				selection.splice( index, 1 );
+
+			}
+
+		} else {
+
+			// Replace the selection
+
+			if ( object === null ) {
+
+				selection.length = 0;
+
+			} else {
+
+				selection.length = 0;
+				selection.push( object );
+
+			}
 
 		}
 
-		this.editor.selected = object;
-		this.editor.config.setKey( 'selected', uuid );
+		// The primary object is the last one in the selection ( drives the sidebar )
 
-		this.signals.objectSelected.dispatch( object );
+		const primary = selection.length > 0 ? selection[ selection.length - 1 ] : null;
+
+		const changed = editor.selected !== primary || additive;
+
+		editor.selected = primary;
+		editor.config.setKey( 'selected', primary !== null ? primary.uuid : null );
+
+		if ( changed ) {
+
+			this.signals.objectSelected.dispatch( primary );
+
+		}
+
+		this.signals.selectionChanged.dispatch( selection.slice() );
 
 	}
 

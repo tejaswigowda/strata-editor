@@ -60,6 +60,7 @@ function Editor() {
 		geometryChanged: new Signal(),
 
 		objectSelected: new Signal(),
+		selectionChanged: new Signal(), // dispatches the full array of selected objects
 		objectFocused: new Signal(),
 
 		objectAdded: new Signal(),
@@ -137,6 +138,7 @@ function Editor() {
 	this.mixer = new THREE.AnimationMixer( this.scene );
 
 	this.selected = null;
+	this.selectionMultiple = []; // all currently selected objects ( includes `selected` as primary )
 	this.helpers = {};
 
 	this.cameras = {};
@@ -577,6 +579,18 @@ Editor.prototype = {
 	select: function ( object ) {
 
 		this.selector.select( object );
+
+	},
+
+	selectMultiple: function ( object, additive ) {
+
+		this.selector.select( object, additive );
+
+	},
+
+	getSelectedObjects: function () {
+
+		return this.selectionMultiple.slice();
 
 	},
 

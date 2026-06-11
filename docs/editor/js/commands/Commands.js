@@ -2,6 +2,8 @@ export { AddObjectCommand } from './AddObjectCommand.js';
 export { AddScriptCommand } from './AddScriptCommand.js';
 export { MoveObjectCommand } from './MoveObjectCommand.js';
 export { MultiCmdsCommand } from './MultiCmdsCommand.js';
+export { GroupObjectsCommand } from './GroupObjectsCommand.js';
+export { UngroupObjectsCommand } from './UngroupObjectsCommand.js';
 export { RemoveObjectCommand } from './RemoveObjectCommand.js';
 export { RemoveScriptCommand } from './RemoveScriptCommand.js';
 export { SetColorCommand } from './SetColorCommand.js';

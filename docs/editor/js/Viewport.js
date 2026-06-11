@@ -8,7 +8,6 @@ import { UIPanel } from './libs/ui.js';
 import { EditorControls } from './EditorControls.js';
 
 import { ViewportControls } from './Viewport.Controls.js';
-import { ViewportInfo } from './Viewport.Info.js';
 
 import { ViewHelper } from './Viewport.ViewHelper.js';
 import { XR } from './Viewport.XR.js';
@@ -16,6 +15,7 @@ import { XR } from './Viewport.XR.js';
 import { SetPositionCommand } from './commands/SetPositionCommand.js';
 import { SetRotationCommand } from './commands/SetRotationCommand.js';
 import { SetScaleCommand } from './commands/SetScaleCommand.js';
+import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 
 import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -31,7 +31,6 @@ function Viewport( editor ) {
 	container.setPosition( 'absolute' );
 
 	container.add( new ViewportControls( editor ) );
-	container.add( new ViewportInfo( editor ) );
 
 	//
 
@@ -61,6 +60,7 @@ function Viewport( editor ) {
 	grid.add( grid2 );
 
 	const viewHelper = new ViewHelper( camera, container );
+	viewHelper.onRequireRender = () => render();
 
 	//
 
@@ -71,6 +71,65 @@ function Viewport( editor ) {
 	selectionBox.material.transparent = true;
 	selectionBox.visible = false;
 	sceneHelpers.add( selectionBox );
+
+	// Extra selection boxes for the non-primary objects of a multi-selection
+
+	const multiSelectionBoxes = [];
+
+	function clearMultiSelectionBoxes() {
+
+		for ( let i = 0; i < multiSelectionBoxes.length; i ++ ) {
+
+			sceneHelpers.remove( multiSelectionBoxes[ i ] );
+			multiSelectionBoxes[ i ].geometry.dispose();
+
+		}
+
+		multiSelectionBoxes.length = 0;
+
+	}
+
+	function addMultiSelectionBox( object ) {
+
+		const helperBox = new THREE.Box3();
+		helperBox.setFromObject( object, true );
+
+		if ( helperBox.isEmpty() ) return;
+
+		const helper = new THREE.Box3Helper( helperBox, 0xffaa00 );
+		helper.material.depthTest = false;
+		helper.material.transparent = true;
+		helper.userData.object = object;
+		sceneHelpers.add( helper );
+		multiSelectionBoxes.push( helper );
+
+	}
+
+	function updateMultiSelectionBoxes() {
+
+		for ( let i = 0; i < multiSelectionBoxes.length; i ++ ) {
+
+			const helper = multiSelectionBoxes[ i ];
+			helper.box.setFromObject( helper.userData.object, true );
+
+		}
+
+	}
+
+	// Pivot used as a shared transform anchor when several objects are selected
+
+	const selectionPivot = new THREE.Group();
+	selectionPivot.name = '__selectionPivot';
+
+	let pivotActive = false;
+	const _pivotStartMatrix = new THREE.Matrix4();
+	const _pivotStartInverse = new THREE.Matrix4();
+	const _dragStartWorld = new Map(); // object -> Matrix4 ( world at drag start )
+	const _dragStartLocal = new Map(); // object -> { position, rotation, scale }
+
+	const _tmpMatrix = new THREE.Matrix4();
+	const _tmpDelta = new THREE.Matrix4();
+	const _tmpParentInverse = new THREE.Matrix4();
 
 	let objectPositionOnDown = null;
 	let objectRotationOnDown = null;
@@ -84,16 +143,77 @@ function Viewport( editor ) {
 	} );
 	transformControls.addEventListener( 'objectChange', function () {
 
-		signals.objectChanged.dispatch( transformControls.object );
+		if ( pivotActive ) {
+
+			// Apply the pivot's delta transform to every selected object
+
+			selectionPivot.updateMatrixWorld( true );
+
+			_tmpDelta.multiplyMatrices( selectionPivot.matrixWorld, _pivotStartInverse );
+
+			const selection = editor.getSelectedObjects();
+
+			for ( let i = 0; i < selection.length; i ++ ) {
+
+				const object = selection[ i ];
+				const startWorld = _dragStartWorld.get( object );
+				if ( startWorld === undefined ) continue;
+
+				_tmpMatrix.multiplyMatrices( _tmpDelta, startWorld );
+
+				object.parent.updateMatrixWorld( true );
+				_tmpParentInverse.copy( object.parent.matrixWorld ).invert();
+				_tmpMatrix.premultiply( _tmpParentInverse );
+
+				_tmpMatrix.decompose( object.position, object.quaternion, object.scale );
+				object.updateMatrixWorld( true );
+
+				signals.objectChanged.dispatch( object );
+
+			}
+
+		} else {
+
+			signals.objectChanged.dispatch( transformControls.object );
+
+		}
 
 	} );
 	transformControls.addEventListener( 'mouseDown', function () {
 
 		const object = transformControls.object;
 
-		objectPositionOnDown = object.position.clone();
-		objectRotationOnDown = object.rotation.clone();
-		objectScaleOnDown = object.scale.clone();
+		if ( pivotActive ) {
+
+			selectionPivot.updateMatrixWorld( true );
+			_pivotStartMatrix.copy( selectionPivot.matrixWorld );
+			_pivotStartInverse.copy( _pivotStartMatrix ).invert();
+
+			_dragStartWorld.clear();
+			_dragStartLocal.clear();
+
+			const selection = editor.getSelectedObjects();
+
+			for ( let i = 0; i < selection.length; i ++ ) {
+
+				const selected = selection[ i ];
+				selected.updateMatrixWorld( true );
+				_dragStartWorld.set( selected, selected.matrixWorld.clone() );
+				_dragStartLocal.set( selected, {
+					position: selected.position.clone(),
+					rotation: selected.rotation.clone(),
+					scale: selected.scale.clone()
+				} );
+
+			}
+
+		} else {
+
+			objectPositionOnDown = object.position.clone();
+			objectRotationOnDown = object.rotation.clone();
+			objectScaleOnDown = object.scale.clone();
+
+		}
 
 		controls.enabled = false;
 
@@ -102,7 +222,46 @@ function Viewport( editor ) {
 
 		const object = transformControls.object;
 
-		if ( object !== undefined ) {
+		if ( pivotActive ) {
+
+			const selection = editor.getSelectedObjects();
+			const commands = [];
+
+			for ( let i = 0; i < selection.length; i ++ ) {
+
+				const selected = selection[ i ];
+				const start = _dragStartLocal.get( selected );
+				if ( start === undefined ) continue;
+
+				if ( ! start.position.equals( selected.position ) ) {
+
+					commands.push( new SetPositionCommand( editor, selected, selected.position.clone(), start.position ) );
+
+				}
+
+				if ( ! start.rotation.equals( selected.rotation ) ) {
+
+					commands.push( new SetRotationCommand( editor, selected, selected.rotation.clone(), start.rotation ) );
+
+				}
+
+				if ( ! start.scale.equals( selected.scale ) ) {
+
+					commands.push( new SetScaleCommand( editor, selected, selected.scale.clone(), start.scale ) );
+
+				}
+
+			}
+
+			if ( commands.length > 0 ) {
+
+				editor.execute( new MultiCmdsCommand( editor, commands ) );
+
+			}
+
+			updateSelectionPivot();
+
+		} else if ( object !== undefined ) {
 
 			switch ( transformControls.getMode() ) {
 
@@ -191,12 +350,12 @@ function Viewport( editor ) {
 
 	}
 
-	function handleClick() {
+	function handleClick( additive = false ) {
 
 		if ( onDownPosition.distanceTo( onUpPosition ) === 0 ) {
 
 			const intersects = selector.getPointerIntersects( onUpPosition, camera );
-			signals.intersectionsDetected.dispatch( intersects );
+			signals.intersectionsDetected.dispatch( intersects, additive );
 
 			render();
 
@@ -222,7 +381,7 @@ function Viewport( editor ) {
 		const array = getMousePosition( container.dom, event.clientX, event.clientY );
 		onUpPosition.fromArray( array );
 
-		handleClick();
+		handleClick( event.shiftKey || event.ctrlKey || event.metaKey );
 
 		document.removeEventListener( 'mouseup', onMouseUp );
 
@@ -449,7 +608,67 @@ function Viewport( editor ) {
 
 			}
 
-			transformControls.attach( object );
+		}
+
+		render();
+
+	} );
+
+	function updateSelectionPivot() {
+
+		const selection = editor.getSelectedObjects();
+		const center = new THREE.Vector3();
+		const objectPosition = new THREE.Vector3();
+
+		for ( let i = 0; i < selection.length; i ++ ) {
+
+			selection[ i ].updateMatrixWorld( true );
+			objectPosition.setFromMatrixPosition( selection[ i ].matrixWorld );
+			center.add( objectPosition );
+
+		}
+
+		if ( selection.length > 0 ) center.divideScalar( selection.length );
+
+		selectionPivot.position.copy( center );
+		selectionPivot.rotation.set( 0, 0, 0 );
+		selectionPivot.scale.set( 1, 1, 1 );
+		selectionPivot.updateMatrixWorld( true );
+
+	}
+
+	signals.selectionChanged.add( function ( selection ) {
+
+		clearMultiSelectionBoxes();
+		transformControls.detach();
+		pivotActive = false;
+
+		if ( selectionPivot.parent !== null ) selectionPivot.parent.remove( selectionPivot );
+
+		// Filter out non-transformable picks ( scene / camera )
+
+		const transformable = selection.filter( o => o !== null && o !== scene && o !== camera );
+
+		if ( transformable.length === 1 ) {
+
+			transformControls.attach( transformable[ 0 ] );
+
+		} else if ( transformable.length > 1 ) {
+
+			// Draw a box for every selected object and attach the gizmo to a shared pivot
+
+			selectionBox.visible = false;
+
+			for ( let i = 0; i < transformable.length; i ++ ) {
+
+				addMultiSelectionBox( transformable[ i ] );
+
+			}
+
+			sceneHelpers.add( selectionPivot );
+			updateSelectionPivot();
+			pivotActive = true;
+			transformControls.attach( selectionPivot );
 
 		}
 
@@ -481,6 +700,12 @@ function Viewport( editor ) {
 		if ( editor.selected === object ) {
 
 			box.setFromObject( object, true );
+
+		}
+
+		if ( multiSelectionBoxes.length > 0 ) {
+
+			updateMultiSelectionBoxes();
 
 		}
 

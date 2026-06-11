@@ -370,6 +370,111 @@ function SidebarScene( editor ) {
 	const fogDensity = new UINumber( 0.05 ).setWidth( '40px' ).setRange( 0, 0.1 ).setStep( 0.001 ).setPrecision( 3 ).onChange( onFogSettingsChanged );
 	fogPropertiesRow.add( fogDensity );
 
+	// info
+
+	container.add( new UIBreak() );
+
+	const objectsRow = new UIRow();
+	const objectsText = new UIText( '0' ).setTextAlign( 'right' ).setWidth( '60px' ).setMarginRight( '6px' );
+	const objectsUnitText = new UIText( strings.getKey( 'viewport/info/objects' ) );
+	objectsRow.add( new UIText( 'Objects' ).setClass( 'Label' ) );
+	objectsRow.add( objectsText, objectsUnitText );
+	container.add( objectsRow );
+
+	const verticesRow = new UIRow();
+	const verticesText = new UIText( '0' ).setTextAlign( 'right' ).setWidth( '60px' ).setMarginRight( '6px' );
+	const verticesUnitText = new UIText( strings.getKey( 'viewport/info/vertices' ) );
+	verticesRow.add( new UIText( 'Vertices' ).setClass( 'Label' ) );
+	verticesRow.add( verticesText, verticesUnitText );
+	container.add( verticesRow );
+
+	const trianglesRow = new UIRow();
+	const trianglesText = new UIText( '0' ).setTextAlign( 'right' ).setWidth( '60px' ).setMarginRight( '6px' );
+	const trianglesUnitText = new UIText( strings.getKey( 'viewport/info/triangles' ) );
+	trianglesRow.add( new UIText( 'Triangles' ).setClass( 'Label' ) );
+	trianglesRow.add( trianglesText, trianglesUnitText );
+	container.add( trianglesRow );
+
+	const frametimeRow = new UIRow();
+	const frametimeText = new UIText( '0' ).setTextAlign( 'right' ).setWidth( '60px' ).setMarginRight( '6px' );
+	frametimeRow.add( new UIText( 'Render Time' ).setClass( 'Label' ) );
+	frametimeRow.add( frametimeText, new UIText( strings.getKey( 'viewport/info/rendertime' ) ) );
+	container.add( frametimeRow );
+
+	const pluralRules = new Intl.PluralRules( editor.config.getKey( 'language' ) );
+
+	function updateInfo() {
+
+		const scene = editor.scene;
+
+		let objects = 0, vertices = 0, triangles = 0;
+
+		for ( let i = 0, l = scene.children.length; i < l; i ++ ) {
+
+			const object = scene.children[ i ];
+
+			object.traverseVisible( function ( object ) {
+
+				objects ++;
+
+				if ( object.isMesh || object.isPoints ) {
+
+					const geometry = object.geometry;
+					const positionAttribute = geometry.attributes.position;
+
+					if ( positionAttribute !== undefined && positionAttribute !== null ) {
+
+						vertices += positionAttribute.count;
+
+					}
+
+					if ( object.isMesh ) {
+
+						if ( geometry.index !== null ) {
+
+							triangles += geometry.index.count / 3;
+
+						} else if ( positionAttribute !== undefined && positionAttribute !== null ) {
+
+							triangles += positionAttribute.count / 3;
+
+						}
+
+					}
+
+				}
+
+			} );
+
+		}
+
+		objectsText.setValue( editor.utils.formatNumber( objects ) );
+		verticesText.setValue( editor.utils.formatNumber( vertices ) );
+		trianglesText.setValue( editor.utils.formatNumber( triangles ) );
+
+		const objectsStringKey = ( pluralRules.select( objects ) === 'one' ) ? 'viewport/info/object' : 'viewport/info/objects';
+		objectsUnitText.setValue( strings.getKey( objectsStringKey ) );
+
+		const verticesStringKey = ( pluralRules.select( vertices ) === 'one' ) ? 'viewport/info/vertex' : 'viewport/info/vertices';
+		verticesUnitText.setValue( strings.getKey( verticesStringKey ) );
+
+		const trianglesStringKey = ( pluralRules.select( triangles ) === 'one' ) ? 'viewport/info/triangle' : 'viewport/info/triangles';
+		trianglesUnitText.setValue( strings.getKey( trianglesStringKey ) );
+
+	}
+
+	function updateFrametime( frametime ) {
+
+		frametimeText.setValue( Number( frametime ).toFixed( 2 ) );
+
+	}
+
+	signals.objectAdded.add( updateInfo );
+	signals.objectRemoved.add( updateInfo );
+	signals.objectChanged.add( updateInfo );
+	signals.geometryChanged.add( updateInfo );
+	signals.sceneRendered.add( updateFrametime );
+
 	//
 
 	function refreshUI() {
@@ -496,6 +601,8 @@ function SidebarScene( editor ) {
 	}
 
 	refreshUI();
+
+	updateInfo();
 
 	// events
 
