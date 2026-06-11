@@ -581,7 +581,12 @@ const server = http.createServer((req, res) => {
 
     // ── Cache headers for PWA offline support ──
     const baseName = path.basename(filePath);
-    if (baseName === 'service-worker.js' || baseName === 'manifest.json') {
+    if (DEV) {
+      // In dev mode never cache static assets so edits are picked up on reload.
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else if (baseName === 'service-worker.js' || baseName === 'manifest.json') {
       // Don't cache service worker and manifest to ensure updates
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     } else if (baseName === 'index.html') {

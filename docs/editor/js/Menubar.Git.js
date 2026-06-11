@@ -3,7 +3,7 @@
 // Uses the GitHub REST API directly via fetch() — no Octokit dependency.
 // Settings (repo URL, branch, path, PAT) are persisted in localStorage.
 
-import { UIPanel, UIRow, UIText, UIButton, UIHorizontalRule } from './libs/ui.js';
+import { UIRow, UIText, UIButton } from './libs/ui.js';
 import { sceneContextString } from './scene/summarize.js';
 import { diffScenes } from './SceneDiff.js';
 import { MergeViewport } from './MergeViewport.js';
@@ -199,109 +199,43 @@ async function ghPut( path, body, token ) {
 
 }
 
-// ── Menu factory ──────────────────────────────────────────────────────────────
+// ── Compare with remote (merge conflict viewport) ─────────────────────────────
 
-function MenubarGit( editor ) {
+async function openGitCompare( editor, strings ) {
 
-	const strings = editor.strings;
+	const cfg    = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl );
 
-	const container = new UIPanel();
-	container.setClass( 'menu' );
+	if ( ! parsed || ! cfg.pat ) {
 
-	const title = new UIPanel();
-	title.setClass( 'title' );
-	title.setTextContent( strings.getKey( 'menubar/git' ) );
-	container.add( title );
+		alert( strings.getKey( 'menubar/git/no_settings' ) );
+		return;
 
-	const options = new UIPanel();
-	options.setClass( 'options' );
-	container.add( options );
+	}
 
-	// Settings
+	const banner = document.createElement( 'div' );
+	banner.style.cssText = 'position:fixed;top:40px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:6px 16px;border-radius:4px;z-index:9999;font:12px monospace;';
+	banner.textContent = `Fetching ${ parsed.owner }/${ parsed.repo }…`;
+	document.body.appendChild( banner );
 
-	let option = new UIRow();
-	option.setClass( 'option' );
-	option.setTextContent( strings.getKey( 'menubar/git/settings' ) );
-	option.onClick( () => {
+	try {
 
-		document.body.appendChild( new GitSettingsDialog( strings ).dom );
+		const apiPath  = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
+		const remote   = await ghGetSceneJSON( apiPath, cfg.pat );
+		const local    = editor.scene.toJSON();
+		const diff     = diffScenes( local, remote );
 
-	} );
-	options.add( option );
+		banner.remove();
 
-	options.add( new UIHorizontalRule() );
+		const mv = new MergeViewport( editor, local, remote, diff );
+		await mv.open();
 
-	// Load scene
+	} catch ( err ) {
 
-	option = new UIRow();
-	option.setClass( 'option' );
-	option.setTextContent( strings.getKey( 'menubar/git/load' ) );
-	option.onClick( () => {
+		banner.remove();
+		alert( `Compare failed: ${ err.message }` );
 
-		document.body.appendChild( new GitLoadDialog( editor, strings ).dom );
-
-	} );
-	options.add( option );
-
-	// Compare with remote (merge conflict viewport)
-
-	option = new UIRow();
-	option.setClass( 'option' );
-	option.setTextContent( strings.getKey( 'menubar/git/compare' ) );
-	option.onClick( async () => {
-
-		const cfg    = loadSettings();
-		const parsed = parseRepo( cfg.repoUrl );
-
-		if ( ! parsed || ! cfg.pat ) {
-
-			alert( strings.getKey( 'menubar/git/no_settings' ) );
-			return;
-
-		}
-
-		const banner = document.createElement( 'div' );
-		banner.style.cssText = 'position:fixed;top:40px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:6px 16px;border-radius:4px;z-index:9999;font:12px monospace;';
-		banner.textContent = `Fetching ${ parsed.owner }/${ parsed.repo }…`;
-		document.body.appendChild( banner );
-
-		try {
-
-			const apiPath  = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
-			const remote   = await ghGetSceneJSON( apiPath, cfg.pat );
-			const local    = editor.scene.toJSON();
-			const diff     = diffScenes( local, remote );
-
-			banner.remove();
-
-			const mv = new MergeViewport( editor, local, remote, diff );
-			await mv.open();
-
-		} catch ( err ) {
-
-			banner.remove();
-			alert( `Compare failed: ${ err.message }` );
-
-		}
-
-	} );
-	options.add( option );
-
-	options.add( new UIHorizontalRule() );
-
-	// Commit scene
-
-	option = new UIRow();
-	option.setClass( 'option' );
-	option.setTextContent( strings.getKey( 'menubar/git/commit' ) );
-	option.onClick( () => {
-
-		document.body.appendChild( new GitCommitDialog( editor, strings ).dom );
-
-	} );
-	options.add( option );
-
-	return container;
+	}
 
 }
 
@@ -309,7 +243,7 @@ function MenubarGit( editor ) {
 
 class GitSettingsDialog {
 
-	constructor( strings ) {
+	constructor( strings, onSave ) {
 
 		const s = loadSettings();
 
@@ -405,6 +339,7 @@ class GitSettingsDialog {
 				scenePath: pathInput.value.trim() || 'scene.json',
 				pat:       patInput.value.trim(),
 			} );
+			if ( typeof onSave === 'function' ) onSave();
 			this.close();
 
 		} );
@@ -751,4 +686,4 @@ function _showBanner( text, durationMs = 0 ) {
 
 }
 
-export { MenubarGit };
+export { GitSettingsDialog, GitLoadDialog, GitCommitDialog, openGitCompare };
