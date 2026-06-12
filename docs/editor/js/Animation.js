@@ -176,9 +176,15 @@ function Animation( editor ) {
 
 	} );
 
-	toolButton( '🗑 Clip', 'Delete the current clip', function () {
+	toolButton( '🗑 Clip', 'Delete the checked animation(s)', function () {
 
 		deleteClip();
+
+	} );
+
+	toolButton( '🗑 Tracks', 'Delete the checked object tracks', function () {
+
+		deleteCheckedTracks();
 
 	} );
 
@@ -365,6 +371,140 @@ function Animation( editor ) {
 
 	}
 
+	// ── Context / kebab (⋮) menus ────────────────────────────────────────────
+	// A single floating menu is reused; openMenu() builds rows from a descriptor
+	// list so clips, tracks and keyframes can each expose their own actions.
+	let activeMenu = null;
+
+	function closeMenu() {
+
+		if ( activeMenu ) {
+
+			activeMenu.remove();
+			activeMenu = null;
+			document.removeEventListener( 'mousedown', onMenuOutside, true );
+			window.removeEventListener( 'blur', closeMenu );
+
+		}
+
+	}
+
+	function onMenuOutside( event ) {
+
+		if ( activeMenu && ! activeMenu.contains( event.target ) ) closeMenu();
+
+	}
+
+	// items: [ { label, onClick, danger }, { separator: true } ]
+	function openMenu( anchor, items ) {
+
+		closeMenu();
+
+		const menu = document.createElement( 'div' );
+		menu.style.position = 'fixed';
+		menu.style.zIndex = '10000';
+		menu.style.minWidth = '150px';
+		menu.style.background = '#fff';
+		menu.style.border = '1px solid #ccc';
+		menu.style.borderRadius = '5px';
+		menu.style.boxShadow = '0 4px 14px rgba(0,0,0,0.18)';
+		menu.style.padding = '4px 0';
+		menu.style.fontSize = '11px';
+		menu.style.color = '#222';
+
+		for ( const item of items ) {
+
+			if ( item.separator ) {
+
+				const hr = document.createElement( 'div' );
+				hr.style.height = '1px';
+				hr.style.margin = '4px 0';
+				hr.style.background = '#eee';
+				menu.appendChild( hr );
+				continue;
+
+			}
+
+			const row = document.createElement( 'div' );
+			row.textContent = item.label;
+			row.style.padding = '6px 14px';
+			row.style.cursor = 'pointer';
+			row.style.whiteSpace = 'nowrap';
+			if ( item.danger ) row.style.color = '#d32f2f';
+			row.addEventListener( 'mouseenter', () => row.style.background = 'rgba(0,136,255,0.10)' );
+			row.addEventListener( 'mouseleave', () => row.style.background = '' );
+			row.addEventListener( 'click', function ( e ) {
+
+				e.stopPropagation();
+				closeMenu();
+				item.onClick();
+
+			} );
+			menu.appendChild( row );
+
+		}
+
+		document.body.appendChild( menu );
+
+		// Right-align to the anchor, then clamp/flip to stay on screen.
+		const r = anchor.getBoundingClientRect();
+		const mw = menu.offsetWidth;
+		const mh = menu.offsetHeight;
+		let left = r.right - mw;
+		let top = r.bottom + 4;
+		if ( left + mw > window.innerWidth - 8 ) left = window.innerWidth - mw - 8;
+		if ( left < 8 ) left = 8;
+		if ( top + mh > window.innerHeight - 8 ) top = r.top - mh - 4;
+		if ( top < 8 ) top = 8;
+		menu.style.left = left + 'px';
+		menu.style.top = top + 'px';
+
+		activeMenu = menu;
+		setTimeout( () => {
+
+			document.addEventListener( 'mousedown', onMenuOutside, true );
+			window.addEventListener( 'blur', closeMenu );
+
+		}, 0 );
+
+	}
+
+	// A small ⋮ "more actions" button. getItems() is evaluated on each open so the
+	// menu reflects current state.
+	function kebabButton( title, getItems ) {
+
+		const b = document.createElement( 'button' );
+		b.title = title || 'More actions';
+		b.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14">' +
+			'<circle cx="7" cy="2.5" r="1.4" fill="currentColor"/>' +
+			'<circle cx="7" cy="7" r="1.4" fill="currentColor"/>' +
+			'<circle cx="7" cy="11.5" r="1.4" fill="currentColor"/></svg>';
+		b.style.flexShrink = '0';
+		b.style.width = '20px';
+		b.style.height = '18px';
+		b.style.display = 'flex';
+		b.style.alignItems = 'center';
+		b.style.justifyContent = 'center';
+		b.style.padding = '0';
+		b.style.margin = '0 4px';
+		b.style.border = 'none';
+		b.style.background = 'transparent';
+		b.style.borderRadius = '3px';
+		b.style.cursor = 'pointer';
+		b.style.color = '#888';
+		b.addEventListener( 'mouseenter', () => { b.style.background = 'rgba(0,0,0,0.08)'; b.style.color = '#222'; } );
+		b.addEventListener( 'mouseleave', () => { b.style.background = 'transparent'; b.style.color = '#888'; } );
+		b.addEventListener( 'mousedown', e => e.stopPropagation() ); // don't scrub the timeline
+		b.addEventListener( 'click', function ( e ) {
+
+			e.stopPropagation();
+			openMenu( b, getItems() );
+
+		} );
+		return b;
+
+	}
+
 	// Hover path helper
 	let hoverHelper = null;
 	let currentAction = null;
@@ -374,6 +514,9 @@ function Animation( editor ) {
 	// Clips whose checkbox is unticked are excluded from the multi-clip preview.
 	// A clip is enabled (previewed) unless its uuid is in this set.
 	const disabledClips = new Set();
+
+	// Tracks (object channels) ticked for group editing. Key: clip.uuid + '|' + track.name.
+	const selectedTracks = new Set();
 
 	// ── Keyframe track editing helpers ───────────────────────────────────────
 	// All track edits rebuild the affected KeyframeTrack (typed arrays are
@@ -552,14 +695,25 @@ function Animation( editor ) {
 
 	}
 
-	function deleteClip() {
+	function deleteClipsList( list ) {
 
-		if ( ! currentClip ) return;
-		if ( confirm( 'Delete animation "' + ( currentClip.name || 'Clip' ) + '"?' ) === false ) return;
+		if ( list.length === 0 ) return;
 
-		if ( currentAction ) currentAction.stop();
-		editor.mixer.uncacheClip( currentClip );
-		removeClipFromRoots( currentClip );
+		const names = list.map( ( { clip } ) => clip.name || 'Clip' );
+		const message = list.length === 1
+			? 'Delete animation "' + names[ 0 ] + '"?'
+			: 'Delete ' + list.length + ' animations?\n\n• ' + names.join( '\n• ' );
+		if ( confirm( message ) === false ) return;
+
+		editor.mixer.stopAllAction();
+
+		for ( const { clip } of list ) {
+
+			editor.mixer.uncacheClip( clip );
+			removeClipFromRoots( clip );
+			disabledClips.delete( clip.uuid );
+
+		}
 
 		currentClip = null;
 		currentAction = null;
@@ -570,6 +724,89 @@ function Animation( editor ) {
 
 		durationText.setValue( '0.00' );
 		timeText.setValue( '0.00' );
+		signals.sceneGraphChanged.dispatch();
+		update();
+		updatePlayheadUI();
+
+	}
+
+	function deleteClip() {
+
+		// Delete every CHECKED animation (those whose checkbox is ticked).
+		deleteClipsList( getAnimationClips().filter( ( { clip } ) => disabledClips.has( clip.uuid ) === false ) );
+
+	}
+
+	function duplicateClip( clip, root ) {
+
+		const copy = clip.clone();
+		copy.name = ( clip.name || 'Clip' ) + ' copy';
+
+		if ( root === editor.scene ) {
+
+			editor.scene.animations.push( copy );
+
+		} else {
+
+			root.animations = root.animations || [];
+			root.animations.push( copy );
+
+		}
+
+		signals.sceneGraphChanged.dispatch();
+		update();
+
+	}
+
+	function deleteTrack( clip, root, track ) {
+
+		const i = clip.tracks.indexOf( track );
+		if ( i === - 1 ) return;
+		clip.tracks.splice( i, 1 );
+
+		selectedTracks.delete( clip.uuid + '|' + track.name );
+		if ( selectedKeyframe && selectedKeyframe.trackName === track.name ) selectedKeyframe = null;
+
+		currentClip = clip;
+		currentRoot = root;
+		commitClip();
+
+	}
+
+	// Delete every track whose checkbox is ticked (group edit), across all clips.
+	function deleteCheckedTracks() {
+
+		if ( selectedTracks.size === 0 ) return;
+		if ( confirm( 'Delete ' + selectedTracks.size + ' selected track(s)?' ) === false ) return;
+
+		editor.mixer.stopAllAction();
+
+		for ( const { clip } of getAnimationClips() ) {
+
+			const before = clip.tracks.length;
+			clip.tracks = clip.tracks.filter( t => selectedTracks.has( clip.uuid + '|' + t.name ) === false );
+			if ( clip.tracks.length !== before ) {
+
+				clip.resetDuration();
+				editor.mixer.uncacheClip( clip );
+
+			}
+
+		}
+
+		selectedTracks.clear();
+		selectedKeyframe = null;
+
+		if ( currentClip && currentRoot ) {
+
+			suppressAutoKey = true;
+			currentAction = editor.mixer.clipAction( currentClip, currentRoot );
+			applyPoseAtPlayhead();
+			suppressAutoKey = false;
+			durationText.setValue( currentClip.duration.toFixed( 2 ) );
+
+		}
+
 		signals.sceneGraphChanged.dispatch();
 		update();
 		updatePlayheadUI();
@@ -867,6 +1104,20 @@ function Animation( editor ) {
 			clipTimeline.style.background = 'rgba(0,0,0,0.03)';
 			clipRow.appendChild( clipTimeline );
 
+			// Per-clip actions (⋮). stopPropagation in kebabButton keeps the row
+			// click (checkbox toggle) from firing.
+			const clipMenu = kebabButton( 'Clip actions', function () {
+
+				return [
+					{ label: 'Rename…', onClick: () => renameClip( clip ) },
+					{ label: 'Duplicate', onClick: () => duplicateClip( clip, root ) },
+					{ separator: true },
+					{ label: 'Delete', danger: true, onClick: () => deleteClipsList( [ { clip, root } ] ) },
+				];
+
+			} );
+			clipRow.appendChild( clipMenu );
+
 			// Clicking the row toggles its checkbox (flat checklist — no accordion).
 			clipRow.addEventListener( 'click', function () {
 
@@ -903,23 +1154,58 @@ function Animation( editor ) {
 				trackRow.style.height = '20px';
 				trackRow.style.borderBottom = '1px solid #eee';
 
-				// Track label
+				// Track label area = [checkbox][color dot][name], fixed to labelWidth
+				// so it lines up with the clip header above.
+				const trackHeader = document.createElement( 'div' );
+				trackHeader.style.width = labelWidth + 'px';
+				trackHeader.style.flexShrink = '0';
+				trackHeader.style.boxSizing = 'border-box';
+				trackHeader.style.display = 'flex';
+				trackHeader.style.alignItems = 'center';
+				trackHeader.style.padding = '0 4px 0 18px';
+
+				const trackKey = clip.uuid + '|' + track.name;
+
+				const trackCheckbox = document.createElement( 'input' );
+				trackCheckbox.type = 'checkbox';
+				trackCheckbox.checked = selectedTracks.has( trackKey );
+				trackCheckbox.title = 'Select this track for group editing (⟶ 🗑 Tracks)';
+				trackCheckbox.style.flexShrink = '0';
+				trackCheckbox.style.margin = '0 5px 0 0';
+				trackCheckbox.style.cursor = 'pointer';
+				trackCheckbox.addEventListener( 'change', function () {
+
+					if ( trackCheckbox.checked ) selectedTracks.add( trackKey );
+					else selectedTracks.delete( trackKey );
+
+				} );
+				trackHeader.appendChild( trackCheckbox );
+
+				const trackDot = document.createElement( 'span' );
+				trackDot.style.width = '7px';
+				trackDot.style.height = '7px';
+				trackDot.style.flexShrink = '0';
+				trackDot.style.marginRight = '5px';
+				trackDot.style.background = getTrackColor( track.name );
+				trackDot.style.transform = 'rotate(45deg)';
+				trackHeader.appendChild( trackDot );
+
+				const objectName = getObjectName( track.name, root );
+				const trackType = getTrackType( track.name );
+
 				const trackLabel = document.createElement( 'div' );
-				trackLabel.style.width = labelWidth + 'px';
-				trackLabel.style.padding = '0 10px 0 20px';
+				trackLabel.style.flex = '1';
+				trackLabel.style.minWidth = '0';
 				trackLabel.style.fontSize = '10px';
 				trackLabel.style.overflow = 'hidden';
 				trackLabel.style.textOverflow = 'ellipsis';
 				trackLabel.style.whiteSpace = 'nowrap';
-				trackLabel.style.flexShrink = '0';
-				trackLabel.style.boxSizing = 'border-box';
 				trackLabel.style.color = '#666';
-
-				const objectName = getObjectName( track.name, root );
-				const trackType = getTrackType( track.name );
 				trackLabel.textContent = objectName + '.' + trackType;
 				trackLabel.title = track.name;
-				trackRow.appendChild( trackLabel );
+				trackHeader.appendChild( trackLabel );
+
+				trackRow.appendChild( trackHeader );
 
 				// Track timeline with block
 				const trackTimeline = document.createElement( 'div' );
@@ -958,7 +1244,7 @@ function Animation( editor ) {
 					keyframe.style.transform = 'rotate(45deg)';
 					keyframe.style.cursor = 'ew-resize';
 					keyframe.style.zIndex = '5';
-					keyframe.title = times[ i ].toFixed( 3 ) + 's — click to scrub, drag to retime';
+					keyframe.title = times[ i ].toFixed( 3 ) + 's — click to scrub, drag to retime, right-click for menu';
 
 					const isSelected = selectedKeyframe &&
 						selectedKeyframe.trackName === track.name &&
@@ -971,6 +1257,45 @@ function Animation( editor ) {
 					}
 
 					( function attachKeyframe( el, theClip, theRoot, trackName, kfIndex, keyTime, tl ) {
+
+						// Right-click a key for its own actions (go to / move / delete).
+						el.addEventListener( 'contextmenu', function ( event ) {
+
+							event.preventDefault();
+							event.stopPropagation();
+
+							currentClip = theClip; currentRoot = theRoot;
+							openMenu( el, [
+								{ label: 'Go to ' + keyTime.toFixed( 2 ) + 's', onClick: function () {
+
+									selectedKeyframe = { trackName: trackName, index: kfIndex };
+									gotoTime( keyTime );
+									update();
+
+								} },
+								{ label: 'Move to playhead', onClick: function () {
+
+									const liveTrack = findTrack( theClip, trackName );
+									if ( ! liveTrack ) return;
+									const r = moveKeyframeTime( theClip, liveTrack, kfIndex, snap( playheadTime ) );
+									selectedKeyframe = { trackName: trackName, index: r.index };
+									playheadTime = snap( playheadTime );
+									commitClip();
+
+								} },
+								{ separator: true },
+								{ label: 'Delete key', danger: true, onClick: function () {
+
+									const liveTrack = findTrack( theClip, trackName );
+									if ( ! liveTrack ) return;
+									removeKeyframeAt( theClip, liveTrack, kfIndex );
+									selectedKeyframe = null;
+									commitClip();
+
+								} },
+							] );
+
+						} );
 
 						el.addEventListener( 'mousedown', function ( event ) {
 
@@ -1031,6 +1356,38 @@ function Animation( editor ) {
 				}
 
 				trackRow.appendChild( trackTimeline );
+
+				// Per-track actions (⋮): jump to the object, add a key here, delete.
+				const trackMenu = kebabButton( 'Track actions', function () {
+
+					const uuid = track.name.substring( 0, track.name.lastIndexOf( '.' ) );
+					const obj = root.getObjectByProperty( 'uuid', uuid );
+					const prop = getTrackType( track.name );
+					const items = [];
+
+					if ( obj ) items.push( { label: 'Select object', onClick: () => editor.select( obj ) } );
+
+					if ( obj && ( prop === 'position' || prop === 'quaternion' || prop === 'scale' ) ) {
+
+						items.push( { label: 'Add key at playhead', onClick: function () {
+
+							currentClip = clip;
+							currentRoot = root;
+							suppressAutoKey = true;
+							setKeyframe( clip, obj, prop, snap( playheadTime ) );
+							suppressAutoKey = false;
+							commitClip();
+
+						} } );
+
+					}
+
+					items.push( { separator: true } );
+					items.push( { label: 'Delete track', danger: true, onClick: () => deleteTrack( clip, root, track ) } );
+					return items;
+
+				} );
+				trackRow.appendChild( trackMenu );
 
 				// Hover on position tracks to show path helper
 				if ( track.name.endsWith( '.position' ) && track.getValueSize() === 3 ) {
