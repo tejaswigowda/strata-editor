@@ -7,7 +7,7 @@
 }
 
 body {
-	font-family: Helvetica, Arial, sans-serif;
+	font-family: 'Roboto', Helvetica, Arial, sans-serif;
 	font-size: 14px;
 	margin: 0;
 	overflow: hidden;
@@ -716,7 +716,7 @@ body.sidebar-bottom .TabbedPanel .Panels {
 	padding: 0;
 	border: 0;
 	background: #1a1a2e;
-	font-family: 'Courier New', Courier, monospace;
+	font-family: Consolas, 'Courier New', monospace;
 	font-size: 13px;
 	color: #ddd;
 }
@@ -728,30 +728,28 @@ body.sidebar-bottom #sidebar #shell {
 
 #shell-header {
 	display: flex;
-	flex-wrap: wrap;
+	flex-wrap: nowrap;        /* everything stays on one line */
 	align-items: center;
 	column-gap: 8px;
-	row-gap: 4px;
 	padding: 6px 10px;
 	background: #111;
 	border-bottom: 1px solid #333;
 	flex-shrink: 0;
-	font-family: Helvetica, Arial, sans-serif;
+	font-family: 'Roboto', Helvetica, Arial, sans-serif;
 	font-size: 12px;
+	overflow: hidden;
 }
 
 #shell-header-title {
 	color: #7ec8e3;
 	font-weight: bold;
 	flex: 0 0 auto;
-	order: 1;
 }
 
 #shell-ai-status {
 	color: #6a9;
 	font-size: 11px;
-	order: 2;
-	flex: 1 1 auto;            /* fills the rest of the first line */
+	flex: 0 1 auto;           /* shrinks first when space is tight */
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -766,8 +764,7 @@ body.sidebar-bottom #sidebar #shell {
 	border-radius: 3px;
 	font-size: 11px;
 	padding: 2px 4px;
-	order: 3;
-	flex: 1 1 140px;          /* wraps to its own line, grows to fill */
+	flex: 1 1 60px;           /* fills the middle, shrinks as needed */
 	min-width: 0;
 }
 
@@ -779,27 +776,29 @@ body.sidebar-bottom #sidebar #shell {
 	font-size: 11px;
 	padding: 3px 10px;
 	cursor: pointer;
-	order: 4;
 	flex: 0 0 auto;
+	white-space: nowrap;
 }
 
 #shell-load-btn:disabled { opacity: 0.5; cursor: default; }
 #shell-load-btn:hover:not(:disabled) { background: #3a6aaf; }
 
+/* Stop = compact red stop icon only */
 #shell-stop-btn {
-	background: #7f2a2a;
-	color: #fff;
+	background: transparent;
+	color: #ff5555;
 	border: none;
 	border-radius: 3px;
-	font-size: 11px;
-	padding: 3px 10px;
+	line-height: 0;
+	padding: 3px 6px;
 	cursor: pointer;
-	order: 4;
 	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
 }
 
 #shell-stop-btn:disabled { opacity: 0.5; cursor: default; }
-#shell-stop-btn:hover:not(:disabled) { background: #af3a3a; }
+#shell-stop-btn:hover:not(:disabled) { color: #ff8888; background: rgba(255,85,85,0.12); }
 
 #shell-progress-wrap {
 	height: 3px;
@@ -836,7 +835,7 @@ body.sidebar-bottom #sidebar #shell {
 	background: transparent;
 	border: none;
 	color: #c9d1d9;
-	font-family: Helvetica, Arial, sans-serif;
+	font-family: 'Roboto', Helvetica, Arial, sans-serif;
 	font-size: 13px;
 	outline: none;
 	padding: 0;
@@ -847,7 +846,7 @@ body.sidebar-bottom #sidebar #shell {
 
 .shell-ai-label {
 	color: #c9a227;
-	font-family: Helvetica, Arial, sans-serif;
+	font-family: 'Roboto', Helvetica, Arial, sans-serif;
 	font-weight: bold;
 	margin-right: 8px;
 }
@@ -874,7 +873,7 @@ body.sidebar-bottom #sidebar #shell {
 	background: transparent;
 	border: none;
 	color: #fff;
-	font-family: 'Courier New', Courier, monospace;
+	font-family: Consolas, 'Courier New', monospace;
 	font-size: 13px;
 	outline: none;
 	resize: none;

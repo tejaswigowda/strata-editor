@@ -55,6 +55,7 @@ function Animation( editor ) {
 	playButton.dom.style.display = 'flex';
 	playButton.dom.style.alignItems = 'center';
 	playButton.dom.style.justifyContent = 'center';
+	playButton.dom.title = 'Play all checked animations';
 	playButton.onClick( function () {
 
 		play();
@@ -370,6 +371,10 @@ function Animation( editor ) {
 	let currentClip = null;
 	let currentRoot = null;
 
+	// Clips whose checkbox is unticked are excluded from the multi-clip preview.
+	// A clip is enabled (previewed) unless its uuid is in this set.
+	const disabledClips = new Set();
+
 	// ── Keyframe track editing helpers ───────────────────────────────────────
 	// All track edits rebuild the affected KeyframeTrack (typed arrays are
 	// immutable in practice for the mixer's cached interpolants), then commitClip()
@@ -675,18 +680,32 @@ function Animation( editor ) {
 
 	}
 
+	// Play every CHECKED clip together. Unticked clips (in disabledClips) are
+	// skipped. The selected clip (or first checked) drives the playhead/timeline.
 	function play() {
 
-		if ( ! currentClip || ! currentRoot ) return;
-		if ( ( currentClip.duration || 0 ) <= 0 ) return;
+		const clips = getAnimationClips().filter( ( { clip } ) => disabledClips.has( clip.uuid ) === false && ( clip.duration || 0 ) > 0 );
+		if ( clips.length === 0 ) return;
 
-		const a = editor.mixer.clipAction( currentClip, currentRoot );
-		a.reset();
-		a.enabled = true;
-		a.paused = false;
-		a.time = playheadTime % currentClip.duration;
-		a.play();
-		currentAction = a;
+		editor.mixer.stopAllAction();
+
+		const ref = clips.find( ( { clip } ) => clip === currentClip ) || clips[ 0 ];
+		currentClip = ref.clip;
+		currentRoot = ref.root;
+		currentAction = null;
+
+		for ( const { clip, root } of clips ) {
+
+			const a = editor.mixer.clipAction( clip, root );
+			a.reset();
+			a.enabled = true;
+			a.paused = false;
+			a.time = ( clip === ref.clip ) ? ( playheadTime % clip.duration ) : 0;
+			a.play();
+			if ( clip === ref.clip ) currentAction = a;
+
+		}
+
 		playing = true;
 
 	}
@@ -704,7 +723,7 @@ function Animation( editor ) {
 	function stop() {
 
 		playing = false;
-		if ( currentAction ) currentAction.stop();
+		editor.mixer.stopAllAction(); // stops the selected clip and any "play all" actions
 		gotoTime( 0 );
 
 	}
@@ -797,20 +816,50 @@ function Animation( editor ) {
 			clipRow.style.height = '24px';
 			clipRow.style.borderBottom = '1px solid #ccc';
 			clipRow.style.cursor = 'pointer';
-			clipRow.style.background = currentClip === clip ? 'rgba(0, 136, 255, 0.1)' : '';
+			// Highlight checked (enabled) clips so it reads as a checklist.
+			clipRow.style.background = disabledClips.has( clip.uuid ) === false ? 'rgba(0, 136, 255, 0.08)' : '';
+
+			// Label area = [checkbox][name], fixed to labelWidth so it lines up
+			// with the indented track rows below.
+			const clipHeader = document.createElement( 'div' );
+			clipHeader.style.width = labelWidth + 'px';
+			clipHeader.style.flexShrink = '0';
+			clipHeader.style.display = 'flex';
+			clipHeader.style.alignItems = 'center';
+			clipHeader.style.boxSizing = 'border-box';
+			clipHeader.style.padding = '0 6px 0 8px';
+
+			const clipCheckbox = document.createElement( 'input' );
+			clipCheckbox.type = 'checkbox';
+			clipCheckbox.checked = disabledClips.has( clip.uuid ) === false;
+			clipCheckbox.title = 'Include this animation when you press Play';
+			clipCheckbox.style.flexShrink = '0';
+			clipCheckbox.style.margin = '0 6px 0 0';
+			clipCheckbox.style.cursor = 'pointer';
+			clipCheckbox.addEventListener( 'click', e => e.stopPropagation() ); // don't select the row
+			clipCheckbox.addEventListener( 'change', function () {
+
+				if ( clipCheckbox.checked ) disabledClips.delete( clip.uuid );
+				else disabledClips.add( clip.uuid );
+
+				if ( playing ) play(); // re-apply the preview set live
+				update(); // refresh row highlight
+
+			} );
+			clipHeader.appendChild( clipCheckbox );
 
 			const clipLabel = document.createElement( 'div' );
-			clipLabel.style.width = labelWidth + 'px';
-			clipLabel.style.padding = '0 10px';
+			clipLabel.style.flex = '1';
+			clipLabel.style.minWidth = '0';
 			clipLabel.style.fontSize = '11px';
 			clipLabel.style.fontWeight = 'bold';
 			clipLabel.style.overflow = 'hidden';
 			clipLabel.style.textOverflow = 'ellipsis';
 			clipLabel.style.whiteSpace = 'nowrap';
-			clipLabel.style.flexShrink = '0';
-			clipLabel.style.boxSizing = 'border-box';
 			clipLabel.textContent = clip.name || 'Animation';
-			clipRow.appendChild( clipLabel );
+			clipHeader.appendChild( clipLabel );
+
+			clipRow.appendChild( clipHeader );
 
 			const clipTimeline = document.createElement( 'div' );
 			clipTimeline.style.flex = '1';
@@ -818,18 +867,11 @@ function Animation( editor ) {
 			clipTimeline.style.background = 'rgba(0,0,0,0.03)';
 			clipRow.appendChild( clipTimeline );
 
+			// Clicking the row toggles its checkbox (flat checklist — no accordion).
 			clipRow.addEventListener( 'click', function () {
 
-				if ( editor.selected !== root ) {
-
-					signals.objectSelected.remove( selectDefaultClip );
-					editor.select( root );
-					signals.objectSelected.add( selectDefaultClip );
-
-				}
-
-				selectClip( clip, root );
-				update(); // Refresh to update highlighting
+				clipCheckbox.checked = ! clipCheckbox.checked;
+				clipCheckbox.dispatchEvent( new Event( 'change' ) );
 
 			} );
 
@@ -842,184 +884,183 @@ function Animation( editor ) {
 
 			trackListContainer.appendChild( clipRow );
 
-			// Only show tracks for selected clip
-			if ( currentClip === clip ) {
 
-				const duration = clip.duration || 1; // avoid divide-by-zero for single-key clips
+			const duration = clip.duration || 1; // avoid divide-by-zero for single-key clips
 
-				for ( const track of clip.tracks ) {
+			for ( const track of clip.tracks ) {
 
-					const times = track.times;
-					if ( times.length === 0 ) continue;
+				const times = track.times;
+				if ( times.length === 0 ) continue;
 
-					const startTime = times[ 0 ];
-					const endTime = times[ times.length - 1 ];
-					const startPercent = ( startTime / duration ) * 100;
-					const widthPercent = ( ( endTime - startTime ) / duration ) * 100;
+				const startTime = times[ 0 ];
+				const endTime = times[ times.length - 1 ];
+				const startPercent = ( startTime / duration ) * 100;
+				const widthPercent = ( ( endTime - startTime ) / duration ) * 100;
 
-					const trackRow = document.createElement( 'div' );
-					trackRow.style.display = 'flex';
-					trackRow.style.alignItems = 'center';
-					trackRow.style.height = '20px';
-					trackRow.style.borderBottom = '1px solid #eee';
+				const trackRow = document.createElement( 'div' );
+				trackRow.style.display = 'flex';
+				trackRow.style.alignItems = 'center';
+				trackRow.style.height = '20px';
+				trackRow.style.borderBottom = '1px solid #eee';
 
-					// Track label
-					const trackLabel = document.createElement( 'div' );
-					trackLabel.style.width = labelWidth + 'px';
-					trackLabel.style.padding = '0 10px 0 20px';
-					trackLabel.style.fontSize = '10px';
-					trackLabel.style.overflow = 'hidden';
-					trackLabel.style.textOverflow = 'ellipsis';
-					trackLabel.style.whiteSpace = 'nowrap';
-					trackLabel.style.flexShrink = '0';
-					trackLabel.style.boxSizing = 'border-box';
-					trackLabel.style.color = '#666';
+				// Track label
+				const trackLabel = document.createElement( 'div' );
+				trackLabel.style.width = labelWidth + 'px';
+				trackLabel.style.padding = '0 10px 0 20px';
+				trackLabel.style.fontSize = '10px';
+				trackLabel.style.overflow = 'hidden';
+				trackLabel.style.textOverflow = 'ellipsis';
+				trackLabel.style.whiteSpace = 'nowrap';
+				trackLabel.style.flexShrink = '0';
+				trackLabel.style.boxSizing = 'border-box';
+				trackLabel.style.color = '#666';
 
-					const objectName = getObjectName( track.name, root );
-					const trackType = getTrackType( track.name );
-					trackLabel.textContent = objectName + '.' + trackType;
-					trackLabel.title = track.name;
-					trackRow.appendChild( trackLabel );
+				const objectName = getObjectName( track.name, root );
+				const trackType = getTrackType( track.name );
+				trackLabel.textContent = objectName + '.' + trackType;
+				trackLabel.title = track.name;
+				trackRow.appendChild( trackLabel );
 
-					// Track timeline with block
-					const trackTimeline = document.createElement( 'div' );
-					trackTimeline.style.flex = '1';
-					trackTimeline.style.height = '100%';
-					trackTimeline.style.position = 'relative';
-					trackTimeline.style.background = 'rgba(0,0,0,0.02)';
+				// Track timeline with block
+				const trackTimeline = document.createElement( 'div' );
+				trackTimeline.style.flex = '1';
+				trackTimeline.style.height = '100%';
+				trackTimeline.style.position = 'relative';
+				trackTimeline.style.background = 'rgba(0,0,0,0.02)';
 
-					const block = document.createElement( 'div' );
-					block.style.position = 'absolute';
-					block.style.left = startPercent + '%';
-					block.style.width = Math.max( 0.5, widthPercent ) + '%';
-					block.style.top = '3px';
-					block.style.bottom = '3px';
-					block.style.background = getTrackColor( track.name );
-					block.style.borderRadius = '2px';
-					block.style.opacity = '0.6';
-					block.title = trackType + ': ' + startTime.toFixed( 2 ) + 's - ' + endTime.toFixed( 2 ) + 's';
+				const block = document.createElement( 'div' );
+				block.style.position = 'absolute';
+				block.style.left = startPercent + '%';
+				block.style.width = Math.max( 0.5, widthPercent ) + '%';
+				block.style.top = '3px';
+				block.style.bottom = '3px';
+				block.style.background = getTrackColor( track.name );
+				block.style.borderRadius = '2px';
+				block.style.opacity = '0.6';
+				block.title = trackType + ': ' + startTime.toFixed( 2 ) + 's - ' + endTime.toFixed( 2 ) + 's';
 
-					trackTimeline.appendChild( block );
+				trackTimeline.appendChild( block );
 
-					// Add keyframe markers (selectable, draggable to retime, click to scrub)
-					for ( let i = 0; i < times.length; i ++ ) {
+				// Add keyframe markers (selectable, draggable to retime, click to scrub)
+				for ( let i = 0; i < times.length; i ++ ) {
 
-						const keyframePercent = ( times[ i ] / duration ) * 100;
-						const keyframe = document.createElement( 'div' );
-						keyframe.style.position = 'absolute';
-						keyframe.style.left = keyframePercent + '%';
-						keyframe.style.top = '50%';
-						keyframe.style.width = '8px';
-						keyframe.style.height = '8px';
-						keyframe.style.marginLeft = '-4px';
-						keyframe.style.marginTop = '-4px';
-						keyframe.style.background = getTrackColor( track.name );
-						keyframe.style.borderRadius = '1px';
-						keyframe.style.transform = 'rotate(45deg)';
-						keyframe.style.cursor = 'ew-resize';
-						keyframe.style.zIndex = '5';
-						keyframe.title = times[ i ].toFixed( 3 ) + 's — click to scrub, drag to retime';
+					const keyframePercent = ( times[ i ] / duration ) * 100;
+					const keyframe = document.createElement( 'div' );
+					keyframe.style.position = 'absolute';
+					keyframe.style.left = keyframePercent + '%';
+					keyframe.style.top = '50%';
+					keyframe.style.width = '8px';
+					keyframe.style.height = '8px';
+					keyframe.style.marginLeft = '-4px';
+					keyframe.style.marginTop = '-4px';
+					keyframe.style.background = getTrackColor( track.name );
+					keyframe.style.borderRadius = '1px';
+					keyframe.style.transform = 'rotate(45deg)';
+					keyframe.style.cursor = 'ew-resize';
+					keyframe.style.zIndex = '5';
+					keyframe.title = times[ i ].toFixed( 3 ) + 's — click to scrub, drag to retime';
 
-						const isSelected = selectedKeyframe &&
-							selectedKeyframe.trackName === track.name &&
-							selectedKeyframe.index === i;
-						if ( isSelected ) {
+					const isSelected = selectedKeyframe &&
+						selectedKeyframe.trackName === track.name &&
+						selectedKeyframe.index === i;
+					if ( isSelected ) {
 
-							keyframe.style.background = '#ff5722';
-							keyframe.style.boxShadow = '0 0 0 2px #fff, 0 0 0 3px #ff5722';
-
-						}
-
-						( function attachKeyframe( el, trackName, kfIndex, keyTime, tl ) {
-
-							el.addEventListener( 'mousedown', function ( event ) {
-
-								event.stopPropagation();
-								event.preventDefault();
-
-								const startX = event.clientX;
-								const dur = currentClip ? ( currentClip.duration || 0 ) : 0;
-								const rect = tl.getBoundingClientRect();
-								let moved = false;
-								let pendingTime = keyTime;
-
-								function onMove( ev ) {
-
-									if ( Math.abs( ev.clientX - startX ) > 3 ) moved = true;
-									if ( ! moved ) return;
-
-									let frac = rect.width > 0 ? ( ev.clientX - rect.left ) / rect.width : 0;
-									frac = Math.max( 0, Math.min( 1, frac ) );
-									pendingTime = snap( frac * ( dur || 0 ) );
-									el.style.left = ( dur > 0 ? ( pendingTime / dur ) * 100 : 0 ) + '%';
-
-								}
-
-								function onUp() {
-
-									document.removeEventListener( 'mousemove', onMove );
-									document.removeEventListener( 'mouseup', onUp );
-
-									const liveTrack = findTrack( currentClip, trackName );
-									if ( moved && liveTrack ) {
-
-										const r = moveKeyframeTime( currentClip, liveTrack, kfIndex, pendingTime );
-										selectedKeyframe = { trackName: trackName, index: r.index };
-										playheadTime = pendingTime;
-										commitClip();
-
-									} else {
-
-										selectedKeyframe = { trackName: trackName, index: kfIndex };
-										gotoTime( keyTime );
-										update();
-
-									}
-
-								}
-
-								document.addEventListener( 'mousemove', onMove );
-								document.addEventListener( 'mouseup', onUp );
-
-							} );
-
-						} )( keyframe, track.name, i, times[ i ], trackTimeline );
-
-						trackTimeline.appendChild( keyframe );
+						keyframe.style.background = '#ff5722';
+						keyframe.style.boxShadow = '0 0 0 2px #fff, 0 0 0 3px #ff5722';
 
 					}
 
-					trackRow.appendChild( trackTimeline );
+					( function attachKeyframe( el, theClip, theRoot, trackName, kfIndex, keyTime, tl ) {
 
-					// Hover on position tracks to show path helper
-					if ( track.name.endsWith( '.position' ) && track.getValueSize() === 3 ) {
+						el.addEventListener( 'mousedown', function ( event ) {
 
-						const uuid = track.name.replace( '.position', '' );
-						const object = root.getObjectByProperty( 'uuid', uuid );
+							event.stopPropagation();
+							event.preventDefault();
 
-						if ( object ) {
+							currentClip = theClip; currentRoot = theRoot; // edit this clip
+							const startX = event.clientX;
+							const dur = theClip.duration || 0;
+							const rect = tl.getBoundingClientRect();
+							let moved = false;
+							let pendingTime = keyTime;
 
-							trackRow.addEventListener( 'mouseenter', function () {
+							function onMove( ev ) {
 
-								showPath( clip, object );
+								if ( Math.abs( ev.clientX - startX ) > 3 ) moved = true;
+								if ( ! moved ) return;
 
-							} );
+								let frac = rect.width > 0 ? ( ev.clientX - rect.left ) / rect.width : 0;
+								frac = Math.max( 0, Math.min( 1, frac ) );
+								pendingTime = snap( frac * ( dur || 0 ) );
+								el.style.left = ( dur > 0 ? ( pendingTime / dur ) * 100 : 0 ) + '%';
 
-							trackRow.addEventListener( 'mouseleave', function () {
+							}
 
-								hidePath();
+							function onUp() {
 
-							} );
+								document.removeEventListener( 'mousemove', onMove );
+								document.removeEventListener( 'mouseup', onUp );
 
-						}
+								const liveTrack = findTrack( theClip, trackName );
+								if ( moved && liveTrack ) {
 
-					}
+									const r = moveKeyframeTime( theClip, liveTrack, kfIndex, pendingTime );
+									selectedKeyframe = { trackName: trackName, index: r.index };
+									playheadTime = pendingTime;
+									commitClip();
 
-					trackListContainer.appendChild( trackRow );
+								} else {
+
+									selectedKeyframe = { trackName: trackName, index: kfIndex };
+									gotoTime( keyTime );
+									update();
+
+								}
+
+							}
+
+							document.addEventListener( 'mousemove', onMove );
+							document.addEventListener( 'mouseup', onUp );
+
+						} );
+
+					} )( keyframe, clip, root, track.name, i, times[ i ], trackTimeline );
+
+					trackTimeline.appendChild( keyframe );
 
 				}
 
+				trackRow.appendChild( trackTimeline );
+
+				// Hover on position tracks to show path helper
+				if ( track.name.endsWith( '.position' ) && track.getValueSize() === 3 ) {
+
+					const uuid = track.name.replace( '.position', '' );
+					const object = root.getObjectByProperty( 'uuid', uuid );
+
+					if ( object ) {
+
+						trackRow.addEventListener( 'mouseenter', function () {
+
+							showPath( clip, object );
+
+						} );
+
+						trackRow.addEventListener( 'mouseleave', function () {
+
+							hidePath();
+
+						} );
+
+					}
+
+				}
+
+				trackListContainer.appendChild( trackRow );
+
 			}
+
+
 
 		}
 

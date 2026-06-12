@@ -165,7 +165,8 @@ function Shell( editor ) {
 
 	const stopBtn = document.createElement( 'button' );
 	stopBtn.id = 'shell-stop-btn';
-	stopBtn.textContent = '■ Stop AI';
+	stopBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true"><rect width="11" height="11" rx="1.5" fill="currentColor"/></svg>';
+	stopBtn.setAttribute( 'aria-label', 'Stop AI' );
 	stopBtn.title = 'Stop the current AI generation';
 	stopBtn.style.display = 'none';
 
@@ -289,7 +290,46 @@ function Shell( editor ) {
 		} );
 
 		output.appendChild( line );
+		scrollToBottom();
+
+	}
+
+	// Pin the console to the latest output. Runs after layout so the freshly
+	// appended line is measured before we scroll.
+	function scrollToBottom() {
+
 		output.scrollTop = output.scrollHeight;
+		requestAnimationFrame( () => { output.scrollTop = output.scrollHeight; } );
+
+	}
+
+	// Registers a finished AnimationClip on an object (default: scene). Shared by
+	// the addClip / addSpinClip sandbox helpers — defined here (closure scope) so
+	// neither relies on `this`, which is unbound when helpers are called bare.
+	function registerAnimationClip( object, clip ) {
+
+		const target = ( object && object.isObject3D ) ? object : editor.scene;
+		// THREE.AnimationClip has no `isAnimationClip` flag, so validate by
+		// type or by shape (tracks[] + resetDuration()).
+		const isClip = clip && ( clip instanceof window.THREE.AnimationClip ||
+			( Array.isArray( clip.tracks ) && typeof clip.resetDuration === 'function' ) );
+		if ( ! isClip ) throw new Error( 'addClip: second arg must be an AnimationClip' );
+		if ( ! Array.isArray( target.animations ) ) target.animations = [];
+		target.animations.push( clip );
+		if ( editor.mixer ) editor.mixer.uncacheRoot( target );
+
+		if ( target !== editor.scene ) {
+
+			editor.select( target );
+
+		} else {
+
+			editor.signals.objectSelected.dispatch( editor.scene );
+
+		}
+
+		appendOutput( 'Added clip "' + ( clip.name || 'Clip' ) + '" (' + clip.tracks.length + ' track' + ( clip.tracks.length === 1 ? '' : 's' ) + ', ' + ( clip.duration >= 0 ? clip.duration.toFixed( 2 ) + 's' : 'auto' ) + ') — open the Animations tab to play it.', 'result' );
+		return clip;
 
 	}
 
@@ -315,6 +355,15 @@ function Shell( editor ) {
 
 		code = code.trim();
 		if ( ! code ) return;
+
+		// `help` (typed bare or called) prints the command reference.
+		if ( code === 'help' || code === 'help()' ) {
+
+			appendOutput( '> ' + code, 'cmd' );
+			printHelp();
+			return;
+
+		}
 
 		history.unshift( code );
 		if ( history.length > 500 ) history.pop();
@@ -790,24 +839,51 @@ function Shell( editor ) {
 				// Selects the animated object so the new clip is visible. Returns the clip.
 				addClip: function ( object, clip ) {
 
+					return registerAnimationClip( object, clip );
+
+				},
+
+				// addSpinClip(object, opts) — register a rotation animation that works for
+				// FULL turns. A 2-keyframe quaternion track CAN'T express a 360° spin
+				// because 0 and 2π map to antipodal quaternions (same orientation), so
+				// slerp interpolates ~nothing. This sub-divides the turn into ≤90° steps
+				// so each slerp segment goes the intended way and a full spin accumulates.
+				// opts: { axis:'y', turns:1, seconds:8, pingPong:true, name }.
+				// pingPong:true rotates out and back to the start (default); false = one way.
+				addSpinClip: function ( object, opts = {} ) {
+
+					const T = window.THREE;
 					const target = ( object && object.isObject3D ) ? object : editor.scene;
-					if ( ! clip || ! clip.isAnimationClip ) throw new Error( 'addClip: second arg must be an AnimationClip' );
-					if ( ! Array.isArray( target.animations ) ) target.animations = [];
-					target.animations.push( clip );
-					if ( editor.mixer ) editor.mixer.uncacheRoot( target );
+					const axis = ( opts.axis || 'y' ).toLowerCase();
+					const turns = opts.turns ?? 1;
+					const seconds = opts.seconds ?? opts.duration ?? 8;
+					const pingPong = opts.pingPong !== false;
+					const name = opts.name || ( 'Spin ' + axis.toUpperCase() );
 
-					if ( target !== editor.scene ) {
+					const axisVec = new T.Vector3( axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0 );
+					const total = turns * Math.PI * 2;
 
-						editor.select( target );
+					// Forward sweep of angles in ≤90° steps, mirrored back for ping-pong.
+					const segments = Math.max( 1, Math.ceil( Math.abs( turns ) * 4 ) );
+					const angles = [];
+					for ( let i = 0; i <= segments; i ++ ) angles.push( ( total * i ) / segments );
+					if ( pingPong ) for ( let i = segments - 1; i >= 0; i -- ) angles.push( ( total * i ) / segments );
 
-					} else {
+					const baseQ = target.quaternion.clone();
+					const tmpQ = new T.Quaternion();
+					const times = [], values = [];
+					const last = angles.length - 1;
 
-						editor.signals.objectSelected.dispatch( editor.scene );
+					for ( let i = 0; i < angles.length; i ++ ) {
+
+						times.push( ( seconds * i ) / last );
+						tmpQ.setFromAxisAngle( axisVec, angles[ i ] ).premultiply( baseQ );
+						values.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
 
 					}
 
-					appendOutput( 'Added clip "' + ( clip.name || 'Clip' ) + '" (' + clip.tracks.length + ' track' + ( clip.tracks.length === 1 ? '' : 's' ) + ', ' + ( clip.duration >= 0 ? clip.duration.toFixed( 2 ) + 's' : 'auto' ) + ') — open the Animations tab to play it.', 'result' );
-					return clip;
+					const track = new T.QuaternionKeyframeTrack( target.uuid + '.quaternion', times, values );
+					return registerAnimationClip( target, new T.AnimationClip( name, - 1, [ track ] ) );
 
 				},
 
@@ -1680,23 +1756,32 @@ function Shell( editor ) {
 
 	} );
 
-	// ── Welcome message ───────────────────────────────────────────────────────
+	// ── Welcome hint ──────────────────────────────────────────────────────────
+	// Keep startup quiet — the full command list is available via `help`.
 
-	appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand  SetMaterialColorCommand  SetValueCommand', 'info' );
-	appendOutput( 'scene lookup: findObject(name)  findAll(name)  findOfType(type)  findNear(mesh,radius)  summarize()', 'info' );
-	appendOutput( 'scene intelligence: findByDescription("right arm of the red person")  describeObject(o)  listCandidates(text)  resolvePartAI(text)', 'info' );
-	appendOutput( 'agentic tools: findAPI(text)  whatsVisible()  whatsAt(x,y)  — AI requests run a bounded generate→validate→execute→observe→fix loop', 'info' );
-	appendOutput( 'spatial: getSize(obj)  getTopY(obj)  getCenter(obj)  placeOnTop(child,target)', 'info' );
-	appendOutput( '3rd-party API: const d = await fetchAPI(url[, {method,headers,body}])  — JSON→object (network/CORS apply)', 'info' );
-	appendOutput( 'dev API (--dev mode): External models (Ollama, OpenAI, Claude) appear in model dropdown when available  — select and click "Load AI"', 'info' );
-	appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
-	appendOutput( 'AI eval: evalAI() runs the standing eval set (pong/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
-	appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
-	appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)', 'info' );
-	appendOutput( 'organic geometry: LatheGeometry(pts,segs)  TubeGeometry(curve,…)  ExtrudeGeometry(shape,{})  CatmullRomCurve3(pts)', 'info' );
-	appendOutput( 'PBR textures: makeTexture(fn,size)  makeCheckerTex(sz,dark,light,tiles)  makeGridTex(sz,color,divs,bg)  + MeshPhysicalMaterial', 'info' );
-	appendOutput( 'edit mode: enterEditMode()  exitEditMode()  extrude(d)  inset(t)  bevel(t)  deleteFaces()  weld(eps)  planarUV(axis)  boxUV()  — Tab to toggle', 'info' );
-	appendOutput( 'selection criteria (M6): selectTopFaces(count)  selectFacingUp(threshold)  selectBoundaryEdges()  selectFaces(…ids)  selectVertices(…ids)  selectEdges(…ids)  clearSelection()', 'info' );
+	appendOutput( 'Type help for the list of available commands.', 'info' );
+
+	// Prints the full command reference (invoked by the `help` command).
+	function printHelp() {
+
+		appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand  SetMaterialColorCommand  SetValueCommand', 'info' );
+		appendOutput( 'scene lookup: findObject(name)  findAll(name)  findOfType(type)  findNear(mesh,radius)  summarize()', 'info' );
+		appendOutput( 'scene intelligence: findByDescription("right arm of the red person")  describeObject(o)  listCandidates(text)  resolvePartAI(text)', 'info' );
+		appendOutput( 'agentic tools: findAPI(text)  whatsVisible()  whatsAt(x,y)  — AI requests run a bounded generate→validate→execute→observe→fix loop', 'info' );
+		appendOutput( 'spatial: getSize(obj)  getTopY(obj)  getCenter(obj)  placeOnTop(child,target)', 'info' );
+		appendOutput( '3rd-party API: const d = await fetchAPI(url[, {method,headers,body}])  — JSON→object (network/CORS apply)', 'info' );
+		appendOutput( 'dev API (--dev mode): External models (Ollama, OpenAI, Claude) appear in model dropdown when available  — select and click "Load AI"', 'info' );
+		appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
+		appendOutput( 'AI eval: evalAI() runs the standing eval set (pong/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
+		appendOutput( 'animation: addClip(obj,clip)  addSpinClip(obj,{axis:"y",turns:1,seconds:8,pingPong:true})  — open the Animations tab to play', 'info' );
+		appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
+		appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)', 'info' );
+		appendOutput( 'organic geometry: LatheGeometry(pts,segs)  TubeGeometry(curve,…)  ExtrudeGeometry(shape,{})  CatmullRomCurve3(pts)', 'info' );
+		appendOutput( 'PBR textures: makeTexture(fn,size)  makeCheckerTex(sz,dark,light,tiles)  makeGridTex(sz,color,divs,bg)  + MeshPhysicalMaterial', 'info' );
+		appendOutput( 'edit mode: enterEditMode()  exitEditMode()  extrude(d)  inset(t)  bevel(t)  deleteFaces()  weld(eps)  planarUV(axis)  boxUV()  — Tab to toggle', 'info' );
+		appendOutput( 'selection criteria (M6): selectTopFaces(count)  selectFacingUp(threshold)  selectBoundaryEdges()  selectFaces(…ids)  selectVertices(…ids)  selectEdges(…ids)  clearSelection()', 'info' );
+
+	}
 
 	return container;
 

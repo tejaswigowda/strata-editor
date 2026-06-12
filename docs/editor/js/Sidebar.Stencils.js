@@ -191,15 +191,13 @@ function SidebarStencils( editor ) {
 
 	}
 
-	// ── Group ──────────────────────────────────────────────────────────────────
+	// ── How to use ──────────────────────────────────────────────────────────────
 
-	addStencil( 'group', strings.getKey( 'menubar/add/group' ), function ( editor, position ) {
-
-		const mesh = new THREE.Group();
-		mesh.name = 'Group';
-		addObject( editor, mesh, position );
-
-	} );
+	const hint = new UIText( 'Drag a stencil into the viewport to drop it where you release — or click to add it at the origin.' ).setWidth( '100%' );
+	hint.setStyle( 'fontSize', [ '11px' ] );
+	hint.setStyle( 'opacity', [ '0.6' ] );
+	hint.setStyle( 'lineHeight', [ '1.4' ] );
+	container.add( new UIRow().add( hint ) );
 
 	container.add( new UIHorizontalRule() );
 

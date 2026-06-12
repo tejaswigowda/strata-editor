@@ -372,7 +372,7 @@ function SidebarScene( editor ) {
 
 	// info
 
-	container.add( new UIBreak() );
+//	container.add( new UIBreak() );
 
 	const objectsRow = new UIRow();
 	const objectsText = new UIText( '0' ).setTextAlign( 'right' ).setWidth( '60px' ).setMarginRight( '6px' );

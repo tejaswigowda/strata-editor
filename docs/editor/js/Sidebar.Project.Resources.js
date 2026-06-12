@@ -10,6 +10,27 @@ function SidebarProjectResources( editor ) {
 
 	const container = new UITabbedPanel();
 
+	// Icon tabs styled like the main sidebar tabbed interface (icon + label).
+	function tabSvg( inner ) {
+
+		return `<svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ inner }</svg>`;
+
+	}
+
+	const RES_ICONS = {
+		geometries: tabSvg( '<path d="M8 1.5l5.5 3.2v6.6L8 14.5l-5.5-3.2V4.7z"/><path d="M8 1.5v13M2.5 4.7L8 8l5.5-3.3"/>' ),
+		materials:  tabSvg( '<circle cx="8" cy="8" r="6"/><path d="M5 5.3a4 4 0 0 1 5.7 5.4"/>' ),
+		textures:   tabSvg( '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><circle cx="5.5" cy="6" r="1.1"/><path d="M2.5 11.5l3-2.5 2.5 2 2.5-3 3 3.5"/>' ),
+	};
+
+	function addIconTab( id, label, content ) {
+
+		container.addTab( id, label, content );
+		const tab = container.tabs[ container.tabs.length - 1 ];
+		tab.dom.innerHTML = `<span class="tab-icon">${ RES_ICONS[ id ] || '' }</span><span class="tab-label">${ label }</span>`;
+
+	}
+
 	// Geometries
 
 	const geometriesTab = new UIPanel();
@@ -46,7 +67,7 @@ function SidebarProjectResources( editor ) {
 
 	} );
 
-	container.addTab( 'geometries', strings.getKey( 'sidebar/project/geometries' ), geometriesTab );
+	addIconTab( 'geometries', strings.getKey( 'sidebar/project/geometries' ), geometriesTab );
 
 	// Materials
 
@@ -85,7 +106,7 @@ function SidebarProjectResources( editor ) {
 
 	} );
 
-	container.addTab( 'materials', strings.getKey( 'sidebar/project/materials' ), materialsTab );
+	addIconTab( 'materials', strings.getKey( 'sidebar/project/materials' ), materialsTab );
 
 	// Textures
 
@@ -101,7 +122,7 @@ function SidebarProjectResources( editor ) {
 	texturesInfo.dom.style.float = 'right';
 	texturesTab.add( texturesInfo );
 
-	container.addTab( 'textures', strings.getKey( 'sidebar/project/textures' ), texturesTab );
+	addIconTab( 'textures', strings.getKey( 'sidebar/project/textures' ), texturesTab );
 
 	container.select( 'geometries' );
 

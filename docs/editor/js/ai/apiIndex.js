@@ -88,7 +88,7 @@ export const SCOPE_FUNCTIONS = new Set( [
 	'diagnoseImport', 'relabelAsset',
 	'enterEditMode', 'exitEditMode', 'extrude', 'inset', 'bevel', 'deleteFaces', 'weld', 'planarUV', 'boxUV',
 	'booleanUnion', 'booleanSubtract', 'booleanIntersect', 'mirrorMesh', 'arrayDuplicate', 'subdivide',
-	'objectToJS', 'sceneToJS', 'sceneEqual', 'showJS', 'addClip',
+	'objectToJS', 'sceneToJS', 'sceneEqual', 'showJS', 'addClip', 'addSpinClip',
 ] );
 
 // source: 'curated' (hand-verified, authoritative) | 'three' (tern typedefs).
@@ -113,6 +113,7 @@ export function buildIndex() {
 	// Keyframe-animation API — curated chunks so retrieval teaches the exact
 	// track/clip signatures and the addClip(object, clip) registration helper.
 	_addChunk( 'addClip', 'op', 'addClip(object, clip)', 'register a finished AnimationClip on an object (default scene) so it shows in the Animations panel and can be played' );
+	_addChunk( 'addSpinClip', 'op', "addSpinClip(object, {axis:'y', turns:1, seconds:8, pingPong:true})", 'register a rotation animation that WORKS for full turns (sub-divides into <=90deg quaternion steps). Prefer this over hand-rolled rotation tracks: a 2-keyframe quaternion 0->2pi will NOT spin (antipodal), and a VectorKeyframeTrack on .rotation does not bind correctly' );
 	_addChunk( 'AnimationClip', 'animation', 'new AnimationClip(name, duration, tracks[])', 'a named animation; pass duration -1 to auto-compute from track times' );
 	_addChunk( 'VectorKeyframeTrack', 'animation', "new VectorKeyframeTrack(obj.uuid+'.position', times[], values[])", 'animate position or scale; values are flattened x,y,z per time (3 per keyframe)' );
 	_addChunk( 'QuaternionKeyframeTrack', 'animation', "new QuaternionKeyframeTrack(obj.uuid+'.quaternion', times[], values[])", 'animate rotation; values are flattened x,y,z,w per time (4 per keyframe) from Quaternion.setFromEuler' );

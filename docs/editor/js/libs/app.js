@@ -5,7 +5,7 @@ const APP = {
 		let renderer;
 
 		const loader = new THREE.ObjectLoader();
-		let camera, scene;
+		let camera, scene, mixer;
 
 		let events = {};
 
@@ -55,6 +55,28 @@ const APP = {
 
 			this.setScene( loader.parse( json.scene ) );
 			this.setCamera( loader.parse( json.camera ) );
+
+			// Animations — the editor stores clips separately from the scene
+			// (three.js doesn't serialize object.animations). Reattach them to
+			// their owners and play them so the preview shows the keyframes.
+
+			mixer = new THREE.AnimationMixer( scene );
+
+			if ( Array.isArray( json.animations ) ) {
+
+				for ( const entry of json.animations ) {
+
+					const target = scene.getObjectByProperty( 'uuid', entry.object );
+
+					if ( target !== undefined ) {
+
+						mixer.clipAction( THREE.AnimationClip.parse( entry.clip ), target ).play();
+
+					}
+
+				}
+
+			}
 
 			events = {
 				init: [],
@@ -194,6 +216,8 @@ const APP = {
 
 			}
 
+			if ( mixer ) mixer.update( ( time - prevTime ) / 1000 );
+
 			renderer.render( scene, camera );
 
 			prevTime = time;
@@ -243,6 +267,13 @@ const APP = {
 			if ( renderer ) {
 
 				renderer.dispose();
+
+			}
+
+			if ( mixer ) {
+
+				mixer.stopAllAction();
+				mixer = undefined;
 
 			}
 

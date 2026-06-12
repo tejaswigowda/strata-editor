@@ -720,10 +720,41 @@ Editor.prototype = {
 
 		const scene = await loader.parseAsync( json.scene );
 
+		// Reattach animation clips (saved separately in toJSON) to their owners by
+		// uuid, before setScene() moves the objects into the live scene.
+
+		if ( Array.isArray( json.animations ) && json.animations.length > 0 ) {
+
+			const clipsByUuid = new Map();
+
+			for ( const entry of json.animations ) {
+
+				if ( clipsByUuid.has( entry.object ) === false ) clipsByUuid.set( entry.object, [] );
+				clipsByUuid.get( entry.object ).push( THREE.AnimationClip.parse( entry.clip ) );
+
+			}
+
+			scene.traverse( function ( object ) {
+
+				const clips = clipsByUuid.get( object.uuid );
+				if ( clips !== undefined ) object.animations = clips;
+
+			} );
+
+		}
+
 		this.backgroundType = json.backgroundType || 'Default';
 		this.environmentType = json.environmentType || 'Default';
 
 		this.setScene( scene );
+
+		// setScene() copies the scene's children but not its own animations array.
+		if ( Array.isArray( scene.animations ) && scene.animations.length > 0 ) {
+
+			this.scene.animations = scene.animations;
+			this.signals.sceneGraphChanged.dispatch();
+
+		}
 
 	},
 
@@ -746,6 +777,27 @@ Editor.prototype = {
 
 		}
 
+		// Animation clips — three.js scene.toJSON() does not serialize
+		// object.animations, so capture them here (keyed by owner uuid) and
+		// restore them in fromJSON(). This is what lets clips persist through
+		// Save / autosave / the Git commit.
+
+		const animations = [];
+
+		scene.traverse( function ( object ) {
+
+			if ( Array.isArray( object.animations ) ) {
+
+				for ( const clip of object.animations ) {
+
+					animations.push( { object: object.uuid, clip: THREE.AnimationClip.toJSON( clip ) } );
+
+				}
+
+			}
+
+		} );
+
 		return {
 
 			metadata: {},
@@ -759,6 +811,7 @@ Editor.prototype = {
 			camera: this.viewportCamera.toJSON(),
 			controls: this.controls.toJSON(),
 			scene: this.scene.toJSON(),
+			animations: animations,
 			scripts: this.scripts,
 			history: this.history.toJSON(),
 			backgroundType: this.backgroundType,

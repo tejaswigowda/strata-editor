@@ -48,7 +48,7 @@ GLOBALS (no THREE. prefix needed):
   Material: MeshStandardMaterial MeshPhysicalMaterial MeshBasicMaterial MeshPhongMaterial MeshLambertMaterial LineBasicMaterial
   Objects:  Mesh Group Line Points DirectionalLight PointLight AmbientLight SpotLight
   Math:     Color Vector3 Vector2 Euler Quaternion
-  Animation: AnimationClip VectorKeyframeTrack QuaternionKeyframeTrack NumberKeyframeTrack ColorKeyframeTrack  + addClip(object,clip)
+  Animation: AnimationClip VectorKeyframeTrack QuaternionKeyframeTrack NumberKeyframeTrack ColorKeyframeTrack  + addClip(object,clip)  + addSpinClip(object,{axis,turns,seconds,pingPong}) for rotations
   Lookup:   findObject(q) findAll(q) findOfType(t) findNear(m,r) findByDescription(text)
   Ground:   whatsVisible() whatsAt(x,y) findAPI(text)  (screen picking + real-signature lookup)
   Spatial:  getSize(o) getTopY(o) getCenter(o) placeOnTop(child,target)
@@ -175,8 +175,10 @@ RULES:
    (b) Build KeyframeTracks. The track name is ALWAYS \`<object.uuid>.<property>\`:
        MOVE  → new VectorKeyframeTrack(o.uuid+'.position', times, values)   (3 numbers x,y,z per time)
        SCALE → new VectorKeyframeTrack(o.uuid+'.scale',    times, values)   (3 numbers per time)
-       SPIN/ROTATE → new QuaternionKeyframeTrack(o.uuid+'.quaternion', times, qValues) (4 numbers x,y,z,w per time).
-         Build each quaternion with new Quaternion().setFromEuler(new Euler(rx,ry,rz)) and push q.x,q.y,q.z,q.w.
+       SPIN/ROTATE → use addSpinClip(o,{axis:'y',turns:1,seconds:8,pingPong:true}) — it builds a working clip.
+         DON'T hand-roll a 2-keyframe quaternion 0→2π: slerp can't express a full turn (0 and 2π are the same
+         orientation, so the object won't move). If you must build it manually, sub-divide into ≤90° quaternion
+         steps so each slerp segment is unambiguous.
        FADE/opacity → new NumberKeyframeTrack(o.uuid+'.material.opacity', times, values) (set material.transparent=true).
    (c) times[] are seconds, ascending, starting at 0. values[] is FLAT (concatenated), not nested arrays.
    (d) const clip=new AnimationClip('Name', -1, [track1,track2]); addClip(o, clip);
@@ -261,13 +263,7 @@ User: spin the wheel 360 degrees over 2 seconds
 (function(){
   const o=findObject('wheel')||editor.selected;
   if(!o)return;
-  const q0=new Quaternion().setFromEuler(new Euler(0,0,0));
-  const q1=new Quaternion().setFromEuler(new Euler(0,Math.PI,0));
-  const q2=new Quaternion().setFromEuler(new Euler(0,Math.PI*2,0));
-  const times=[0,1,2];
-  const values=[q0.x,q0.y,q0.z,q0.w, q1.x,q1.y,q1.z,q1.w, q2.x,q2.y,q2.z,q2.w];
-  const track=new QuaternionKeyframeTrack(o.uuid+'.quaternion',times,values);
-  addClip(o,new AnimationClip('Spin',-1,[track]));
+  addSpinClip(o,{axis:'y',turns:1,seconds:2,pingPong:false});
 })();
 
 User: make a pong scene

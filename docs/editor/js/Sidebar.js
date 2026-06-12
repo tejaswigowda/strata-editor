@@ -20,7 +20,7 @@ function tabSvg( inner ) {
 const TAB_ICONS = {
 	'scene':      tabSvg( '<rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9.5h4"/>' ),
 	'project':    tabSvg( '<path d="M2 5h4l1.5 1.5H14v7H2z"/>' ),
-	'settings':   tabSvg( '<circle cx="8" cy="8" r="2.5"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.2 3.2l1.1 1.1M11.7 11.7l1.1 1.1M12.8 3.2l-1.1 1.1M4.3 11.7l-1.1 1.1"/>' ),
+	'settings':   '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
 	'git':        tabSvg( '<circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="4" r="1.5"/><circle cx="11" cy="12" r="1.5"/><path d="M5 10.5V7.5a2 2 0 0 1 2-2H10.5M11 5.5v5"/>' ),
 	'export':     tabSvg( '<path d="M8 2v8M5 5l3-3 3 3"/><path d="M3 11v1.5A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5V11"/>' ),
 	'stencils':   tabSvg( '<rect x="3" y="6" width="10" height="7" rx="1"/><rect x="5" y="3.5" width="6" height="2.5" rx="1"/><rect x="7" y="1.5" width="2" height="2" rx="0.5"/>' ),
@@ -62,6 +62,8 @@ function Sidebar( editor ) {
 	}
 	const project = new SidebarProject( editor );
 	const settings = new SidebarSettings( editor );
+	// Settings and Project share one tab.
+	const settingsProject = new UISpan().add( settings, project );
 	const git = new SidebarGit( editor );
 	const exporter = new SidebarExport( editor );
 	const stencils = new SidebarStencils( editor );
@@ -79,15 +81,15 @@ function Sidebar( editor ) {
 	}
 
 	addIconTab( 'scene', strings.getKey( 'sidebar/scene' ), scene );
-	addIconTab( 'project', strings.getKey( 'sidebar/project' ), project );
-	addIconTab( 'settings', strings.getKey( 'sidebar/settings' ), settings );
 	addIconTab( 'git', strings.getKey( 'menubar/git' ), git );
-	addIconTab( 'export', strings.getKey( 'menubar/file/export' ), exporter );
-	addIconTab( 'stencils', 'Stencils', stencils );
+	// Tab id 'shelltab' must NOT collide with the Shell container's own id 'shell'.
+	addIconTab( 'shelltab', 'AI Shell', shell );
 	// Tab id avoids 'animation' so the wrapper panel doesn't pick up the old #animation CSS.
 	addIconTab( 'animations', strings.getKey( 'sidebar/animations' ), animation );
-	// Tab id 'shelltab' must NOT collide with the Shell container's own id 'shell'.
-	addIconTab( 'shelltab', 'Shell', shell );
+	addIconTab( 'stencils', 'Stencils', stencils );
+	addIconTab( 'export', strings.getKey( 'menubar/file/export' ), exporter );
+	// Merged Settings + Project into one tab.
+	addIconTab( 'settings', strings.getKey( 'sidebar/settings' ), settingsProject );
 	container.select( 'scene' );
 
 	// ── Overlay drag handle + resize grip ─────────────────────────────────────
