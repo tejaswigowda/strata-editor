@@ -1,5 +1,27 @@
 :root {
-	color-scheme: light dark;
+	color-scheme: dark;
+
+	/* Strata brand — dark UI with a bright-purple accent. */
+	--accent: #b061ff;          /* bright purple */
+	--accent-strong: #9333ea;
+	--accent-contrast: #ffffff;
+	--accent-12: rgba( 176, 97, 255, 0.16 );
+	--accent-10: rgba( 176, 97, 255, 0.14 );
+	--accent-06: rgba( 176, 97, 255, 0.10 );
+	--accent-50: rgba( 176, 97, 255, 0.55 );
+	--accent-25: rgba( 176, 97, 255, 0.32 );
+
+	/* The five strata layers of the mark, bottom → top. */
+	--strata-blue: #5181e6;
+	--strata-teal: #2fa3b7;
+	--strata-green: #3aa86a;
+	--strata-orange: #dd8a3c;
+	--strata-red: #cf514b;
+
+	/* App chrome — dark slate, matched to the existing dark surfaces. */
+	--chrome: #111111;
+	--chrome-2: #1b1b1b;
+	--chrome-border: #222222;
 }
 
 [hidden] {
@@ -1303,9 +1325,9 @@ body.sidebar-bottom #sidebar #shell {
 
 }
 
-/* DARK MODE */
+/* DARK MODE — forced for all users (Strata is dark-only). */
 
-@media ( prefers-color-scheme: dark ) {
+@media all {
 
 	.Button {
 		color: #aaa;
@@ -1586,7 +1608,7 @@ body.sidebar-bottom #sidebar #shell {
 	margin-top: 0;
 }
 
-@media ( prefers-color-scheme: dark ) {
+@media all {
 
 	.TextureParametersDialog-groupHeading {
 		border-bottom-color: #444;
@@ -1600,7 +1622,7 @@ body.sidebar-bottom #sidebar #shell {
 	line-height: 16px;
 }
 
-@media ( prefers-color-scheme: dark ) {
+@media all {
 
 	.Dialog-content {
 		background: #111;
@@ -1619,4 +1641,143 @@ body.sidebar-bottom #sidebar #shell {
 [draggable="true"] {
 	transform: translate(0, 0);
 	z-index: 0;
+}
+
+/* ===========================================================================
+   Strata brand theme
+   A cohesive re-skin layered on top of the base editor styles. It rebrands the
+   accent from the stock cyan-blue to the Strata blue, cools the app chrome, and
+   threads the icon's five-layer "strata" gradient through the UI. Layout and
+   behaviour are untouched — colour only.
+   =========================================================================== */
+
+/* --- Accent: tabs ------------------------------------------------------- */
+.TabbedPanel .Tabs::-webkit-scrollbar-thumb {
+	background: var( --accent-25 );
+}
+
+.TabbedPanel .Tabs:hover::-webkit-scrollbar-thumb {
+	background: var( --accent );
+}
+
+.TabbedPanel .Tabs .Tab:hover {
+	color: var( --accent );
+	background: var( --accent-06 );
+}
+
+.TabbedPanel .Tabs .Tab.selected {
+	color: var( --accent );
+	background: var( --accent-12 );
+	border-bottom-color: var( --accent );
+}
+
+.TabbedPanel .Tab.selected {
+	color: var( --accent );
+	background-color: var( --accent-10 );
+	border-bottom-color: var( --accent );
+}
+
+/* --- Accent: inputs, ranges, resizers ----------------------------------- */
+.Input.Number {
+	color: var( --accent ) !important;
+}
+
+#animation input[type="range"] {
+	accent-color: var( --accent );
+}
+
+#resizer:hover,
+#animation-resizer:hover {
+	background-color: var( --accent-50 );
+}
+
+#resizer:active,
+#animation-resizer:active {
+	background-color: var( --accent );
+}
+
+body.sidebar-bottom #resizer:hover {
+	background: var( --accent-10 );
+}
+
+body.sidebar-bottom #resizer:hover::after,
+body.sidebar-bottom #resizer:active::after {
+	background: var( --accent );
+}
+
+/* --- Accent: menubar ---------------------------------------------------- */
+#menubar .menu .options .option:hover {
+	color: var( --accent-contrast );
+	background-color: var( --accent );
+}
+
+#menubar .menu .options .option.toggle-on {
+	color: var( --accent );
+}
+
+/* --- Accent: selections & selected buttons ------------------------------ */
+.Button.selected {
+	color: var( --accent-contrast );
+	background-color: var( --accent );
+}
+
+.Outliner .option:hover,
+.Listbox .ListboxItem:hover {
+	background-color: var( --accent-12 );
+}
+
+.Outliner .option.active,
+.Listbox .ListboxItem.active {
+	background-color: var( --accent-25 );
+	color: #ffffff;
+}
+
+/* --- Chrome: cooler neutrals -------------------------------------------- */
+#menubar,
+#sidebar,
+#toolbar {
+	background: var( --chrome );
+}
+
+#tabs,
+.TabbedPanel .Tabs {
+	background-color: var( --chrome-2 );
+}
+
+/* --- Menubar: strata accent + crisp edge -------------------------------- */
+#menubar {
+	box-shadow: inset 0 -1px 0 var( --chrome-border );
+}
+
+#menubar::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 2px;
+	background: linear-gradient( 90deg,
+		var( --strata-blue ),
+		var( --strata-teal ),
+		var( --strata-green ),
+		var( --strata-orange ),
+		var( --strata-red ) );
+	opacity: 0.9;
+	pointer-events: none;
+}
+
+/* --- Toolbar: floating brand pill --------------------------------------- */
+#toolbar {
+	border-color: var( --chrome );
+	box-shadow: 0 2px 12px rgba( 43, 43, 47, 0.16 );
+}
+
+/* --- Buttons: subtle brand hover ---------------------------------------- */
+.Button {
+	border-radius: 4px;
+	transition: background-color 0.15s, color 0.15s;
+}
+
+.Button:hover {
+	color: var( --accent-strong );
 }

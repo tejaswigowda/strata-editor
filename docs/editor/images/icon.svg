@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Strata</title>
+  <defs>
+    <!-- Top-face sheens: subtle vertical lightening toward the back vertex -->
+    <linearGradient id="topRed" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e06a61"/><stop offset="1" stop-color="#cf514b"/>
+    </linearGradient>
+    <linearGradient id="topOrange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e89b4c"/><stop offset="1" stop-color="#dd8a3c"/>
+    </linearGradient>
+    <linearGradient id="topGreen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4cbb7c"/><stop offset="1" stop-color="#3aa86a"/>
+    </linearGradient>
+    <linearGradient id="topTeal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#41b4ca"/><stop offset="1" stop-color="#2fa3b7"/>
+    </linearGradient>
+    <linearGradient id="topBlue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6a92ec"/><stop offset="1" stop-color="#5181e6"/>
+    </linearGradient>
+
+    <!-- Glossy sphere -->
+    <radialGradient id="sphere" cx="0.36" cy="0.30" r="0.85">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#eef4fb"/>
+      <stop offset="0.80" stop-color="#cdd9ea"/>
+      <stop offset="1" stop-color="#aebfd6"/>
+    </radialGradient>
+    <radialGradient id="sphereHi" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Brand background -->
+  <rect width="512" height="512" rx="96" fill="#2b2b2f"/>
+
+  <!-- ===== Strata stack (drawn bottom -> top) ===== -->
+  <!-- blue -->
+  <g>
+    <polygon points="106,300 256,375 256,393 106,318" fill="#3d5a9e"/>
+    <polygon points="406,300 256,375 256,393 406,318" fill="#456bb8"/>
+    <polygon points="256,225 406,300 256,375 106,300" fill="url(#topBlue)"/>
+  </g>
+  <!-- teal -->
+  <g>
+    <polygon points="128,270 256,334 256,352 128,288" fill="#1f6b78"/>
+    <polygon points="384,270 256,334 256,352 384,288" fill="#27808f"/>
+    <polygon points="256,206 384,270 256,334 128,270" fill="url(#topTeal)"/>
+  </g>
+  <!-- green -->
+  <g>
+    <polygon points="150,240 256,293 256,311 150,258" fill="#27704a"/>
+    <polygon points="362,240 256,293 256,311 362,258" fill="#2f8455"/>
+    <polygon points="256,187 362,240 256,293 150,240" fill="url(#topGreen)"/>
+  </g>
+  <!-- orange -->
+  <g>
+    <polygon points="172,210 256,252 256,270 172,228" fill="#a76322"/>
+    <polygon points="340,210 256,252 256,270 340,228" fill="#b06d2c"/>
+    <polygon points="256,168 340,210 256,252 172,210" fill="url(#topOrange)"/>
+  </g>
+  <!-- red (top) -->
+  <g>
+    <polygon points="194,180 256,211 256,231 194,200" fill="#9c3f39"/>
+    <polygon points="318,180 256,211 256,231 318,200" fill="#a6433c"/>
+    <polygon points="256,149 318,180 256,211 194,180" fill="url(#topRed)"/>
+  </g>
+
+  <!-- Glossy sphere resting on the red layer -->
+  <g>
+    <ellipse cx="250" cy="182" rx="36" ry="13" fill="#000000" opacity="0.16"/>
+    <circle cx="246" cy="150" r="47" fill="url(#sphere)"/>
+    <ellipse cx="232" cy="133" rx="20" ry="14" fill="url(#sphereHi)"/>
+  </g>
+</svg>
