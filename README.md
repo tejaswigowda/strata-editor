@@ -13,7 +13,7 @@ A sovereign, AI-native 3D scene editor that builds, edits, and reasons about sce
 
 ## Quick start
 
-```bash
+```bash                                                                                                                                                                          
 npx serve docs       # local dev — or point GitHub Pages at docs/
 ```
 
@@ -48,6 +48,7 @@ DEV=1 node server.js
 | **Edit Mode** | Half-edge mesh editing: vertex/edge/face selection, extrude, inset, bevel, delete, weld, UV projection. |
 | **Keyframe animation** | An **Animations** tab to author clips by hand (create / key / interpolate / play) — and the AI can author clips too ("make the box bounce", "spin it 360° over 2s") via `addClip`. |
 | **Scene intelligence** | Resolve descriptive part references ("the right arm of the red person") on imported GLBs with meaningless node names — geometry + color + symmetry descriptors, no vision model. |
+| **Selector-based editing** | Address imported parts by CSS-like selector (`$$('.wheel.front')`) and edit them with a closed set of **command-backed, guarded ops** (`recolor`, `scale`, `spin`, …). Resolution is deterministic; the model only translates language → selector. |
 | **Parametric codegen** | Edited meshes record a construction recipe (primitive + ops) so "export as JS" stays readable instead of dumping raw vertices. |
 | **Git integration** | Auto-load on open, commit, and a split-screen merge-conflict viewport. AI writes diff-aware commit messages. |
 | **Error-feedback retry** | If generated code throws, the error is fed back to the model for one auto-correction pass. |
@@ -218,6 +219,33 @@ resolvePartAI('the flat panel on top')                // async: rule match + LLM
 ```
 
 Deterministic geometry + color + symmetry descriptors are derived on import; ambiguous queries fall back to the already-loaded LLM reasoning over a compact descriptor table — **no vision model**. See [Scene intelligence](#scene-intelligence).
+
+### Part editing — selectors + ops
+
+A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the **preferred way to edit imported parts** — `$$(selector)` returns a chainable set whose methods are 3D ops, each compiling to `editor.execute(new Command())` (undoable, versioned, guarded).
+
+```js
+listSelectors()                     // the REAL addressable parts in THIS scene, with counts:
+                                    //   .rims(×4)  .grille  #dump-bed  .red(×3)  .front …
+$$('.rims').recolor('#111')         // recolor 4 wheels — command-backed, guarded
+$$('.wheel.front').spin('y', 1, 2)  // compound selector + animation op (winding-safe clip)
+$$('#dump-bed').scale(1.2)          // edit a single labelled part by id
+op({ type:'recolor', selector:'.rims', color:'red' })   // explicit op-JSON (same thing)
+ops([ {…}, {…} ])                   // several ops in one undoable batch (multi-op)
+```
+
+**Selector grammar** (deterministic match, no model at match time): `#id` (semantic label) · `.class` · `type` (`mesh`/`group`/`light`) · `.a.b` (compound AND) · `A B` (descendant) · `A > B` (child) · `*`. Classes are **auto-derived on import** from descriptors — facts like `.front .left .red .elongated .pair-left`, plus material names (`Rims` → `.rims`) — and the optional [labeling pass](#scene-intelligence) adds semantic `#labels`/`.classes` (`wheel`, `dump-bed`).
+
+**Closed op set** (the human sugar; each is also an op-JSON `type`):
+
+```js
+recolor(color)  scale(factor, axis?)  move(dx,dy,dz)  rotate(axis, deg)
+delete()  duplicate(dx,dy,dz)  setMaterial({…})  retexture(tex)
+spin(axis?,turns?,dur?)  bounce()  pulse()  fade()  orbit()  shake()   // → keyframe clips
+op({ type:'raw', selector, code })   // escape hatch: raw JS as one op (loop-protected)
+```
+
+**Host-enforced guards** (the model expresses intent; the host enforces correctness): clone-on-write for shared materials (no bleed), texture-tint warning (`recolor` on a textured part tints — use `setMaterial` for solid), merged-mesh graceful-fail, ground/clamp, and a **"subset named but all changed" flag** — a part selector that resolves to *every* mesh is surfaced as a likely wrong resolution, never a silent ✓.
 
 ### Modeling ops (undoable, AI-callable)
 
@@ -529,7 +557,8 @@ server.js              — Static file server + API proxy (dev mode)
 docs/editor/js/
   AIEngine.js          — WebLLM wrapper: init() (8192-window override+fallback), stream(), complete(), interrupt()
   AIPrompt.js          — SYSTEM_PROMPT, buildSystemPrompt(), SCENE_QA_PROMPT, model registry, few-shot examples
-  AIUtils.js           — extractCode() (fenced-only, prose never runs), buildMessages(), token helpers
+  AIUtils.js           — extractCode() (fenced-only, prose never runs), buildMessages() (injects the EDIT OPS
+                          reference + this scene's real selectors only when there are parts to edit), token helpers
   Shell.js             — REPL UI + single execute() surface; Stop-AI; evalAI(); instantiates the controllers
                           External model discovery, askExternal(), getAvailableModels()
   ai/
@@ -558,10 +587,21 @@ docs/editor/js/
     colorName.js       — HSV-bin → human color name
     resolver.js        — Path A rule match + Path B LLM disambiguation
     sceneIndex.js      — findByDescription / describeObject / listCandidates + controller
+    classDerive.js     — descriptors → CSS-like auto-classes (.front/.red/.rims…); label-as-class match
+    selectorEngine.js  — CSS-subset parser + deterministic matcher over the scene graph
+    editOps.js         — structured edit ops (recolor/scale/move/…) → guarded commands
+    opPrimitive.js     — op-JSON contract + op()/ops()/$$ dispatcher; subset-sanity guard
+    animationRecipes.js— spin/bounce/pulse/… → winding-safe keyframe clips (command-backed)
+    vocabInjection.js  — current-scene selectors + op schema for the model prompt
+  commands/
+    AddAnimationClipCommand.js — register an AnimationClip on the undo stack (recipe ops)
 ```
 
 ### Design principles
 
+- **Deterministic shell, small fuzzy core.** 3D editing decomposes into a deterministic shell (selector matching, command execution, undo, versioning, normalization, guards) and **5 fuzzy tasks** the model handles: op-type selection, selector resolution, argument extraction, labeling, multi-op decomposition. Everything else is host code — if a feature seems to need the model to reason more, decompose it instead of expanding the model's job.
+- **Model expresses intent; host enforces correctness.** The model emits a selector + op; guards (clone-on-write, texture-tint, merged-mesh, ground/clamp, subset-sanity) and arg-normalization (`"black"`→`#111`) are host-side, so the model never has to remember them.
+- **Resolution is deterministic.** Selectors match over verified labels + auto-classes; the model only translates fuzzy language → a selector. Once labeled, resolution needs no model.
 - **One execution surface.** AI and human code run through the same `execute()` binding.
 - **Sovereignty is the product.** Inference is 100 % on-device — ironclad.
 - **No new model.** Scene intelligence uses deterministic math + the renderer + the already-loaded code LLM only.
@@ -594,6 +634,8 @@ docs/editor/js/
 ✅  M6: AI selection criteria (selectTopFaces, selectFacingUp, selectBoundaryEdges)
 ✅  Dev mode: Optional external APIs (Ollama, OpenAI, Claude) · dropdown model selection · askExternal() REPL function
 ✅  Keyframe animation: Animations-tab authoring (create/key/interpolate/play) + AI clip authoring (addClip, track-name convention, eval tier)
+✅  Selector-based editing: CSS-subset selector engine + auto-classes · op-JSON contract (op/ops/$$ + named sugar) · host guards · command-backed animation recipes · op vocab + live selectors fed to the model
+⬜  Eval matrix: 5 fuzzy tasks × model size × scaffolding (+ Haiku ceiling) — the size-decision gate and zero-training evidence
 ⬜  M7: glTF / OBJ import helpers + recipe-aware export
 ⬜  M8: Advanced texture/UV tools, material property setters, texture baking
 ⬜  Optional vision layer (precise nouns, OCR) — separate spec, needs a model
