@@ -27,8 +27,12 @@ import { weld }        from './mesh/ops/weld.js';
 import { planarUV, boxUV } from './mesh/ops/uv.js';
 import { SceneIntelligence, findByDescription, describeObject, listCandidates, resolvePartAI } from './intelligence/sceneIndex.js';
 import { findParts } from './intelligence/sceneIndex.js';
+import * as selectorEngine from './intelligence/selectorEngine.js';
+import { selectorCounts } from './intelligence/vocabInjection.js';
 import { diagnoseImport, diagnosticMessages } from './import/diagnostics.js';
 import { labelImportedAsset } from './import/labelPass.js';
+import { executeRecipeOp } from './intelligence/animationRecipes.js';
+import { op as runOp, ops as runOps, makeQuery, OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import { colorToName } from './intelligence/colorName.js';
 import { whatsVisible, whatsAt } from './intelligence/gpuPick.js';
 import { snapshotScene, sceneDiff, confirmChange, diffSummary, inspectScene } from './intelligence/observe.js';
@@ -309,10 +313,10 @@ function Shell( editor ) {
 	function registerAnimationClip( object, clip ) {
 
 		const target = ( object && object.isObject3D ) ? object : editor.scene;
-		// THREE.AnimationClip has no `isAnimationClip` flag, so validate by
-		// type or by shape (tracks[] + resetDuration()).
-		const isClip = clip && ( clip instanceof window.THREE.AnimationClip ||
-			( Array.isArray( clip.tracks ) && typeof clip.resetDuration === 'function' ) );
+		// THREE.AnimationClip has no `isAnimationClip` flag, so validate by SHAPE:
+		// a valid AnimationClip must have tracks[] and a numeric duration property.
+		// This duck-type check works across all THREE versions and edge cases.
+		const isClip = clip && Array.isArray( clip.tracks ) && typeof clip.duration === 'number';
 		if ( ! isClip ) throw new Error( 'addClip: second arg must be an AnimationClip' );
 		if ( ! Array.isArray( target.animations ) ) target.animations = [];
 		target.animations.push( clip );
@@ -711,6 +715,62 @@ function Shell( editor ) {
 
 				// relabelAsset(obj) — re-run the LLM labeling pass (Stage 4) on demand.
 				relabelAsset: ( obj ) => labelImportedAsset( editor, obj ?? editor.selected, { force: true } ),
+
+				// ── Selector-based part addressing (CSS-like grammar over scene graph) ──
+				// Selectors: #id (unique label), .class, type, .a.b (compound),
+				// A B (descendant), A > B (child), * (wildcard).
+				// Example: query(scene, '.wheel.front') → all front wheels
+				query: ( selector ) => {
+
+					if ( typeof selector !== 'string' ) throw new Error( 'query: arg must be a selector string' );
+					return selectorEngine.query( editor.scene, selector );
+
+				},
+
+				// queryOne(selector) — return first match or null
+				queryOne: ( selector ) => {
+
+					if ( typeof selector !== 'string' ) throw new Error( 'queryOne: arg must be a selector string' );
+					const results = selectorEngine.query( editor.scene, selector );
+					return results.length > 0 ? results[ 0 ] : null;
+
+				},
+
+				// isValidSelector(selector) — check syntax without matching
+				isValidSelector: ( selector ) => selectorEngine.isValid( selector ),
+
+				// listSelectors() — the ACTUAL addressable selectors in the current
+				// scene, with counts (e.g. ".tire(×4)  #dump-bed  .red(×3)"). Use this
+				// to discover what parts are called instead of guessing ".wheel". A
+				// selector matching nothing means that label/class isn't in the scene —
+				// run relabelAsset() if the import labeling pass hasn't tagged parts yet.
+				listSelectors: () => {
+
+					const counts = selectorCounts( editor.scene );
+					if ( counts.length === 0 ) {
+
+						appendOutput( 'No addressable selectors yet. Import an asset, or run relabelAsset() to label parts.', 'info' );
+						return [];
+
+					}
+					const line = counts.map( ( { selector, count } ) => count > 1 ? `${ selector }(×${ count })` : selector ).join( '  ' );
+					appendOutput( 'Addressable parts: ' + line, 'result' );
+					return counts;
+
+				},
+
+				// ── op-JSON primitive + $$ chainable API (the unified edit surface) ──
+				// op({type, selector, ...args}) — execute ONE structured op (command-backed,
+				// guarded, undoable). Closed set: recolor scale move rotate delete duplicate
+				// retexture setMaterial spin bounce pulse fade orbit shake raw.
+				op: ( opJSON ) => runOp( editor, opJSON ),
+				// ops([...]) — execute a list of ops in sequence (multi-op decomposition).
+				ops: ( opList ) => runOps( editor, opList ),
+				// $$(selector) — jQuery-style chainable set; named methods are 3D ops.
+				// Example: $$('.wheel').recolor('#111').spin('y', 1)
+				$$: makeQuery( editor ),
+				// OP_VOCABULARY — the closed op set + typed args (for introspection).
+				OP_VOCABULARY,
 
 				// ── Agentic grounding tools (no vision model) ─────────────────────────
 				// findAPI(text) — retrieve REAL API signatures (anti-hallucination)

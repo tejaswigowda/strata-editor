@@ -13,6 +13,7 @@
 // LLM only labels, diagnoses, suggests.
 
 import { indexSubtree } from '../intelligence/descriptors.js';
+import { deriveAllClasses } from '../intelligence/classDerive.js';
 import { normalizeImportedObject } from './normalize.js';
 import { diagnoseImport, diagnosticMessages } from './diagnostics.js';
 import { labelImportedAsset } from './labelPass.js';
@@ -96,7 +97,11 @@ export async function runImportPipeline( editor, root, opts = {} ) {
 	}
 
 	// Stage 3 — harvest descriptors NOW (the label pass + diagnosis need them).
-	try { indexSubtree( root, true ); } catch { /* descriptors are best-effort */ }
+	try { 
+		indexSubtree( root, true );
+		// Derive CSS-like classes from descriptors (for selector-based addressing).
+		deriveAllClasses( root );
+	} catch { /* descriptors and classes are best-effort */ }
 
 	// Stage 3 — diagnose (deterministic) and surface the always-safe messages.
 	const diag = diagnoseImport( root );

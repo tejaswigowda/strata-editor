@@ -2,8 +2,39 @@
 // Utilities shared between Shell.js and AIEngine.js.
 
 import { summarizeScene as _summarizeScene, sceneContextString } from './scene/summarize.js';
+import { selectorCounts } from './intelligence/vocabInjection.js';
 
 export { sceneContextString };
+
+// Build the "ADDRESSABLE PARTS" line for the prompt — the REAL selectors present
+// in the current scene, with counts. Feeds the op/$$ edit path so the model picks
+// ".rims" (what the asset actually has) instead of guessing ".wheel". Empty when
+// nothing is labeled/classed yet (no import). Capped for context budget.
+function addressablePartsBlock( editor ) {
+
+	if ( ! editor || ! editor.scene ) return '';
+	let counts;
+	try { counts = selectorCounts( editor.scene ); } catch { return ''; }
+	if ( ! counts || counts.length === 0 ) return '';
+
+	const line = counts
+		.slice( 0, 30 )
+		.map( ( { selector, count } ) => count > 1 ? `${ selector }(×${ count })` : selector )
+		.join( '  ' );
+
+	// Compact EDIT OPS reference — injected ONLY when there are parts to edit (kept
+	// OUT of the always-on system prompt to save the local model's 8k context).
+	return 'EDIT OPS — preferred for editing existing parts (command-backed, guarded, undoable;\n' +
+		'NOT findObject/Set*Command). Output ONE IIFE; address a part by a selector below:\n' +
+		"  $$('.sel').recolor('#111')   // or op({type:'recolor',selector:'.sel',color:'#111'})\n" +
+		'Ops & args: recolor(color) scale(factor,axis?) move(dx,dy,dz) rotate(axis,deg) delete()\n' +
+		'  duplicate(dx,dy,dz) setMaterial({color,roughness,metalness}) spin(axis?,turns?,dur?)\n' +
+		'  bounce/pulse/fade/orbit/shake(…opts). Fuzzy: bigger≈1.5 a-bit≈1.2 smaller≈0.6 slowly≈dur4.\n' +
+		'recolor TINTS a textured part — for SOLID color use setMaterial. Several edits → multiple\n' +
+		'$$ calls or ops([…]). Use ONLY listed selectors; map the noun to the closest one.\n' +
+		'ADDRESSABLE PARTS (do NOT invent others):\n' + line + '\n\n';
+
+}
 
 export function summarizeScene( editor ) {
 
@@ -186,9 +217,13 @@ export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '' )
 	// Inject retrieved REAL API signatures ahead of the request (Technique 2 RAG)
 	const apiBlock = apiHints ? apiHints + '\n\n' : '';
 
+	// Inject the scene's REAL addressable selectors so the model edits via op/$$
+	// against parts that actually exist (".rims"), not invented ones (".wheel").
+	const partsBlock = addressablePartsBlock( editor );
+
 	return [
 		{ role: 'system', content: systemPrompt },
-		{ role: 'user',   content: apiBlock + 'Scene:\n' + ctxStr + '\n\nRequest: ' + userPrompt },
+		{ role: 'user',   content: apiBlock + partsBlock + 'Scene:\n' + ctxStr + '\n\nRequest: ' + userPrompt },
 	];
 
 }
