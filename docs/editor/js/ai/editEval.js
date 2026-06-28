@@ -22,31 +22,36 @@
 // Each is shell-scope code. userData.label emulates the import-time LLM labeling
 // pass so findByDescription can resolve part nouns. userData.imported marks them.
 
-const SETUP_DUMPTRUCK = `(function(){
+export const SETUP_DUMPTRUCK = `(function(){
 	const g=new Group(); g.name='DumpTruck'; g.userData.imported=true;
-	const mk=(name,label,w,h,d,x,y,z,color)=>{
-		const m=new Mesh(new BoxGeometry(w,h,d),new MeshStandardMaterial({color}));
-		m.name=name; m.userData.label=label; m.position.set(x,y,z); g.add(m); return m;
+	// classes mirror what classDerive produces on the REAL asset (material names →
+	// .rims/.grille, descriptors → .front/.left). Set directly so the selector
+	// engine resolves without the renderer-dependent descriptor harvest.
+	const mk=(name,label,matName,classes,w,h,d,x,y,z,color)=>{
+		const mat=new MeshStandardMaterial({color}); mat.name=matName;
+		const m=new Mesh(new BoxGeometry(w,h,d),mat);
+		m.name=name; m.userData.label=label; m.userData.classes=new Set(['mesh',...classes]);
+		m.position.set(x,y,z); g.add(m); return m;
 	};
-	mk('Object_03','Cab',1.2,1.2,1.4,0,1.0,1.6,0x2266cc);
-	mk('Object_07','Dump Bed',1.6,1.0,2.4,0,1.1,-0.6,0x888888);
-	mk('Object_12','Tail Light (left)',0.2,0.3,0.1,-0.6,0.8,-1.8,0xcc2222);
-	mk('Object_13','Tail Light (right)',0.2,0.3,0.1,0.6,0.8,-1.8,0xcc2222);
-	mk('Object_20','Front Left Wheel',0.5,0.5,0.3,-0.8,0.4,1.4,0x111111);
-	mk('Object_21','Front Right Wheel',0.5,0.5,0.3,0.8,0.4,1.4,0x111111);
-	mk('Object_22','Rear Left Wheel',0.5,0.5,0.3,-0.8,0.4,-1.0,0x111111);
-	mk('Object_23','Rear Right Wheel',0.5,0.5,0.3,0.8,0.4,-1.0,0x111111);
+	mk('Object_03','Cab','Grille',['cab','grille','front','top'],1.2,1.2,1.4,0,1.0,1.6,0x2266cc);
+	mk('Object_07','Dump Bed','Body',['bed','dump-bed','center','largest'],1.6,1.0,2.4,0,1.1,-0.6,0x888888);
+	mk('Object_12','Tail Light (left)','Tail Light',['tail-light','light','back','left','pair-left'],0.2,0.3,0.1,-0.6,0.8,-1.8,0xcc2222);
+	mk('Object_13','Tail Light (right)','Tail Light',['tail-light','light','back','right','pair-right'],0.2,0.3,0.1,0.6,0.8,-1.8,0xcc2222);
+	mk('Object_20','Front Left Wheel','Rims',['wheel','rims','front','left','pair-left'],0.5,0.5,0.3,-0.8,0.4,1.4,0x111111);
+	mk('Object_21','Front Right Wheel','Rims',['wheel','rims','front','right','pair-right'],0.5,0.5,0.3,0.8,0.4,1.4,0x111111);
+	mk('Object_22','Rear Left Wheel','Rims',['wheel','rims','back','left','pair-left'],0.5,0.5,0.3,-0.8,0.4,-1.0,0x111111);
+	mk('Object_23','Rear Right Wheel','Rims',['wheel','rims','back','right','pair-right'],0.5,0.5,0.3,0.8,0.4,-1.0,0x111111);
 	editor.execute(new AddObjectCommand(editor,g));
 })();`;
 
-const SETUP_MERGED_BED = `(function(){
+export const SETUP_MERGED_BED = `(function(){
 	const m=new Mesh(new BoxGeometry(2,0.8,3),new MeshStandardMaterial({color:0x9a7b4f}));
 	m.name='GothicBed'; m.userData.imported=true; m.userData.partsSeparable=false;
 	m.userData.label='Gothic Bed'; m.position.y=0.4;
 	editor.execute(new AddObjectCommand(editor,m));
 })();`;
 
-const SETUP_SHARED_WHEELS = `(function(){
+export const SETUP_SHARED_WHEELS = `(function(){
 	const mat=new MeshStandardMaterial({color:0xffffff});
 	const a=new Mesh(new BoxGeometry(0.6,0.2,2),mat); a.name='Paddle Left'; a.position.set(-3,0.1,0);
 	const b=new Mesh(new BoxGeometry(0.6,0.2,2),mat); b.name='Paddle Right'; b.position.set(3,0.1,0);

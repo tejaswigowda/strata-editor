@@ -29,6 +29,8 @@ import { SceneIntelligence, findByDescription, describeObject, listCandidates, r
 import { findParts } from './intelligence/sceneIndex.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
+import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
+import { colorBase as editColorBase } from './ai/editEval.js';
 import { diagnoseImport, diagnosticMessages } from './import/diagnostics.js';
 import { labelImportedAsset } from './import/labelPass.js';
 import { executeRecipeOp } from './intelligence/animationRecipes.js';
@@ -1201,6 +1203,11 @@ function Shell( editor ) {
 				// loop and print a 3-axis (structure/spatial/semantic) pass/fail table.
 				evalAI: function ( prompts ) { return evalAI( prompts ); },
 
+				// evalEditMatrix('bare'|'scaffolded') — run the 5 fuzzy editing tasks
+				// on the current model; accumulates the model×condition matrix and
+				// prints it. Load each model / flip condition / add Haiku for the ceiling.
+				evalEditMatrix: function ( condition ) { return evalEditMatrix( condition ); },
+
 			};
 
 			// Build a named-parameter function so every scope var is a local;
@@ -1261,6 +1268,8 @@ function Shell( editor ) {
 		// REPL helpers accidentally typed into the AI box → route to the JS surface
 		// rather than asking the model to "build" the literal text (e.g. evalAI()).
 		if ( /^\s*evalAI\s*\(/.test( userPrompt ) ) { evalAI(); return; }
+		const mEvalEdit = userPrompt.match( /^\s*evalEditMatrix\s*\(\s*['"]?(\w+)?['"]?\s*\)/ );
+		if ( mEvalEdit ) { evalEditMatrix( mEvalEdit[ 1 ] || 'scaffolded' ); return; }
 
 		if ( ! aiEngine.ready ) {
 
@@ -1453,6 +1462,72 @@ function Shell( editor ) {
 
 		appendOutput( formatTable( results ), 'result' );
 		return results;
+
+	}
+
+	// ── Eval matrix: the 5 fuzzy tasks × model × {bare, scaffolded} ──────────────
+	// Persistent across calls so loading each model / flipping condition builds up
+	// the matrix. REPL: evalEditMatrix('scaffolded')  then  evalEditMatrix('bare');
+	// load Haiku (dev mode) and run again for the ceiling column.
+	const _editMatrix = newMatrix();
+
+	async function evalEditMatrix( condition = 'scaffolded' ) {
+
+		if ( ! aiEngine.ready ) { appendOutput( 'AI not loaded — click "Load AI" first.', 'error' ); return; }
+		const model = aiEngine.modelId || 'unknown';
+		const injectParts = condition !== 'bare';
+		appendOutput( `Eval matrix: ${ model } / ${ condition } — running the 5 tasks…`, 'info' );
+
+		// runOnce — drive the real agentic loop, return the GENERATED code (parsed
+		// into ops to score op-type/selector/args/multi-op independently).
+		async function runOnce( prompt ) {
+
+			const apiHints = retrieveForPrompt( prompt );
+			const systemPrompt = buildSystemPrompt( opsSchema() );
+			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts } );
+			let lastCode = '';
+			const streamCode = async ( msgs ) => { lastCode = await streamToOutput( msgs ); return lastCode; };
+			const res = await runAgentic( {
+				editor, messages, intent: prompt, maxRetries: 3, tokenBudget: aiTokenBudget(),
+				deps: { streamCode, execute, appendOutput, validateCode, snapshotScene, sceneDiff,
+					confirmChange, diffSummary, inspectScene,
+					historyLen: () => editor.history.undos.length,
+					rollbackTo: ( len ) => { while ( editor.history.undos.length > len ) editor.history.undo(); } },
+			} );
+			return { code: lastCode, execOk: !! ( res && res.ok ), text: ( res && res.text ) || '' };
+
+		}
+
+		// labelOnce — task-4 probe: a descriptor row → predicted label, SAME model.
+		async function labelOnce( descRow ) {
+
+			try {
+
+				const reply = await aiEngine.complete( [
+					{ role: 'system', content: 'Name this single 3D part in 1-3 words from its descriptor facts. Reply with ONLY the name.' },
+					{ role: 'user', content: descRow },
+				], { maxTokens: 12, temperature: 0 } );
+				return String( reply || '' ).split( /\r?\n/ )[ 0 ].replace( /["'`.]/g, '' ).trim();
+
+			} catch { return ''; }
+
+		}
+
+		const taskScores = await runEditMatrix( {
+			clearScene: () => { editor.clear(); },
+			runSetup: ( code ) => { execute( code ); },
+			runOnce,
+			resolveSelector: ( sel ) => new Set( selectorEngine.query( editor.scene, sel ).map( n => n.name ).filter( Boolean ) ),
+			colorBase: editColorBase,
+			normalizeColor: ( c ) => { try { return new window.THREE.Color( c ).getHex(); } catch { return null; } },
+			labelOnce,
+		} );
+
+		recordRun( _editMatrix, { model, condition, taskScores } );
+		const line = Object.entries( taskScores ).map( ( [ t, s ] ) => `${ t } ${ s.passed }/${ s.total }` ).join( '   ' );
+		appendOutput( `${ model } / ${ condition }:   ${ line }`, 'result' );
+		appendOutput( formatMatrix( _editMatrix ), 'result' );
+		return taskScores;
 
 	}
 

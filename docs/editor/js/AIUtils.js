@@ -196,7 +196,7 @@ export function buildQAMessages( qaSystemPrompt, editor, question ) {
 
 }
 
-export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '' ) {
+export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '', opts = {} ) {
 
 	// Prefer the JS-comment representation — the model "speaks" JS
 	let ctxStr = sceneContextString( editor );
@@ -219,7 +219,8 @@ export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '' )
 
 	// Inject the scene's REAL addressable selectors so the model edits via op/$$
 	// against parts that actually exist (".rims"), not invented ones (".wheel").
-	const partsBlock = addressablePartsBlock( editor );
+	// The eval matrix's BARE condition suppresses this to measure scaffolding lift.
+	const partsBlock = opts.injectParts === false ? '' : addressablePartsBlock( editor );
 
 	return [
 		{ role: 'system', content: systemPrompt },
