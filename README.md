@@ -1,4 +1,4 @@
-# Strata — Local-First AI for Building 3D Scenes
+# Strata -- Local-First AI for Building 3D Scenes
 
 A sovereign, AI-native 3D scene editor that builds, edits, and reasons about scenes via natural language. Local LLM inference, executes output through the integrated JS shell (command pattern → undo stack), and versions scenes through git.
 
@@ -11,7 +11,7 @@ A sovereign, AI-native 3D scene editor that builds, edits, and reasons about sce
 ## Quick start
 
 ```bash                                                                                                                                                                          
-npx serve docs       # local dev — or point GitHub Pages at docs/
+npx serve docs       # local dev -- or point GitHub Pages at docs/
 ```
 
 Requires **Chrome 113+** (WebGPU). Verify at [webgpureport.org](https://webgpureport.org).
@@ -35,16 +35,16 @@ DEV=1 node server.js
 |---|---|
 | **Sovereign AI** | 100 % on-device inference via WebGPU (WebLLM / MLC). Prompts and scenes never leave the browser. |
 | **No build step** | Serve `docs/` as-is. Plain ES modules, importmap, no bundler. |
-| **JS Shell** | Interactive REPL — a tab in the right sidebar (**View → JS Shell**). Same scope as the AI. |
-| **One execution surface** | AI-generated and human-typed code run through the same `execute()` binding — same undo stack, same error handling, no second path. |
-| **Agentic loop** | AI requests run a bounded **generate → validate → execute → observe → fix** loop — the model checks its own output against the real API and the resulting scene change, and self-corrects. |
+| **JS Shell** | Interactive REPL -- a tab in the right sidebar (**View → JS Shell**). Same scope as the AI. |
+| **One execution surface** | AI-generated and human-typed code run through the same `execute()` binding -- same undo stack, same error handling, no second path. |
+| **Agentic loop** | AI requests run a bounded **generate → validate → execute → observe → fix** loop -- the model checks its own output against the real API and the resulting scene change, and self-corrects. |
 | **No API hallucination** | Real command/op/material/geometry signatures are indexed locally and injected before generation + linted after, killing invented classes and wrong arguments. |
-| **Model-free scene grounding** | GPU color-picking answers "what's visible / what's under this point" from the renderer — no vision model. |
+| **Model-free scene grounding** | GPU color-picking answers "what's visible / what's under this point" from the renderer -- no vision model. |
 | **Scene Q&A** | Ask the AI about the scene in plain English (prefix with `?`). No code generated or run. |
-| **Modeling ops** | Boolean CSG, mirror, array, subdivision — undoable and AI-callable. |
+| **Modeling ops** | Boolean CSG, mirror, array, subdivision -- undoable and AI-callable. |
 | **Edit Mode** | Half-edge mesh editing: vertex/edge/face selection, extrude, inset, bevel, delete, weld, UV projection. |
-| **Keyframe animation** | An **Animations** tab to author clips by hand (create / key / interpolate / play) — and the AI can author clips too ("make the box bounce", "spin it 360° over 2s") via `addClip`. |
-| **Scene intelligence** | Resolve descriptive part references ("the right arm of the red person") on imported GLBs with meaningless node names — geometry + color + symmetry descriptors, no vision model. |
+| **Keyframe animation** | An **Animations** tab to author clips by hand (create / key / interpolate / play) -- and the AI can author clips too ("make the box bounce", "spin it 360° over 2s") via `addClip`. |
+| **Scene intelligence** | Resolve descriptive part references ("the right arm of the red person") on imported GLBs with meaningless node names -- geometry + color + symmetry descriptors, no vision model. |
 | **Selector-based editing** | Address imported parts by CSS-like selector (`$$('.wheel.front')`) and edit them with a closed set of **command-backed, guarded ops** (`recolor`, `scale`, `spin`, …). Resolution is deterministic; the model only translates language → selector. |
 | **Parametric codegen** | Edited meshes record a construction recipe (primitive + ops) so "export as JS" stays readable instead of dumping raw vertices. |
 | **Git integration** | Auto-load on open, commit, and a split-screen merge-conflict viewport. AI writes diff-aware commit messages. |
@@ -79,14 +79,14 @@ External models appear in the dropdown **below** WebLLM models (marked with sour
 On load the engine requests an **8192-token context window** (overriding the 4096
 default) so the system prompt + RAG hints + retry history have headroom; it falls
 back to 4096 automatically if the compiled model rejects the larger window. The
-shell prints the window in effect (`AI ready — … (context window: N tokens)`).
+shell prints the window in effect (`AI ready -- … (context window: N tokens)`).
 
 ---
 
-## Model tiers — which to use when
+## Model tiers -- which to use when
 
 Backed by a standing 19-prompt eval (`evalAI()`, below) scored on four axes, run
-1.5B vs 7B side-by-side. **The 7B is not a strict upgrade — route by task type.**
+1.5B vs 7B side-by-side. **The 7B is not a strict upgrade -- route by task type.**
 
 | Use the **1.5B Default** for | Use the **7B Power** for |
 |---|---|
@@ -102,11 +102,11 @@ structural/near-neighbor cases the 1.5B nails. The shell already surfaces a
 primitive (`shouldSuggestPower` in `ai/eval.js`).
 
 **Neither tier handles** (flagged by the eval, not yet solved): obscure board
-layouts — backgammon / go / monopoly both fall back to the chess alternating-grid
-template (a knowledge gap, not a size gap) — and reliably keeping furniture above
+layouts -- backgammon / go / monopoly both fall back to the chess alternating-grid
+template (a knowledge gap, not a size gap) -- and reliably keeping furniture above
 the ground plane.
 
-### Eval harness — `evalAI()`
+### Eval harness -- `evalAI()`
 
 Type `evalAI()` in the JS shell (works from either input row) to run the standing
 prompt set through the **real agentic loop** and print a 4-axis pass/fail table:
@@ -117,18 +117,18 @@ tier            | struct | spatial | semantic | distinct | prompt
 
 | Axis | Checks |
 |------|--------|
-| **struct** | ran clean — IIFE, named, `AddObjectCommand`, no repetition loop / prose / overflow |
+| **struct** | ran clean -- IIFE, named, `AddObjectCommand`, no repetition loop / prose / overflow |
 | **spatial** | flat things lie flat (X-Z), objects rest on/above the ground (no X-Y walls, no negative Y), and "X and Y" objects are placed apart (no co-location/overlap) |
-| **semantic** | has the expected parts — and they are *distinct*, not N identical boxes |
+| **semantic** | has the expected parts -- and they are *distinct*, not N identical boxes |
 | **distinct** | not over-fit (a non-chess "board" doesn't emit the chess template) and recolors yield the requested distinct colors |
 
 The `distinct` axis exists because earlier 3-axis runs scored a chessboard-shaped
-"traffic intersection" as a triple-pass — the gauge read green over a known fault.
+"traffic intersection" as a triple-pass -- the gauge read green over a known fault.
 Canary prompts (backgammon/go/monopoly) + an overfit detector make it visible.
 
 Run `evalAI()` after any prompt change, and on both tiers to set routing. The
 validation + translated-feedback layer (undefined-helper, duplicate-`const`,
-`.add()`-on-Material, shared-material clone-on-write) is **model-independent** — it
+`.add()`-on-Material, shared-material clone-on-write) is **model-independent** -- it
 caught and let the 7B *recover* the same bug classes it catches on the 1.5B.
 
 ### External API Model Selection
@@ -136,8 +136,8 @@ caught and let the 7B *recover* the same bug classes it catches on the 1.5B.
 In dev mode, external models are auto-discovered and listed in the dropdown:
 
 1. Select a model from the **External APIs** section (e.g., Claude, OpenAI, Ollama)
-2. Click **Load AI** — the editor checks health instead of downloading weights
-3. Type a prompt and send — it routes through the selected external API
+2. Click **Load AI** -- the editor checks health instead of downloading weights
+3. Type a prompt and send -- it routes through the selected external API
 
 No keys are exposed; all API communication stays server-side. See [Dev Mode](#dev-mode-external-apis) for setup details.
 
@@ -153,7 +153,7 @@ The shell is the **SHELL tab** in the right sidebar (toggle with **View → JS S
 | `Shift+Enter` | New line |
 | `↑` / `↓` | Command history |
 | AI input + `Enter` | Generate and run code |
-| AI input `? question` | Ask about the scene — plain-text answer, no code |
+| AI input `? question` | Ask about the scene -- plain-text answer, no code |
 
 ### Core globals
 
@@ -202,7 +202,7 @@ getSize(obj)               // → {x,y,z} bounding box dimensions (geometry × s
 getTopY(obj)               // → world Y of the top face
 getCenter(obj)             // → world-space bounding box centre
 placeOnTop(child, target)  // sets child.position.y to rest on top of target
-lineFromPoints(pts, color) // → a Line through pts (Vector3[] or [x,y,z][]) — nets/wires/paths,
+lineFromPoints(pts, color) // → a Line through pts (Vector3[] or [x,y,z][]) -- nets/wires/paths,
                            //   hides the BufferGeometry/LineBasicMaterial plumbing
 ```
 
@@ -215,23 +215,23 @@ listCandidates('the two wheels at the back')          // → ranked candidates
 resolvePartAI('the flat panel on top')                // async: rule match + LLM disambiguation
 ```
 
-Deterministic geometry + color + symmetry descriptors are derived on import; ambiguous queries fall back to the already-loaded LLM reasoning over a compact descriptor table — **no vision model**. See [Scene intelligence](#scene-intelligence).
+Deterministic geometry + color + symmetry descriptors are derived on import; ambiguous queries fall back to the already-loaded LLM reasoning over a compact descriptor table -- **no vision model**. See [Scene intelligence](#scene-intelligence).
 
-### Part editing — selectors + ops
+### Part editing -- selectors + ops
 
-A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the **preferred way to edit imported parts** — `$$(selector)` returns a chainable set whose methods are 3D ops, each compiling to `editor.execute(new Command())` (undoable, versioned, guarded).
+A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the **preferred way to edit imported parts** -- `$$(selector)` returns a chainable set whose methods are 3D ops, each compiling to `editor.execute(new Command())` (undoable, versioned, guarded).
 
 ```js
 listSelectors()                     // the REAL addressable parts in THIS scene, with counts:
                                     //   .rims(×4)  .grille  #dump-bed  .red(×3)  .front …
-$$('.rims').recolor('#111')         // recolor 4 wheels — command-backed, guarded
+$$('.rims').recolor('#111')         // recolor 4 wheels -- command-backed, guarded
 $$('.wheel.front').spin('y', 1, 2)  // compound selector + animation op (winding-safe clip)
 $$('#dump-bed').scale(1.2)          // edit a single labelled part by id
 op({ type:'recolor', selector:'.rims', color:'red' })   // explicit op-JSON (same thing)
 ops([ {…}, {…} ])                   // several ops in one undoable batch (multi-op)
 ```
 
-**Selector grammar** (deterministic match, no model at match time): `#id` (semantic label) · `.class` · `type` (`mesh`/`group`/`light`) · `.a.b` (compound AND) · `A B` (descendant) · `A > B` (child) · `*`. Classes are **auto-derived on import** from descriptors — facts like `.front .left .red .elongated .pair-left`, plus material names (`Rims` → `.rims`) — and the optional [labeling pass](#scene-intelligence) adds semantic `#labels`/`.classes` (`wheel`, `dump-bed`).
+**Selector grammar** (deterministic match, no model at match time): `#id` (semantic label) · `.class` · `type` (`mesh`/`group`/`light`) · `.a.b` (compound AND) · `A B` (descendant) · `A > B` (child) · `*`. Classes are **auto-derived on import** from descriptors -- facts like `.front .left .red .elongated .pair-left`, plus material names (`Rims` → `.rims`) -- and the optional [labeling pass](#scene-intelligence) adds semantic `#labels`/`.classes` (`wheel`, `dump-bed`).
 
 **Closed op set** (the human sugar; each is also an op-JSON `type`):
 
@@ -242,7 +242,7 @@ spin(axis?,turns?,dur?)  bounce()  pulse()  fade()  orbit()  shake()   // → ke
 op({ type:'raw', selector, code })   // escape hatch: raw JS as one op (loop-protected)
 ```
 
-**Host-enforced guards** (the model expresses intent; the host enforces correctness): clone-on-write for shared materials (no bleed), texture-tint warning (`recolor` on a textured part tints — use `setMaterial` for solid), merged-mesh graceful-fail, ground/clamp, and a **"subset named but all changed" flag** — a part selector that resolves to *every* mesh is surfaced as a likely wrong resolution, never a silent ✓.
+**Host-enforced guards** (the model expresses intent; the host enforces correctness): clone-on-write for shared materials (no bleed), texture-tint warning (`recolor` on a textured part tints -- use `setMaterial` for solid), merged-mesh graceful-fail, ground/clamp, and a **"subset named but all changed" flag** -- a part selector that resolves to *every* mesh is surfaced as a likely wrong resolution, never a silent ✓.
 
 ### Modeling ops (undoable, AI-callable)
 
@@ -322,7 +322,7 @@ await fetchAPI('https://api.example.com/save', {
 });
 ```
 
-> **Sovereignty note.** `fetchAPI` is the one helper that leaves the device — the request
+> **Sovereignty note.** `fetchAPI` is the one helper that leaves the device -- the request
 > hits the network and the target must allow CORS. Everything else (inference, scene state,
 > intelligence) stays on-device. Keep API keys in a variable you control; don't hard-code
 > secrets into saved scenes (they'd be committed via Git).
@@ -331,7 +331,7 @@ await fetchAPI('https://api.example.com/save', {
 
 ## Dev Mode: External APIs
 
-**Dev mode enables optional integration with Ollama, OpenAI, and Anthropic Claude** — keeping the editor sovereign by default (browser-only) while allowing developers to use more powerful models when needed.
+**Dev mode enables optional integration with Ollama, OpenAI, and Anthropic Claude** -- keeping the editor sovereign by default (browser-only) while allowing developers to use more powerful models when needed.
 
 ### Setup
 
@@ -354,9 +354,9 @@ ollama serve
 ### Security
 
 - **API keys stay server-side only.** Never sent to the browser or logged.
-- **Request validation** — content-type check, request size limits, model validation
-- **Response sanitization** — generic error messages, no service internals exposed
-- **No caching** — API responses never cached; sensitive endpoints not exposed
+- **Request validation** -- content-type check, request size limits, model validation
+- **Response sanitization** -- generic error messages, no service internals exposed
+- **No caching** -- API responses never cached; sensitive endpoints not exposed
 
 Full security details in [DEV_MODE_API.md](DEV_MODE_API.md).
 
@@ -376,8 +376,8 @@ claude-3-5-sonnet      (Claude)
 ### Using External Models
 
 1. **Select** a model from the dropdown
-2. **Click "Load AI"** — editor checks if the service is healthy
-3. **Type a prompt** and send — routed to the selected model
+2. **Click "Load AI"** -- editor checks if the service is healthy
+3. **Type a prompt** and send -- routed to the selected model
 4. **Response appears** in the output panel
 
 All code execution still goes through the same command pattern (undoable).
@@ -427,7 +427,7 @@ The **Animations** tab (right sidebar) is a full keyframe editor layered on `THR
 
 ### AI-authored clips
 
-The AI agent can author clips from natural language — "make the box bounce", "spin the wheel 360°
+The AI agent can author clips from natural language -- "make the box bounce", "spin the wheel 360°
 over 2 seconds", "fade it out". It builds real `KeyframeTrack`s and registers them with the
 `addClip(object, clip)` helper, which drops the clip into the Animations tab ready to play:
 
@@ -445,22 +445,22 @@ addClip(o, new AnimationClip('Bounce', -1, [track]));
 The animation classes are in scope and on the validator allow-list, so generated clips pass the
 same hallucination/arity lint as any other code. Position/scale use `VectorKeyframeTrack` (3 floats
 per key), rotation uses `QuaternionKeyframeTrack` (4 floats, built from `Quaternion.setFromEuler`).
-The agent authors **clips only** — runtime `requestAnimationFrame` loops remain out of scope.
+The agent authors **clips only** -- runtime `requestAnimationFrame` loops remain out of scope.
 
 ---
 
 ## Scene intelligence
 
-Resolves natural-language part references against imported GLBs whose nodes are named `Object_12, Object_44, …` — using **only deterministic math, the existing renderer, and the already-loaded code LLM. No new model download.**
+Resolves natural-language part references against imported GLBs whose nodes are named `Object_12, Object_44, …` -- using **only deterministic math, the existing renderer, and the already-loaded code LLM. No new model download.**
 
 **Per-node descriptors** (`userData.descriptors`, derived on import):
-- **Region** — left/right/top/bottom/front/back within the parent bounding box.
-- **Shape** — elongated / flat / blocky / thin (from sorted bbox dims → limb vs panel vs block).
-- **Symmetry pairs** — reflect a sibling's centroid across the parent plane; matches tag left/right (the high-value primitive for arms/legs/wheels).
-- **Color** — sampled from the **texture** (16×16 offscreen render → dominant HSV bin → color name), because `baseColorFactor` is usually white on real GLBs. Pure pixel math, reuses the renderer.
+- **Region** -- left/right/top/bottom/front/back within the parent bounding box.
+- **Shape** -- elongated / flat / blocky / thin (from sorted bbox dims → limb vs panel vs block).
+- **Symmetry pairs** -- reflect a sibling's centroid across the parent plane; matches tag left/right (the high-value primitive for arms/legs/wheels).
+- **Color** -- sampled from the **texture** (16×16 offscreen render → dominant HSV bin → color name), because `baseColorFactor` is usually white on real GLBs. Pure pixel math, reuses the renderer.
 - Size rank, orientation, adjacency, hierarchy role.
 
-**Resolution** is cheap-first: a deterministic rule match (free, offline) handles most queries; ambiguous ones build a compact, pre-filtered descriptor table and ask the loaded LLM to disambiguate. Never silently wrong — returns confidence and ranked candidates, and detects single merged-mesh GLBs (no per-part nodes) and says so.
+**Resolution** is cheap-first: a deterministic rule match (free, offline) handles most queries; ambiguous ones build a compact, pre-filtered descriptor table and ask the loaded LLM to disambiguate. Never silently wrong -- returns confidence and ranked candidates, and detects single merged-mesh GLBs (no per-part nodes) and says so.
 
 The AI scene context is enriched with compact `desc(region,shape,color,pair)` tags so the main code-gen model can map "right arm of the red person" → node by reasoning, with zero extra inference.
 
@@ -468,27 +468,27 @@ The AI scene context is enriched with compact `desc(region,shape,color,pair)` ta
 
 ## Reliable AI assist (the agentic loop)
 
-Instead of "generate code and hope," every AI request runs a bounded, self-correcting loop — all on-device, no extra models:
+Instead of "generate code and hope," every AI request runs a bounded, self-correcting loop -- all on-device, no extra models:
 
 ```
 generate → validate → execute → observe → fix   (max 3 retries, every action on the undo stack)
 ```
 
-1. **Retrieve real APIs.** A local index of the actual command/op/material/geometry signatures (rebuilt at load, so it never goes stale) is searched by intent and injected *before* generation — the model sees the real `AddObjectCommand(editor, object)` and the real `metalness` key instead of guessing.
-2. **Validate.** Generated code is statically linted against that index *before* running — invented classes (`Tree3D`), wrong command arity (a stray position arg), bad material keys (`metal:1`), undefined helper calls (`backWall()`), `.add()` on a Material/Geometry, duplicate-`const` redeclaration, `scene.add()` bypass, and constructed-but-never-added objects are all caught and fed back as **actionable** corrections (the fix, not the raw symptom). Identical re-tries stop early instead of looping.
+1. **Retrieve real APIs.** A local index of the actual command/op/material/geometry signatures (rebuilt at load, so it never goes stale) is searched by intent and injected *before* generation -- the model sees the real `AddObjectCommand(editor, object)` and the real `metalness` key instead of guessing.
+2. **Validate.** Generated code is statically linted against that index *before* running -- invented classes (`Tree3D`), wrong command arity (a stray position arg), bad material keys (`metal:1`), undefined helper calls (`backWall()`), `.add()` on a Material/Geometry, duplicate-`const` redeclaration, `scene.add()` bypass, and constructed-but-never-added objects are all caught and fed back as **actionable** corrections (the fix, not the raw symptom). Identical re-tries stop early instead of looping.
 3. **Execute** through the single shell surface (`editor.execute` → undo stack).
-4. **Observe.** The scene is snapshotted before/after and diffed (added / removed / moved / scaled / recolored). The loop reports `✓ 1 recolored` — or, if a change was expected and *nothing* happened (usually a missed lookup), feeds that back for one corrective retry.
+4. **Observe.** The scene is snapshotted before/after and diffed (added / removed / moved / scaled / recolored). The loop reports `✓ 1 recolored` -- or, if a change was expected and *nothing* happened (usually a missed lookup), feeds that back for one corrective retry.
 5. **Bounded & reversible.** Retries are hard-capped; every autonomous action is undoable; ambiguous/destructive ops surface candidates rather than guess.
 
-**Scene grounding without a vision model.** Beyond the scene graph and descriptors, GPU color-picking renders each object in a unique ID color offscreen and reads pixels — giving `whatsVisible()` (what's on screen, by area) and `whatsAt(x, y)` (what's under a point). Deterministic, reuses the existing renderer, no download.
+**Scene grounding without a vision model.** Beyond the scene graph and descriptors, GPU color-picking renders each object in a unique ID color offscreen and reads pixels -- giving `whatsVisible()` (what's on screen, by area) and `whatsAt(x, y)` (what's under a point). Deterministic, reuses the existing renderer, no download.
 
-The net effect: real APIs (no hallucination), the right object (grounding), and a verified result (observation) — entirely on-device.
+The net effect: real APIs (no hallucination), the right object (grounding), and a verified result (observation) -- entirely on-device.
 
 ---
 
 ## AI scene context
 
-Every request gets a compact JS-comment scene description — the format a code model reads most naturally:
+Every request gets a compact JS-comment scene description -- the format a code model reads most naturally:
 
 ```
 // [selected] "Body" Mesh BoxGeometry(0.6,1.8,0.5) mat:"Red Paint" size(0.6,1.8,0.5) color:#cc2200(red) at(0,0.9,0) desc(blocky,red)
@@ -503,7 +503,7 @@ Each line includes: object name (glTF `_0XX_` escapes **decoded**), **material n
 
 ## Git integration
 
-Open the **Git** menu to configure a repository and sync scenes. All calls use `fetch()` directly — no Octokit.
+Open the **Git** menu to configure a repository and sync scenes. All calls use `fetch()` directly -- no Octokit.
 
 | Action | Behaviour |
 |--------|-----------|
@@ -519,7 +519,7 @@ Content is fetched with the GitHub **raw** media type (handles files >1 MB, deco
 
 `Git → Compare with Remote` diffs your scene against the repo's and opens a split-screen review: **left = local, right = remote**, one shared orbit camera. Objects are tinted 🟢 added · 🔴 removed · 🟠 modified. A per-conflict list lets you choose local/remote/both per object (or **Accept All**), **🤖 AI Suggest** proposes resolutions, and **Apply Merge** rebuilds the scene from your choices.
 
-> **Token storage & scope.** The access token lives in `localStorage` (`git-settings`) — readable by same-origin scripts, so treat it like a password. **Prefer a fine-grained, repo-specific PAT** (Settings → Developer settings → Fine-grained tokens) scoped to the one repo with **Contents: Read and write** only. A classic `repo`-scope token grants write access to every repository in your account — avoid it here.
+> **Token storage & scope.** The access token lives in `localStorage` (`git-settings`) -- readable by same-origin scripts, so treat it like a password. **Prefer a fine-grained, repo-specific PAT** (Settings → Developer settings → Fine-grained tokens) scoped to the one repo with **Contents: Read and write** only. A classic `repo`-scope token grants write access to every repository in your account -- avoid it here.
 
 ---
 
@@ -532,7 +532,7 @@ Two-form, lossless, git-diffable.
 | 1 | JS → Scene | Shell `execute()` |
 | 2 | Scene → JSON | `scene.toJSON()` |
 | 3 | JSON → Scene | `ObjectLoader.parse()` |
-| 4 | Scene → JS | `codegen.js` — `objectToJS()` / `sceneToJS()` (recipe-aware) |
+| 4 | Scene → JS | `codegen.js` -- `objectToJS()` / `sceneToJS()` (recipe-aware) |
 
 **Round-trip test (in-shell):**
 ```js
@@ -546,61 +546,61 @@ sceneEqual(snap, editor.scene.toJSON())   // { equal:true, differences:[] }
 ## Architecture
 
 ```
-server.js              — Static file server + API proxy (dev mode)
-  /api/models          — List WebLLM + external models (Ollama, OpenAI, Claude)
-  /api/chat            — Proxy requests to external LLMs
-  /api/health          — Check service availability
+server.js              -- Static file server + API proxy (dev mode)
+  /api/models          -- List WebLLM + external models (Ollama, OpenAI, Claude)
+  /api/chat            -- Proxy requests to external LLMs
+  /api/health          -- Check service availability
 
 docs/editor/js/
-  AIEngine.js          — WebLLM wrapper: init() (8192-window override+fallback), stream(), complete(), interrupt()
-  AIPrompt.js          — SYSTEM_PROMPT, buildSystemPrompt(), SCENE_QA_PROMPT, model registry, few-shot examples
-  AIUtils.js           — extractCode() (fenced-only, prose never runs), buildMessages() (injects the EDIT OPS
+  AIEngine.js          -- WebLLM wrapper: init() (8192-window override+fallback), stream(), complete(), interrupt()
+  AIPrompt.js          -- SYSTEM_PROMPT, buildSystemPrompt(), SCENE_QA_PROMPT, model registry, few-shot examples
+  AIUtils.js           -- extractCode() (fenced-only, prose never runs), buildMessages() (injects the EDIT OPS
                           reference + this scene's real selectors only when there are parts to edit), token helpers
-  Shell.js             — REPL UI + single execute() surface; Stop-AI; evalAI(); instantiates the controllers
+  Shell.js             -- REPL UI + single execute() surface; Stop-AI; evalAI(); instantiates the controllers
                           External model discovery, askExternal(), getAvailableModels()
   ai/
-    apiIndex.js        — local RAG: curated command/op signatures + full three.js API (tern typedefs)
-    threejsApi.js      — AUTO-GENERATED three.js API index (scripts/genThreeApi.cjs)
-    validate.js        — static lint (hallucination / arity / undefined-call / dup-const / shared-material …)
-    agentLoop.js       — generate→validate→execute→observe→fix; error translation; intent-preserving retries
-    eval.js            — standing eval set + 4-axis rubric + overfit canaries + routing heuristic
-  Animation.js         — Animations sidebar tab: keyframe authoring (create/key/interpolate/play, channels, snap) + AI addClip target
-  Menubar.Git.js       — Git settings/load/commit, auto-load, raw fetch, diff messages
-  SceneDiff.js         — semantic scene diff (added/removed/modified)
-  MergeViewport.js     — split-screen conflict review + resolution
+    apiIndex.js        -- local RAG: curated command/op signatures + full three.js API (tern typedefs)
+    threejsApi.js      -- AUTO-GENERATED three.js API index (scripts/genThreeApi.cjs)
+    validate.js        -- static lint (hallucination / arity / undefined-call / dup-const / shared-material …)
+    agentLoop.js       -- generate→validate→execute→observe→fix; error translation; intent-preserving retries
+    eval.js            -- standing eval set + 4-axis rubric + overfit canaries + routing heuristic
+  Animation.js         -- Animations sidebar tab: keyframe authoring (create/key/interpolate/play, channels, snap) + AI addClip target
+  Menubar.Git.js       -- Git settings/load/commit, auto-load, raw fetch, diff messages
+  SceneDiff.js         -- semantic scene diff (added/removed/modified)
+  MergeViewport.js     -- split-screen conflict review + resolution
   scene/
-    summarize.js       — sceneContextString(), spatial helpers, glTF name decode, material labels
+    summarize.js       -- sceneContextString(), spatial helpers, glTF name decode, material labels
     serialize.js  codegen.js  geometryParams.js  materialProps.js  sceneEqual.js
   mesh/
-    EditableMesh.js        — half-edge structure, from/to BufferGeometry
-    Selection.js           — vertex/edge/face selection sets
-    EditModeController.js   — enter/exit, overlay, picking, recipe recording
+    EditableMesh.js        -- half-edge structure, from/to BufferGeometry
+    Selection.js           -- vertex/edge/face selection sets
+    EditModeController.js   -- enter/exit, overlay, picking, recipe recording
     ops/
       index.js  boolean.js  mirror.js  array.js  subdivide.js
       extrude.js  inset.js  bevel.js  delete.js  weld.js  uv.js
   intelligence/
-    descriptors.js     — Layer 1+2 geometry/color descriptors (texture pixel sampling)
-    symmetry.js        — left/right symmetry-pair detection
-    colorName.js       — HSV-bin → human color name
-    resolver.js        — Path A rule match + Path B LLM disambiguation
-    sceneIndex.js      — findByDescription / describeObject / listCandidates + controller
-    classDerive.js     — descriptors → CSS-like auto-classes (.front/.red/.rims…); label-as-class match
-    selectorEngine.js  — CSS-subset parser + deterministic matcher over the scene graph
-    editOps.js         — structured edit ops (recolor/scale/move/…) → guarded commands
-    opPrimitive.js     — op-JSON contract + op()/ops()/$$ dispatcher; subset-sanity guard
-    animationRecipes.js— spin/bounce/pulse/… → winding-safe keyframe clips (command-backed)
-    vocabInjection.js  — current-scene selectors + op schema for the model prompt
+    descriptors.js     -- Layer 1+2 geometry/color descriptors (texture pixel sampling)
+    symmetry.js        -- left/right symmetry-pair detection
+    colorName.js       -- HSV-bin → human color name
+    resolver.js        -- Path A rule match + Path B LLM disambiguation
+    sceneIndex.js      -- findByDescription / describeObject / listCandidates + controller
+    classDerive.js     -- descriptors → CSS-like auto-classes (.front/.red/.rims…); label-as-class match
+    selectorEngine.js  -- CSS-subset parser + deterministic matcher over the scene graph
+    editOps.js         -- structured edit ops (recolor/scale/move/…) → guarded commands
+    opPrimitive.js     -- op-JSON contract + op()/ops()/$$ dispatcher; subset-sanity guard
+    animationRecipes.js-- spin/bounce/pulse/… → winding-safe keyframe clips (command-backed)
+    vocabInjection.js  -- current-scene selectors + op schema for the model prompt
   commands/
-    AddAnimationClipCommand.js — register an AnimationClip on the undo stack (recipe ops)
+    AddAnimationClipCommand.js -- register an AnimationClip on the undo stack (recipe ops)
 ```
 
 ### Design principles
 
-- **Deterministic shell, small fuzzy core.** 3D editing decomposes into a deterministic shell (selector matching, command execution, undo, versioning, normalization, guards) and **5 fuzzy tasks** the model handles: op-type selection, selector resolution, argument extraction, labeling, multi-op decomposition. Everything else is host code — if a feature seems to need the model to reason more, decompose it instead of expanding the model's job.
+- **Deterministic shell, small fuzzy core.** 3D editing decomposes into a deterministic shell (selector matching, command execution, undo, versioning, normalization, guards) and **5 fuzzy tasks** the model handles: op-type selection, selector resolution, argument extraction, labeling, multi-op decomposition. Everything else is host code -- if a feature seems to need the model to reason more, decompose it instead of expanding the model's job.
 - **Model expresses intent; host enforces correctness.** The model emits a selector + op; guards (clone-on-write, texture-tint, merged-mesh, ground/clamp, subset-sanity) and arg-normalization (`"black"`→`#111`) are host-side, so the model never has to remember them.
 - **Resolution is deterministic.** Selectors match over verified labels + auto-classes; the model only translates fuzzy language → a selector. Once labeled, resolution needs no model.
 - **One execution surface.** AI and human code run through the same `execute()` binding.
-- **Sovereignty is the product.** Inference is 100 % on-device — ironclad.
+- **Sovereignty is the product.** Inference is 100 % on-device -- ironclad.
 - **No new model.** Scene intelligence uses deterministic math + the renderer + the already-loaded code LLM only.
 - **No build step.** Plain ES modules. No bundler.
 - **Everything reversible.** All mutations go through `editor.execute(new Command(…))`.
@@ -632,10 +632,10 @@ docs/editor/js/
 ✅  Dev mode: Optional external APIs (Ollama, OpenAI, Claude) · dropdown model selection · askExternal() REPL function
 ✅  Keyframe animation: Animations-tab authoring (create/key/interpolate/play) + AI clip authoring (addClip, track-name convention, eval tier)
 ✅  Selector-based editing: CSS-subset selector engine + auto-classes · op-JSON contract (op/ops/$$ + named sugar) · host guards · command-backed animation recipes · op vocab + live selectors fed to the model
-⬜  Eval matrix: 5 fuzzy tasks × model size × scaffolding (+ Haiku ceiling) — the size-decision gate and zero-training evidence
+⬜  Eval matrix: 5 fuzzy tasks × model size × scaffolding (+ Haiku ceiling) -- the size-decision gate and zero-training evidence
 ⬜  M7: glTF / OBJ import helpers + recipe-aware export
 ⬜  M8: Advanced texture/UV tools, material property setters, texture baking
-⬜  Optional vision layer (precise nouns, OCR) — separate spec, needs a model
+⬜  Optional vision layer (precise nouns, OCR) -- separate spec, needs a model
 ⬜  PWA / WebXR / Electron packaging
 ⬜  Streaming responses for better UX
 ⬜  Integration tests for external models
