@@ -70,20 +70,60 @@ function Sidebar( editor ) {
 	const animation = new Animation( editor );
 	const shell = new Shell( editor );
 
-	// Helper: addTab then inject icon+label into the tab's innerHTML
+	// Helper: addTab then inject icon+label into the tab's innerHTML. Returns the tab.
 	function addIconTab( id, label, content ) {
 
 		container.addTab( id, label, content );
 		const tab = container.tabs[ container.tabs.length - 1 ];
 		const icon = TAB_ICONS[ id ] || '';
 		tab.dom.innerHTML = `<span class="tab-icon">${ icon }</span><span class="tab-label">${ label }</span>`;
+		return tab;
+
+	}
+
+	// Live AI-status dot on the Shell tab: red = no AI, green = AI ready. The tab's
+	// hover tooltip carries the detail (which model, where it runs, context window).
+	// Polls editor.aiEngine so it tracks load/unload without extra signals.
+	function attachAiStatusDot( tab ) {
+
+		const dot = document.createElement( 'span' );
+		dot.className = 'ai-status-dot';
+		dot.style.cssText = 'display:block;width:8px;height:8px;border-radius:50%;margin-left:50px;vertical-align:middle;position:absolute;margin-top:-40px;';
+		tab.dom.appendChild( dot );
+
+		function refresh() {
+
+			const e = editor.aiEngine;
+			const ready = !! ( e && e.ready );
+			const id = ready && e.modelId ? e.modelId : null;
+			const external = id ? /^(ollama:|gpt-|claude-)/.test( id ) : false;
+
+			dot.style.background = ready ? '#2ecc71' : '#c0392b';
+			dot.style.boxShadow = `0 0 5px ${ ready ? '#2ecc71' : '#c0392b' }`;
+
+			if ( ready ) {
+
+				const where = external ? 'External API (dev server)' : 'On-device (WebLLM, WebGPU)';
+				const cw = e.contextWindow ? `\nContext: ${ e.contextWindow } tokens` : '';
+				tab.dom.title = `AI ready\nModel: ${ id || 'unknown' }\n${ where }${ cw }`;
+
+			} else {
+
+				tab.dom.title = 'no AI\nOpen the Shell tab and click "Load AI".';
+
+			}
+
+		}
+
+		refresh();
+		setInterval( refresh, 1500 );
 
 	}
 
 	addIconTab( 'scene', strings.getKey( 'sidebar/scene' ), scene );
 	addIconTab( 'git', strings.getKey( 'menubar/git' ), git );
 	// Tab id 'shelltab' must NOT collide with the Shell container's own id 'shell'.
-	addIconTab( 'shelltab', 'AI Shell', shell );
+	attachAiStatusDot( addIconTab( 'shelltab', 'Shell', shell ) );
 	// Tab id avoids 'animation' so the wrapper panel doesn't pick up the old #animation CSS.
 	addIconTab( 'animations', strings.getKey( 'sidebar/animations' ), animation );
 	addIconTab( 'stencils', 'Stencils', stencils );
