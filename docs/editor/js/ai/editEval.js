@@ -24,13 +24,18 @@
 
 export const SETUP_DUMPTRUCK = `(function(){
 	const g=new Group(); g.name='DumpTruck'; g.userData.imported=true;
+	g.userData.label='DumpTruck'; g.userData.customClasses=new Set(['truck','vehicle']); // whole-asset addressable (#dumptruck / .truck)
 	// classes mirror what classDerive produces on the REAL asset (material names →
 	// .rims/.grille, descriptors → .front/.left). Set directly so the selector
 	// engine resolves without the renderer-dependent descriptor harvest.
 	const mk=(name,label,matName,classes,w,h,d,x,y,z,color)=>{
 		const mat=new MeshStandardMaterial({color}); mat.name=matName;
 		const m=new Mesh(new BoxGeometry(w,h,d),mat);
-		m.name=name; m.userData.label=label; m.userData.classes=new Set(['mesh',...classes]);
+		// customClasses (not userData.classes): getAllClasses() — which feeds the
+		// ADDRESSABLE PARTS list the model is shown — reads customClasses but
+		// RE-DERIVES (ignores) a directly-set userData.classes. Using customClasses
+		// keeps the PRESENTED vocabulary consistent with what hasClass() resolves.
+		m.name=name; m.userData.label=label; m.userData.customClasses=new Set(classes);
 		m.position.set(x,y,z); g.add(m); return m;
 	};
 	mk('Object_03','Cab','Grille',['cab','grille','front','top'],1.2,1.2,1.4,0,1.0,1.6,0x2266cc);

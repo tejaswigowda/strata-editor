@@ -7,6 +7,10 @@ import { SetScaleCommand } from './commands/SetScaleCommand.js';
 import { SetMaterialColorCommand } from './commands/SetMaterialColorCommand.js';
 import { SetMaterialCommand } from './commands/SetMaterialCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
+import { SetLabelCommand } from './commands/SetLabelCommand.js';
+import { SetClassCommand } from './commands/SetClassCommand.js';
+import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
+import { createVerifyPanel } from './import/VerifyPanel.js';
 import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT, buildSystemPrompt } from './AIPrompt.js';
 import { extractCode, buildMessages, buildQAMessages, sceneContextString } from './AIUtils.js';
 import { AIEngine, getModelList } from './AIEngine.js';
@@ -357,7 +361,9 @@ function Shell( editor ) {
 	// Both human keystrokes and AI output call this function.
 	// Binding: new Function('__s__','__c__','with(__s__){return eval(__c__)}')(scope, code)
 
-	function execute( code ) {
+	function execute( code, opts = {} ) {
+
+		const quiet = opts.quiet === true; // eval fixtures run silently (no echo/history/result)
 
 		code = code.trim();
 		if ( ! code ) return;
@@ -371,12 +377,16 @@ function Shell( editor ) {
 
 		}
 
-		history.unshift( code );
-		if ( history.length > 500 ) history.pop();
-		historyIndex = - 1;
-		savedInput = '';
+		if ( ! quiet ) {
 
-		appendOutput( '> ' + code, 'cmd' );
+			history.unshift( code );
+			if ( history.length > 500 ) history.pop();
+			historyIndex = - 1;
+			savedInput = '';
+
+			appendOutput( '> ' + code, 'cmd' );
+
+		}
 
 		try {
 
@@ -717,6 +727,54 @@ function Shell( editor ) {
 
 				// relabelAsset(obj) — re-run the LLM labeling pass (Stage 4) on demand.
 				relabelAsset: ( obj ) => labelImportedAsset( editor, obj ?? editor.selected, { force: true } ),
+
+				// verifyImport(obj?) — open the Import+Verify panel (M7): symmetric
+				// families collapsed to one row ("Wheel ×4"), low-confidence first,
+				// Apply writes family labels in ONE undo. Also opens automatically
+				// after an asset is imported+labeled. Reflected in the next AI request.
+				verifyImport: ( obj ) => openVerifyPanel( obj ?? editor.selected, { resolve: true } ),
+
+				// ── User-curated labels/classes (verify-edit path) ────────────────────
+				// These write the fields BOTH the selector engine AND the injected
+				// ADDRESSABLE PARTS list read (userData.label / userData.customClasses),
+				// command-backed (undoable). Because the prompt recomputes per request,
+				// edits are reflected in the next AI request automatically.
+
+				// relabel(obj?, 'wheel') — rename a part's semantic label (→ #wheel).
+				relabel: ( obj, label ) => {
+
+					if ( label === undefined && typeof obj === 'string' ) { label = obj; obj = undefined; }
+					const node = obj ?? editor.selected;
+					if ( ! node ) { appendOutput( 'relabel: select or pass an object.', 'info' ); return null; }
+					if ( typeof label !== 'string' || ! label.trim() ) { appendOutput( 'relabel: pass a label string.', 'info' ); return null; }
+					editor.execute( new SetLabelCommand( editor, node, label.trim() ) );
+					appendOutput( `Labeled "${ node.name || node.uuid.slice( 0, 6 ) }" → "${ label.trim() }" (now addressable; reflected in the next AI request).`, 'result' );
+					return node;
+
+				},
+
+				// tagClass(obj?, 'wheel') / untagClass(obj?, 'wheel') — add/remove a
+				// semantic class (→ .wheel). obj defaults to the selection.
+				tagClass: ( obj, cls ) => {
+
+					if ( cls === undefined && typeof obj === 'string' ) { cls = obj; obj = undefined; }
+					const node = obj ?? editor.selected;
+					if ( ! node || typeof cls !== 'string' || ! cls.trim() ) { appendOutput( 'tagClass(obj?, "class")', 'info' ); return null; }
+					editor.execute( new SetClassCommand( editor, node, cls.trim(), true ) );
+					appendOutput( `Tagged "${ node.name || 'node' }" .${ cls.trim() }`, 'result' );
+					return node;
+
+				},
+				untagClass: ( obj, cls ) => {
+
+					if ( cls === undefined && typeof obj === 'string' ) { cls = obj; obj = undefined; }
+					const node = obj ?? editor.selected;
+					if ( ! node || typeof cls !== 'string' || ! cls.trim() ) { appendOutput( 'untagClass(obj?, "class")', 'info' ); return null; }
+					editor.execute( new SetClassCommand( editor, node, cls.trim(), false ) );
+					appendOutput( `Untagged "${ node.name || 'node' }" .${ cls.trim() }`, 'result' );
+					return node;
+
+				},
 
 				// ── Selector-based part addressing (CSS-like grammar over scene graph) ──
 				// Selectors: #id (unique label), .class, type, .a.b (compound),
@@ -1218,7 +1276,7 @@ function Shell( editor ) {
 			const __fn   = new Function( ...__keys, '__shell_src__', 'return eval(__shell_src__)' );
 			const result = __fn.call( null, ...__vals, code );
 
-			if ( result !== undefined ) {
+			if ( result !== undefined && ! quiet ) {
 
 				appendOutput( formatValue( result ), 'result' );
 
@@ -1226,7 +1284,7 @@ function Shell( editor ) {
 
 		} catch ( err ) {
 
-			appendOutput( err.toString(), 'error' );
+			if ( ! quiet ) appendOutput( err.toString(), 'error' );
 			return { ok: false, error: err.toString() };
 
 		}
@@ -1268,8 +1326,9 @@ function Shell( editor ) {
 		// REPL helpers accidentally typed into the AI box → route to the JS surface
 		// rather than asking the model to "build" the literal text (e.g. evalAI()).
 		if ( /^\s*evalAI\s*\(/.test( userPrompt ) ) { evalAI(); return; }
-		const mEvalEdit = userPrompt.match( /^\s*evalEditMatrix\s*\(\s*['"]?(\w+)?['"]?\s*\)/ );
-		if ( mEvalEdit ) { evalEditMatrix( mEvalEdit[ 1 ] || 'scaffolded' ); return; }
+		// Route the full evalEditMatrix(...) call through the JS surface so any args
+		// (condition, { debug:true }) work — it's in scope.
+		if ( /^\s*evalEditMatrix\s*\(/.test( userPrompt ) ) { execute( userPrompt ); return; }
 
 		if ( ! aiEngine.ready ) {
 
@@ -1450,51 +1509,106 @@ function Shell( editor ) {
 
 		}
 
-		const results = await runEval( {
-			prompts,
-			deps: {
-				generate,
-				clearScene: () => { editor.clear(); },
-				seed: ( code ) => { execute( code ); },
-				log: ( line ) => appendOutput( line, 'info' ),
-			},
-		} );
+		// Non-destructive: snapshot + restore so the eval never erases the user's
+		// scene (editor.clear() also wipes persistent storage).
+		const _snap = editor.toJSON();
+		let results;
+		try {
+
+			results = await runEval( {
+				prompts,
+				deps: {
+					generate,
+					clearScene: () => { editor.clear(); },
+					seed: ( code ) => { execute( code ); },
+					log: ( line ) => appendOutput( line, 'info' ),
+				},
+			} );
+
+		} finally {
+
+			try { editor.clear(); await editor.fromJSON( _snap ); editor.storage.set( editor.toJSON() ); }
+			catch ( e ) { appendOutput( `eval cleanup (scene restore) failed: ${ e.message }`, 'error' ); }
+
+		}
 
 		appendOutput( formatTable( results ), 'result' );
 		return results;
 
 	}
 
+	// ── Import + Verify UX (M7) ──────────────────────────────────────────────────
+	// Persistent (closure-level, not the per-execute scope) so it can be both the
+	// REPL command and the auto-open-after-import hook. One panel at a time.
+	let _verifyPanel = null;
+
+	function openVerifyPanel( root, opts = {} ) {
+
+		if ( opts.resolve || ! ( root && root.userData && root.userData.labelPass ) ) {
+
+			// Explicit arg → selection → the most recent labeled asset.
+			let r = root || editor.selected;
+			if ( ! r || ! r.userData || ! r.userData.labelPass ) {
+
+				let found = null;
+				editor.scene.traverse( n => { if ( n.userData && n.userData.labelPass ) found = n; } );
+				r = found || r;
+
+			}
+			root = r;
+
+		}
+		if ( ! root ) { appendOutput( 'verifyImport: import an asset first (or select one).', 'info' ); return null; }
+
+		if ( _verifyPanel ) _verifyPanel.close();
+		_verifyPanel = createVerifyPanel( root, {
+			mount: document.body,   // fixed overlay — stays visible across sidebar tab switches
+			log: ( m ) => appendOutput( m, 'result' ),
+			selectNodes: ( nodes ) => { if ( nodes && nodes[ 0 ] ) editor.select( nodes[ 0 ] ); },
+			onClose: () => { _verifyPanel = null; },
+			// One undoable batch across every renamed family (correction-propagation).
+			applyAll: ( assignments ) => {
+
+				const cmds = [];
+				for ( const { nodes, label } of assignments ) for ( const n of nodes ) cmds.push( new SetLabelCommand( editor, n, label ) );
+				if ( cmds.length ) editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+
+			},
+		} );
+		return _verifyPanel;
+
+	}
+
+	// The import pipeline calls this after Stage-4 labeling (low-coupling hook).
+	editor.onVerifyReady = ( root ) => openVerifyPanel( root );
+
 	// ── Eval matrix: the 5 fuzzy tasks × model × {bare, scaffolded} ──────────────
 	// Persistent across calls so loading each model / flipping condition builds up
 	// the matrix. REPL: evalEditMatrix('scaffolded')  then  evalEditMatrix('bare');
 	// load Haiku (dev mode) and run again for the ceiling column.
 	const _editMatrix = newMatrix();
+	let _matrixRunning = false;
 
-	async function evalEditMatrix( condition = 'scaffolded' ) {
+	async function evalEditMatrix( condition = 'scaffolded', opts = {} ) {
 
 		if ( ! aiEngine.ready ) { appendOutput( 'AI not loaded — click "Load AI" first.', 'error' ); return; }
+		if ( _matrixRunning ) { appendOutput( '⏳ eval matrix already running — let it finish (run conditions one at a time, awaited).', 'info' ); return; }
+		_matrixRunning = true;
+		const debug = opts.debug === true;
 		const model = aiEngine.modelId || 'unknown';
 		const injectParts = condition !== 'bare';
-		appendOutput( `Eval matrix: ${ model } / ${ condition } — running the 5 tasks…`, 'info' );
+		appendOutput( `Eval matrix: ${ model } / ${ condition } — measuring the 5 tasks (single-shot, quiet)…`, 'info' );
 
-		// runOnce — drive the real agentic loop, return the GENERATED code (parsed
-		// into ops to score op-type/selector/args/multi-op independently).
+		// runOnce — ONE quiet generation (no agentic loop, no retries, NO execution).
+		// We only need the model's first-shot CODE to parse the op it emitted; the
+		// selector resolves deterministically against the setup scene afterward.
 		async function runOnce( prompt ) {
 
 			const apiHints = retrieveForPrompt( prompt );
 			const systemPrompt = buildSystemPrompt( opsSchema() );
 			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts } );
-			let lastCode = '';
-			const streamCode = async ( msgs ) => { lastCode = await streamToOutput( msgs ); return lastCode; };
-			const res = await runAgentic( {
-				editor, messages, intent: prompt, maxRetries: 3, tokenBudget: aiTokenBudget(),
-				deps: { streamCode, execute, appendOutput, validateCode, snapshotScene, sceneDiff,
-					confirmChange, diffSummary, inspectScene,
-					historyLen: () => editor.history.undos.length,
-					rollbackTo: ( len ) => { while ( editor.history.undos.length > len ) editor.history.undo(); } },
-			} );
-			return { code: lastCode, execOk: !! ( res && res.ok ), text: ( res && res.text ) || '' };
+			const raw = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0 } );
+			return { code: extractCode( raw ) };
 
 		}
 
@@ -1513,15 +1627,45 @@ function Shell( editor ) {
 
 		}
 
-		const taskScores = await runEditMatrix( {
-			clearScene: () => { editor.clear(); },
-			runSetup: ( code ) => { execute( code ); },
-			runOnce,
-			resolveSelector: ( sel ) => new Set( selectorEngine.query( editor.scene, sel ).map( n => n.name ).filter( Boolean ) ),
-			colorBase: editColorBase,
-			normalizeColor: ( c ) => { try { return new window.THREE.Color( c ).getHex(); } catch { return null; } },
-			labelOnce,
-		} );
+		// NON-DESTRUCTIVE: the eval clears the scene (and editor.clear() also wipes
+		// persistent storage) per case, so snapshot the user's scene first and
+		// restore + re-persist it after — running an eval must never erase your work.
+		const _sceneSnapshot = editor.toJSON();
+
+		let taskScores;
+		try {
+
+			taskScores = await runEditMatrix( {
+				clearScene: () => { editor.clear(); },
+				runSetup: ( code ) => { execute( code, { quiet: true } ); },   // fixtures run silently
+				runOnce,
+				resolveSelector: ( sel ) => new Set( selectorEngine.query( editor.scene, sel ).map( n => n.name ).filter( Boolean ) ),
+				colorBase: editColorBase,
+				normalizeColor: ( c ) => { try { return new window.THREE.Color( c ).getHex(); } catch { return null; } },
+				labelOnce,
+				onProgress: ( msg ) => { aiStatus.textContent = msg; },
+				onCase: debug ? ( d ) => {
+
+					const flags = `op:${ d.pass.op ? '✓' : '✗' } sel:${ d.pass.sel ? '✓' : '✗' } arg:${ d.pass.arg ? '✓' : '✗' } multi:${ d.pass.multi ? '✓' : '✗' }`;
+					appendOutput( `  [${ d.id }] "${ d.prompt }" → ${ d.emittedSel }   ${ flags }`, 'info' );
+					if ( ! d.pass.sel && d.reasons.sel && d.reasons.sel.length ) appendOutput( `      sel: ${ d.reasons.sel.join( '; ' ) }`, 'info' );
+
+				} : null,
+			} );
+
+		} finally {
+
+			_matrixRunning = false;
+			// Restore the user's scene and re-persist it (editor.clear() wiped storage).
+			try {
+
+				editor.clear();
+				await editor.fromJSON( _sceneSnapshot );
+				editor.storage.set( editor.toJSON() );
+
+			} catch ( e ) { appendOutput( `eval cleanup (scene restore) failed: ${ e.message }`, 'error' ); }
+
+		}
 
 		recordRun( _editMatrix, { model, condition, taskScores } );
 		const line = Object.entries( taskScores ).map( ( [ t, s ] ) => `${ t } ${ s.passed }/${ s.total }` ).join( '   ' );

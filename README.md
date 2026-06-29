@@ -7,7 +7,7 @@ A sovereign, AI-native 3D scene editor that builds, edits, and reasons about sce
 
 **No server. No API keys. No data leaves the device.**
 
-<img src='docs/demo.png'/>
+<img src='docs/demo.gif'/>
 
 ---
 

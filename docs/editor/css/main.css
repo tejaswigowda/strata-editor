@@ -1788,11 +1788,10 @@ body.sidebar-bottom #resizer:active::after {
 
 /* --- Menubar logo ----------------------------------------------------- */
 #menubar-logo {
-	display: inline-block;
+	display: block;
 	width: 28px;
 	height: 28px;
 	margin: 4px 12px 4px 8px;
-	vertical-align: middle;
 	pointer-events: auto;
 	flex-shrink: 0;
 	position: absolute;

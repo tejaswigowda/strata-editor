@@ -119,6 +119,12 @@ export async function runImportPipeline( editor, root, opts = {} ) {
 			if ( labels.labeled > 0 ) {
 
 				log( `↳ Labeled ${ labels.labeled }/${ labels.total } part(s) — you can now refer to them by description.` );
+				// Open the Import+Verify panel (M7) so only the SEMANTIC guesses are
+				// confirmed/corrected (facts are auto-assigned). Optional hook — the
+				// host (Shell) wires it; pipeline stays UI-agnostic.
+				if ( typeof editor.onVerifyReady === 'function' ) {
+					try { editor.onVerifyReady( root ); } catch { /* non-fatal */ }
+				}
 
 			} else if ( labels.skipped === 'no-llm' ) {
 

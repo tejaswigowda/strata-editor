@@ -378,7 +378,9 @@ export function formatMatrix( matrix, opts = {} ) {
 	// id so the caller needn't pass the exact string. Falls back to none.
 	const all = [ ...matrix.models ];
 	const ceiling = opts.ceiling || all.find( m => /haiku|claude|gpt-|sonnet|opus/i.test( m ) ) || null;
-	const models = all.filter( m => m !== ceiling );
+	// Rows = ALL models (so a single ceiling-only run still prints its row); the
+	// ceiling column repeats the ceiling's scaffolded score for comparison.
+	const models = all;
 	const tasks = TASK_ORDER.filter( t => matrix.tasks.has( t ) );
 	const cell = ( t, m, c ) => { const x = matrix.cells[ `${ t }|${ m }|${ c }` ]; return x ? `${ x.pct }%` : ' · '; };
 
@@ -386,14 +388,15 @@ export function formatMatrix( matrix, opts = {} ) {
 	lines.push( 'EVAL MATRIX — 5 tasks × model × {bare, scaffolded}   (ceiling: ' + ( ceiling || 'none yet' ) + ')' );
 	lines.push( 'task                  model        bare   scaffolded   ' + ( ceiling || '' ) );
 	lines.push( '─'.repeat( 64 ) );
+	const short = ( m ) => String( m ).replace( /-\d{6,}$/, '' ).slice( 0, 12 );
 	for ( const t of tasks ) {
 
 		for ( const m of models ) {
 
 			lines.push(
-				t.padEnd( 22 ) + String( m ).padEnd( 13 ) +
+				t.padEnd( 22 ) + short( m ).padEnd( 13 ) +
 				cell( t, m, 'bare' ).padEnd( 7 ) + cell( t, m, 'scaffolded' ).padEnd( 13 ) +
-				cell( t, ceiling, 'scaffolded' ) );
+				( ceiling ? cell( t, ceiling, 'scaffolded' ) : '' ) );
 
 		}
 		lines.push( '' );
@@ -424,35 +427,49 @@ export async function runEditMatrix( deps ) {
 	function p() { return { passed: 0, total: 0 }; }
 	const bump = ( t, ok ) => { taskTally[ t ].total ++; if ( ok ) taskTally[ t ].passed ++; };
 
-	// Tasks 1/2/3/5 — one generated edit per case, parsed and scored per task.
-	for ( const c of EDIT_TASK_CASES ) {
+	const progress = deps.onProgress || ( () => {} );
 
+	// Tasks 1/2/3/5 — ONE quiet generation per case (no agentic loop, no retries,
+	// no execution). The model's first-shot code is parsed into ops and each task
+	// scored independently; selectors resolve deterministically against the intact
+	// setup scene (so we never mutate it — a delete case still resolves correctly).
+	for ( let i = 0; i < EDIT_TASK_CASES.length; i ++ ) {
+
+		const c = EDIT_TASK_CASES[ i ];
 		await deps.clearScene();
 		await deps.runSetup( ASSET_SETUPS[ c.asset ] );
 
-		const out = await deps.runOnce( c.prompt );           // generates AND executes (mutates scene)
-		const emitted = parseEmittedOps( out && out.code || '' );
+		let emitted = [], code = '';
+		try { const out = await deps.runOnce( c.prompt ); code = out && out.code || ''; emitted = parseEmittedOps( code ); }
+		catch ( e ) { progress( `case ${ c.id }: generation error — ${ e.message }` ); }
 
-		// resolved-correct-node truth must come from the UNMUTATED asset (a delete
-		// case would otherwise resolve to nothing). Rebuild a fresh copy and resolve
-		// the model's emitted selectors against it.
-		await deps.clearScene();
-		await deps.runSetup( ASSET_SETUPS[ c.asset ] );
 		const resolvedSets = emitted.map( o => o.selector ? deps.resolveSelector( o.selector ) : new Set() );
-
 		const s = scoreMatrixCase( emitted, resolvedSets, c.expect, deps );
 		bump( 'op-selection', s.opType.pass );
 		bump( 'selector-resolution', s.selectorResolution.pass );
 		bump( 'arg-extraction', s.argExtraction.pass );
 		bump( 'multi-op', s.multiOp.pass );
+		progress( `edit ${ i + 1 }/${ EDIT_TASK_CASES.length } (${ c.id }): ${ emitted.length } op(s) emitted` );
+
+		// Per-case detail for debugging WHY a cell is low (emitted selector/op vs
+		// expected, pass/fail per task). Wired to the shell's debug flag.
+		if ( deps.onCase ) deps.onCase( {
+			id: c.id, prompt: c.prompt, code, emitted,
+			emittedSel: emitted.map( o => `${ o.op }(${ o.selector || '?' })` ).join( ' ' ) || '(no op — raw codegen?)',
+			pass: { op: s.opType.pass, sel: s.selectorResolution.pass, arg: s.argExtraction.pass, multi: s.multiOp.pass },
+			reasons: { op: s.opType.reasons, sel: s.selectorResolution.reasons },
+		} );
 
 	}
 
 	// Task 4 — labeling probe (descriptor row → label), split tracked by caller.
-	for ( const lc of LABELING_CASES ) {
+	for ( let i = 0; i < LABELING_CASES.length; i ++ ) {
 
-		const predicted = await deps.labelOnce( lc.desc );
+		const lc = LABELING_CASES[ i ];
+		let predicted = '';
+		try { predicted = await deps.labelOnce( lc.desc ); } catch ( e ) { progress( `label error — ${ e.message }` ); }
 		bump( 'labeling', scoreLabel( predicted, lc.gold ).pass );
+		progress( `label ${ i + 1 }/${ LABELING_CASES.length } (${ lc.kind }): "${ predicted }"` );
 
 	}
 
