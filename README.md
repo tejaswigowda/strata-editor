@@ -6,7 +6,6 @@ A sovereign, AI-native 3D scene editor that builds, edits, and reasons about sce
 
 <img src='docs/demo.gif'/>
 
----
 
 ## Quick start
 
