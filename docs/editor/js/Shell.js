@@ -35,6 +35,7 @@ import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
 import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
 import { colorBase as editColorBase } from './ai/editEval.js';
+import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog } from './ai/clientAPI.js';
 import { diagnoseImport, diagnosticMessages } from './import/diagnostics.js';
 import { labelImportedAsset } from './import/labelPass.js';
 import { executeRecipeOp } from './intelligence/animationRecipes.js';
@@ -151,6 +152,41 @@ function Shell( editor ) {
 
 	} )();
 
+	// ── Client-side external API models (browser → provider) ──────────────────
+	// Coexists with the DEV-mode server proxy above. Adds a separator + one option
+	// per configured client provider. Re-run after the config dialog saves so new
+	// providers appear without a page reload.
+	function refreshClientModels() {
+
+		[ ...modelSelect.options ].forEach( o => {
+
+			if ( o.dataset.source === 'client' || o.dataset.clientSep === '1' ) o.remove();
+
+		} );
+
+		const clientModels = listClientModels();
+		if ( clientModels.length === 0 ) return;
+
+		const sep = document.createElement( 'option' );
+		sep.disabled = true;
+		sep.dataset.clientSep = '1';
+		sep.textContent = '─── Client APIs (browser) ───';
+		modelSelect.appendChild( sep );
+
+		clientModels.forEach( m => {
+
+			const opt = document.createElement( 'option' );
+			opt.value = m.value;
+			opt.dataset.source = 'client';
+			opt.textContent = m.label;
+			modelSelect.appendChild( opt );
+
+		} );
+
+	}
+
+	refreshClientModels();
+
 	// Default to a preferred coder model if present in the list
 	const PREFERRED = [
 		'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',
@@ -173,6 +209,19 @@ function Shell( editor ) {
 	loadBtn.id = 'shell-load-btn';
 	loadBtn.textContent = 'Load AI';
 
+	// Configure a client-side external API (browser → provider). Opens a dialog to
+	// add OpenAI / Anthropic / Ollama / custom endpoints; saved ones appear in the
+	// model dropdown. This is independent of (and coexists with) the DEV proxy.
+	const configApiBtn = document.createElement( 'button' );
+	configApiBtn.id = 'shell-config-api-btn';
+	configApiBtn.textContent = '⚙ API';
+	configApiBtn.title = 'Configure a client-side external API (browser → provider). Coexists with the DEV-mode server proxy.';
+	configApiBtn.addEventListener( 'click', () => {
+
+		openClientAPIDialog( { onSaved: () => refreshClientModels() } );
+
+	} );
+
 	const stopBtn = document.createElement( 'button' );
 	stopBtn.id = 'shell-stop-btn';
 	stopBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true"><rect width="11" height="11" rx="1.5" fill="currentColor"/></svg>';
@@ -186,6 +235,7 @@ function Shell( editor ) {
 	header.appendChild( headerTitle );
 	header.appendChild( modelSelect );
 	header.appendChild( loadBtn );
+	header.appendChild( configApiBtn );
 	header.appendChild( stopBtn );
 	header.appendChild( aiStatus );
 	container.dom.appendChild( header );
@@ -1694,7 +1744,9 @@ function Shell( editor ) {
 		if ( aiEngine.ready || aiEngine.loading ) return;
 
 		const selectedModel = modelSelect.value;
-		const isExternal = [ 'ollama:', 'gpt-', 'claude-' ].some( prefix => selectedModel.startsWith( prefix ) );
+		const isClient = isClientModel( selectedModel );
+		const isServerExternal = ! isClient && [ 'ollama:', 'gpt-', 'claude-' ].some( prefix => selectedModel.startsWith( prefix ) );
+		const isExternal = isClient || isServerExternal;
 
 		loadBtn.disabled = true;
 		modelSelect.disabled = true;
@@ -1704,7 +1756,26 @@ function Shell( editor ) {
 
 		try {
 
-			if ( isExternal ) {
+			if ( isClient ) {
+
+				// Client-side external API: the browser calls the provider DIRECTLY
+				// (no server proxy). No health check — the first request surfaces any
+				// key/CORS error. Same unified streamFn contract as the server path.
+				const cfg = getClientConfig( selectedModel );
+				if ( ! cfg ) throw new Error( 'client API config not found — reconfigure it via ⚙ API' );
+				if ( ! cfg.model ) throw new Error( 'client API config has no model id' );
+
+				const { stream, interrupt } = makeClientEngine( cfg );
+				aiEngine.setExternalAPI( cfg.model, stream, interrupt );
+
+				aiStatus.textContent = 'ready';
+				loadBtn.textContent = '✓ AI';
+				aiInput.disabled = false;
+				aiInput.focus();
+				localStorage.setItem( 'shell-ai-model', selectedModel );
+				appendOutput( 'AI ready — model: ' + cfg.model + '  (client-side ' + cfg.provider + ' API, direct from browser)', 'info' );
+
+			} else if ( isServerExternal ) {
 
 				// External API: verify health and set up via aiEngine
 				const healthRes = await fetch( '/api/health' );

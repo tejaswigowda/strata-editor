@@ -1,10 +1,14 @@
-# Strata: Local-First AI for Editing and Versioning 3D Scenes
+# Strata — A CSS-like interface for editing and versioning 3D scenes
 
-A sovereign, AI-native 3D scene editor. It edits, composes, versions, and reasons about 3D scenes from natural language. Building (scaffolding) is supported where useful, but editing and versioning lead. Inference runs locally. Output executes through the integrated JS shell (command pattern, undo stack). Scenes version through git.
+**Address parts by selector, edit by op, version with git — drive it by hand or in natural language. Sovereign, browser-native, no build.**
 
-**The thesis:** 3D editing decomposes into a deterministic shell plus a small fuzzy core. A stock on-device model handles the core. No task-specific training is required.
+Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors, change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely **by hand, without any AI**.
 
-**Nothing leaves the device except by your explicit action** (git sync, `fetchAPI`). The editor is sovereign by default: local inference, on-device scene state.
+Because that interface is small, a stock on-device model can map natural language onto it — no task-specific training. AI is the natural-language layer *over* the interface, not the foundation; it debuts most vividly at **animation** ("make it bounce" → a real keyframe clip). Generation (blocking out a scene from a prompt) is kept as **scaffolding**, not the headline.
+
+> **The thesis (short).** 3D editing decomposes into a deterministic shell + **5 fuzzy tasks** (op-selection, selector-resolution, argument-extraction, labeling, multi-op) — so a stock on-device model suffices, with no task-specific training.
+
+**Sovereign by default.** Nothing leaves the device except by your explicit, user-initiated action (git sync, `fetchAPI`) — local inference, on-device scene state.
 
 <img src='docs/demo.gif'/>
 
@@ -76,6 +80,22 @@ Strata is the structure and design layer for 3D. You author and label the scene 
 | **Edit Mode** | Half-edge mesh editing: vertex, edge, and face selection, extrude, inset, bevel, delete, weld, UV projection. |
 | **No build step** | Serve `docs/` as-is. Plain ES modules, importmap, no bundler. |
 | **Generation (scaffolding)** | The model can block out structure from a prompt. This is the weaker, ceded task. It is kept as scaffolding, not the headline. |
+
+---
+
+## Where Strata sits
+
+Strata is the **authoring layer upstream of the ecosystem** — the place you *iterate*, not the place you ship. You build and edit fast (AI + WebGL, no render wait, every step versioned), then **hand off** the result to any renderer or engine.
+
+- **Author here.** Structure (scene graph) + design (selectors / ops, labels, keyframe clips), versioned in git.
+- **Hand off via glTF + labels.** Export to any renderer (Blender / Unreal / WebGPU → media) or any engine (three.js / Unity / Unreal → runtime), where **behavior attaches to the labels**.
+- Renderer- and engine-agnostic by design: Strata owns authoring; the downstream owns runtime and final pixels.
+
+**Handoff status (honest).** glTF export with animations works today (`Sidebar, Export, GLB/GLTF`). Full label-through-`extras` survival and the broader renderer-agnostic pipeline are **partial / roadmap**: string `userData.label`s ride along on the default `userData → extras` path, but auto-classes (stored as Sets) do not yet serialize, and the handoff is not yet tested end-to-end.
+
+**Three invariants (why Strata stays the authoring layer):** no runtime · no interaction · no render-wait-during-iteration. The moment a task needs one of those, it belongs downstream.
+
+**Who it's for.** People who use engines and renderers but find them *in the way* during fast iteration — Strata is the fast-iteration authoring layer that comes **before** the handoff.
 
 ---
 
@@ -409,6 +429,20 @@ Enable with `DEV=1 node server.js` to add current Ollama, OpenAI, and Claude mod
 
 External models appear in the dropdown below the WebLLM models. On load the engine requests an 8192-token context window (overriding the 4096 default). It falls back to 4096 if the compiled model rejects the larger window.
 
+### Client-side API models (no server)
+
+The dropdown also supports calling a provider **directly from the browser**, with no `server.js` proxy — useful on static hosting (e.g. GitHub Pages). This coexists with Dev Mode; use whichever you prefer.
+
+Click **⚙ API** in the shell header to open a 3-step wizard:
+
+1. **Choose provider** — OpenAI, Anthropic (Claude), Ollama (local), or a custom OpenAI-compatible endpoint. Adjust the base URL and set an optional label.
+2. **API key** — paste the key (optional for local Ollama).
+3. **Choose model** — the list is fetched live from the provider's `/models` endpoint, so you only pick model IDs the key can actually use. A `Custom…` option lets you type an ID if fetching is unavailable.
+
+Saved providers appear under a `─── Client APIs (browser) ───` separator in the model dropdown; select one and click **Load AI**.
+
+**Trade-off (less sovereign):** keys are stored in `localStorage` (readable by same-origin scripts, like the git token) and requests leave the device straight to the provider. On-device WebLLM remains the default. Providers must allow browser CORS — OpenAI and Ollama do; Anthropic requires the `anthropic-dangerous-direct-browser-access` header (sent automatically).
+
 ### The eval matrix (the editing gate, NOT yet run)
 
 This is the most important honesty note in this README. **The 5 fuzzy tasks are implemented but not yet measured.**
@@ -575,6 +609,7 @@ DONE
     host guards, command-backed animation recipes, op vocab + live selectors fed to the model
   Verify-edit primitives: relabel / tagClass / untagClass (command-backed), Import + Verify panel
   Eval matrix HARNESS: 5 tasks x model x {bare, scaffolded}, resolved-correct-node scoring
+  glTF / GLB / USDZ / OBJ export (GLTFExporter + optimized animations)
 
 NEXT (the gate)
   Run the eval matrix across model sizes + a Haiku ceiling. Make the size decision.
@@ -583,7 +618,8 @@ NEXT (the gate)
 THEN
   Constrained decoding (JSON-schema-restricted output) as a scaffolding lever for small models
   Import + Verify UX: in-viewport part highlight, lazy label-on-first-reference
-  Renderer-agnostic export (glTF + animation + labels via extras) to feed Blender / UE / any renderer
+  Renderer-agnostic export PIPELINE: label-through-extras survival + Blender / UE / any-renderer handoff
+    (glTF export + animations already work; auto-classes don't yet serialize, path untested end-to-end)
   Distributed WebGL render to 2D video (the iteration render pipeline)
   BVH import (skeletal motion as imported data) + blendshape / facemesh performance
   Capture-pipeline integration: body mocap + face record to Strata (sovereign capture -> author -> render)
