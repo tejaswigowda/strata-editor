@@ -437,7 +437,7 @@ Click **⚙ API** in the shell header to open a 3-step wizard:
 
 1. **Choose provider** — OpenAI, Anthropic (Claude), Ollama (local), or a custom OpenAI-compatible endpoint. Adjust the base URL and set an optional label.
 2. **API key** — paste the key (optional for local Ollama).
-3. **Choose model** — the list is fetched live from the provider's `/models` endpoint, so you only pick model IDs the key can actually use. A `Custom…` option lets you type an ID if fetching is unavailable.
+3. **Choose model** — the list is fetched live from the provider's `/models` endpoint, so you onay pick model IDs the key can actually use. A `Custom…` option lets you type an ID if fetching is unavailable.
 
 Saved providers appear under a `─── Client APIs (browser) ───` separator in the model dropdown; select one and click **Load AI**.
 
