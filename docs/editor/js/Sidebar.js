@@ -120,8 +120,51 @@ function Sidebar( editor ) {
 
 	}
 
+	// Live git-status dot on the Git tab: green = repo URL + access token are both
+	// configured (ready to load/commit/sync), red = not configured. The tooltip
+	// carries the detail. Polls localStorage so it tracks Settings edits live.
+	function attachGitStatusDot( tab ) {
+
+		const dot = document.createElement( 'span' );
+		dot.className = 'git-status-dot';
+		dot.style.cssText = 'display:block;width:8px;height:8px;border-radius:50%;margin-left:50px;vertical-align:middle;position:absolute;margin-top:-40px;';
+		tab.dom.appendChild( dot );
+
+		function refresh() {
+
+			let s = {};
+			try { s = JSON.parse( localStorage.getItem( 'git-settings' ) ) || {}; } catch ( e ) {}
+
+			const hasRepo = !! ( s.repoUrl && s.repoUrl.trim() );
+			const hasToken = !! ( s.pat && s.pat.trim() );
+			const ready = hasRepo && hasToken;
+
+			dot.style.background = ready ? '#2ecc71' : '#c0392b';
+			dot.style.boxShadow = `0 0 5px ${ ready ? '#2ecc71' : '#c0392b' }`;
+
+			if ( ready ) {
+
+				tab.dom.title = `Git configured\nRepo: ${ s.repoUrl }\nBranch: ${ s.branch || 'main' }\nToken: set (read/write)`;
+
+			} else if ( hasRepo ) {
+
+				tab.dom.title = `Git repo set, no access token\nRepo: ${ s.repoUrl }\nOpen the Git tab and add a token to enable commit/sync.`;
+
+			} else {
+
+				tab.dom.title = 'Git not configured\nOpen the Git tab and set a repository URL + token.';
+
+			}
+
+		}
+
+		refresh();
+		setInterval( refresh, 1500 );
+
+	}
+
 	addIconTab( 'scene', strings.getKey( 'sidebar/scene' ), scene );
-	addIconTab( 'git', strings.getKey( 'menubar/git' ), git );
+	attachGitStatusDot( addIconTab( 'git', strings.getKey( 'menubar/git' ), git ) );
 	// Tab id 'shelltab' must NOT collide with the Shell container's own id 'shell'.
 	attachAiStatusDot( addIconTab( 'shelltab', 'Shell', shell ) );
 	// Tab id avoids 'animation' so the wrapper panel doesn't pick up the old #animation CSS.

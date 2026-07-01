@@ -1,14 +1,14 @@
-# Strata — A CSS-like interface for editing and versioning 3D scenes
+# Strata: A CSS-like interface for editing and versioning 3D scenes
 
-**Address parts by selector, edit by op, version with git — drive it by hand or in natural language. Sovereign, browser-native, no build.**
+**Address parts by selector, edit by op, version with git. Drive it by hand or in natural language. Sovereign, browser-native, no build.**
 
 Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors, change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely **by hand, without any AI**.
 
-Because that interface is small, a stock on-device model can map natural language onto it — no task-specific training. AI is the natural-language layer *over* the interface, not the foundation; it debuts most vividly at **animation** ("make it bounce" → a real keyframe clip). Generation (blocking out a scene from a prompt) is kept as **scaffolding**, not the headline.
+Because that interface is small, a stock on-device model can map natural language onto it. No task-specific training is needed. AI is the natural-language layer over the interface, not the foundation. It debuts most vividly at **animation**: "make it bounce" becomes a real keyframe clip. Generation (blocking out a scene from a prompt) is kept as **scaffolding**, not the headline.
 
-> **The thesis (short).** 3D editing decomposes into a deterministic shell + **5 fuzzy tasks** (op-selection, selector-resolution, argument-extraction, labeling, multi-op) — so a stock on-device model suffices, with no task-specific training.
+> **The thesis (short).** 3D editing decomposes into a deterministic shell plus **5 fuzzy tasks** (op-selection, selector-resolution, argument-extraction, labeling, multi-op). So a stock on-device model suffices, with no task-specific training.
 
-**Sovereign by default.** Nothing leaves the device except by your explicit, user-initiated action (git sync, `fetchAPI`) — local inference, on-device scene state.
+**Sovereign by default.** Nothing leaves the device except by your explicit action (git sync, `fetchAPI`). Inference is local. Scene state stays on-device.
 
 <img src='docs/demo.gif'/>
 
@@ -85,7 +85,7 @@ Strata is the structure and design layer for 3D. You author and label the scene 
 
 ## Where Strata sits
 
-Strata is the **authoring layer upstream of the ecosystem** — the place you *iterate*, not the place you ship. You build and edit fast (AI + WebGL, no render wait, every step versioned), then **hand off** the result to any renderer or engine.
+Strata is the **authoring layer upstream of the ecosystem**. It is the place you *iterate*, not the place you ship. You build and edit fast: AI plus WebGL, no render wait, every step versioned. Then you **hand off** the result to any renderer or engine.
 
 - **Author here.** Structure (scene graph) + design (selectors / ops, labels, keyframe clips), versioned in git.
 - **Hand off via glTF + labels.** Export to any renderer (Blender / Unreal / WebGPU → media) or any engine (three.js / Unity / Unreal → runtime), where **behavior attaches to the labels**.
@@ -95,7 +95,7 @@ Strata is the **authoring layer upstream of the ecosystem** — the place you *i
 
 **Three invariants (why Strata stays the authoring layer):** no runtime · no interaction · no render-wait-during-iteration. The moment a task needs one of those, it belongs downstream.
 
-**Who it's for.** People who use engines and renderers but find them *in the way* during fast iteration — Strata is the fast-iteration authoring layer that comes **before** the handoff.
+**Who it's for.** People who use engines and renderers but find them *in the way* during fast iteration. Strata is the authoring layer that comes **before** the handoff.
 
 ---
 
@@ -431,17 +431,17 @@ External models appear in the dropdown below the WebLLM models. On load the engi
 
 ### Client-side API models (no server)
 
-The dropdown also supports calling a provider **directly from the browser**, with no `server.js` proxy — useful on static hosting (e.g. GitHub Pages). This coexists with Dev Mode; use whichever you prefer.
+The dropdown also supports calling a provider **directly from the browser**, with no `server.js` proxy. This is useful on static hosting such as GitHub Pages. It coexists with Dev Mode. Use whichever you prefer.
 
 Click **⚙ API** in the shell header to open a 3-step wizard:
 
-1. **Choose provider** — OpenAI, Anthropic (Claude), Ollama (local), or a custom OpenAI-compatible endpoint. Adjust the base URL and set an optional label.
-2. **API key** — paste the key (optional for local Ollama).
-3. **Choose model** — the list is fetched live from the provider's `/models` endpoint, so you onay pick model IDs the key can actually use. A `Custom…` option lets you type an ID if fetching is unavailable.
+1. **Choose provider.** OpenAI, Anthropic (Claude), Ollama (local), or a custom OpenAI-compatible endpoint. Adjust the base URL and set an optional label.
+2. **API key.** Paste the key. It is optional for local Ollama.
+3. **Choose model.** The list is fetched live from the provider's `/models` endpoint. You only pick model IDs the key can actually use. A `Custom…` option lets you type an ID if fetching is unavailable.
 
 Saved providers appear under a `─── Client APIs (browser) ───` separator in the model dropdown; select one and click **Load AI**.
 
-**Trade-off (less sovereign):** keys are stored in `localStorage` (readable by same-origin scripts, like the git token) and requests leave the device straight to the provider. On-device WebLLM remains the default. Providers must allow browser CORS — OpenAI and Ollama do; Anthropic requires the `anthropic-dangerous-direct-browser-access` header (sent automatically).
+**Trade-off (less sovereign):** keys are stored in `localStorage`, readable by same-origin scripts, like the git token. Requests leave the device straight to the provider. On-device WebLLM remains the default. Providers must allow browser CORS. OpenAI and Ollama do. Anthropic requires the `anthropic-dangerous-direct-browser-access` header, sent automatically.
 
 ### The eval matrix (the editing gate, NOT yet run)
 
