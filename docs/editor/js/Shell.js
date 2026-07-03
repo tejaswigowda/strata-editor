@@ -442,6 +442,7 @@ function Shell( editor ) {
 
 			// Scope vars become named parameters of a new Function; direct eval()
 			// inside that function reliably sees all parameters as local variables.
+			const query = makeQuery( editor ); // shared selector-picker ($$, $S, Pick, pick)
 			const scope = {
 				editor,
 				THREE:   window.THREE,
@@ -878,7 +879,11 @@ function Shell( editor ) {
 				ops: ( opList ) => runOps( editor, opList ),
 				// $$(selector) — jQuery-style chainable set; named methods are 3D ops.
 				// Example: $$('.wheel').recolor('#111').spin('y', 1)
-				$$: makeQuery( editor ),
+				// Aliases: $S, Pick, pick — all the same selector-picking function.
+				$$: query,
+				$S: query,
+				Pick: query,
+				pick: query,
 				// OP_VOCABULARY — the closed op set + typed args (for introspection).
 				OP_VOCABULARY,
 

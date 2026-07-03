@@ -101,7 +101,7 @@ Strata is the **authoring layer upstream of the ecosystem**. It is the place you
 
 ## Selector-based editing
 
-A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the preferred way to edit imported parts. `$$(selector)` returns a chainable set. Its methods are 3D ops. Each compiles to `editor.execute(new Command())`. Every op is undoable, versioned, and guarded.
+A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the preferred way to edit imported parts. `$$(selector)` returns a chainable set. Its methods are 3D ops. Each compiles to `editor.execute(new Command())`. Every op is undoable, versioned, and guarded. `$$` also answers to the aliases `$S`, `Pick`, and `pick`. They are the same function.
 
 ```js
 listSelectors()                     // the REAL addressable parts in THIS scene, with counts:
@@ -114,6 +114,8 @@ ops([ {}, {} ])                     // several ops in one undoable batch (multi-
 ```
 
 **Selector grammar.** Deterministic match, no model at match time: `#id` (semantic label), `.class`, `type` (`mesh`/`group`/`light`), `.a.b` (compound AND), `A B` (descendant), `A > B` (child), `*`. Classes auto-derive on import from descriptors. Facts like `.front .left .red .elongated .pair-left`, plus material names (`Rims` to `.rims`). The optional labeling pass adds semantic `#labels` and `.classes` (`wheel`, `dump-bed`).
+
+**Names become classes too.** A meaningful object name yields a stem class, so "Chair 1", "Chair 2", and "Chair 3" all get `.chair`. Plural requests then resolve cleanly (`$$('.chair').scale(0.5)`). The trailing index also stays addressable by id (`#chair-2`). Auto-generated names like `Object_12` are skipped so the vocabulary stays clean.
 
 **Closed op set.** The human sugar; each is also an op-JSON `type`:
 
@@ -283,7 +285,8 @@ addClip(object, clip)   // register a clip on object (or scene). Shows in Animat
 
 ```js
 listSelectors()                     // the real addressable parts in this scene, with counts
-$$('.rims').recolor('#111')         // chainable op set ($$, op, ops)
+$$('.rims').recolor('#111')         // chainable op set ($$, op, ops). Aliases: $S, Pick, pick
+$S('.chair').scale(0.5)             // same as $$; "Chair 1", "Chair 2", … all share .chair
 op({type:'scale', selector:'.cab', factor:1.5})
 relabel('wheel')  tagClass('wheel')  untagClass(node,'rims')  verifyImport()
 ```
@@ -610,6 +613,8 @@ DONE
   Verify-edit primitives: relabel / tagClass / untagClass (command-backed), Import + Verify panel
   Eval matrix HARNESS: 5 tasks x model x {bare, scaffolded}, resolved-correct-node scoring
   glTF / GLB / USDZ / OBJ export (GLTFExporter + optimized animations)
+  Name-stem auto-classes: "Chair 1"/"Chair 2" share .chair so plural selectors resolve
+  $$ selector aliases: $S, Pick, pick (same function)
 
 NEXT (the gate)
   Run the eval matrix across model sizes + a Haiku ceiling. Make the size decision.

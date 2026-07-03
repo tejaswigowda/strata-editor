@@ -30,6 +30,31 @@ export function normalizeClassName( str ) {
 
 }
 
+// Auto-generated / meaningless node names we never turn into a class. Imported
+// glTF parts ("Object_12", "mesh_0") rely on descriptors and labels instead;
+// turning their raw names into classes would flood the vocabulary with noise. A
+// meaningful name ("Chair", "Chair 1") DOES become a ".chair" class so the model
+// can group them with "$$('.chair')".
+const AUTO_NAME_RE = /^(object|mesh|node|group|primitive|untitled|instance|empty|scene|geometry|buffergeometry|material|texture)[\s_\-.]*\d*$/i;
+
+/**
+ * Derive a "stem" class from a node's name: drop a trailing index so "Chair 1",
+ * "Chair 2", "Chair 3" all share ".chair". Returns '' when the name is absent,
+ * too short, or auto-generated.
+ * @param {THREE.Object3D} node
+ * @returns {string}
+ */
+export function nameStemClass( node ) {
+
+	if ( ! node ) return '';
+	const raw = node.name && String( node.name ).trim();
+	if ( ! raw || raw.length < 2 ) return '';
+	if ( AUTO_NAME_RE.test( raw ) ) return '';
+	const stem = raw.replace( /[\s_.-]*\d+$/, '' ).trim() || raw; // strip trailing index
+	return normalizeClassName( stem );
+
+}
+
 /**
  * Derive classes for a single node from its descriptors.
  * Returns a Set of class strings (e.g. ['front', 'left', 'red', 'mesh', 'wheel']).
@@ -55,6 +80,12 @@ export function deriveClasses( node ) {
 	if ( node.isOrthographicCamera ) classes.add( 'orthographic-camera' );
 	if ( node.isPerspectiveCamera ) classes.add( 'perspective-camera' );
 	if ( node.isSkinnedMesh ) classes.add( 'skinned-mesh' );
+
+	// Name-stem class — a meaningful object name becomes an addressable class so
+	// "$$('.chair')" groups "Chair 1", "Chair 2", … These are generated or
+	// hand-named parts that carry no descriptors; auto-generated names are skipped.
+	const nameCls = nameStemClass( node );
+	if ( nameCls ) classes.add( nameCls );
 
 	// Descriptor-based classes (facts — deterministic, no guesses)
 	const d = node.userData.descriptors;

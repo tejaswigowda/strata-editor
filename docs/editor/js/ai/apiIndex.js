@@ -87,7 +87,7 @@ export const SCOPE_FUNCTIONS = new Set( [
 	'listCandidates', 'resolvePartAI', 'askScene', 'colorToName', 'evalAI',
 	'diagnoseImport', 'relabelAsset',
 	// op-JSON edit surface (selector/$$ path) — the PREFERRED way to edit imported parts.
-	'op', 'ops', '$$', 'query', 'queryOne', 'isValidSelector', 'listSelectors',
+	'op', 'ops', '$$', '$S', 'Pick', 'pick', 'query', 'queryOne', 'isValidSelector', 'listSelectors',
 	'enterEditMode', 'exitEditMode', 'extrude', 'inset', 'bevel', 'deleteFaces', 'weld', 'planarUV', 'boxUV',
 	'booleanUnion', 'booleanSubtract', 'booleanIntersect', 'mirrorMesh', 'arrayDuplicate', 'subdivide',
 	'objectToJS', 'sceneToJS', 'sceneEqual', 'showJS', 'addClip', 'addSpinClip',

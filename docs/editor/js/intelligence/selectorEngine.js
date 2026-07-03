@@ -3,7 +3,7 @@
 // Selectors are deterministic — no model at match time, only at parse.
 //
 // Grammar (CSS subset):
-//   #id              matches node with userData.label === id
+//   #id              matches node with userData.label === id (falls back to node.name)
 //   .class           matches any node with class
 //   type             matches three.js type (mesh, group, light, camera, etc.)
 //   .a.b             compound selector (AND) — has .a AND .b
@@ -186,10 +186,13 @@ function nodeMatches( node, matchers ) {
 
 		if ( m.type === 'id' ) {
 
-			// Match the semantic label, normalized on both sides so "#dump-bed"
-			// reconciles with a stored label like "Dump Bed".
-			if ( ! node.userData.label ) return false;
-			if ( normalizeClassName( node.userData.label ) !== normalizeClassName( m.value ) ) return false;
+			// Match the semantic label first, then fall back to the object's name,
+			// all normalized so "#dump-bed" reconciles with a stored label "Dump
+			// Bed" and "#chair" reconciles with an object named "Chair".
+			const target = normalizeClassName( m.value );
+			const label = node.userData.label ? normalizeClassName( node.userData.label ) : '';
+			const name = node.name ? normalizeClassName( node.name ) : '';
+			if ( target !== label && target !== name ) return false;
 
 		} else if ( m.type === 'class' ) {
 
