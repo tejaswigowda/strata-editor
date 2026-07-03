@@ -1,6 +1,6 @@
 // ── opPrimitive.js ──────────────────────────────────────────────────────────────
 // THE op-JSON contract — ONE schema, four consumers (model tool-list / decoding
-// grammar, MCP tools, op() dispatcher, human $$ sugar).
+// grammar, MCP tools, op() dispatcher, human $S sugar).
 //
 // op-JSON shape:  { type: <op>, selector: <css-like>, ...typed args }
 // Closed op set:  recolor scale move rotate delete duplicate retexture setMaterial
@@ -234,7 +234,7 @@ export function ops( editor, opList ) {
 
 }
 
-// ── $$ chainable set (jQuery PATTERN; methods are 3D ops) ─────────────────────
+// ── $S chainable set (jQuery PATTERN; methods are 3D ops) ─────────────────────
 
 class ChainableSet {
 
@@ -304,20 +304,8 @@ class ChainableSet {
 }
 
 /**
- * $$(editor, selector) → chainable set.
- * Curry-friendly: bind editor once → const $$ = makeQuery(editor); $$('.wheel').recolor('#111').
- * @param {Editor} editor
- * @param {string|Array} selectorOrNodes
- * @returns {ChainableSet}
- */
-export function $$( editor, selectorOrNodes ) {
-
-	return new ChainableSet( editor, selectorOrNodes );
-
-}
-
-/**
- * Bind editor once so callers can use the bare $$(selector) form.
+ * makeQuery(editor) → bind editor once so callers use the bare $S(selector) form.
+ * Curry-friendly: const $S = makeQuery(editor); $S('.wheel').recolor('#111').
  * @param {Editor} editor
  * @returns {(selector:string)=>ChainableSet}
  */

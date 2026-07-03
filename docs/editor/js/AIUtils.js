@@ -7,7 +7,7 @@ import { selectorCounts } from './intelligence/vocabInjection.js';
 export { sceneContextString };
 
 // Build the "ADDRESSABLE PARTS" line for the prompt — the REAL selectors present
-// in the current scene, with counts. Feeds the op/$$ edit path so the model picks
+// in the current scene, with counts. Feeds the op/$S edit path so the model picks
 // ".rims" (what the asset actually has) instead of guessing ".wheel". Empty when
 // nothing is labeled/classed yet (no import). Capped for context budget.
 function addressablePartsBlock( editor ) {
@@ -26,12 +26,12 @@ function addressablePartsBlock( editor ) {
 	// OUT of the always-on system prompt to save the local model's 8k context).
 	return 'EDIT OPS — preferred for editing existing parts (command-backed, guarded, undoable;\n' +
 		'NOT findObject/Set*Command). Output ONE IIFE; address a part by a selector below:\n' +
-		"  $$('.sel').recolor('#111')   // or op({type:'recolor',selector:'.sel',color:'#111'})\n" +
+		"  $S('.sel').recolor('#111')   // or op({type:'recolor',selector:'.sel',color:'#111'})\n" +
 		'Ops & args: recolor(color) scale(factor,axis?) move(dx,dy,dz) rotate(axis,deg) delete()\n' +
 		'  duplicate(dx,dy,dz) setMaterial({color,roughness,metalness}) spin(axis?,turns?,dur?)\n' +
 		'  bounce/pulse/fade/orbit/shake(…opts). Fuzzy: bigger≈1.5 a-bit≈1.2 smaller≈0.6 slowly≈dur4.\n' +
 		'recolor TINTS a textured part — for SOLID color use setMaterial. Several edits → multiple\n' +
-		'$$ calls or ops([…]). Use ONLY listed selectors; map the noun to the closest one.\n' +
+		'$S calls or ops([…]). Use ONLY listed selectors; map the noun to the closest one.\n' +
 		'ADDRESSABLE PARTS (do NOT invent others):\n' + line + '\n\n';
 
 }
@@ -217,7 +217,7 @@ export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '', 
 	// Inject retrieved REAL API signatures ahead of the request (Technique 2 RAG)
 	const apiBlock = apiHints ? apiHints + '\n\n' : '';
 
-	// Inject the scene's REAL addressable selectors so the model edits via op/$$
+	// Inject the scene's REAL addressable selectors so the model edits via op/$S
 	// against parts that actually exist (".rims"), not invented ones (".wheel").
 	// The eval matrix's BARE condition suppresses this to measure scaffolding lift.
 	const partsBlock = opts.injectParts === false ? '' : addressablePartsBlock( editor );

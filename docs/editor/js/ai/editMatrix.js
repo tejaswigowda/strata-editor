@@ -104,7 +104,7 @@ export const LABELING_CASES = [
 // Extracts the op surface the model emitted. Returns [{ op, selector, args }].
 // Empty array = the model did NOT use the op surface (raw findObject/Set*Command);
 // that correctly fails the op/selector/arg tasks (it didn't do the task the way
-// the architecture requires). Tolerant of $$ chains, op({...}), and ops([...]).
+// the architecture requires). Tolerant of $S chains, op({...}), and ops([...]).
 
 const ANIM_METHODS = new Set( [ 'spin', 'bounce', 'pulse', 'fade', 'orbit', 'shake' ] );
 
@@ -113,8 +113,9 @@ export function parseEmittedOps( code ) {
 	if ( typeof code !== 'string' || ! code.trim() ) return [];
 	const ops = [];
 
-	// 1) $$('sel').m(args).m2(args)…  — a chainable set; each method is one op.
-	const chainRe = /\$\$\(\s*['"]([^'"]+)['"]\s*\)((?:\s*\.\s*[A-Za-z_]\w*\s*\([^)]*\))+)/g;
+	// 1) $S('sel').m(args).m2(args)…  — a chainable set; each method is one op.
+	//    Also tolerates the legacy $$ and the Pick/pick aliases.
+	const chainRe = /(?:\$S|\$\$|Pick|pick)\(\s*['"]([^'"]+)['"]\s*\)((?:\s*\.\s*[A-Za-z_]\w*\s*\([^)]*\))+)/g;
 	let m;
 	while ( ( m = chainRe.exec( code ) ) !== null ) {
 
@@ -150,7 +151,7 @@ export function parseEmittedOps( code ) {
 function _opTypeFromArgs( argStr ) { return _field( argStr, 'type' ) || 'op'; }
 
 // Parse a positional/object arg string into a loose args bag. For chains the
-// args are positional ($$('.x').recolor('#111') → ['#111']); we keep them as a
+// args are positional ($S('.x').recolor('#111') → ['#111']); we keep them as a
 // raw positional array AND a guessed bag so the arg scorer can read either form.
 function _parseArgs( argStr ) {
 

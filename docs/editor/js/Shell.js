@@ -442,7 +442,7 @@ function Shell( editor ) {
 
 			// Scope vars become named parameters of a new Function; direct eval()
 			// inside that function reliably sees all parameters as local variables.
-			const query = makeQuery( editor ); // shared selector-picker ($$, $S, Pick, pick)
+			const query = makeQuery( editor ); // shared selector-picker ($S, Pick, pick)
 			const scope = {
 				editor,
 				THREE:   window.THREE,
@@ -870,17 +870,16 @@ function Shell( editor ) {
 
 				},
 
-				// ── op-JSON primitive + $$ chainable API (the unified edit surface) ──
+				// ── op-JSON primitive + $S chainable API (the unified edit surface) ──
 				// op({type, selector, ...args}) — execute ONE structured op (command-backed,
 				// guarded, undoable). Closed set: recolor scale move rotate delete duplicate
 				// retexture setMaterial spin bounce pulse fade orbit shake raw.
 				op: ( opJSON ) => runOp( editor, opJSON ),
 				// ops([...]) — execute a list of ops in sequence (multi-op decomposition).
 				ops: ( opList ) => runOps( editor, opList ),
-				// $$(selector) — jQuery-style chainable set; named methods are 3D ops.
-				// Example: $$('.wheel').recolor('#111').spin('y', 1)
-				// Aliases: $S, Pick, pick — all the same selector-picking function.
-				$$: query,
+				// $S(selector) — jQuery-style chainable set; named methods are 3D ops.
+				// Example: $S('.wheel').recolor('#111').spin('y', 1)
+				// Aliases: Pick, pick — the same selector-picking function.
 				$S: query,
 				Pick: query,
 				pick: query,

@@ -34,7 +34,7 @@ export function normalizeClassName( str ) {
 // glTF parts ("Object_12", "mesh_0") rely on descriptors and labels instead;
 // turning their raw names into classes would flood the vocabulary with noise. A
 // meaningful name ("Chair", "Chair 1") DOES become a ".chair" class so the model
-// can group them with "$$('.chair')".
+// can group them with "$S('.chair')".
 const AUTO_NAME_RE = /^(object|mesh|node|group|primitive|untitled|instance|empty|scene|geometry|buffergeometry|material|texture)[\s_\-.]*\d*$/i;
 
 /**
@@ -82,7 +82,7 @@ export function deriveClasses( node ) {
 	if ( node.isSkinnedMesh ) classes.add( 'skinned-mesh' );
 
 	// Name-stem class — a meaningful object name becomes an addressable class so
-	// "$$('.chair')" groups "Chair 1", "Chair 2", … These are generated or
+	// "$S('.chair')" groups "Chair 1", "Chair 2", … These are generated or
 	// hand-named parts that carry no descriptors; auto-generated names are skipped.
 	const nameCls = nameStemClass( node );
 	if ( nameCls ) classes.add( nameCls );

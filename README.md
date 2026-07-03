@@ -65,7 +65,7 @@ Strata is the structure and design layer for 3D. You author and label the scene 
 
 | | |
 |---|---|
-| **Selector-based editing** | Address imported parts by CSS-like selector (`$$('.wheel.front')`). Edit them with a closed set of command-backed, guarded ops (`recolor`, `scale`, `spin`). Resolution is deterministic. The model only translates language to a selector. |
+| **Selector-based editing** | Address imported parts by CSS-like selector (`$S('.wheel.front')`). Edit them with a closed set of command-backed, guarded ops (`recolor`, `scale`, `spin`). Resolution is deterministic. The model only translates language to a selector. |
 | **Scene intelligence** | Resolve descriptive part references on imported GLBs with meaningless node names. Geometry, color, and symmetry descriptors become auto-classes. No vision model. |
 | **Git versioning** | Auto-load on open, commit, and a split-screen merge-conflict viewport. The AI writes diff-aware commit messages. Scenes are diffable JSON. |
 | **One execution surface** | AI-generated and human-typed code run through the same `execute()` binding. Same undo stack, same error handling, no second path. |
@@ -101,21 +101,21 @@ Strata is the **authoring layer upstream of the ecosystem**. It is the place you
 
 ## Selector-based editing
 
-A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the preferred way to edit imported parts. `$$(selector)` returns a chainable set. Its methods are 3D ops. Each compiles to `editor.execute(new Command())`. Every op is undoable, versioned, and guarded. `$$` also answers to the aliases `$S`, `Pick`, and `pick`. They are the same function.
+A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the preferred way to edit imported parts. `$S(selector)` returns a chainable set. Its methods are 3D ops. Each compiles to `editor.execute(new Command())`. Every op is undoable, versioned, and guarded. `$S` also answers to the aliases `Pick` and `pick`. They are the same function.
 
 ```js
 listSelectors()                     // the REAL addressable parts in THIS scene, with counts:
                                     //   .rims(x4)  .grille  #dump-bed  .red(x3)  .front
-$$('.rims').recolor('#111')         // recolor 4 wheels. Command-backed, guarded
-$$('.wheel.front').spin('y', 1, 2)  // compound selector + animation op (winding-safe clip)
-$$('#dump-bed').scale(1.2)          // edit a single labelled part by id
+$S('.rims').recolor('#111')         // recolor 4 wheels. Command-backed, guarded
+$S('.wheel.front').spin('y', 1, 2)  // compound selector + animation op (winding-safe clip)
+$S('#dump-bed').scale(1.2)          // edit a single labelled part by id
 op({ type:'recolor', selector:'.rims', color:'red' })   // explicit op-JSON (same thing)
 ops([ {}, {} ])                     // several ops in one undoable batch (multi-op)
 ```
 
 **Selector grammar.** Deterministic match, no model at match time: `#id` (semantic label), `.class`, `type` (`mesh`/`group`/`light`), `.a.b` (compound AND), `A B` (descendant), `A > B` (child), `*`. Classes auto-derive on import from descriptors. Facts like `.front .left .red .elongated .pair-left`, plus material names (`Rims` to `.rims`). The optional labeling pass adds semantic `#labels` and `.classes` (`wheel`, `dump-bed`).
 
-**Names become classes too.** A meaningful object name yields a stem class, so "Chair 1", "Chair 2", and "Chair 3" all get `.chair`. Plural requests then resolve cleanly (`$$('.chair').scale(0.5)`). The trailing index also stays addressable by id (`#chair-2`). Auto-generated names like `Object_12` are skipped so the vocabulary stays clean.
+**Names become classes too.** A meaningful object name yields a stem class, so "Chair 1", "Chair 2", and "Chair 3" all get `.chair`. Plural requests then resolve cleanly (`$S('.chair').scale(0.5)`). The trailing index also stays addressable by id (`#chair-2`). Auto-generated names like `Object_12` are skipped so the vocabulary stays clean.
 
 **Closed op set.** The human sugar; each is also an op-JSON `type`:
 
@@ -200,7 +200,7 @@ The AI authors clips from natural language: "make the box bounce", "spin the whe
 Recipes register through `AddAnimationClipCommand` (undoable). The lower-level `addClip(object, clip)` helper also exists for hand-built tracks. It validates clips by shape (tracks plus duration), not by an `isAnimationClip` flag, because three.js omits that flag.
 
 ```js
-$$('.wheel').spin('y', 1, 2)        // recipe: 1 turn on Y over 2s, winding-safe
+$S('.wheel').spin('y', 1, 2)        // recipe: 1 turn on Y over 2s, winding-safe
 ```
 
 The agent authors clips only. Runtime `requestAnimationFrame` loops remain out of scope. Skeletal motion (BVH) and captured performance are on the roadmap as imported data, not generation.
@@ -216,7 +216,7 @@ generate -> validate -> execute -> observe -> fix   (max 3 retries, every action
 ```
 
 1. **Retrieve real APIs.** A local index of the actual command, op, material, and geometry signatures (rebuilt at load) is searched by intent and injected before generation. The model sees the real `AddObjectCommand(editor, object)` and the real `metalness` key instead of guessing.
-2. **Validate.** Generated code is statically linted against that index before running. It catches invented classes (`Tree3D`), wrong command arity, bad material keys (`metal:1`), undefined helper calls (`backWall()`), `.add()` on a Material or Geometry, duplicate-`const` redeclaration, `scene.add()` bypass, and constructed-but-never-added objects. Each is fed back as an actionable correction, the fix, not the raw symptom. Identical retries stop early. The selector ops (`$$`, `op`, `ops`, `listSelectors`) are on the allow-list.
+2. **Validate.** Generated code is statically linted against that index before running. It catches invented classes (`Tree3D`), wrong command arity, bad material keys (`metal:1`), undefined helper calls (`backWall()`), `.add()` on a Material or Geometry, duplicate-`const` redeclaration, `scene.add()` bypass, and constructed-but-never-added objects. Each is fed back as an actionable correction, the fix, not the raw symptom. Identical retries stop early. The selector ops (`$S`, `op`, `ops`, `listSelectors`) are on the allow-list.
 3. **Execute** through the single shell surface (`editor.execute`, undo stack).
 4. **Observe.** The scene is snapshotted before and after, then diffed (added, removed, moved, scaled, recolored). The loop reports the change. If a change was expected and nothing happened (usually a missed lookup), it feeds that back for one corrective retry.
 5. **Bounded and reversible.** Retries are hard-capped. Every autonomous action is undoable. Ambiguous or destructive ops surface candidates rather than guess.
@@ -285,8 +285,8 @@ addClip(object, clip)   // register a clip on object (or scene). Shows in Animat
 
 ```js
 listSelectors()                     // the real addressable parts in this scene, with counts
-$$('.rims').recolor('#111')         // chainable op set ($$, op, ops). Aliases: $S, Pick, pick
-$S('.chair').scale(0.5)             // same as $$; "Chair 1", "Chair 2", … all share .chair
+$S('.rims').recolor('#111')         // chainable op set ($S, op, ops). Aliases: Pick, pick
+$S('.chair').scale(0.5)             // "Chair 1", "Chair 2", … all share .chair
 op({type:'scale', selector:'.cab', factor:1.5})
 relabel('wheel')  tagClass('wheel')  untagClass(node,'rims')  verifyImport()
 ```
@@ -551,7 +551,7 @@ docs/editor/js/
     classDerive.js     descriptors to CSS-like auto-classes; label-as-class match
     selectorEngine.js  CSS-subset parser + deterministic matcher over the scene graph
     editOps.js         structured edit ops (recolor/scale/move) to guarded commands
-    opPrimitive.js     op-JSON contract + op()/ops()/$$ dispatcher; subset-sanity guard
+    opPrimitive.js     op-JSON contract + op()/ops()/$S dispatcher; subset-sanity guard
     animationRecipes.js spin/bounce/pulse to winding-safe keyframe clips (command-backed)
     vocabInjection.js  current-scene selectors + op schema for the model prompt
   import/
@@ -608,13 +608,13 @@ DONE
   Local three.js API RAG, 8192-token window, Stop-AI button
   Generation eval harness (evalAI, 4-axis, overfit canaries), two-tier routing
   Keyframe animation: tab authoring + AI clip authoring
-  Selector-based editing: CSS-subset selector engine + auto-classes, op-JSON (op/ops/$$),
+  Selector-based editing: CSS-subset selector engine + auto-classes, op-JSON (op/ops/$S),
     host guards, command-backed animation recipes, op vocab + live selectors fed to the model
   Verify-edit primitives: relabel / tagClass / untagClass (command-backed), Import + Verify panel
   Eval matrix HARNESS: 5 tasks x model x {bare, scaffolded}, resolved-correct-node scoring
   glTF / GLB / USDZ / OBJ export (GLTFExporter + optimized animations)
   Name-stem auto-classes: "Chair 1"/"Chair 2" share .chair so plural selectors resolve
-  $$ selector aliases: $S, Pick, pick (same function)
+  Selector picker is $S (aliases Pick, pick); the old $$ name was removed
 
 NEXT (the gate)
   Run the eval matrix across model sizes + a Haiku ceiling. Make the size decision.
