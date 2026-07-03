@@ -24,14 +24,16 @@ function addressablePartsBlock( editor ) {
 
 	// Compact EDIT OPS reference — injected ONLY when there are parts to edit (kept
 	// OUT of the always-on system prompt to save the local model's 8k context).
-	return 'EDIT OPS — preferred for editing existing parts (command-backed, guarded, undoable;\n' +
-		'NOT findObject/Set*Command). Output ONE IIFE; address a part by a selector below:\n' +
-		"  $S('.sel').recolor('#111')   // or op({type:'recolor',selector:'.sel',color:'#111'})\n" +
+	return 'EDIT OPS — this scene HAS addressable parts. To edit any part LISTED below you\n' +
+		'MUST use the op surface ($S / op / ops) — NOT findObject / Set*Command / traverse /\n' +
+		'raw three.js. Wrap in one IIFE (or emit a bare op call). Examples:\n' +
+		"  (function(){ $S('.sel').recolor('#111'); })();\n" +
+		"  (function(){ ops([{type:'recolor',selector:'.a',color:'#111'},{type:'scale',selector:'.b',factor:1.5}]); })();\n" +
 		'Ops & args: recolor(color) scale(factor,axis?) move(dx,dy,dz) rotate(axis,deg) delete()\n' +
 		'  duplicate(dx,dy,dz) setMaterial({color,roughness,metalness}) spin(axis?,turns?,dur?)\n' +
 		'  bounce/pulse/fade/orbit/shake(…opts). Fuzzy: bigger≈1.5 a-bit≈1.2 smaller≈0.6 slowly≈dur4.\n' +
-		'recolor TINTS a textured part — for SOLID color use setMaterial. Several edits → multiple\n' +
-		'$S calls or ops([…]). Use ONLY listed selectors; map the noun to the closest one.\n' +
+		'recolor TINTS a textured part — for SOLID color use setMaterial. Use ONLY listed selectors;\n' +
+		'map the user\'s noun to the CLOSEST listed one (asked "wheels", list has .rims → .rims).\n' +
 		'ADDRESSABLE PARTS (do NOT invent others):\n' + line + '\n\n';
 
 }
@@ -52,7 +54,7 @@ export function summarizeScene( editor ) {
 // and feed back a code-only retry, never execute it.
 
 // Allowed code-start tokens for the no-fence path (model is told to emit an IIFE).
-const CODE_START = /^(?:\(\s*(?:async\s+)?function|\(\s*\)|const\s|let\s|var\s|function\s|editor\b|scene\b|new\s|\/\/|\/\*|;|\{|if\s*\(|for\s*\(|while\s*\()/;
+const CODE_START = /^(?:\(\s*(?:async\s+)?function|\(\s*\)|const\s|let\s|var\s|function\s|editor\b|scene\b|new\s|\$S\s*\(|ops?\s*\(|\/\/|\/\*|;|\{|if\s*\(|for\s*\(|while\s*\()/;
 
 // Strip a stray leading language tag the model sometimes emits ("javascript\n…").
 function stripLangTag( s ) {

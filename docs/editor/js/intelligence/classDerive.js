@@ -134,8 +134,12 @@ export function deriveClasses( node ) {
 	// Size rank
 	if ( d.sizeRank ) classes.add( d.sizeRank );  // 'largest' | 'medium' | 'smallest'
 
-	// Role
-	if ( d.role ) classes.add( d.role );          // 'leaf' | 'group'
+	// Role (graph topology: 'leaf' | 'group') is deliberately NOT emitted as a class.
+	// 'leaf' means "scene-graph leaf" (any childless mesh) — every mesh is one, so a
+	// '.leaf' class matches an entire asset AND collides with the English word
+	// "leaf/leaves" (a tree/plant's parts all resolve, recoloring the trunk too).
+	// Both values are already covered by the type classes ('.mesh', '.group'); code
+	// that needs topology reads node.userData.descriptors.role directly.
 
 	return classes;
 

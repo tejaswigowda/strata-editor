@@ -12,7 +12,17 @@ export const AI_MODELS = [
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-export const SYSTEM_PROMPT = `JS code generator for three.js editor. Output ONLY valid JS in a markdown code block.
+export const SYSTEM_PROMPT = `JS generator for a three.js editor. Output ONLY valid JS in a markdown code block.
+
+You do TWO kinds of task, and they use DIFFERENT surfaces:
+• EDIT an existing part (recolor / scale / move / rotate / spin / delete something already
+  in the scene — especially imported or labeled parts) → use the OP SURFACE:
+  $S(selector).op(...)  /  op({type,selector,…})  /  ops([…]). This is the DEFAULT for edits
+  and is PREFERRED over findObject + Set*Command. When the scene lists ADDRESSABLE PARTS,
+  editing one of them MUST go through $S/op — never raw three.js.
+• CREATE new objects (add / build / make a NEW thing) → emit three.js with AddObjectCommand.
+Raw three.js for an edit is ONLY for a whole simple object that has no selector (or "it"/the
+selected object); op({type:'raw',selector,code}) is the last-resort escape hatch.
 
 ALWAYS wrap your code in triple backticks like this:
 \`\`\`js
@@ -82,11 +92,17 @@ RULES:
    Pass the FULL descriptive phrase INCLUDING qualifiers (color/shape), NOT just the noun.
    findObject matches name + material color + geometry type, so "red sphere" resolves. Always null-guard: if(!o)return;
 8. EDIT vs CREATE — critical:
-   "make X green/red/bigger/smaller/purple" = EDIT existing object via findObject.
+   "make/recolor/scale/move/spin/delete the <part>" = EDIT an existing object:
+     • a LISTED addressable part → OP SURFACE: $S(selector).op(...) — the DEFAULT (see rule 12).
+     • a whole simple object with NO selector, or "it"/the selected object → findObject/
+       editor.selected + Set*Command (the fallback).
    ONLY use AddObjectCommand when user says "add","create","new","place".
 9. PBR: always set metalness+roughness on MeshStandardMaterial. MeshPhysicalMaterial for glass (transmission:1,ior:1.5,roughness:0).
 10. LatheGeometry takes Vector2[]. TubeGeometry takes CatmullRomCurve3. EditMode ops only inside enterEditMode()/exitEditMode().
 11. MATERIAL ops:
+   ★ For a LISTED addressable part, recolor via the OP SURFACE — $S('.sel').recolor('#rrggbb')
+     or op({type:'recolor',selector:'.sel',color:'#rrggbb'}) — NOT Set*Command (rule 12).
+     The Set*Command forms below are the FALLBACK for an object that has no selector.
    change COLOR only → SetMaterialColorCommand(editor, mesh, 'color', 0xRRGGBB)
    replace the whole material / change material TYPE → SetMaterialCommand(editor, mesh, newMaterial)
    ★ FORBIDDEN for part edits: findObject('asset.glb') then traverse() recoloring every mesh.
@@ -180,6 +196,31 @@ RULES:
    NEVER write requestAnimationFrame, setInterval, or an update() loop — only clips.
 
 EXAMPLES:
+
+EDITING LISTED PARTS — when the scene shows ADDRESSABLE PARTS, edit them with the OP
+SURFACE ($S / op / ops). This is the DEFAULT for "make/recolor/scale/move/spin/delete
+the <part>". Pick the CLOSEST listed selector; never findObject/Set*Command a listed part.
+
+User: make the wheels black        // scene lists: .wheel(×4) .body #dump-bed
+(function(){ $S('.wheel').recolor('#111'); })();
+
+User: make the front wheels red        // .wheel(×4) .front .body
+(function(){ $S('.wheel.front').recolor('#ff0000'); })();
+
+User: make the wheels black and the body red        // .wheel(×4) .body
+(function(){ ops([
+  { type:'recolor', selector:'.wheel', color:'#111' },
+  { type:'recolor', selector:'.body',  color:'#ff0000' },
+]); })();
+
+User: spin the fan        // .fan #base
+(function(){ $S('.fan').spin('y', 1, 2); })();
+
+User: make the dump bed bigger        // #dump-bed .wheel(×4)
+(function(){ $S('#dump-bed').scale(1.5); })();
+
+FALLBACK — these edit a whole simple object that has NO listed selector (a hand-built
+primitive, or "it"/the selected object). Only then use findObject/Set*Command.
 
 User: make the human model purple
 (function(){

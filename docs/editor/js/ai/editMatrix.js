@@ -133,7 +133,7 @@ export function parseEmittedOps( code ) {
 
 	}
 
-	// 2) op({ type:'…', selector:'…', …args })   (also inside ops([...]))
+	// 2) op({ type:'…', selector:'…', …args })   (also inside ops([ op({…}) ]))
 	const opRe = /\bop\(\s*\{([^}]*)\}\s*\)/g;
 	while ( ( m = opRe.exec( code ) ) !== null ) {
 
@@ -141,6 +141,26 @@ export function parseEmittedOps( code ) {
 		const type = _field( body, 'type' );
 		const selector = _field( body, 'selector' );
 		if ( type ) ops.push( { op: type, selector: selector || null, args: _objArgs( body ) } );
+
+	}
+
+	// 3) ops([ { type:'…', selector:'…', … }, … ])  — BARE op-objects in an array
+	//    (the executable form: ops() maps each element through op()). op({…})
+	//    elements are already handled by pass 2; strip them first so they are
+	//    not double-counted, then read the remaining bare object literals.
+	const opsArrRe = /\bops\(\s*\[([\s\S]*?)\]\s*\)/g;
+	while ( ( m = opsArrRe.exec( code ) ) !== null ) {
+
+		const arrBody = m[ 1 ].replace( /\bop\(\s*\{[^}]*\}\s*\)/g, '' );
+		const objRe = /\{([^{}]*)\}/g;
+		let o;
+		while ( ( o = objRe.exec( arrBody ) ) !== null ) {
+
+			const type = _field( o[ 1 ], 'type' );
+			const selector = _field( o[ 1 ], 'selector' );
+			if ( type ) ops.push( { op: type, selector: selector || null, args: _objArgs( o[ 1 ] ) } );
+
+		}
 
 	}
 

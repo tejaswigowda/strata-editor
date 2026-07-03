@@ -430,7 +430,7 @@ Enable with `DEV=1 node server.js` to add current Ollama, OpenAI, and Claude mod
 | **OpenAI** | `export OPENAI_API_KEY="sk-..."` | Cloud. Strong for raw-code fallback |
 | **Anthropic** | `export ANTHROPIC_API_KEY="sk-ant-..."` | Cloud. Strong for complex decomposition |
 
-External models appear in the dropdown below the WebLLM models. On load the engine requests an 8192-token context window (overriding the 4096 default). It falls back to 4096 if the compiled model rejects the larger window.
+External models appear in the dropdown below the WebLLM models. On load the engine requests a **16384-token** context window (overriding the 4096 default). 8192 proved too tight: a labeled ~30-part asset's system prompt + injected selector block + scene summary already reaches ~8.4k tokens, so a small on-device model would overflow before emitting a single op. 16384 clears the headroom (Qwen2.5-Coder natively supports 32k). It falls back to 4096 if the compiled model rejects the larger window.
 
 ### Client-side API models (no server)
 
@@ -459,6 +459,8 @@ await evalEditMatrix('scaffolded')   // then 'bare'. Load each model size, add H
 `evalEditMatrix` scores each of the 5 tasks independently from one generated edit. Selector resolution is scored as resolved-correct-node: the right nodes changed, and only those. The harness uses synthetic assets and is non-destructive (it snapshots and restores your scene).
 
 **The full matrix run is the gate that has not yet been completed.** It is what confirms the zero-training claim and sets the model size to ship. Until it runs, treat the 5 tasks as built, not validated. The current "scaffolded" condition means selector injection is on. Constrained decoding is not yet wired.
+
+**Live spot-checks (not the matrix).** Two manual runs of "make the leaves red" on a labeled tree GLB confirm the op-path steering end to end: both Claude Haiku 4.5 (cloud) and the **1.5B on-device model** emit the op surface (`$S('.leaves').recolor('#ff0000')`) with the correct narrow selector, not raw three.js and not the whole asset. The 1.5B occasionally wraps the op in a function it forgets to invoke (a format slip our few-shots' IIFE style invites), which the observe-and-retry loop catches. These are anecdotes that motivate the harness, not a substitute for it.
 
 ### The generation eval (legacy axis): `evalAI()`
 

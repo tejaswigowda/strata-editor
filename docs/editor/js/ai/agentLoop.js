@@ -176,7 +176,7 @@ function countColorWords( intent ) {
 // "Count of meshes changed" ≠ "right parts changed". If the user named a SUBSET
 // ("wheels","body","the grille") but the edit touched EVERY part of a multi-part
 // imported asset, that is a PROBABLE WRONG RESOLUTION (the blind traverse-all
-// failure), NOT a success — flag it and steer the model to findParts/findByDescription.
+// failure), NOT a success — flag it and steer the model to a narrower $S/op selector.
 //
 // Pure + node-testable. The caller supplies the asset part-name sets so this needs
 // no THREE/scene access.
@@ -450,7 +450,7 @@ export async function runAgentic( { editor, messages, intent, deps, maxRetries =
 		// C7 — SUBSET request but ALL parts changed = probable WRONG RESOLUTION.
 		// "make the wheels black" that recolored every one of the 12 truck meshes is
 		// NOT a success (count-changed ≠ right-parts-changed). Flag it and steer the
-		// model to resolve the specific parts via findParts/findByDescription instead
+		// model to resolve the specific parts via a narrower $S/op SELECTOR instead
 		// of traversing the whole asset. Capped to one corrective pass (subsetRepaired).
 		if ( ! subsetRepaired && attempt < maxRetries ) {
 
@@ -464,7 +464,7 @@ export async function runAgentic( { editor, messages, intent, deps, maxRetries =
 				// Undo this wrong-resolution attempt so the corrected one doesn't stack.
 				if ( typeof rollbackTo === 'function' && checkpoint !== null ) rollbackTo( checkpoint );
 
-				lastFail = { code, error: `WRONG RESOLUTION: you changed ALL ${ mis.count } parts of the imported asset, but the user asked only for "${ mis.noun }". Do NOT traverse/recolor the whole asset. Resolve the specific parts with findParts('${ mis.noun }') (or findByDescription('${ mis.noun }') for a single part) and edit ONLY those returned nodes. If it returns nothing, STOP and tell the user the part could not be resolved.` };
+				lastFail = { code, error: `WRONG RESOLUTION: you changed ALL ${ mis.count } parts of the imported asset, but the user asked only for "${ mis.noun }". Do NOT recolor/traverse the whole asset. Use the OP SURFACE to address ONLY the requested parts by SELECTOR: pick the NARROWEST listed selector that matches "${ mis.noun }" from the ADDRESSABLE PARTS block and edit via $S(selector).recolor(...) / op({type,selector,…}) — NOT findObject/findParts/Set*Command. If NO listed selector isolates just "${ mis.noun }", STOP and tell the user the part could not be resolved.` };
 				continue;
 
 			}

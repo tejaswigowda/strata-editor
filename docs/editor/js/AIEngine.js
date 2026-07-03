@@ -30,7 +30,11 @@ export class AIEngine {
 		// Desired context window. Qwen2.5 supports far more than the 4096 the
 		// prebuilt MLC config defaults to; a larger window gives the prompt + RAG +
 		// retry history real headroom. Applied as an override at load, with fallback.
-		this.desiredContextWindow = 8192;
+		// 8192 was too tight: a labeled ~30-part asset's system prompt + ADDRESSABLE
+		// PARTS injection + scene summary already reaches ~8.4k tokens, overflowing
+		// the small on-device models before they can emit a single op. 16384 clears
+		// that headroom (Qwen2.5-Coder natively supports 32k).
+		this.desiredContextWindow = 16384;
 		// Actual window in effect after load (override value, or conservative
 		// fallback if the compiled model rejected the override).
 		this.contextWindow = null;
