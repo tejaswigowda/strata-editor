@@ -9,11 +9,13 @@
 //   emc.exit()               // bake back to BufferGeometry
 //
 // Keyboard shortcuts (active when edit mode is on):
-//   Tab   — exit edit mode
+//   Tab / Esc — exit edit mode
 //   1     — vertex mode
 //   2     — edge mode
 //   3     — face mode
 //   A     — select all / deselect all
+// Drag the transform gizmo to move the current vertex / edge / face selection
+// (translate, rotate, or scale) — the mesh itself no longer moves in edit mode.
 
 import * as THREE from 'three';
 import { EditableMesh } from './EditableMesh.js';
@@ -121,6 +123,7 @@ export class EditModeController {
 		this._attachKeys();
 
 		this.editor.signals.editModeChanged.dispatch( { active: true, mesh } );
+		this._notifySelection();
 
 	}
 
@@ -171,6 +174,7 @@ export class EditModeController {
 		this.selection.setMode( mode );
 		this.updateOverlay();
 		this.editor.signals.editModeChanged.dispatch( { active: true, mesh: this.mesh, mode } );
+		this._notifySelection();
 
 	}
 
@@ -223,6 +227,148 @@ export class EditModeController {
 			this.mesh.userData.recipe.push( { op: opName, params, selection: selSnapshot } );
 
 		}
+
+		this._notifySelection();
+
+	}
+
+	// ── Sub-object transform (viewport gizmo drags the SELECTION, not the mesh) ──
+	// The Viewport attaches a TransformControls gizmo to a proxy placed at the
+	// selection centroid and feeds us the drag delta so vertices move — the whole
+	// object no longer moves in edit mode. Works in vertex / edge / face mode.
+
+	// Vertex ids touched by the current selection, resolved per mode.
+	affectedVertexIds() {
+
+		const em = this.em, sel = this.selection, out = new Set();
+		if ( ! em ) return out;
+
+		if ( sel.mode === 'vertex' ) {
+
+			for ( const vid of sel.vertices ) out.add( vid );
+
+		} else if ( sel.mode === 'edge' ) {
+
+			for ( const heId of sel.edges ) {
+
+				const he = em.halfEdges[ heId ];
+				if ( ! he ) continue;
+				out.add( he.v );
+				out.add( em.halfEdges[ he.next ].v );
+
+			}
+
+		} else {
+
+			for ( const fid of sel.faces ) {
+
+				for ( const v of em.faceVertices( fid ) ) out.add( v.id );
+
+			}
+
+		}
+
+		return out;
+
+	}
+
+	// World-space centroid of the current selection (or null when empty).
+	selectionCentroidWorld( target = new THREE.Vector3() ) {
+
+		const ids = this.affectedVertexIds();
+		if ( ! ids.size ) return null;
+
+		target.set( 0, 0, 0 );
+		const p = new THREE.Vector3();
+		for ( const vid of ids ) {
+
+			const v = this.em.vertices[ vid ];
+			p.set( v.x, v.y, v.z );
+			this.mesh.localToWorld( p );
+			target.add( p );
+
+		}
+
+		return target.divideScalar( ids.size );
+
+	}
+
+	// Snapshot the world positions of the affected vertices before a drag.
+	beginTransform() {
+
+		this._dragStartWorld = new Map();
+		if ( ! this.active ) return false;
+
+		const p = new THREE.Vector3();
+		for ( const vid of this.affectedVertexIds() ) {
+
+			const v = this.em.vertices[ vid ];
+			p.set( v.x, v.y, v.z );
+			this.mesh.localToWorld( p );
+			this._dragStartWorld.set( vid, p.clone() );
+
+		}
+
+		return this._dragStartWorld.size > 0;
+
+	}
+
+	// Apply the gizmo's world delta matrix to every affected vertex, then refresh
+	// the overlay so the wireframe deforms live. The solid surface is baked on drop.
+	applyTransform( deltaMatrix ) {
+
+		if ( ! this._dragStartWorld ) return;
+
+		const p = new THREE.Vector3();
+		for ( const [ vid, startWorld ] of this._dragStartWorld ) {
+
+			p.copy( startWorld ).applyMatrix4( deltaMatrix );
+			this.mesh.worldToLocal( p );
+			const v = this.em.vertices[ vid ];
+			v.x = p.x; v.y = p.y; v.z = p.z;
+
+		}
+
+		this.updateOverlay();
+
+	}
+
+	// Bake the moved vertices into the mesh geometry as ONE undoable command. A
+	// pure move keeps topology, so `em` and the selection stay valid for more drags.
+	commitTransform() {
+
+		if ( ! this._dragStartWorld ) return;
+		this._dragStartWorld = null;
+
+		const newGeom = this.em.toBufferGeometry();
+
+		if ( this.mesh.userData._recipeReplay ) {
+
+			this.mesh.geometry.dispose();
+			this.mesh.geometry = newGeom;
+			this.mesh.geometry.computeBoundingSphere();
+
+		} else {
+
+			this.editor.execute( new SetGeometryCommand( this.editor, this.mesh, newGeom ) );
+
+		}
+
+		this.updateOverlay();
+		this._notifySelection();
+
+	}
+
+	// Tell the viewport the selection changed so it can reposition / hide the gizmo.
+	_notifySelection() {
+
+		if ( ! this.active ) return;
+		const c = this.selectionCentroidWorld();
+		this.editor.signals.subObjectSelected.dispatch( {
+			mode: this.selection.mode,
+			ids: [ ...this.selection.ids ],
+			centroidWorld: c ? c.toArray() : null,
+		} );
 
 	}
 
@@ -399,6 +545,7 @@ export class EditModeController {
 		}
 
 		this.updateOverlay();
+		this._notifySelection();
 
 	}
 
@@ -414,6 +561,7 @@ export class EditModeController {
 			switch ( e.key ) {
 
 				case 'Tab':      e.preventDefault(); this.exit(); break;
+				case 'Escape':   e.preventDefault(); this.exit(); break;
 				case '1':        this.setMode( 'vertex' ); break;
 				case '2':        this.setMode( 'edge' );   break;
 				case '3':        this.setMode( 'face' );   break;
@@ -421,6 +569,7 @@ export class EditModeController {
 					if ( this.selection.count ) this.selection.clear();
 					else this.selection.selectAll( this.em );
 					this.updateOverlay();
+					this._notifySelection();
 					break;
 
 			}

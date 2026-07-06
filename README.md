@@ -332,7 +332,7 @@ subdivide(mesh, iterations=1)             listOps()   // print registered op sch
 
 ### Edit Mode ops
 
-Enter with the **Edit** toolbar button or `enterEditMode()`. `Tab` toggles. Keys: `1/2/3` for vertex/edge/face, `A` for select all/none.
+Enter with the **Edit** toolbar button or `enterEditMode()`. `Tab` or `Esc` toggles/exits. Keys: `1/2/3` for vertex/edge/face, `A` for select all/none. With a sub-object selected, drag the transform gizmo to move it (translate/rotate/scale) — the mesh itself stays put.
 
 ```js
 enterEditMode()  exitEditMode()
@@ -384,8 +384,9 @@ A topology-aware half-edge mesh editor is layered on top of `BufferGeometry`.
 
 - **Enter.** Select a Mesh, then the **Edit** toolbar button (or `enterEditMode()`). The mesh is converted to a half-edge `EditableMesh`. A colored overlay shows vertices, edges, and selected faces.
 - **Select.** Click in the viewport in vertex, edge, or face mode (`1`/`2`/`3`). Face picks a triangle. Vertex picks the nearest corner. Edge picks the nearest edge.
+- **Move.** With a selection, drag the transform gizmo (translate/rotate/scale) to move those vertices — parked at the selection centroid. The mesh transform is untouched, so only the sub-object moves; the drop bakes one undoable `SetGeometryCommand`.
 - **Operate.** `extrude`, `inset`, `bevel`, `deleteFaces`, `weld`, `planarUV`, `boxUV`. Each op emits a `SetGeometryCommand` (undoable).
-- **Exit.** `Tab` bakes the half-edge structure back to `BufferGeometry`. The round-trip is lossless for supported geometry.
+- **Exit.** `Tab` or `Esc` bakes the half-edge structure back to `BufferGeometry`. The round-trip is lossless for supported geometry.
 
 ### Parametric recipe (non-destructive history)
 

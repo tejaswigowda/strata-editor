@@ -187,6 +187,47 @@ function Viewport( editor ) {
 	let objectRotationOnDown = null;
 	let objectScaleOnDown = null;
 
+	// Edit Mode: the gizmo drags this proxy (parked at the selection centroid) and
+	// the delta is applied to the selected vertices, so the mesh itself never moves.
+	const editProxy = new THREE.Object3D();
+	editProxy.name = '__editGizmoProxy';
+	sceneHelpers.add( editProxy );
+	let editDragActive = false;
+	const _editStartInverse = new THREE.Matrix4();
+	const _editDelta = new THREE.Matrix4();
+
+	function editModeActive() {
+
+		const emc = editor.editModeController;
+		return !! ( emc && emc.active );
+
+	}
+
+	// Park the gizmo on the current sub-object selection (or hide it when empty).
+	function syncEditGizmo() {
+
+		const emc = editor.editModeController;
+		if ( ! emc || ! emc.active ) return;
+
+		const c = emc.selectionCentroidWorld();
+		if ( c ) {
+
+			editProxy.position.copy( c );
+			editProxy.rotation.set( 0, 0, 0 );
+			editProxy.scale.set( 1, 1, 1 );
+			editProxy.updateMatrixWorld( true );
+			if ( transformControls.object !== editProxy ) transformControls.attach( editProxy );
+
+		} else if ( transformControls.object === editProxy ) {
+
+			transformControls.detach();
+
+		}
+
+		render();
+
+	}
+
 	const transformControls = new TransformControls( camera );
 	transformControls.addEventListener( 'axis-changed', function () {
 
@@ -194,6 +235,16 @@ function Viewport( editor ) {
 
 	} );
 	transformControls.addEventListener( 'objectChange', function () {
+
+		if ( editDragActive ) {
+
+			editProxy.updateMatrixWorld( true );
+			_editDelta.multiplyMatrices( editProxy.matrixWorld, _editStartInverse );
+			editor.editModeController.applyTransform( _editDelta );
+			render();
+			return;
+
+		}
 
 		if ( pivotActive ) {
 
@@ -235,6 +286,16 @@ function Viewport( editor ) {
 
 		const object = transformControls.object;
 
+		if ( editModeActive() && object === editProxy ) {
+
+			editProxy.updateMatrixWorld( true );
+			_editStartInverse.copy( editProxy.matrixWorld ).invert();
+			editDragActive = editor.editModeController.beginTransform();
+			controls.enabled = false;
+			return;
+
+		}
+
 		if ( pivotActive ) {
 
 			selectionPivot.updateMatrixWorld( true );
@@ -273,6 +334,16 @@ function Viewport( editor ) {
 	transformControls.addEventListener( 'mouseUp', function () {
 
 		const object = transformControls.object;
+
+		if ( editDragActive ) {
+
+			editDragActive = false;
+			editor.editModeController.commitTransform();
+			syncEditGizmo();
+			controls.enabled = true;
+			return;
+
+		}
 
 		if ( pivotActive ) {
 
@@ -697,6 +768,10 @@ function Viewport( editor ) {
 
 		if ( selectionPivot.parent !== null ) selectionPivot.parent.remove( selectionPivot );
 
+		// In Edit Mode the gizmo belongs to the sub-object selection — never let an
+		// object-level selection change steal it back onto the whole mesh.
+		if ( editModeActive() ) { syncEditGizmo(); return; }
+
 		// Filter out non-transformable picks ( scene / camera )
 
 		const transformable = selection.filter( o => o !== null && o !== scene && o !== camera );
@@ -725,6 +800,36 @@ function Viewport( editor ) {
 		}
 
 		render();
+
+	} );
+
+	signals.editModeChanged.add( function ( { active } ) {
+
+		if ( active ) {
+
+			// Hand the gizmo to the sub-object selection and hide the object gizmo /
+			// selection box so dragging edits vertices instead of moving the mesh.
+			selectionBox.visible = false;
+			transformControls.detach();
+			syncEditGizmo();
+
+		} else {
+
+			editDragActive = false;
+			if ( transformControls.object === editProxy ) transformControls.detach();
+
+			// Restore the object gizmo on the mesh we were editing.
+			const sel = editor.selected;
+			if ( sel && sel !== scene && sel !== camera ) transformControls.attach( sel );
+			render();
+
+		}
+
+	} );
+
+	signals.subObjectSelected.add( function () {
+
+		if ( ! editDragActive && editModeActive() ) syncEditGizmo();
 
 	} );
 

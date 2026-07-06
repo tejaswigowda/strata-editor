@@ -54,9 +54,13 @@ export const EDIT_TASK_CASES = [
 		expect: { opType: 'scale', opCount: 1, args: { factor: { min: 1.05 } },
 			targetNodes: [ 'DumpTruck' ] } },                       // whole-asset transform
 
-	{ id: 'spin-wheels', asset: 'dumptruck', prompt: 'spin the wheels',
-		expect: { opType: 'spin', opCount: 1,
+	{ id: 'spin-wheels', asset: 'dumptruck', prompt: 'spin the wheels slowly',
+		expect: { opType: 'spin', opCount: 1, args: { duration: { min: 3 } },
 			targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] } },
+	// ↑ "slowly" is the DURATION arg-extract case. RANGE target, not an exact number:
+	// "slowly" has no single canonical value, so any duration slower than the default
+	// (2) passes — ≥3, canonical ≈4 (see AIUtils "slowly≈dur4"). Omitting duration, or
+	// picking the default/faster, correctly FAILS: the model didn't extract the modifier.
 
 	{ id: 'lift', asset: 'dumptruck', prompt: 'lift the cab up a bit',
 		expect: { opType: 'move', opCount: 1, args: { dy: { min: 0.01 } },
@@ -66,15 +70,30 @@ export const EDIT_TASK_CASES = [
 		expect: { opType: 'delete', opCount: 1,
 			targetNodes: [ 'Object_20', 'Object_21' ] } },
 
-	// multi-op decomposition (must split into the RIGHT number — not under/over)
+	// multi-op decomposition — the ONLY task-5 denominator (gated by multiOp:true in
+	// the runner). Scored where op COUNT is the discriminator: compound requests that
+	// must split into N, and traps that must NOT over-split. Single-op cases are NOT
+	// counted here — emitting exactly 1 op on a single request is trivial and used to
+	// inflate multi-op to ~9/11 for any coder model while a raw-JS model (0 parsed ops)
+	// scored 0 everywhere. That artifact (1.5B-bare 91% > frontier-bare 9%) is the bug.
 	{ id: 'two-colors', asset: 'dumptruck', prompt: 'make the wheels black and the bed red',
-		expect: { opCount: 2,
+		expect: { multiOp: true, opCount: 2,
 			ops: [ { opType: 'recolor', targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] },
 				{ opType: 'recolor', targetNodes: [ 'Object_07' ] } ] } },
 
+	{ id: 'three-ops', asset: 'dumptruck', prompt: 'spin the wheels, paint the bed red, and remove the grille',
+		expect: { multiOp: true, opCount: 3,
+			ops: [ { opType: 'spin', targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] },
+				{ opType: 'recolor', targetNodes: [ 'Object_07' ] },
+				{ opType: 'delete', targetNodes: [ 'Object_03' ] } ] } },
+
 	{ id: 'no-oversplit', asset: 'dumptruck', prompt: 'make the wheels black',
-		expect: { opCount: 1, opType: 'recolor',
+		expect: { multiOp: true, opCount: 1, opType: 'recolor',
 			targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] } },  // must NOT over-split to 4
+
+	{ id: 'whole-truck', asset: 'dumptruck', prompt: 'paint the whole truck red',
+		expect: { multiOp: true, opCount: 1, opType: 'recolor',
+			targetNodes: [ 'DumpTruck' ] } },                       // must NOT over-split per-part
 
 	// graceful-fail (merged mesh) — selector resolution must NOT hit "everything"
 	{ id: 'merged-sheets', asset: 'merged-bed', prompt: 'make the bed sheets blue',
@@ -88,16 +107,28 @@ export const ASSET_SETUPS = {
 };
 
 // ── LABELING CASES (task 4) — scored separately, SPLIT by asset type ──────────
-// Each: descriptor row (what the import harvest produces) + gold human label.
+// Each: descriptor row (VERBATIM the import harvest's labelPass.row output — first
+// token is the graph ROLE "leaf"=a mesh) + `asset` context + gold human label(s).
 // `kind` splits the floor: material-named (strong hint) vs descriptor-only (weak).
+//
+// FAIRNESS: production labeling hands the LLM the WHOLE part table with a schema-
+// explaining system prompt (labelPass.LABEL_SYSTEM: "first the role, then shape…
+// MATERIAL name is a STRONG hint") — so it can infer the vehicle and read the row.
+// The eval must not be HARDER than production: `asset` supplies the context prod
+// gets from the full table, and the SCAFFOLDED probe (Shell.labelOnce) explains the
+// row schema. The BARE probe omits both = the honest floor. gold accepts synonyms
+// (scoreLabel is substring-either-direction) so valid variants are not rejected.
 
 export const LABELING_CASES = [
-	{ kind: 'material-named', desc: 'leaf, round, low, pair(left), material:"Rims"', gold: [ 'wheel', 'tire', 'rim' ] },
-	{ kind: 'material-named', desc: 'leaf, blocky, front, material:"Grille"', gold: [ 'grille' ] },
-	{ kind: 'material-named', desc: 'leaf, small, back, pair(right), material:"Tail Light"', gold: [ 'tail light', 'taillight', 'light' ] },
-	{ kind: 'descriptor-only', desc: 'leaf, large, open-top, center, largest', gold: [ 'bed', 'dump bed', 'tray', 'bucket' ] },
-	{ kind: 'descriptor-only', desc: 'leaf, blocky, front, top', gold: [ 'cab', 'cabin', 'roof' ] },
-	{ kind: 'descriptor-only', desc: 'leaf, round, low, pair(left)', gold: [ 'wheel', 'tire' ] },
+	{ kind: 'material-named', asset: 'dump truck', desc: 'leaf, round, low, pair(left), material:"Rims"', gold: [ 'wheel', 'tire', 'rim' ] },
+	{ kind: 'material-named', asset: 'dump truck', desc: 'leaf, blocky, front, material:"Grille"', gold: [ 'grille', 'grill' ] },
+	{ kind: 'material-named', asset: 'dump truck', desc: 'leaf, small, back, pair(right), material:"Tail Light"', gold: [ 'tail light', 'taillight', 'light', 'lamp' ] },
+	{ kind: 'material-named', asset: 'dump truck', desc: 'leaf, flat, front, low, material:"Bumper"', gold: [ 'bumper', 'fender', 'guard' ] },
+	{ kind: 'material-named', asset: 'dump truck', desc: 'leaf, transparent, front, top, material:"Windshield"', gold: [ 'windshield', 'windscreen', 'window', 'glass' ] },
+	{ kind: 'material-named', asset: 'dump truck', desc: 'leaf, round, low, pair(right), material:"Rims"', gold: [ 'wheel', 'tire', 'rim' ] },
+	{ kind: 'descriptor-only', asset: 'dump truck', desc: 'leaf, large, open-top, center, largest', gold: [ 'bed', 'dump bed', 'tray', 'bucket', 'cargo', 'flatbed', 'container' ] },
+	{ kind: 'descriptor-only', asset: 'dump truck', desc: 'leaf, blocky, front, top', gold: [ 'cab', 'cabin', 'roof', 'canopy' ] },
+	{ kind: 'descriptor-only', asset: 'dump truck', desc: 'leaf, round, low, pair(left)', gold: [ 'wheel', 'tire' ] },
 ];
 
 // ── PARSER: generated code → emitted ops ──────────────────────────────────────
@@ -269,10 +300,20 @@ export function scoreSelectorResolution( resolvedSets, expect ) {
 
 }
 
-// Task 3 — argument extraction: each expected arg present & correct, OR
-// host-normalizable. `normalizeColor` is injected (host THREE.Color path); a
-// color passes if it normalizes to the expected base. Numeric args may specify
-// {min}/{max}/exact. Positional chain args are matched by op signature.
+// Task 3 — argument extraction.  POLICY: canonical-KEY, lenient-VALUE — tied to
+// the host boundary. The op() dispatcher (opPrimitive.js) reads opJSON.factor /
+// .dx/.dy/.dz / .color / .axis+.degrees / .duration and does NOT map synonyms, so
+// e.g. {value:2} for scale is genuinely wrong — the HOST would drop it too, so the
+// scorer rejects it too, on purpose (measuring what actually executes).
+//   • KEY (strict): the arg must use the schema key the host reads. Matches _argBag
+//     — positional chain args map by op signature (SIG); object args read as-is.
+//   • VALUE (lenient): a color passes if normalizeColor→colorBase equals the base
+//     (host THREE.Color path — "black"→#111 all count). A magnitude with no single
+//     canonical answer ("bigger", "slowly") is a {min}/{max} RANGE, not an exact
+//     number; an explicit value is matched by string equality.
+// INVARIANT: every arg case must have at least one reasonable answer that PASSES
+// (a case nothing can pass tests nothing) — hence "slowly"→duration{min:3}, never an
+// impossible exact target.
 export function scoreArgExtraction( emitted, expect, deps = {} ) {
 
 	if ( expect.mergedFail || ! expect.args ) return { pass: true, reasons: [ 'n/a' ] };
@@ -332,14 +373,24 @@ function _argBag( op ) {
 
 }
 
-// Task 5 — multi-op decomposition: right NUMBER of ops (under AND over both fail).
+// Task 5 — multi-op decomposition: right NUMBER of ops (under AND over both fail)
+// AND the right op TYPES in order. Count-only over-credits a coder model that emits
+// N arbitrary statements; requiring the type sequence makes it measure decomposition,
+// not verbosity. Targets are scored by selector-resolution (kept separate).
 export function scoreMultiOp( emitted, expect ) {
 
 	if ( expect.mergedFail ) return { pass: true, reasons: [ 'n/a' ] };
 	const want = expect.opCount != null ? expect.opCount : ( expect.ops ? expect.ops.length : 1 );
 	const got = emitted.length;
-	const ok = got === want;
-	return { pass: ok, reasons: ok ? [ `${ got } op(s)` ] : [ `${ got } ops ≠ expected ${ want } (${ got < want ? 'under' : 'over' }-split)` ] };
+	if ( got !== want ) return { pass: false, reasons: [ `${ got } ops ≠ expected ${ want } (${ got < want ? 'under' : 'over' }-split)` ] };
+	const wantTypes = expect.ops ? expect.ops.map( e => e.opType ) : ( expect.opType ? [ expect.opType ] : null );
+	if ( wantTypes ) {
+
+		const bad = wantTypes.findIndex( ( t, i ) => ! emitted[ i ] || emitted[ i ].op !== t );
+		if ( bad !== -1 ) return { pass: false, reasons: [ `op${ bad } "${ emitted[ bad ] ? emitted[ bad ].op : '∅' }" ≠ "${ wantTypes[ bad ] }"` ] };
+
+	}
+	return { pass: true, reasons: [ `${ got } op(s), types ok` ] };
 
 }
 
@@ -433,7 +484,7 @@ export function formatMatrix( matrix, opts = {} ) {
 //   runOnce(prompt) → Promise<{ code, text, execOk }>,   // drives the agentic loop, returns generated CODE
 //   resolveSelector(selector) → Set<string>,             // real selectorEngine over the CURRENT scene → node names
 //   colorBase, normalizeColor,                           // host arg-normalization (THREE.Color path)
-//   labelOnce(descRow) → Promise<string>,                // task-4 probe: descriptor row → predicted label
+//   labelOnce(labelCase) → Promise<string>,              // task-4 probe: {desc,asset,kind} → label (condition-aware)
 //   condition: 'bare' | 'scaffolded',                    // flips scaffolding (constrained decode / arg-norm / one-op)
 //   model: string,                                       // tag for the matrix (caller sets the loaded model)
 // }
@@ -469,7 +520,7 @@ export async function runEditMatrix( deps ) {
 		bump( 'op-selection', s.opType.pass );
 		bump( 'selector-resolution', s.selectorResolution.pass );
 		bump( 'arg-extraction', s.argExtraction.pass );
-		bump( 'multi-op', s.multiOp.pass );
+		if ( c.expect.multiOp ) bump( 'multi-op', s.multiOp.pass );   // task-5 ONLY on genuine decomposition cases (not the trivial singles)
 		progress( `edit ${ i + 1 }/${ EDIT_TASK_CASES.length } (${ c.id }): ${ emitted.length } op(s) emitted` );
 
 		// Per-case detail for debugging WHY a cell is low (emitted selector/op vs
@@ -488,7 +539,7 @@ export async function runEditMatrix( deps ) {
 
 		const lc = LABELING_CASES[ i ];
 		let predicted = '';
-		try { predicted = await deps.labelOnce( lc.desc ); } catch ( e ) { progress( `label error — ${ e.message }` ); }
+		try { predicted = await deps.labelOnce( lc ); } catch ( e ) { progress( `label error — ${ e.message }` ); }
 		bump( 'labeling', scoreLabel( predicted, lc.gold ).pass );
 		progress( `label ${ i + 1 }/${ LABELING_CASES.length } (${ lc.kind }): "${ predicted }"` );
 

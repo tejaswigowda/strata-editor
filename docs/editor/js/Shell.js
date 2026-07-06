@@ -1667,12 +1667,25 @@ function Shell( editor ) {
 		}
 
 		// labelOnce — task-4 probe: a descriptor row → predicted label, SAME model.
-		async function labelOnce( descRow ) {
+		// Condition-aware (previously it ignored the condition → labeling could NEVER
+		// show a bare→scaffolded delta, a harness artifact). BARE: raw descriptor + a
+		// bare instruction = the floor. SCAFFOLDED: production-faithful framing (like
+		// labelPass.LABEL_SYSTEM) — the row schema is explained (first token is the
+		// graph role, ignore it; MATERIAL name is a STRONG hint) AND the asset context
+		// production gets from seeing the whole part table is supplied. injectParts
+		// (the matrix's scaffold knob) selects, so labeling scales with scaffolding
+		// like the other tasks and a frontier model can actually pull ahead.
+		async function labelOnce( lc ) {
 
+			const descRow = typeof lc === 'string' ? lc : lc.desc;
+			const asset = ( lc && lc.asset ) || '3D model';
+			const system = injectParts
+				? `You label ONE part of an imported ${ asset }, from derived descriptor facts (you cannot see geometry). The first token is the graph role ("leaf"=a mesh) — ignore it. Then come shape, region, size, symmetry pair, and a MATERIAL name which is a STRONG hint ("Rims"→wheel, "Grille"→grille, "Glass"→window). Reply with ONLY a 1-3 word part name.`
+				: 'Name this single 3D part in 1-3 words from its descriptor facts. Reply with ONLY the name.';
 			try {
 
 				const reply = await aiEngine.complete( [
-					{ role: 'system', content: 'Name this single 3D part in 1-3 words from its descriptor facts. Reply with ONLY the name.' },
+					{ role: 'system', content: system },
 					{ role: 'user', content: descRow },
 				], { maxTokens: 12, temperature: 0 } );
 				return String( reply || '' ).split( /\r?\n/ )[ 0 ].replace( /["'`.]/g, '' ).trim();

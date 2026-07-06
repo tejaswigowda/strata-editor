@@ -53,7 +53,7 @@ function Toolbar( editor ) {
 	// ── Edit Mode button ──────────────────────────────────────────────────────
 
 	const editBtn = new UIButton();
-	editBtn.dom.title = 'Edit Mode (Tab) — select a Mesh first';
+	editBtn.dom.title = 'Edit Mode (Tab / Esc) — select a Mesh first, then drag the gizmo to move vertices';
 	editBtn.dom.style.cssText = 'margin-left:8px;font-size:11px;padding:0 8px;letter-spacing:0.03em;';
 	editBtn.setTextContent( 'Edit' );
 
