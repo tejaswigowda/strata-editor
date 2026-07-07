@@ -68,7 +68,7 @@ Strata is the structure and design layer for 3D. You author and label the scene 
 | **Selector-based editing** | Address imported parts by CSS-like selector (`$S('.wheel.front')`). Edit them with a closed set of command-backed, guarded ops (`recolor`, `scale`, `spin`). Resolution is deterministic. The model only translates language to a selector. |
 | **Scene intelligence** | Resolve descriptive part references on imported GLBs with meaningless node names. Geometry, color, and symmetry descriptors become auto-classes. No vision model. |
 | **Git versioning** | Auto-load on open, commit, and a split-screen merge-conflict viewport. The AI writes diff-aware commit messages. Scenes are diffable JSON. |
-| **One execution surface** | AI-generated and human-typed code run through the same `execute()` binding. Same undo stack, same error handling, no second path. |
+| **One execution surface** | **All** code (manual, AI-generated, eval fixtures) runs through a single `execute()` binding. Monaco editors present AI-generated code with live syntax highlighting; the Run button executes only the edited code. Same undo stack, same error handling, no second path. The editor is disposed immediately after execution. |
 | **Everything reversible** | Every mutation goes through `editor.execute(new Command())`. Selectors, ops, labels, and class edits are all undoable. |
 | **Verify UX (on import)** | After labeling, a panel surfaces the semantic guesses. Symmetric parts collapse to one decision ("Wheel x4"). Low-confidence guesses come first. |
 | **Sovereign by default** | On-device inference via WebGPU (WebLLM / MLC). Nothing leaves the device except your explicit git sync or `fetchAPI` call. |
@@ -251,6 +251,19 @@ The shell is the **SHELL tab** in the right sidebar (toggle with **View, JS Shel
 | `Up` / `Down` | Command history |
 | AI input + `Enter` | Generate and run code |
 | AI input `? question` | Ask about the scene. Plain-text answer, no code |
+
+### Code Editor Integration (Monaco)
+
+AI-generated code is displayed in **Monaco Editor** code blocks with live syntax highlighting and auto-height (max 40vh). Each code block includes:
+
+- **Monaco Editor** — auto-height based on content, word-wrapped, no line numbers, full JavaScript syntax highlighting
+- **Run button** (top-right) — executes only the edited code in the Monaco editor
+- **Auto-disposal** — editor is disposed immediately after execution, removing it from the output
+- **Edit capability** — modify the generated code before running
+
+**Execution flow:** AI generates code → code block with Monaco editor appears → edit if needed → click Run → code executes with full access to shell scope → editor is disposed
+
+**Important:** Only the code visible in the Monaco editor is executed. Any text outside the editor is display-only. The execution binding and scope remain identical to manual shell input.
 
 ### Core globals
 
@@ -459,6 +472,15 @@ await evalEditMatrix('scaffolded')   // then 'bare'. Load each model size, add H
 
 `evalEditMatrix` scores each of the 5 tasks independently from one generated edit. Selector resolution is scored as resolved-correct-node: the right nodes changed, and only those. The harness uses synthetic assets and is non-destructive (it snapshots and restores your scene).
 
+**Execution flow with Monaco editors:**
+
+When `evalEditMatrix` generates edit code:
+1. AI generates op-JSON (e.g., `$S('.wheels').recolor('#000')`)
+2. Code appears in a **Monaco editor block** with a Run button
+3. Running executes **only the code in the editor** through the standard `execute()` binding
+4. Scene state is captured before and after to measure correctness
+5. Editor is disposed after execution
+
 **The full matrix run is the gate that has not yet been completed.** It is what confirms the zero-training claim and sets the model size to ship. Until it runs, treat the 5 tasks as built, not validated. The current "scaffolded" condition means selector injection is on. Constrained decoding is not yet wired.
 
 **Live spot-checks (not the matrix).** Two manual runs of "make the leaves red" on a labeled tree GLB confirm the op-path steering end to end: both Claude Haiku 4.5 (cloud) and the **1.5B on-device model** emit the op surface (`$S('.leaves').recolor('#ff0000')`) with the correct narrow selector, not raw three.js and not the whole asset. The 1.5B occasionally wraps the op in a function it forgets to invoke (a format slip our few-shots' IIFE style invites), which the observe-and-retry loop catches. These are anecdotes that motivate the harness, not a substitute for it.
@@ -466,6 +488,8 @@ await evalEditMatrix('scaffolded')   // then 'bare'. Load each model size, add H
 ### The generation eval (legacy axis): `evalAI()`
 
 `evalAI()` is the older generation-scaffolding eval. It runs a standing prompt set through the agentic loop and prints a 4-axis pass/fail table (struct, spatial, semantic, distinct). It tests the generation task, which is now scaffolding, not the headline. It still tells a useful story about the generation fallback and the model-independent validation layer. It is not the editing eval.
+
+**Monaco editor in eval output:** When code is generated during `evalAI()`, it also appears in Monaco editors with the same Run/dispose behavior, ensuring consistent evaluation workflow across all shell execution paths.
 
 ---
 
