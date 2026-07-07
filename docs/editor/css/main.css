@@ -861,6 +861,7 @@ body.sidebar-bottom #sidebar #shell {
 #shell-output {
 	flex: 1;
 	overflow-y: auto;
+	overflow-x: hidden;
 	padding: 8px 12px 4px;
 	user-select: text;
 	-webkit-user-select: text;
