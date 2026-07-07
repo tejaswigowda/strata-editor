@@ -102,6 +102,8 @@ RULES:
    Always set obj.name so later commands can find it.
 3. REMOVE: const o=findObject('...'); if(o) editor.execute(new RemoveObjectCommand(editor, o));
    NEVER pass findObject(...) straight into a command — it may be null and will crash. Assign + null-guard first.
+   NEVER use editor.scene.children.find(...) — find() is a JavaScript Array method expecting a function predicate,
+   not a selector string. This pattern FAILS: "string ".selector" is not a function". Always use findObject() instead.
 4. NEVER use scene.add/remove directly — ALWAYS editor.execute(new AddObjectCommand(editor,obj)).
    scene.add() bypasses the undo stack and is forbidden in every case. Set transforms
    on the object BEFORE adding (obj.position.set(...)) or via Set*Command afterward.
@@ -250,19 +252,24 @@ RULES:
 
 25. ANIMATION — author keyframe CLIPS (never runtime loops). Steps:
    (a) Resolve the target object first (editor.selected for "it", else findObject('...')); null-guard.
-   (b) Build KeyframeTracks. The track name is ALWAYS \`<object.uuid>.<property>\`:
-       MOVE  → new VectorKeyframeTrack(o.uuid+'.position', times, values)   (3 numbers x,y,z per time)
-       SCALE → new VectorKeyframeTrack(o.uuid+'.scale',    times, values)   (3 numbers per time)
-       SPIN/ROTATE → use addSpinClip(o,{axis:'y',turns:1,seconds:8,pingPong:true}) — it builds a working clip.
-         DON'T hand-roll a 2-keyframe quaternion 0→2π: slerp can't express a full turn (0 and 2π are the same
-         orientation, so the object won't move). If you must build it manually, sub-divide into ≤90° quaternion
-         steps so each slerp segment is unambiguous.
-       FADE/opacity → new NumberKeyframeTrack(o.uuid+'.material.opacity', times, values) (set material.transparent=true).
-   (c) times[] are seconds, ascending, starting at 0. values[] is FLAT (concatenated), not nested arrays.
-   (d) const clip=new AnimationClip('Name', -1, [track1,track2]); addClip(o, clip);
-       -1 auto-computes duration. addClip registers it on the object and shows it in the Animations panel.
+       ✓ CORRECT: const o=findObject('wheel')||editor.selected; if(!o)return;
+       ✗ FORBIDDEN: editor.scene.children.find(...) — find() expects a function, not a string selector
+       ✗ FORBIDDEN: editor.selected.children.find(...) for sub-objects; traverse manually if needed
+   (b) For SPIN/ROTATE (the common case) → ALWAYS use addSpinClip(o, {axis, turns, seconds, pingPong})
+       ✓ addSpinClip(o, {axis:'y', turns:1, seconds:8}) — one full circle over 8 seconds
+       ✓ addSpinClip(o, {axis:'y', turns:3, seconds:6, pingPong:true}) — 3 turns, out and back
+       ✗ NEVER: setInterval(...)  ← forbidden, breaks undo and editor state
+       ✗ NEVER: requestAnimationFrame(...) ← forbidden, must use clips only
+   (c) For other animations (move, fade, custom tracks):
+       Build KeyframeTracks with track name = \`<object.uuid>.<property>\`:
+       MOVE  → new VectorKeyframeTrack(o.uuid+'.position', times, values)
+       SCALE → new VectorKeyframeTrack(o.uuid+'.scale',    times, values)
+       FADE  → new NumberKeyframeTrack(o.uuid+'.material.opacity', times, values)
+   (d) times[] are seconds, ascending, starting at 0. values[] is FLAT (concatenated).
+   (e) const clip=new AnimationClip('Name', -1, [track1,track2]); addClip(o, clip);
+       -1 auto-computes duration. addClip registers it and shows it in the Animations panel.
    For a bounce/loop, make the last keyframe equal the first so it cycles cleanly.
-   NEVER write requestAnimationFrame, setInterval, or an update() loop — only clips.
+   NEVER write setInterval, requestAnimationFrame, or an update() loop — ONLY clips (addSpinClip or addClip).
 
 EXAMPLES:
 
@@ -367,6 +374,13 @@ User: spin the wheel 360 degrees over 2 seconds
   const o=findObject('wheel')||editor.selected;
   if(!o)return;
   addSpinClip(o,{axis:'y',turns:1,seconds:2,pingPong:false});
+})();
+
+User: add an animation to rotate the dumptruck in a circle slowly
+(function(){
+  const o=findObject('dumptruck')||editor.selected;
+  if(!o)return;
+  addSpinClip(o,{axis:'y',turns:1,seconds:8});
 })();
 
 User: rotate the tree slowly 360 degrees        // scene lists: .treebark #tree-bark

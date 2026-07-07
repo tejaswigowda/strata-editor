@@ -937,21 +937,22 @@ body.sidebar-bottom #sidebar #shell {
 }
 
 .shell-line {
-	padding: 4px 8px;
-	line-height: 1.6;
+	display: block;
+	padding: 0;
 	white-space: pre-wrap;
 	cursor: pointer;
 	border-radius: 2px;
 	min-height: 20px;
-	margin-bottom: 8px;
+	margin-bottom: 2px;
 	max-width: 100%;
 	box-sizing: border-box;
+	overflow: visible;
+	flex: 0 0 auto;
 }
 
 .shell-code-block {
 	width: 100%;
-	min-height: 80px;
-	max-height: 40vh;
+	height: auto;
 	flex: 0 0 auto;
 	overflow: hidden;
 }
@@ -964,11 +965,11 @@ body.sidebar-bottom #sidebar #shell {
 	background: rgba(120,200,100,0.18);
 }
 
-.shell-cmd       { color: #bbb; overflow-y: auto;}
-.shell-result    { color: #79c0ff; }
+.shell-cmd       { color: #bbb; }
+.shell-result    { color: #79c0ff; overflow: visible; }
 .shell-error     { color: #ff6b6b; }
 .shell-info      { color: #6a737d; font-style: italic; }
-.shell-ai-prompt { color: #c9a227; font-style: italic; }
+.shell-ai-prompt { color: #c9a227; font-style: italic; overflow: visible; }
 .shell-ai-stream { color: #7a8099; font-style: italic; white-space: pre-wrap; word-break: break-all; }
 
 #menubar {

@@ -409,8 +409,6 @@ function Shell( editor ) {
 
 		const line = document.createElement( 'div' );
 		line.className = 'shell-line shell-' + type;
-		line.style.display = 'flex';
-		line.style.flexDirection = 'column';
 		line.style.width = '100%';
 		line.style.boxSizing = 'border-box';
 
@@ -534,40 +532,45 @@ function Shell( editor ) {
 
 		} );
 
-		// Button container for Run button - positioned on top-right of editor
+		// Button container for Run button - positioned on bottom-right of editor
 		const btnContainer = document.createElement( 'div' );
 		btnContainer.style.display = 'flex';
 		btnContainer.style.gap = '8px';
-		btnContainer.style.alignItems = 'flex-start';
+		btnContainer.style.alignItems = 'flex-end';
 		btnContainer.style.position = 'absolute';
-		btnContainer.style.top = '8px';
+		btnContainer.style.bottom = '8px';
 		btnContainer.style.right = '8px';
 		btnContainer.style.zIndex = '100';
 		btnContainer.style.pointerEvents = 'auto';
 
 		// Add "Run" button
 		const runBtn = document.createElement( 'button' );
-		runBtn.textContent = '▶ Run';
-		runBtn.style.padding = '6px 12px';
-		runBtn.style.backgroundColor = '#4CAF50';
+		runBtn.textContent = '▶';
+		runBtn.style.width = '32px';
+		runBtn.style.height = '32px';
+		runBtn.style.padding = '0';
+		runBtn.style.backgroundColor = '#ff5555';
 		runBtn.style.color = 'white';
 		runBtn.style.border = 'none';
-		runBtn.style.borderRadius = '4px';
+		runBtn.style.borderRadius = '50%';
 		runBtn.style.cursor = 'pointer';
-		runBtn.style.fontSize = '13px';
+		runBtn.style.fontSize = '16px';
 		runBtn.style.fontWeight = '600';
+		runBtn.style.display = 'flex';
+		runBtn.style.alignItems = 'center';
+		runBtn.style.justifyContent = 'center';
 		runBtn.style.zIndex = '101';
 		runBtn.style.pointerEvents = 'auto';
 		runBtn.addEventListener( 'click', async function () {
 
 			runBtn.disabled = true;
-			runBtn.textContent = '⟳ running…';
+			runBtn.textContent = '⟳';
 
 			try {
 
 				await editorReady;
 				await execute( monacoEditorInstance.getValue() );
-				runBtn.textContent = '✓ done';
+				runBtn.textContent = '✓';
 				
 				// Destroy the editor and remove the shell-line immediately after execution
 				if ( monacoEditorInstance ) {
