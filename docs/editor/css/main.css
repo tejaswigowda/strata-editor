@@ -937,13 +937,14 @@ body.sidebar-bottom #sidebar #shell {
 }
 
 .shell-line {
-	padding: 1px 2px;
-	line-height: 1.5;
+	padding: 4px 8px;
+	line-height: 1.6;
 	white-space: pre-wrap;
 	word-break: break-all;
 	cursor: pointer;
 	border-radius: 2px;
 	min-height: 20px;
+	margin-bottom: 8px;
 }
 
 .shell-code-block {
