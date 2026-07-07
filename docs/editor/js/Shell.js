@@ -524,7 +524,14 @@ function Shell( editor ) {
 					await editorReady;
 					await execute( monacoEditorInstance.getValue() );
 					runBtn.textContent = '✓ done';
+					
+					// Destroy the editor after execution
 					setTimeout( () => {
+						if ( monacoEditorInstance ) {
+							monacoEditorInstance.dispose();
+							editorDiv.innerHTML = '';
+							container.remove();
+						}
 						runBtn.textContent = '▶ Run';
 						runBtn.disabled = false;
 					}, 1500 );
