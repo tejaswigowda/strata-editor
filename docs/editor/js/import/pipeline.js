@@ -16,7 +16,7 @@ import { indexSubtree } from '../intelligence/descriptors.js';
 import { deriveAllClasses } from '../intelligence/classDerive.js';
 import { normalizeImportedObject } from './normalize.js';
 import { diagnoseImport, diagnosticMessages } from './diagnostics.js';
-import { labelImportedAsset } from './labelPass.js';
+import { labelImportedAsset, applyHeuristicLabels } from './labelPass.js';
 import { registerOp } from '../mesh/ops/index.js';
 
 function defaultLog( msg ) { try { console.log( msg ); } catch { /* noop */ } }
@@ -129,6 +129,14 @@ export async function runImportPipeline( editor, root, opts = {} ) {
 			} else if ( labels.skipped === 'no-llm' ) {
 
 				log( '↳ Load an AI model to auto-label this asset\'s parts for natural-language editing.' );
+
+			}
+
+			// Fallback: fill in any remaining unlabeled meshes with heuristics (size, name)
+			const heurCount = applyHeuristicLabels( root );
+			if ( heurCount > 0 ) {
+
+				log( `↳ Applied heuristic labels to ${ heurCount } part(s) (size/name-based).` );
 
 			}
 

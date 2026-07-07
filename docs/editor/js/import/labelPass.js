@@ -220,3 +220,100 @@ export async function labelImportedAsset( editor, root, opts = {} ) {
 	return { labeled, lowConfidence, total: nodes.length };
 
 }
+
+/**
+ * Heuristic fallback labeling for unlabeled meshes in an imported asset.
+ * If a mesh doesn't have userData.label set, assign one based on:
+ *   - Size (triangles): largest → "body", others by position/count
+ *   - Name patterns: "wheel" / "tire" → "wheel", "cab" / "cabin" → "cab"
+ *   - Position: sides → "wheel", center → "body"
+ * ALSO adds the label as a CLASS so selectors like ".body" are addressable.
+ * This runs AFTER the LLM labeling to fill gaps.
+ * @param {THREE.Object3D} root   the imported asset root
+ * @returns {number}  count of newly-labeled meshes
+ */
+export function applyHeuristicLabels( root ) {
+
+	const meshes = [];
+	root.traverse( node => {
+
+		if ( node.isMesh && ! node.userData.label ) meshes.push( node );
+
+	} );
+
+	if ( meshes.length === 0 ) return 0;
+
+	let labeled = 0;
+
+	// Try name-based heuristics first
+	const namePattern = {
+		wheel: /wheel|tire|tyre|rim|hubcap/i,
+		cab: /cab|cabin|cockpit|driver|front/i,
+		bed: /bed|cargo|trunk|box|dump/i,
+		door: /door|hatch|lid/i,
+		window: /window|glass|windshield|window|pane/i,
+		bumper: /bumper|fender|guard/i,
+		axle: /axle|chassis|frame|suspension/i,
+	};
+
+	for ( const mesh of meshes ) {
+
+		for ( const [ label, pattern ] of Object.entries( namePattern ) ) {
+
+			if ( pattern.test( mesh.name ) ) {
+
+				mesh.userData.label = label;
+				// Also add as a CLASS so selectors like ".wheel" work
+				if ( ! mesh.userData.customClasses ) mesh.userData.customClasses = new Set();
+				mesh.userData.customClasses.add( label );
+				labeled ++;
+				break;
+
+			}
+
+		}
+
+	}
+
+	// For remaining unlabeled, use size heuristic: label the largest as "body"
+	const remaining = meshes.filter( m => ! m.userData.label );
+	if ( remaining.length > 0 ) {
+
+		let maxTriangles = 0, bodyMesh = null;
+		for ( const mesh of remaining ) {
+
+			let triCount = 0;
+			if ( mesh.geometry && mesh.geometry.index ) {
+
+				triCount = mesh.geometry.index.count / 3;
+
+			} else if ( mesh.geometry && mesh.geometry.attributes.position ) {
+
+				triCount = mesh.geometry.attributes.position.count / 3;
+
+			}
+
+			if ( triCount > maxTriangles ) {
+
+				maxTriangles = triCount;
+				bodyMesh = mesh;
+
+			}
+
+		}
+
+		if ( bodyMesh && maxTriangles > 10 ) { // only label if substantial
+
+			bodyMesh.userData.label = 'body';
+			// Also add as a CLASS so selectors like ".body" work
+			if ( ! bodyMesh.userData.customClasses ) bodyMesh.userData.customClasses = new Set();
+			bodyMesh.userData.customClasses.add( 'body' );
+			labeled ++;
+
+		}
+
+	}
+
+	return labeled;
+
+}

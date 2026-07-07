@@ -268,6 +268,24 @@ export function validateCode( code ) {
 
 	}
 
+	// 0c. Selector validation: catch $S() calls with spaces in selectors (e.g., ".tree bark")
+	//     which are invalid combinations. Spaces in CSS mean descendant selector, but model
+	//     often generates them by combining separate selectors from the list.
+	const selectorMatch = /\$S\s*\(\s*['"`]([^'"`]*?)['"`]\s*\)/g;
+	let sm;
+	while ( ( sm = selectorMatch.exec( code ) ) !== null ) {
+
+		const selector = sm[ 1 ];
+		// Check for spaces that aren't part of a valid compound selector like ".a.b"
+		// If there's a space after . or # (like ".foo bar" or "#id name"), it's likely a mistake
+		if ( /[.#]\s+[.#a-zA-Z]|[.#]\s+\w+\s+[.#]/.test( selector ) || /\s{2,}/.test( selector ) ) {
+
+			issues.push( `Selector "${ selector }" contains invalid spaces. Selectors must use exact names from the ADDRESSABLE PARTS list. Did you mean to combine selectors with &&? E.g., use ".class1.class2" (no space) or separate into different $S() calls.` );
+
+		}
+
+	}
+
 	// 1. Every `new X(` constructor
 	const ctor = /new\s+([A-Za-z_$][\w$]*)\s*\(/g;
 	let m;

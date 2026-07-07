@@ -55,7 +55,7 @@ function SidebarMaterialColorProperty( editor, property, name ) {
 
 		material = editor.getObjectMaterial( object, materialSlot );
 
-		if ( property in material ) {
+		if ( property in material && material[ property ] && typeof material[ property ].getHexString === 'function' ) {
 
 			color.setHexValue( material[ property ].getHexString() );
 

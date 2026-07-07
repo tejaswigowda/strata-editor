@@ -777,6 +777,8 @@ body.sidebar-bottom #sidebar #shell {
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	text-align: right;
+	margin-left: 8px;
+	margin-right: 6px;
 }
 
 #shell-model-select {
@@ -822,6 +824,27 @@ body.sidebar-bottom #sidebar #shell {
 #shell-stop-btn:disabled { opacity: 0.5; cursor: default; }
 #shell-stop-btn:hover:not(:disabled) { color: #ff8888; background: rgba(255,85,85,0.12); }
 
+/* Mutable toggle — read-only (grey) vs mutable/executes-code (amber) */
+#shell-mutable-wrap {
+	display: flex;
+	align-items: center;
+	column-gap: 4px;
+	flex: 0 0 auto;
+	color: #888;
+	font-size: 11px;
+	cursor: pointer;
+	user-select: none;
+	white-space: nowrap;
+}
+
+#shell-mutable-wrap.is-mutable { color: #e0a030; }
+
+#shell-mutable-checkbox {
+	accent-color: #e0a030;
+	margin: 0;
+	cursor: pointer;
+}
+
 #shell-progress-wrap {
 	height: 3px;
 	background: #1e2235;
@@ -841,6 +864,10 @@ body.sidebar-bottom #sidebar #shell {
 	padding: 8px 12px 4px;
 	user-select: text;
 	-webkit-user-select: text;
+	min-height: 400px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 #shell-ai-row {
@@ -916,6 +943,13 @@ body.sidebar-bottom #sidebar #shell {
 	word-break: break-all;
 	cursor: pointer;
 	border-radius: 2px;
+	min-height: 20px;
+}
+
+.shell-code-block {
+	width: 100%;
+	min-height: 300px;
+	flex: 0 0 auto;
 }
 
 .shell-line:hover {

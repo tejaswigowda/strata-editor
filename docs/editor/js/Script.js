@@ -60,297 +60,241 @@ function Script( editor ) {
 	let currentMode;
 	let currentScript;
 	let currentObject;
+	let monacoEditor = null;
+	let editorReady = new Promise( ( resolve ) => {
 
-	const codemirror = CodeMirror( container.dom, {
-		value: '',
-		lineNumbers: true,
-		matchBrackets: true,
-		indentWithTabs: true,
-		tabSize: 4,
-		indentUnit: 4,
-		hintOptions: {
-			completeSingle: false
-		}
-	} );
-	codemirror.setOption( 'theme', 'monokai' );
-	codemirror.on( 'change', function () {
+		// Initialize Monaco Editor when loader is ready
+		require( [ 'vs/editor/editor.main' ], function () {
 
-		if ( codemirror.state.focused === false ) return;
+			monacoEditor = monaco.editor.create( container.dom, {
+				value: '',
+				language: 'javascript',
+				lineNumbers: 'on',
+				minimap: { enabled: false },
+				theme: 'vs-dark',
+				tabSize: 4,
+				indentSize: 4,
+				insertSpaces: false,
+				readOnly: false,
+				scrollBeyondLastLine: false,
+				fontSize: 12,
+				fontFamily: 'Consolas, "Courier New", monospace'
+			} );
 
-		clearTimeout( delay );
-		delay = setTimeout( function () {
+			// Adjust height to fill container
+			setTimeout( () => {
+				monacoEditor.layout();
+			}, 100 );
 
-			const value = codemirror.getValue();
+			monacoEditor.onDidChangeModelContent( function () {
 
-			if ( ! validate( value ) ) return;
+				clearTimeout( delay );
+				delay = setTimeout( function () {
 
-			if ( typeof ( currentScript ) === 'object' ) {
+					const value = monacoEditor.getValue();
 
-				if ( value !== currentScript.source ) {
+					if ( ! validate( value ) ) return;
 
-					editor.execute( new SetScriptValueCommand( editor, currentObject, currentScript, 'source', value ) );
+					if ( typeof ( currentScript ) === 'object' ) {
+
+						if ( value !== currentScript.source ) {
+
+							editor.execute( new SetScriptValueCommand( editor, currentObject, currentScript, 'source', value ) );
+
+						}
+
+						return;
+
+					}
+
+					if ( currentScript !== 'programInfo' ) return;
+
+					const json = JSON.parse( value );
+
+					if ( JSON.stringify( currentObject.material.defines ) !== JSON.stringify( json.defines ) ) {
+
+						const cmd = new SetMaterialValueCommand( editor, currentObject, 'defines', json.defines );
+						cmd.updatable = false;
+						editor.execute( cmd );
+
+					}
+
+				if ( JSON.stringify( currentObject.material.uniforms ) !== JSON.stringify( json.uniforms ) ) {
+
+					const cmd = new SetMaterialValueCommand( editor, currentObject, 'uniforms', json.uniforms );
+					cmd.updatable = false;
+					editor.execute( cmd );
 
 				}
 
-				return;
+				if ( JSON.stringify( currentObject.material.attributes ) !== JSON.stringify( json.attributes ) ) {
 
-			}
+					const cmd = new SetMaterialValueCommand( editor, currentObject, 'attributes', json.attributes );
+					cmd.updatable = false;
+					editor.execute( cmd );
 
-			if ( currentScript !== 'programInfo' ) return;
+				}
 
-			const json = JSON.parse( value );
+			}, 300 );
 
-			if ( JSON.stringify( currentObject.material.defines ) !== JSON.stringify( json.defines ) ) {
+		} );
 
-				const cmd = new SetMaterialValueCommand( editor, currentObject, 'defines', json.defines );
-				cmd.updatable = false;
-				editor.execute( cmd );
+		// prevent backspace from deleting objects
+		const wrapper = monacoEditor.getDomNode();
+		wrapper.addEventListener( 'keydown', function ( event ) {
 
-			}
+			event.stopPropagation();
 
-			if ( JSON.stringify( currentObject.material.uniforms ) !== JSON.stringify( json.uniforms ) ) {
+		} );
 
-				const cmd = new SetMaterialValueCommand( editor, currentObject, 'uniforms', json.uniforms );
-				cmd.updatable = false;
-				editor.execute( cmd );
+		resolve();
 
-			}
-
-			if ( JSON.stringify( currentObject.material.attributes ) !== JSON.stringify( json.attributes ) ) {
-
-				const cmd = new SetMaterialValueCommand( editor, currentObject, 'attributes', json.attributes );
-				cmd.updatable = false;
-				editor.execute( cmd );
-
-			}
-
-		}, 300 );
-
-	} );
-
-	// prevent backspace from deleting objects
-	const wrapper = codemirror.getWrapperElement();
-	wrapper.addEventListener( 'keydown', function ( event ) {
-
-		event.stopPropagation();
+		} );
 
 	} );
 
 	// validate
 
-	const errorLines = [];
-	const widgets = [];
+	const decorations = [];
 
 	const validate = function ( string ) {
 
 		let valid;
 		let errors = [];
+		const newDecorations = [];
 
-		return codemirror.operation( function () {
+		switch ( currentMode ) {
 
-			while ( errorLines.length > 0 ) {
+			case 'javascript':
 
-				codemirror.removeLineClass( errorLines.shift(), 'background', 'errorLine' );
+				try {
 
-			}
+					const syntax = esprima.parse( string, { tolerant: true } );
+					errors = syntax.errors;
 
-			while ( widgets.length > 0 ) {
+				} catch ( error ) {
 
-				codemirror.removeLineWidget( widgets.shift() );
+					errors.push( {
 
-			}
+						lineNumber: error.lineNumber - 1,
+						message: error.message
 
-			//
+					} );
 
-			switch ( currentMode ) {
+				}
 
-				case 'javascript':
+				for ( let i = 0; i < errors.length; i ++ ) {
 
-					try {
+					const error = errors[ i ];
+					error.message = error.message.replace( /Line [0-9]+: /, '' );
 
-						const syntax = esprima.parse( string, { tolerant: true } );
-						errors = syntax.errors;
+				}
 
-					} catch ( error ) {
+				break;
+
+			case 'json':
+
+				errors = [];
+
+				jsonlint.parseError = function ( message, info ) {
+
+					message = message.split( '\n' )[ 3 ];
+
+					errors.push( {
+
+						lineNumber: info.loc.first_line - 1,
+						message: message
+
+					} );
+
+				};
+
+				try {
+
+					jsonlint.parse( string );
+
+				} catch ( error ) {
+
+					// ignore failed error recovery
+
+				}
+
+				break;
+
+			case 'glsl':
+
+				currentObject.material[ currentScript ] = string;
+				currentObject.material.needsUpdate = true;
+				signals.materialChanged.dispatch( currentObject, 0 ); // TODO: Add multi-material support
+
+				const programs = renderer.info.programs;
+
+				valid = true;
+				const parseMessage = /^(?:ERROR|WARNING): \d+:(\d+): (.*)/g;
+
+				for ( let i = 0, n = programs.length; i !== n; ++ i ) {
+
+					const diagnostics = programs[ i ].diagnostics;
+
+					if ( diagnostics === undefined ||
+							diagnostics.material !== currentObject.material ) continue;
+
+					if ( ! diagnostics.runnable ) valid = false;
+
+					const shaderInfo = diagnostics[ currentScript ];
+					const lineOffset = shaderInfo.prefix.split( /\r\n|\r|\n/ ).length;
+
+					while ( true ) {
+
+						const parseResult = parseMessage.exec( shaderInfo.log );
+						if ( parseResult === null ) break;
 
 						errors.push( {
 
-							lineNumber: error.lineNumber - 1,
-							message: error.message
+							lineNumber: parseResult[ 1 ] - lineOffset,
+							message: parseResult[ 2 ]
 
 						} );
 
-					}
-
-					for ( let i = 0; i < errors.length; i ++ ) {
-
-						const error = errors[ i ];
-						error.message = error.message.replace( /Line [0-9]+: /, '' );
-
-					}
+					} // messages
 
 					break;
 
-				case 'json':
+				} // programs
 
-					errors = [];
+		} // mode switch
 
-					jsonlint.parseError = function ( message, info ) {
-
-						message = message.split( '\n' )[ 3 ];
-
-						errors.push( {
-
-							lineNumber: info.loc.first_line - 1,
-							message: message
-
-						} );
-
-					};
-
-					try {
-
-						jsonlint.parse( string );
-
-					} catch ( error ) {
-
-						// ignore failed error recovery
-
-					}
-
-					break;
-
-				case 'glsl':
-
-					currentObject.material[ currentScript ] = string;
-					currentObject.material.needsUpdate = true;
-					signals.materialChanged.dispatch( currentObject, 0 ); // TODO: Add multi-material support
-
-					const programs = renderer.info.programs;
-
-					valid = true;
-					const parseMessage = /^(?:ERROR|WARNING): \d+:(\d+): (.*)/g;
-
-					for ( let i = 0, n = programs.length; i !== n; ++ i ) {
-
-						const diagnostics = programs[ i ].diagnostics;
-
-						if ( diagnostics === undefined ||
-								diagnostics.material !== currentObject.material ) continue;
-
-						if ( ! diagnostics.runnable ) valid = false;
-
-						const shaderInfo = diagnostics[ currentScript ];
-						const lineOffset = shaderInfo.prefix.split( /\r\n|\r|\n/ ).length;
-
-						while ( true ) {
-
-							const parseResult = parseMessage.exec( shaderInfo.log );
-							if ( parseResult === null ) break;
-
-							errors.push( {
-
-								lineNumber: parseResult[ 1 ] - lineOffset,
-								message: parseResult[ 2 ]
-
-							} );
-
-						} // messages
-
-						break;
-
-					} // programs
-
-			} // mode switch
+		// Add error decorations if editor exists
+		if ( monacoEditor ) {
 
 			for ( let i = 0; i < errors.length; i ++ ) {
 
 				const error = errors[ i ];
+				const lineNumber = Math.max( error.lineNumber + 1, 1 );
 
-				const message = document.createElement( 'div' );
-				message.className = 'esprima-error';
-				message.textContent = error.message;
-
-				const lineNumber = Math.max( error.lineNumber, 0 );
-				errorLines.push( lineNumber );
-
-				codemirror.addLineClass( lineNumber, 'background', 'errorLine' );
-
-				const widget = codemirror.addLineWidget( lineNumber, message );
-
-				widgets.push( widget );
+				newDecorations.push( {
+					range: new monaco.Range( lineNumber, 1, lineNumber, 1 ),
+					options: {
+						isWholeLine: true,
+						className: 'errorLine',
+						glyphMarginClassName: 'fas fa-times-circle',
+						glyphMarginHoverMessage: { value: error.message }
+					}
+				} );
 
 			}
 
-			return valid !== undefined ? valid : errors.length === 0;
+			monacoEditor.deltaDecorations( decorations, newDecorations );
+			decorations.length = 0;
+			decorations.push( ...newDecorations.map( d => d.range ) );
 
-		} );
+		}
+
+		return valid !== undefined ? valid : errors.length === 0;
 
 	};
 
-	// tern js autocomplete
-
-	const server = new CodeMirror.TernServer( {
-		caseInsensitive: true,
-		plugins: { threejs: null }
-	} );
-
-	codemirror.setOption( 'extraKeys', {
-		'Ctrl-Space': function ( cm ) {
-
-			server.complete( cm );
-
-		},
-		'Ctrl-I': function ( cm ) {
-
-			server.showType( cm );
-
-		},
-		'Ctrl-O': function ( cm ) {
-
-			server.showDocs( cm );
-
-		},
-		'Alt-.': function ( cm ) {
-
-			server.jumpToDef( cm );
-
-		},
-		'Alt-,': function ( cm ) {
-
-			server.jumpBack( cm );
-
-		},
-		'Ctrl-Q': function ( cm ) {
-
-			server.rename( cm );
-
-		},
-		'Ctrl-.': function ( cm ) {
-
-			server.selectName( cm );
-
-		}
-	} );
-
-	codemirror.on( 'cursorActivity', function ( cm ) {
-
-		if ( currentMode !== 'javascript' ) return;
-		server.updateArgHints( cm );
-
-	} );
-
-	codemirror.on( 'keypress', function ( cm, kb ) {
-
-		if ( currentMode !== 'javascript' ) return;
-		if ( /[\w\.]/.exec( kb.key ) ) {
-
-			server.complete( cm );
-
-		}
-
-	} );
-
+	// Monaco IntelliSense is built-in and doesn't require additional configuration
 
 	//
 
@@ -395,7 +339,7 @@ function Script( editor ) {
 
 	}
 
-	signals.editScript.add( function ( object, script ) {
+	signals.editScript.add( async function ( object, script ) {
 
 		let mode, source;
 
@@ -449,10 +393,24 @@ function Script( editor ) {
 		currentObject = object;
 
 		container.setDisplay( '' );
-		codemirror.setValue( source );
-		codemirror.clearHistory();
-		if ( mode === 'json' ) mode = { name: 'javascript', json: true };
-		codemirror.setOption( 'mode', mode );
+
+		await editorReady;
+
+		if ( monacoEditor ) {
+
+			// Set the code value
+			monacoEditor.getModel().setValue( source );
+
+			// Set the language based on mode
+			let language = 'javascript';
+			if ( mode === 'glsl' ) {
+				language = 'glsl';
+			} else if ( mode === 'json' || ( typeof mode === 'object' && mode.json ) ) {
+				language = 'json';
+			}
+			monaco.editor.setModelLanguage( monacoEditor.getModel(), language );
+
+		}
 
 	} );
 

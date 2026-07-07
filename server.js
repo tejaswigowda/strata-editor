@@ -222,7 +222,7 @@ async function handleApiChat(req, res) {
 
     try {
       const payload = JSON.parse(body);
-      const { model, messages, temperature = 0.7, max_tokens = 2000 } = payload;
+      const { model, messages, temperature = 0.7, max_tokens = 2000, schema = null } = payload;
       const wantStream = payload.stream === true;
 
       // Validate model parameter
@@ -249,7 +249,9 @@ async function handleApiChat(req, res) {
             upstream = await fetch('http://127.0.0.1:11434/api/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ model: modelName, messages, stream: true })
+              // Ollama structured outputs: `format` accepts a JSON schema and
+              // constrains generation to schema-valid JSON (the 'constrained' cond).
+              body: JSON.stringify({ model: modelName, messages, stream: true, ...(schema ? { format: schema } : {}) })
             });
           } catch (e) {
             console.error('[Ollama Error]', e.message);
@@ -270,7 +272,7 @@ async function handleApiChat(req, res) {
           const ollamaRes = await fetch('http://127.0.0.1:11434/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: modelName, messages, stream: false }),
+            body: JSON.stringify({ model: modelName, messages, stream: false, ...(schema ? { format: schema } : {}) }),
             timeout: 30000
           });
           const data = await ollamaRes.json();
@@ -298,7 +300,7 @@ async function handleApiChat(req, res) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
               },
-              body: JSON.stringify({ model, messages, temperature, max_tokens, stream: true })
+              body: JSON.stringify({ model, messages, temperature, max_tokens, stream: true, ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'ops', schema, strict: false } } } : {}) })
             });
           } catch (e) {
             console.error('[OpenAI Error]', e.message);
@@ -324,7 +326,7 @@ async function handleApiChat(req, res) {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
             },
-            body: JSON.stringify({ model, messages, temperature, max_tokens }),
+            body: JSON.stringify({ model, messages, temperature, max_tokens, ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'ops', schema, strict: false } } } : {}) }),
             timeout: 30000
           });
 
@@ -386,6 +388,16 @@ async function handleApiChat(req, res) {
           // Add system parameter if we have system content
           if (systemPrompt) {
             requestBody.system = systemPrompt;
+          }
+
+          // Constrained decoding (the 'constrained' eval condition): Claude has no
+          // response_format, so force a single tool call whose input_schema IS the
+          // ops schema — the model must emit schema-valid JSON as the tool input.
+          // Wired for the non-streaming path (what the eval uses). Streaming +
+          // tools would need input_json_delta assembly, so schema is skipped there.
+          if (schema && !wantStream) {
+            requestBody.tools = [ { name: 'emit_ops', description: 'Emit the edit operation(s) as structured JSON.', input_schema: schema } ];
+            requestBody.tool_choice = { type: 'tool', name: 'emit_ops' };
           }
 
           console.log('[Claude Request]', JSON.stringify({ model, messageCount: claudeMessages.length, maxTokens: max_tokens, hasSystem: !!systemPrompt }));
@@ -468,7 +480,11 @@ async function handleApiChat(req, res) {
           }
 
           const data = await claudeRes.json();
-          // Convert Claude response format to OpenAI-compatible format for consistent client handling
+          // Convert Claude response format to OpenAI-compatible format for consistent client handling.
+          // Constrained runs return a tool_use block (schema-valid JSON as its input)
+          // instead of a text block; surface that input as the message content.
+          const block = Array.isArray(data.content) ? data.content.find(b => b && (b.type === 'tool_use' || b.type === 'text')) : null;
+          const content = block && block.type === 'tool_use' ? JSON.stringify(block.input) : ((block && block.text) || '');
           const compatibleResponse = {
             id: data.id,
             object: 'chat.completion',
@@ -479,7 +495,7 @@ async function handleApiChat(req, res) {
                 index: 0,
                 message: {
                   role: 'assistant',
-                  content: data.content[0].text
+                  content: content
                 },
                 finish_reason: data.stop_reason === 'end_turn' ? 'stop' : data.stop_reason
               }

@@ -37,6 +37,37 @@ export const OP_SCHEMA = {
 	required: [ 'op', 'selector', 'args' ],
 };
 
+// ── Constrained-decode schema ─────────────────────────────────────────────────
+// The JSON-schema handed to constrained decoding (WebLLM response_format, Ollama
+// `format`, OpenAI json_schema, Claude tool input_schema). It REUSES OP_SCHEMA as
+// the per-op item and wraps it in an { ops:[…] } envelope so a single request and a
+// multi-op decomposition share ONE grammar. `raw` is added to the op enum so the
+// escape hatch stays reachable (constrained decoding forbids MALFORMED output, not
+// the legitimate raw-codegen fallback). selector/args are optional at the item
+// level so a `raw` op (code in args, no selector) is still schema-valid.
+
+export function buildConstrainedOpsSchema() {
+
+	const opItem = {
+		type: 'object',
+		properties: {
+			op: { type: 'string', enum: [ ...OP_SCHEMA.properties.op.enum, 'raw' ] },
+			selector: { type: 'string' },
+			args: { type: 'object' },
+		},
+		required: [ 'op' ],
+	};
+
+	return {
+		type: 'object',
+		properties: {
+			ops: { type: 'array', minItems: 1, items: opItem },
+		},
+		required: [ 'ops' ],
+	};
+
+}
+
 // ── Validation ──────────────────────────────────────────────────────────────────
 
 /**
@@ -143,6 +174,31 @@ function clamp( val, min = -1000, max = 1000 ) {
 
 }
 
+/**
+ * Expand a matched node to all recolorable/material-settable meshes.
+ * If node is a mesh, yield it; if node is a Group/container, recursively yield all descendant meshes.
+ * This allows whole-asset edits: selecting a Group applies the op to all its child meshes.
+ * @param {THREE.Object3D} node
+ * @yields {THREE.Mesh}
+ */
+function* expandToMeshes( node ) {
+
+	if ( node.isMesh ) {
+
+		yield node;
+
+	} else if ( node.children ) {
+
+		for ( const child of node.children ) {
+
+			yield* expandToMeshes( child );
+
+		}
+
+	}
+
+}
+
 // ── Edit op implementations ─────────────────────────────────────────────────────
 
 /**
@@ -178,9 +234,19 @@ export function recolorOp( editor, selector, color ) {
 	let warnings = [];
 	const cmds = [];
 
+	// Expand matched nodes to all descendant meshes (so Groups apply to children)
+	const meshes = [];
 	for ( const node of nodes ) {
 
-		if ( ! node.isMesh ) continue;
+		for ( const mesh of expandToMeshes( node ) ) {
+
+			meshes.push( mesh );
+
+		}
+
+	}
+
+	for ( const node of meshes ) {
 
 		const isArrayMat = Array.isArray( node.material );
 		const mat = isArrayMat ? node.material[ 0 ] : node.material;
@@ -540,9 +606,19 @@ export function setMaterialOp( editor, selector, materialProps ) {
 	const THREE = window.THREE;
 	let count = 0;
 
+	// Expand matched nodes to all descendant meshes (so Groups apply to children)
+	const meshes = [];
 	for ( const node of nodes ) {
 
-		if ( ! node.isMesh ) continue;
+		for ( const mesh of expandToMeshes( node ) ) {
+
+			meshes.push( mesh );
+
+		}
+
+	}
+
+	for ( const node of meshes ) {
 
 		try {
 

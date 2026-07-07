@@ -4,6 +4,8 @@
 
 import { UIPanel } from './libs/ui.js';
 import { PropertyBinding, AnimationClip } from 'three';
+import { GLTFImportDialog } from './GLTFImportDialog.js';
+import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 
 // Per-format icons for the export buttons (same box-button style as Stencils).
 function svg( inner ) {
@@ -29,6 +31,7 @@ const EXPORT_ICONS = {
 
 EXPORT_ICONS[ 'PLY (BINARY)' ] = EXPORT_ICONS[ 'PLY' ];
 EXPORT_ICONS[ 'STL (BINARY)' ] = EXPORT_ICONS[ 'STL' ];
+EXPORT_ICONS[ 'GLB (OPT)' ] = svg( '<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/><path d="M18.5 2.5l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"/>' );
 
 function SidebarExport( editor ) {
 
@@ -176,6 +179,109 @@ function SidebarExport( editor ) {
 			saveArrayBuffer( result, 'scene.glb' );
 
 		}, undefined, { binary: true, animations: optimizedAnimations } );
+
+	} );
+
+	// Export GLB (Optimized) — clones the scene, compresses geometry via the
+	// wizard (weld / simplify / quantize), then writes a binary .glb. The live
+	// editor scene is left untouched (geometries are cloned before optimizing).
+
+	addButton( 'GLB (Opt)', async function () {
+
+		const scene = editor.scene;
+
+		if ( needsUniqueNames( scene ) ) { // see #25179
+
+			if ( confirm( strings.getKey( 'prompt/file/export/duplicateNames' ) ) === false ) return;
+
+			ensureUniqueNames( scene );
+
+		}
+
+		// Work on a deep copy so compression never mutates the live scene.
+		const clone = scene.clone( true );
+		clone.traverse( ( child ) => {
+
+			if ( child.geometry ) child.geometry = child.geometry.clone();
+
+		} );
+
+		let options;
+
+		try {
+
+			const dialog = new GLTFImportDialog( strings, clone, {
+				hideAsScene: true,
+				title: 'Export Optimized GLB',
+				confirmLabel: 'Export',
+				defaultPreset: 'medium',
+			} );
+			options = await dialog.show();
+
+		} catch ( e ) {
+
+			return; // cancelled
+
+		}
+
+		if ( options.compress && options.compressionOptions ) {
+
+			const banner = createProgressBanner( 'Compressing geometry…' );
+
+			try {
+
+				const { before, after } = await optimizeObject(
+					clone,
+					options.compressionOptions,
+					( done, total ) => banner.update( done, total, `Compressing geometry… ${ done }/${ total }` )
+				);
+				const pct = before.bytes > 0 ? Math.round( ( 1 - after.bytes / before.bytes ) * 100 ) : 0;
+
+				if ( editor.importLog ) {
+
+					editor.importLog(
+						`🗜 Optimized export: ${ before.triangles.toLocaleString() }→${ after.triangles.toLocaleString() } tris, ` +
+						`${ formatBytes( before.bytes ) }→${ formatBytes( after.bytes ) } (−${ pct }%)`
+					);
+
+				}
+
+			} finally {
+
+				banner.remove();
+
+			}
+
+		}
+
+		const animations = combineAnimations( scene );
+
+		const optimizedAnimations = [];
+
+		for ( const animation of animations ) {
+
+			optimizedAnimations.push( animation.clone().optimize() );
+
+		}
+
+		const { GLTFExporter } = await import( 'three/addons/exporters/GLTFExporter.js' );
+
+		const exporter = new GLTFExporter();
+
+		const exportBanner = createProgressBanner();
+		exportBanner.done( 'Writing GLB…' );
+
+		exporter.parse( clone, function ( result ) {
+
+			exportBanner.remove();
+			saveArrayBuffer( result, 'scene.optimized.glb' );
+
+		}, function ( error ) {
+
+			exportBanner.remove();
+			console.error( 'GLB (Opt) export failed:', error );
+
+		}, { binary: true, animations: optimizedAnimations } );
 
 	} );
 

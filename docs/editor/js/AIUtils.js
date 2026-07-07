@@ -10,7 +10,7 @@ export { sceneContextString };
 // in the current scene, with counts. Feeds the op/$S edit path so the model picks
 // ".rims" (what the asset actually has) instead of guessing ".wheel". Empty when
 // nothing is labeled/classed yet (no import). Capped for context budget.
-function addressablePartsBlock( editor ) {
+export function addressablePartsBlock( editor ) {
 
 	if ( ! editor || ! editor.scene ) return '';
 	let counts;
@@ -22,19 +22,16 @@ function addressablePartsBlock( editor ) {
 		.map( ( { selector, count } ) => count > 1 ? `${ selector }(×${ count })` : selector )
 		.join( '  ' );
 
-	// Compact EDIT OPS reference — injected ONLY when there are parts to edit (kept
-	// OUT of the always-on system prompt to save the local model's 8k context).
-	return 'EDIT OPS — this scene HAS addressable parts. To edit any part LISTED below you\n' +
-		'MUST use the op surface ($S / op / ops) — NOT findObject / Set*Command / traverse /\n' +
-		'raw three.js. Wrap in one IIFE (or emit a bare op call). Examples:\n' +
-		"  (function(){ $S('.sel').recolor('#111'); })();\n" +
-		"  (function(){ ops([{type:'recolor',selector:'.a',color:'#111'},{type:'scale',selector:'.b',factor:1.5}]); })();\n" +
-		'Ops & args: recolor(color) scale(factor,axis?) move(dx,dy,dz) rotate(axis,deg) delete()\n' +
-		'  duplicate(dx,dy,dz) setMaterial({color,roughness,metalness}) spin(axis?,turns?,dur?)\n' +
-		'  bounce/pulse/fade/orbit/shake(…opts). Fuzzy: bigger≈1.5 a-bit≈1.2 smaller≈0.6 slowly≈dur4.\n' +
-		'recolor TINTS a textured part — for SOLID color use setMaterial. Use ONLY listed selectors;\n' +
-		'map the user\'s noun to the CLOSEST listed one (asked "wheels", list has .rims → .rims).\n' +
-		'ADDRESSABLE PARTS (do NOT invent others):\n' + line + '\n\n';
+	// Simple, direct enforcement: show ONLY allowed selectors, repeated, with examples
+	return '🔒 ADDRESSABLE PARTS MODE: Use ONLY these selectors (nothing else works):\n' +
+		'ALLOWED: ' + line + '\n\n' +
+		'TO EDIT A PART:\n' +
+		"  $S('.body').recolor('#ff0000')\n" +
+		"  ops([{type:'recolor',selector:'.body',color:'#ff0000'}])\n" +
+		'Edit ops: recolor(color) scale(factor) move(dx,dy,dz) delete() setMaterial({color,roughness,metalness})\n' +
+		'Wrap in (function(){ ... })();\n' +
+		'⚠️  MUST use EXACT selectors from the list above — do NOT combine or add spaces (e.g., ".tree bark" fails, use ".treebark" or "#tree-bark").\n' +
+		'Any selector not in ALLOWED list above will fail silently and do nothing.\n\n';
 
 }
 
@@ -182,8 +179,14 @@ export function truncateForContext( s, head = 200, tail = 200 ) {
 // read this more naturally than raw JSON.  Falls back to a compact JSON summary
 // if the JS string exceeds the token budget.
 
-// System prompt is ~900 tokens; leave ~900 for context + user message in a 4096 window
-const CTX_CHAR_LIMIT = 900; // ~225 tokens
+// Scene-context budget for the CODE-GEN path. This used to be 900 chars (~225
+// tokens), sized for a 4096-token window — but the models now load with a 16384
+// window, so that tiny cap needlessly STARVED code-gen of the per-mesh detail
+// the read-only Q&A path (which sends the full sceneContextString uncapped) uses
+// to map a noun like "body" to the real node ("Object_07"). Raised to fit the
+// larger window so mutable mode "sees" the same scene read-only does. Only a
+// genuinely huge scene now falls back to the compact summary.
+const CTX_CHAR_LIMIT = 8000; // ~2000 tokens — full mesh listing for typical imported assets
 
 // ── Q&A message builder ───────────────────────────────────────────────────────
 // Used for plain-text scene interrogation (no code generation).
@@ -191,9 +194,46 @@ const CTX_CHAR_LIMIT = 900; // ~225 tokens
 export function buildQAMessages( qaSystemPrompt, editor, question ) {
 
 	const ctx = sceneContextString( editor );
+	
+	// IMPORTANT: Include addressable parts in read-only mode too, so the model
+	// knows what selectors (.body, .wheel, etc.) are available on imported parts.
+	// Without this, the model falls back to guessing or using generic object names.
+	const partsBlock = addressablePartsBlock( editor );
+	const contextWithParts = partsBlock ? partsBlock + 'Scene:\n' + ctx : 'Scene:\n' + ctx;
+	
+	// Detect bulk scene operations and add explicit warning
+	const isClearRequest = /\b(clear|empty|wipe|reset|remove all|remove everything)\b/i.test( question );
+	const bulkWarning = isClearRequest ? 
+		'\n🔴 SCENE CLEAR REQUIRED: You must use EXACTLY this pattern:\n' +
+		'const toRemove = scene.children.filter(o=>o.type!==\'Camera\');\n' +
+		'toRemove.forEach(o=>editor.execute(new RemoveObjectCommand(editor,o)));\n' +
+		'editor.signals.sceneGraphChanged.dispatch();\n\n' +
+		'✗ NEVER use: editor.snapshot() — this function does not exist\n' +
+		'✗ NEVER use: scene.children.forEach(...) without snapshot — modifies array during iteration\n' +
+		'✗ NEVER use: ops([{type:\'delete\',selector:\'all\'}]) — CRASHES with "No nodes matched"\n\n' : ''
+	
+	// Detect object creation requests and add API warning
+	const isAddRequest = /\b(add|create|make)\s+[a-z]|new\s+[a-z]/i.test( question );
+	const addWarning = isAddRequest ?
+		'\n⚠️  OBJECT CREATION DETECTED: Use THREE.js classes with FULL material names (not abbreviated).\n' +
+		'✓ AVAILABLE MATERIALS: MeshStandardMaterial, MeshBasicMaterial, MeshPhongMaterial, MeshPhysicalMaterial, LineBasicMaterial\n' +
+		'✗ WRONG: BasicMaterial, StandardMaterial, PhongMaterial (abbreviated names do not exist)\n' +
+		'✓ PATTERN: const obj = new Mesh(<geometry>, new Mesh<Material>({color: 0xHHHHHH, ...})); obj.name = \'Name\'; editor.execute(new AddObjectCommand(editor, obj));\n' +
+		'✓ GEOMETRY CHOICES: BoxGeometry (cubes), SphereGeometry (balls), CylinderGeometry (pipes/trees), ConeGeometry (cones), TorusGeometry (rings), etc.\n\n' : '';
+	
+	// Detect modification requests and add ops() guidance
+	const isModifyRequest = /\b(make|change|set|rotate|scale|move|color|material|red|blue|green|yellow)\b/i.test( question ) && !/\badd\b|create\b|new\b/i.test( question );
+	const modifyWarning = isModifyRequest ?
+		'\n🔴 CRITICAL: OBJECT MODIFICATION MUST USE ops() — NOT raw JavaScript!\n' +
+		'✓ REQUIRED: ops([{type:\'recolor\',selector:\'.object-name\',color:\'#ff0000\'}])\n' +
+		'✗ FORBIDDEN: scene.children.find(...).material.color.set(...) — WRONG, breaks undo/redo\n' +
+		'✗ FORBIDDEN: Raw loops on scene.children — WRONG, use ops() instead\n' +
+		'✗ FORBIDDEN: Inventing selectors with spaces like ".tree bark" — ONLY use exact selectors from the addressable parts list\n' +
+		'ALWAYS prefer ops() for any modification, color, rotation, or property changes.\n\n' : '';
+	
 	return [
 		{ role: 'system', content: qaSystemPrompt },
-		{ role: 'user',   content: 'Scene:\n' + ctx + '\n\nQuestion: ' + question },
+		{ role: 'user',   content: contextWithParts + bulkWarning + modifyWarning + addWarning + 'Question: ' + question },
 	];
 
 }
@@ -205,9 +245,9 @@ export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '', 
 
 	if ( ctxStr.length > CTX_CHAR_LIMIT ) {
 
-		// Fall back to compact JSON summary, capped at 8 objects
+		// Fall back to compact JSON summary, capped at 40 objects
 		const summary = _summarizeScene( editor );
-		const compact = { ...summary, objects: summary.objects.slice( 0, 8 ), truncated: true };
+		const compact = { ...summary, objects: summary.objects.slice( 0, 40 ), truncated: true };
 		try {
 			ctxStr = JSON.stringify( compact );
 		} catch {
@@ -226,7 +266,7 @@ export function buildMessages( systemPrompt, editor, userPrompt, apiHints = '', 
 
 	return [
 		{ role: 'system', content: systemPrompt },
-		{ role: 'user',   content: apiBlock + partsBlock + 'Scene:\n' + ctxStr + '\n\nRequest: ' + userPrompt },
+		{ role: 'user',   content: partsBlock + apiBlock + 'Scene:\n' + ctxStr + '\n\nRequest: ' + userPrompt },
 	];
 
 }

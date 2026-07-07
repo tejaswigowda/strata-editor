@@ -12,7 +12,7 @@ import { SetClassCommand } from './commands/SetClassCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 import { createVerifyPanel } from './import/VerifyPanel.js';
 import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT, buildSystemPrompt } from './AIPrompt.js';
-import { extractCode, buildMessages, buildQAMessages, sceneContextString } from './AIUtils.js';
+import { extractCode, buildMessages, buildQAMessages, sceneContextString, addressablePartsBlock } from './AIUtils.js';
 import { AIEngine, getModelList } from './AIEngine.js';
 import { objectToJS, sceneToJS } from './scene/codegen.js';
 import { sceneEqual } from './scene/sceneEqual.js';
@@ -33,6 +33,7 @@ import { SceneIntelligence, findByDescription, describeObject, listCandidates, r
 import { findParts } from './intelligence/sceneIndex.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
+import { buildConstrainedOpsSchema } from './intelligence/editOps.js';
 import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
 import { colorBase as editColorBase } from './ai/editEval.js';
 import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog } from './ai/clientAPI.js';
@@ -95,13 +96,32 @@ function Shell( editor ) {
 	// Keywords that identify code-generation models
 	const CODE_KEYWORDS = [ 'coder', 'code', 'deepseek', 'starcoder', 'codellama', 'codestral' ];
 
+	// General-purpose model families to surface alongside the coder models so the
+	// user can switch between them: Phi, Gemma, Mistral, Llama.
+	const MODEL_KEYWORDS = [ 'phi', 'gemma', 'mistral', 'llama' ];
+
+	const DROPDOWN_KEYWORDS = [ ...CODE_KEYWORDS, ...MODEL_KEYWORDS ];
+
+	// Surface the fast half-precision builds and the full-precision q4f32 builds.
+	// On WebGPU the q4f32_1 variants run ~half the speed and use ~2x the memory of
+	// the q4f16_1 build, so they're tagged "(slower)" in the dropdown to set
+	// expectations; unquantized q0f* variants are still excluded as impractical.
+	const quantTag = ( id ) => {
+
+		const lower = id.toLowerCase();
+		if ( lower.includes( 'q4f16' ) ) return '';
+		if ( lower.includes( 'q4f32' ) ) return '  \u2014  (slower)';
+		return null; // not an offered quantization
+
+	};
+
 	getModelList()
-		.filter( m => CODE_KEYWORDS.some( kw => m.model_id.toLowerCase().includes( kw ) ) )
+		.filter( m => DROPDOWN_KEYWORDS.some( kw => m.model_id.toLowerCase().includes( kw ) ) && quantTag( m.model_id ) !== null )
 		.forEach( m => {
 
 			const opt = document.createElement( 'option' );
 			opt.value = m.model_id;
-			opt.textContent = m.model_id + fmtVram( m.vram_required_MB );
+			opt.textContent = m.model_id + fmtVram( m.vram_required_MB ) + quantTag( m.model_id );
 			modelSelect.appendChild( opt );
 
 		} );
@@ -209,6 +229,14 @@ function Shell( editor ) {
 	loadBtn.id = 'shell-load-btn';
 	loadBtn.textContent = 'Load AI';
 
+	// Unload the current model so a different one can be loaded (switch models).
+	// Hidden until a model is ready.
+	const unloadBtn = document.createElement( 'button' );
+	unloadBtn.id = 'shell-unload-btn';
+	unloadBtn.textContent = 'Unload';
+	unloadBtn.title = 'Unload the current model so you can switch to a different one';
+	unloadBtn.style.display = 'none';
+
 	// Configure a client-side external API (browser → provider). Opens a dialog to
 	// add OpenAI / Anthropic / Ollama / custom endpoints; saved ones appear in the
 	// model dropdown. This is independent of (and coexists with) the DEV proxy.
@@ -221,6 +249,36 @@ function Shell( editor ) {
 		openClientAPIDialog( { onSaved: () => refreshClientModels() } );
 
 	} );
+
+	// ── Mutable toggle ─────────────────────────────────────────────────────────
+	// When CHECKED the AI may generate + EXECUTE code and mutate the scene (the full
+	// agentic path). When UNCHECKED the panel is READ-ONLY: every prompt is answered
+	// Read-only mode only: AI answers questions about the scene but never executes code.
+	// Generated code is shown with a "Run" button — user controls execution.
+	// This eliminates the 45s mutable mode prefill delay while keeping 2s read-only speed.
+	const mutableWrap = document.createElement( 'label' );
+	mutableWrap.id = 'shell-mutable-wrap';
+	mutableWrap.style.display = 'none';  // Hide: read-only only now
+
+	const mutableCheckbox = document.createElement( 'input' );
+	mutableCheckbox.type = 'checkbox';
+	mutableCheckbox.id = 'shell-mutable-checkbox';
+	mutableCheckbox.checked = false;  // Always off
+
+	const mutableText = document.createElement( 'span' );
+	mutableText.textContent = 'Mutable';
+
+	mutableWrap.appendChild( mutableCheckbox );
+	mutableWrap.appendChild( mutableText );
+
+	const isMutable = () => false;  // Always read-only
+
+	function updateAIPlaceholder() {
+
+		if ( aiInput.disabled ) return;
+		aiInput.placeholder = 'Ask about the scene… (Enter)';
+
+	}
 
 	const stopBtn = document.createElement( 'button' );
 	stopBtn.id = 'shell-stop-btn';
@@ -235,9 +293,9 @@ function Shell( editor ) {
 	header.appendChild( headerTitle );
 	header.appendChild( modelSelect );
 	header.appendChild( loadBtn );
+	header.appendChild( unloadBtn );
 	header.appendChild( configApiBtn );
-	header.appendChild( stopBtn );
-	header.appendChild( aiStatus );
+	header.appendChild( mutableWrap );
 	container.dom.appendChild( header );
 
 	// ── Progress bar (shown during model load) ────────────────────────────────
@@ -276,6 +334,8 @@ function Shell( editor ) {
 
 	aiRow.appendChild( aiPromptLabel );
 	aiRow.appendChild( aiInput );
+	aiRow.appendChild( aiStatus );
+	aiRow.appendChild( stopBtn );
 	container.dom.appendChild( aiRow );
 
 	// ── JS input row ──────────────────────────────────────────────────────────
@@ -331,23 +391,289 @@ function Shell( editor ) {
 
 		const line = document.createElement( 'div' );
 		line.className = 'shell-line shell-' + type;
-		line.innerHTML = String( text )
-			.replace( /&/g, '&amp;' )
-			.replace( /</g, '&lt;' )
-			.replace( />/g, '&gt;' )
-			.replace( /\n/g, '<br>' );
+		line.style.display = 'flex';
+		line.style.flexDirection = 'column';
+		line.style.width = '100%';
+		line.style.boxSizing = 'border-box';
+		
+		// Helper to decode HTML entities
+		function decodeHTML( html ) {
+			const txt = document.createElement( 'textarea' );
+			txt.innerHTML = html;
+			return txt.value;
+		}
+		
+		// Check if this is a code result with a fenced block — format it specially
+		const codeBlockMatch = String( text ).match( /```(?:js|javascript)?\n([\s\S]*?)\n```/ );
+		if ( type === 'result' && codeBlockMatch && codeBlockMatch[ 1 ] ) {
 
-		// Click copies the raw text to clipboard
-		line.addEventListener( 'click', function () {
+			let code = decodeHTML( codeBlockMatch[ 1 ].trim() );
+			const fullText = String( text );
+			const beforeCode = fullText.substring( 0, fullText.indexOf( '```' ) );
+			const afterCode = fullText.substring( fullText.lastIndexOf( '```' ) + 3 );
 
-			navigator.clipboard.writeText( text ).then( function () {
+			// Render text before code block
+			if ( beforeCode.trim() ) {
 
-				line.classList.add( 'shell-copied' );
-				setTimeout( () => line.classList.remove( 'shell-copied' ), 600 );
+				const beforeDiv = document.createElement( 'div' );
+				beforeDiv.innerHTML = beforeCode
+					.replace( /&/g, '&amp;' )
+					.replace( /</g, '&lt;' )
+					.replace( />/g, '&gt;' )
+					.replace( /\n/g, '<br>' );
+				beforeDiv.style.marginBottom = '8px';
+				line.appendChild( beforeDiv );
+
+			}
+
+			// Create container for code block with position: relative
+			const container = document.createElement( 'div' );
+			container.className = 'shell-code-block';
+			container.style.width = '100%';
+			container.style.minHeight = '350px';
+			container.style.boxSizing = 'border-box';
+			container.style.backgroundColor = '#1e1e1e';
+			container.style.border = '1px solid #333';
+			container.style.borderRadius = '4px';
+			container.style.padding = '12px';
+			container.style.fontFamily = 'Consolas, monospace';
+			container.style.fontSize = '13px';
+			container.style.lineHeight = '1.5';
+			container.style.color = '#d4d4d4';
+			container.style.marginBottom = '8px';
+			container.style.display = 'flex';
+			container.style.flexDirection = 'column';
+			container.style.gap = '8px';
+			container.style.pointerEvents = 'auto';
+
+			// Create Monaco editor container with explicit sizing
+			const editorDiv = document.createElement( 'div' );
+			editorDiv.style.width = '100%';
+			editorDiv.style.height = '300px';
+			editorDiv.style.minHeight = '300px';
+			editorDiv.style.flex = '0 0 300px';
+			editorDiv.style.display = 'block';
+			editorDiv.style.boxSizing = 'border-box';
+			editorDiv.style.border = '1px solid #3e3e42';
+			editorDiv.style.borderRadius = '2px';
+			editorDiv.style.overflow = 'hidden';
+			editorDiv.style.pointerEvents = 'auto';
+			editorDiv.style.backgroundColor = '#1e1e1e';
+
+			// Append to container FIRST, before Monaco initialization
+			container.appendChild( editorDiv );
+
+			// Initialize Monaco Editor with syntax highlighting
+			let monacoEditorInstance = null;
+			const editorReady = new Promise( ( resolve ) => {
+
+				require( [ 'vs/editor/editor.main' ], function () {
+
+					monacoEditorInstance = monaco.editor.create( editorDiv, {
+						value: code,
+						language: 'javascript',
+						lineNumbers: 'on',
+						minimap: { enabled: false },
+						theme: 'vs-dark',
+						tabSize: 2,
+						indentSize: 2,
+						insertSpaces: true,
+						readOnly: false,
+						scrollBeyondLastLine: false,
+						fontSize: 12,
+						fontFamily: 'Consolas, "Courier New", monospace'
+					} );
+
+					// Store for later layout call after DOM insertion
+					editorDiv.__monacoInstance = monacoEditorInstance;
+					resolve();
+
+				} );
 
 			} );
 
-		} );
+			// Button container for Run and Fullscreen
+			const btnContainer = document.createElement( 'div' );
+			btnContainer.style.display = 'flex';
+			btnContainer.style.gap = '8px';
+			btnContainer.style.alignItems = 'flex-start';
+			btnContainer.style.position = 'relative';
+			btnContainer.style.zIndex = '100';
+			btnContainer.style.pointerEvents = 'auto';
+
+			// Add "Run" button
+			const runBtn = document.createElement( 'button' );
+			runBtn.textContent = '▶ Run';
+			runBtn.style.padding = '6px 12px';
+			runBtn.style.backgroundColor = '#4CAF50';
+			runBtn.style.color = 'white';
+			runBtn.style.border = 'none';
+			runBtn.style.borderRadius = '4px';
+			runBtn.style.cursor = 'pointer';
+			runBtn.style.fontSize = '13px';
+			runBtn.style.fontWeight = '600';
+			runBtn.style.zIndex = '101';
+			runBtn.style.pointerEvents = 'auto';
+			runBtn.addEventListener( 'click', async function () {
+
+				runBtn.disabled = true;
+				runBtn.textContent = '⟳ running…';
+
+				try {
+
+					await editorReady;
+					await execute( monacoEditorInstance.getValue() );
+					runBtn.textContent = '✓ done';
+					setTimeout( () => {
+						runBtn.textContent = '▶ Run';
+						runBtn.disabled = false;
+					}, 1500 );
+
+				} catch ( err ) {
+
+					appendOutput( '⚠ Execution error: ' + ( err.message || err ), 'error' );
+					runBtn.textContent = '▶ Run';
+					runBtn.disabled = false;
+
+				}
+
+			} );
+			btnContainer.appendChild( runBtn );
+
+			// Add "Fullscreen" button
+			const fullscreenBtn = document.createElement( 'button' );
+			fullscreenBtn.textContent = '⛶ Fullscreen';
+			fullscreenBtn.style.padding = '6px 12px';
+			fullscreenBtn.style.backgroundColor = '#2196F3';
+			fullscreenBtn.style.color = 'white';
+			fullscreenBtn.style.border = 'none';
+			fullscreenBtn.style.borderRadius = '4px';
+			fullscreenBtn.style.cursor = 'pointer';
+			fullscreenBtn.style.fontSize = '13px';
+			fullscreenBtn.style.fontWeight = '600';
+			fullscreenBtn.style.zIndex = '101';
+			fullscreenBtn.style.pointerEvents = 'auto';
+			fullscreenBtn.addEventListener( 'click', async function () {
+
+				await editorReady;
+
+				// Create fullscreen overlay
+				const overlay = document.createElement( 'div' );
+				overlay.style.position = 'fixed';
+				overlay.style.top = '0';
+				overlay.style.left = '0';
+				overlay.style.width = '100%';
+				overlay.style.height = '100%';
+				overlay.style.backgroundColor = '#1e1e1e';
+				overlay.style.zIndex = '10000';
+				overlay.style.display = 'flex';
+				overlay.style.flexDirection = 'column';
+				overlay.style.padding = '20px';
+				overlay.style.boxSizing = 'border-box';
+
+				// Close button
+				const closeBtn = document.createElement( 'button' );
+				closeBtn.textContent = '✕ Close';
+				closeBtn.style.alignSelf = 'flex-end';
+				closeBtn.style.marginBottom = '12px';
+				closeBtn.style.padding = '8px 16px';
+				closeBtn.style.backgroundColor = '#f44336';
+				closeBtn.style.color = 'white';
+				closeBtn.style.border = 'none';
+				closeBtn.style.borderRadius = '4px';
+				closeBtn.style.cursor = 'pointer';
+				closeBtn.style.fontSize = '14px';
+				closeBtn.style.fontWeight = '600';
+				closeBtn.addEventListener( 'click', function () {
+					overlay.remove();
+				} );
+				overlay.appendChild( closeBtn );
+
+				// Full-size editor container
+				const fullEditorDiv = document.createElement( 'div' );
+				fullEditorDiv.style.flex = '1';
+				fullEditorDiv.style.overflow = 'hidden';
+
+				// Create another Monaco instance for fullscreen
+				require( [ 'vs/editor/editor.main' ], function () {
+
+					const fullEditor = monaco.editor.create( fullEditorDiv, {
+						value: monacoEditorInstance.getValue(),
+						language: 'javascript',
+						lineNumbers: 'on',
+						minimap: { enabled: false },
+						theme: 'vs-dark',
+						tabSize: 2,
+						indentSize: 2,
+						insertSpaces: true,
+						readOnly: false,
+						scrollBeyondLastLine: false,
+						fontSize: 12,
+						fontFamily: 'Consolas, "Courier New", monospace'
+					} );
+
+					// Sync changes back to main editor on close
+					closeBtn.addEventListener( 'click', function () {
+						monacoEditorInstance.getModel().setValue( fullEditor.getValue() );
+						overlay.remove();
+					} );
+
+					fullEditor.focus();
+					fullEditor.layout();
+
+				} );
+
+				overlay.appendChild( fullEditorDiv );
+				document.body.appendChild( overlay );
+
+			} );
+			btnContainer.appendChild( fullscreenBtn );
+			container.appendChild( btnContainer );
+			line.appendChild( container );
+			
+			// Layout Monaco AFTER adding to DOM
+			requestAnimationFrame( () => {
+				if ( editorDiv.__monacoInstance ) {
+					editorDiv.__monacoInstance.layout();
+				}
+			} );
+
+			// Render text after code block
+			if ( afterCode.trim() ) {
+
+				const afterDiv = document.createElement( 'div' );
+				afterDiv.innerHTML = afterCode
+					.replace( /&/g, '&amp;' )
+					.replace( /</g, '&lt;' )
+					.replace( />/g, '&gt;' )
+					.replace( /\n/g, '<br>' );
+				afterDiv.style.marginTop = '8px';
+				line.appendChild( afterDiv );
+
+			}
+
+		} else {
+
+			// Non-code result — display normally
+			line.innerHTML = String( text )
+				.replace( /&/g, '&amp;' )
+				.replace( /</g, '&lt;' )
+				.replace( />/g, '&gt;' )
+				.replace( /\n/g, '<br>' );
+
+			// Click copies the raw text to clipboard
+			line.addEventListener( 'click', function () {
+
+				navigator.clipboard.writeText( text ).then( function () {
+
+					line.classList.add( 'shell-copied' );
+					setTimeout( () => line.classList.remove( 'shell-copied' ), 600 );
+
+				} );
+
+			} );
+
+		}
 
 		output.appendChild( line );
 		scrollToBottom();
@@ -443,6 +769,11 @@ function Shell( editor ) {
 			// Scope vars become named parameters of a new Function; direct eval()
 			// inside that function reliably sees all parameters as local variables.
 			const query = makeQuery( editor ); // shared selector-picker ($S, Pick, pick)
+			
+			// Capture scene state before execution
+			const childrenCountBefore = editor.scene.children.length;
+			const historyCmdCountBefore = editor.history.undos.length;
+			
 			const scope = {
 				editor,
 				THREE:   window.THREE,
@@ -1212,15 +1543,26 @@ function Shell( editor ) {
 
 				const streamDiv = document.createElement( 'div' );
 				streamDiv.className = 'shell-line shell-ai-stream';
+				const textNode = document.createTextNode( '' );
+				const caret = document.createElement( 'span' );
+				caret.className = 'shell-ai-caret';
+				caret.textContent = ' ▌';
+				streamDiv.appendChild( textNode );
+				streamDiv.appendChild( caret );
 				output.appendChild( streamDiv );
+
+				let scrollQueued = false;
 
 				aiEngine.stream( messages, {
 					maxTokens: 300,
 					temperature: 0.2,
-					onToken: ( _delta, full ) => {
+					onToken: ( delta ) => {
 
-						streamDiv.textContent = full + ' ▌';
-						output.scrollTop = output.scrollHeight;
+						if ( delta ) textNode.appendData( delta );
+						if ( ! scrollQueued ) {
+							scrollQueued = true;
+							requestAnimationFrame( () => { output.scrollTop = output.scrollHeight; scrollQueued = false; } );
+						}
 
 					},
 				} ).then( answer => {
@@ -1315,10 +1657,13 @@ function Shell( editor ) {
 				// loop and print a 3-axis (structure/spatial/semantic) pass/fail table.
 				evalAI: function ( prompts ) { return evalAI( prompts ); },
 
-				// evalEditMatrix('bare'|'scaffolded') — run the 5 fuzzy editing tasks
-				// on the current model; accumulates the model×condition matrix and
-				// prints it. Load each model / flip condition / add Haiku for the ceiling.
+				// evalEditMatrix('bare'|'scaffolded'|'constrained') — run the 5 fuzzy
+				// editing tasks on the current model; accumulates the model×condition
+				// matrix and prints it. Load each model / flip condition / add Haiku for
+				// the ceiling. 'constrained' = scaffolded + JSON-schema constrained decode.
 				evalEditMatrix: function ( condition ) { return evalEditMatrix( condition ); },
+				// saveEvalRows() — download the accumulated per-case rows as JSONL.
+				saveEvalRows: function () { return saveEvalRows(); },
 
 			};
 
@@ -1330,10 +1675,29 @@ function Shell( editor ) {
 			const __fn   = new Function( ...__keys, '__shell_src__', 'return eval(__shell_src__)' );
 			const result = __fn.call( null, ...__vals, code );
 
+			// Check if scene changed after execution
+			const childrenCountAfter = editor.scene.children.length;
+			const historyCmdCountAfter = editor.history.undos.length;
+			const sceneChanged = childrenCountAfter !== childrenCountBefore || historyCmdCountAfter !== historyCmdCountBefore;
+
 			if ( result !== undefined && ! quiet ) {
 
 				appendOutput( formatValue( result ), 'result' );
 
+			}
+			
+			// Show scene change message
+			if ( sceneChanged && ! quiet ) {
+				const childDelta = childrenCountAfter - childrenCountBefore;
+				const cmdDelta = historyCmdCountAfter - historyCmdCountBefore;
+				let msg = '✨ Scene updated';
+				if ( childDelta !== 0 ) {
+					msg += ` (${childDelta > 0 ? '+' : ''}${childDelta} objects)`;
+				}
+				if ( cmdDelta > 0 ) {
+					msg += ` — ${cmdDelta} command${cmdDelta > 1 ? 's' : ''} executed`;
+				}
+				appendOutput( msg, 'result' );
 			}
 
 		} catch ( err ) {
@@ -1354,12 +1718,30 @@ function Shell( editor ) {
 
 		const streamDiv = document.createElement( 'div' );
 		streamDiv.className = 'shell-line shell-ai-stream';
+
+		// Append only the incremental delta to a text node instead of rewriting the
+		// whole output string every token. Rewriting `textContent = full` is O(n) per
+		// token → O(n²) over a response, and it forces a layout each time on the same
+		// main thread WebLLM's decode loop runs on — which throttles tokens/sec. A
+		// text node + appendData( delta ) is O(delta), and scrolling is coalesced to
+		// one rAF so we don't force reflow on every token.
+		const textNode = document.createTextNode( '' );
+		const caret = document.createElement( 'span' );
+		caret.className = 'shell-ai-caret';
+		caret.textContent = ' ▌';
+		streamDiv.appendChild( textNode );
+		streamDiv.appendChild( caret );
 		output.appendChild( streamDiv );
 
+		let scrollQueued = false;
+
 		const fullText = await aiEngine.stream( messages, {
-			onToken: ( _delta, full ) => {
-				streamDiv.textContent = full + ' ▌';
-				output.scrollTop = output.scrollHeight;
+			onToken: ( delta ) => {
+				if ( delta ) textNode.appendData( delta );
+				if ( ! scrollQueued ) {
+					scrollQueued = true;
+					requestAnimationFrame( () => { output.scrollTop = output.scrollHeight; scrollQueued = false; } );
+				}
 			},
 		} );
 
@@ -1375,14 +1757,50 @@ function Shell( editor ) {
 
 	}
 
+	// ── System prompt cache for mutable mode (avoid rebuilding on every request) ──
+	// Caches buildSystemPrompt(opsSchema()) result, invalidated when scene changes.
+	// opsSchema is expensive to compute (~50ms), SYSTEM_PROMPT is static but large (~4k tokens).
+	// Reusing prevents needless prefill delays. Cache key is scene.uuid to detect changes.
+	let promptCache = { sceneUuid: null, systemPrompt: null, lastOpsSchema: null };
+	let aiTimerInterval = null;  // Timer for counting up elapsed seconds
+
+	function getCachedSystemPrompt( editor ) {
+
+		const currentUuid = editor.scene.uuid;
+		if ( promptCache.sceneUuid === currentUuid && promptCache.systemPrompt ) {
+
+			// Scene hasn't changed, reuse cached prompt
+			return promptCache.systemPrompt;
+
+		}
+
+		// Scene changed or first call — rebuild and cache
+		// OPTIMIZATION: Skip opsSchema when addressable parts exist.
+		// If the scene has real parts to edit (.body, .wheel, etc.), those ARE the schema.
+		// opsSchema just distracts the model with generic ops and bloats prefill by ~1.5k tokens.
+		// Only include opsSchema if there are NO addressable parts (model needs op reference).
+		const partsPreview = addressablePartsBlock( editor );
+		const schema = partsPreview ? '' : opsSchema();  // Empty schema if parts exist
+		const prompt = buildSystemPrompt( schema );
+		promptCache = { sceneUuid: currentUuid, systemPrompt: prompt, lastOpsSchema: schema };
+		return prompt;
+
+	}
+
 	async function runAI( userPrompt ) {
 
 		// REPL helpers accidentally typed into the AI box → route to the JS surface
 		// rather than asking the model to "build" the literal text (e.g. evalAI()).
-		if ( /^\s*evalAI\s*\(/.test( userPrompt ) ) { evalAI(); return; }
-		// Route the full evalEditMatrix(...) call through the JS surface so any args
-		// (condition, { debug:true }) work — it's in scope.
-		if ( /^\s*evalEditMatrix\s*\(/.test( userPrompt ) ) { execute( userPrompt ); return; }
+		// These EXECUTE code, so they're honoured only in mutable mode.
+		if ( isMutable() ) {
+
+			if ( /^\s*evalAI\s*\(/.test( userPrompt ) ) { evalAI(); return; }
+			// Route the full evalEditMatrix(...) call through the JS surface so any args
+			// (condition, { debug:true }) work — it's in scope.
+			if ( /^\s*evalEditMatrix\s*\(/.test( userPrompt ) ) { execute( userPrompt ); return; }
+			if ( /^\s*saveEvalRows\s*\(/.test( userPrompt ) ) { execute( userPrompt ); return; }
+
+		}
 
 		if ( ! aiEngine.ready ) {
 
@@ -1391,11 +1809,25 @@ function Shell( editor ) {
 
 		}
 
-		const isQA = userPrompt.startsWith( '?' );
-		const question = isQA ? userPrompt.slice( 1 ).trim() : userPrompt;
+		// Read-only (Mutable unchecked): answer through the lean Q&A prompt only and
+		// NEVER execute code or mutate the scene. Every prompt is treated as a
+		// question regardless of the leading "?".
+		const mutable = isMutable();
+		const startsQ = userPrompt.startsWith( '?' );
+		const question = startsQ ? userPrompt.slice( 1 ).trim() : userPrompt;
+		const isQA = true;  // Always Q&A in read-only mode
 
-		appendOutput( ( isQA ? '? ' : '(AI) ' ) + question, 'ai-prompt' );
-		aiStatus.textContent = 'thinking…';
+		appendOutput( question, 'ai-prompt' );
+		
+		// Start countdown timer (counting up: 1s, 2s, 3s...)
+		let elapsedSeconds = 0;
+		if ( aiTimerInterval ) clearInterval( aiTimerInterval );  // Clear any previous timer
+		aiStatus.textContent = '⏱ thinking…';
+		aiTimerInterval = setInterval( () => {
+			elapsedSeconds++;
+			aiStatus.textContent = `⏱ ${elapsedSeconds}s`;
+		}, 1000 );
+		
 		aiInput.disabled = true;
 		aiAborted = false;
 		stopBtn.disabled = false;
@@ -1403,67 +1835,11 @@ function Shell( editor ) {
 
 		try {
 
-			if ( isQA ) {
-
-				// Q&A mode — stream plain-text answer, do not execute
-				const messages = buildQAMessages( SCENE_QA_PROMPT, editor, question );
-				const answer   = await streamRaw( messages );
-				appendOutput( answer, 'result' );
-				if ( aiAborted ) appendOutput( '■ Stopped by user.', 'info' );
-
-			} else {
-
-				// Code-gen mode — bounded agentic loop:
-				// generate → validate (real API index) → execute → observe → fix.
-				const apiHints = retrieveForPrompt( question );
-				const systemPrompt = buildSystemPrompt( opsSchema() );
-				const messages = buildMessages( systemPrompt, editor, question, apiHints );
-
-				const beforeMeshes = new Set();
-				editor.scene.traverse( o => { if ( o.isMesh ) beforeMeshes.add( o.uuid ); } );
-
-				const res = await runAgentic( {
-					editor,
-					messages,
-					intent: question,
-					maxRetries: 3,
-					shouldAbort:   () => aiAborted,
-					tokenBudget:   aiTokenBudget(),
-					deps: {
-						streamCode:    streamToOutput,
-						execute,
-						appendOutput,
-						validateCode,
-						snapshotScene,
-						sceneDiff,
-						confirmChange,
-						diffSummary,
-						inspectScene,
-						historyLen: () => editor.history.undos.length,
-						rollbackTo: ( len ) => { while ( editor.history.undos.length > len ) editor.history.undo(); },
-					},
-				} );
-
-				// D1 — compositional ceiling: a complex real-world object that came
-				// back as a single primitive likely needs the Power tier's world
-				// knowledge. Surface a hint (don't force-escalate). This is a
-				// GENERATION under-decomposition heuristic ONLY: suppress it on EDITS
-				// (nothing was BUILT — e.g. recoloring the dumptruck's parts adds 0
-				// meshes), where "only one shape was built" is nonsense and the real
-				// issue is part RESOLUTION, not decomposition.
-				if ( res && res.ok && ! aiAborted ) {
-
-					let addedMeshes = 0;
-					editor.scene.traverse( o => { if ( o.isMesh && ! beforeMeshes.has( o.uuid ) ) addedMeshes ++; } );
-					if ( addedMeshes >= 1 && shouldSuggestPower( question, addedMeshes, isPowerModel() ) ) {
-
-						appendOutput( '💡 This looks like a multi-part object but only one shape was built. Try the "Power" model (7B) for richer decomposition.', 'info' );
-
-					}
-
-				}
-
-			}
+			// Always read-only: Q&A mode — stream plain-text answer, do not execute
+			const messages = buildQAMessages( SCENE_QA_PROMPT, editor, question );
+			const answer   = await streamRaw( messages );
+			appendOutput( answer, 'result' );
+			if ( aiAborted ) appendOutput( '■ Stopped by user.', 'info' );
 
 		} catch ( err ) {
 
@@ -1471,9 +1847,11 @@ function Shell( editor ) {
 
 		} finally {
 
+			if ( aiTimerInterval ) clearInterval( aiTimerInterval );  // Stop timer
 			aiStatus.textContent = aiAborted ? 'stopped' : 'ready';
 			stopBtn.style.display = 'none';
 			aiInput.disabled = false;
+			updateAIPlaceholder();
 			aiInput.focus();
 
 		}
@@ -1492,6 +1870,14 @@ function Shell( editor ) {
 	// undefined before a window is known, so the loop falls back to its default.
 	function aiTokenBudget() {
 
+		// INPUT/context budget: how many tokens the prompt (system + scene + parts +
+		// retry history) may occupy before the agentic loop trims/aborts, and the
+		// upper bound for the eval harness's single-shot decode. It must track the
+		// model's context window MINUS a small output reserve — NOT a fixed output
+		// cap. A labeled ~30-part asset's edit prompt already reaches ~8.4k tokens,
+		// so clamping this low makes the loop abort with "prompt exceeds the context
+		// window" before it can retry. The normal code-gen/Q&A output is separately
+		// bounded by AIEngine.stream's own maxTokens default.
 		const w = aiEngine.contextWindow;
 		return w ? Math.max( 2000, w - 650 ) : undefined;
 
@@ -1514,7 +1900,15 @@ function Shell( editor ) {
 			editor.scene.traverse( o => { if ( o.isMesh ) before.add( o.uuid ); } );
 
 			const apiHints = retrieveForPrompt( prompt );
-			const systemPrompt = buildSystemPrompt( opsSchema() );
+			
+			// Use cached system prompt for mutable edits
+			const partsPreview = addressablePartsBlock( editor );
+			let systemPrompt;
+			if ( ! partsPreview ) {
+				systemPrompt = SYSTEM_PROMPT;
+			} else {
+				systemPrompt = getCachedSystemPrompt( editor );
+			}
 			const messages = buildMessages( systemPrompt, editor, prompt, apiHints );
 
 			// Capture the final generated code (for the not-overfit axis).
@@ -1642,6 +2036,20 @@ function Shell( editor ) {
 	// load Haiku (dev mode) and run again for the ceiling column.
 	const _editMatrix = newMatrix();
 	let _matrixRunning = false;
+	// Per-(model,condition,task,id) rows accumulated across runs → the re-run
+	// JSONL artifact. saveEvalRows() (JS surface) downloads it.
+	const _matrixRows = [];
+
+	// Output contract for the 'constrained' condition. Decoding enforces the schema
+	// (well-formed JSON), this tells the model the SEMANTICS: emit an { ops:[…] }
+	// envelope, one entry per operation, no prose, no code fences.
+	const CONSTRAINED_JSON_INSTRUCTION = `
+
+CONSTRAINED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code fences:
+{"ops":[{"op":"<op>","selector":"<css-selector>","args":{ … }}]}
+- One array entry per operation (a compound request → multiple entries).
+- "op" is one of the edit ops above; "selector" targets the part(s); "args" holds op-specific values (e.g. recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).
+- Do NOT split a single set edit ("all four wheels") into one op per node — one op, one selector.`;
 
 	async function evalEditMatrix( condition = 'scaffolded', opts = {} ) {
 
@@ -1650,7 +2058,12 @@ function Shell( editor ) {
 		_matrixRunning = true;
 		const debug = opts.debug === true;
 		const model = aiEngine.modelId || 'unknown';
+		// Conditions: 'bare' (no scaffolding), 'scaffolded' (parts injection), and
+		// 'constrained' (scaffolded + JSON-schema constrained decoding). The last two
+		// both inject parts; 'constrained' additionally forces schema-valid op JSON.
 		const injectParts = condition !== 'bare';
+		const constrainDecode = condition === 'constrained';
+		const opsResponseSchema = constrainDecode ? buildConstrainedOpsSchema() : null;
 		appendOutput( `Eval matrix: ${ model } / ${ condition } — measuring the 5 tasks (single-shot, quiet)…`, 'info' );
 
 		// runOnce — ONE quiet generation (no agentic loop, no retries, NO execution).
@@ -1659,10 +2072,24 @@ function Shell( editor ) {
 		async function runOnce( prompt ) {
 
 			const apiHints = retrieveForPrompt( prompt );
-			const systemPrompt = buildSystemPrompt( opsSchema() );
+			
+			// Use cached system prompt for mutable edits
+			const partsPreview = addressablePartsBlock( editor );
+			let systemPrompt;
+			if ( ! partsPreview ) {
+				systemPrompt = SYSTEM_PROMPT;
+			} else {
+				systemPrompt = getCachedSystemPrompt( editor );
+			}
+			// In the constrained condition the model must emit schema-valid op JSON
+			// (enforced by decoding) rather than the $S/op() JS surface, so tell it the
+			// output contract explicitly; the schema handles well-formedness.
+			if ( constrainDecode ) systemPrompt += CONSTRAINED_JSON_INSTRUCTION;
 			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts } );
-			const raw = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0 } );
-			return { code: extractCode( raw ) };
+			const raw = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: opsResponseSchema } );
+			// Constrained output is raw JSON (no code fence) — parseEmittedOps reads it
+			// directly; the JS-code conditions still go through the fenced-code extractor.
+			return { code: constrainDecode ? raw : extractCode( raw ) };
 
 		}
 
@@ -1711,6 +2138,7 @@ function Shell( editor ) {
 				normalizeColor: ( c ) => { try { return new window.THREE.Color( c ).getHex(); } catch { return null; } },
 				labelOnce,
 				onProgress: ( msg ) => { aiStatus.textContent = msg; },
+				onRow: ( r ) => { _matrixRows.push( { model, condition, task: r.task, id: r.id, score: r.score, raw: r.raw, parsed: r.parsed } ); },
 				onCase: debug ? ( d ) => {
 
 					const flags = `op:${ d.pass.op ? '✓' : '✗' } sel:${ d.pass.sel ? '✓' : '✗' } arg:${ d.pass.arg ? '✓' : '✗' } multi:${ d.pass.multi ? '✓' : '✗' }`;
@@ -1738,7 +2166,22 @@ function Shell( editor ) {
 		const line = Object.entries( taskScores ).map( ( [ t, s ] ) => `${ t } ${ s.passed }/${ s.total }` ).join( '   ' );
 		appendOutput( `${ model } / ${ condition }:   ${ line }`, 'result' );
 		appendOutput( formatMatrix( _editMatrix ), 'result' );
+		appendOutput( `${ _matrixRows.length } row(s) logged — saveEvalRows() to download JSONL.`, 'info' );
 		return taskScores;
+
+	}
+
+	// Download the accumulated per-(model,condition,task,id) rows as JSONL.
+	function saveEvalRows() {
+
+		if ( ! _matrixRows.length ) { appendOutput( 'No eval rows yet — run evalEditMatrix(...) first.', 'info' ); return; }
+		const jsonl = _matrixRows.map( r => JSON.stringify( r ) ).join( '\n' );
+		const blob = new Blob( [ jsonl ], { type: 'application/x-ndjson' } );
+		const url = URL.createObjectURL( blob );
+		const a = document.createElement( 'a' );
+		a.href = url; a.download = 'eval-matrix-rows.jsonl'; a.click();
+		URL.revokeObjectURL( url );
+		appendOutput( `Saved ${ _matrixRows.length } eval rows → eval-matrix-rows.jsonl`, 'result' );
 
 	}
 
@@ -1749,6 +2192,11 @@ function Shell( editor ) {
 		if ( ! aiEngine.ready ) return;
 		aiAborted = true;
 		aiEngine.interrupt();
+		
+		// Make input responsive IMMEDIATELY (don't wait for stream to fully exit)
+		// User should be able to type again instantly, even if stream cleanup is ongoing
+		aiInput.disabled = false;
+		aiInput.focus();
 		stopBtn.disabled = true;
 		aiStatus.textContent = 'stopping…';
 
@@ -1787,7 +2235,9 @@ function Shell( editor ) {
 
 				aiStatus.textContent = 'ready';
 				loadBtn.textContent = '✓ AI';
+				unloadBtn.style.display = '';
 				aiInput.disabled = false;
+				updateAIPlaceholder();
 				aiInput.focus();
 				localStorage.setItem( 'shell-ai-model', selectedModel );
 				appendOutput( 'AI ready — model: ' + cfg.model + '  (client-side ' + cfg.provider + ' API, direct from browser)', 'info' );
@@ -1835,7 +2285,11 @@ function Shell( editor ) {
 								// fence makes the extractor correctly reject the output).
 								// The 600-token default is tuned for memory-bound WebLLM;
 								// it's far too low for verbose cloud models.
-								max_tokens: Math.max( opts.maxTokens ?? 0, 4096 )
+								max_tokens: Math.max( opts.maxTokens ?? 0, 4096 ),
+								// Constrained-decode schema ('constrained' eval condition):
+								// the server relays it to each provider's structured-output
+								// mechanism (Ollama format / OpenAI json_schema / Claude tool).
+								...( opts.schema ? { schema: opts.schema } : {} )
 							} )
 						} );
 
@@ -1930,7 +2384,9 @@ function Shell( editor ) {
 
 				aiStatus.textContent = 'ready';
 				loadBtn.textContent = '✓ AI';
+				unloadBtn.style.display = '';
 				aiInput.disabled = false;
+				updateAIPlaceholder();
 				aiInput.focus();
 				localStorage.setItem( 'shell-ai-model', selectedModel );
 				appendOutput( 'AI ready — model: ' + selectedModel + '  (external API)', 'info' );
@@ -1963,7 +2419,9 @@ function Shell( editor ) {
 				setTimeout( () => { progressWrap.style.display = 'none'; }, 600 );
 				aiStatus.textContent = 'ready';
 				loadBtn.textContent = '✓ AI';
+				unloadBtn.style.display = '';
 				aiInput.disabled = false;
+				updateAIPlaceholder();
 				aiInput.focus();
 				localStorage.setItem( 'shell-ai-model', selectedModel );
 				appendOutput( 'AI ready — model: ' + selectedModel +
@@ -2001,11 +2459,55 @@ function Shell( editor ) {
 
 	} );
 
+	// ── Unload AI ─────────────────────────────────────────────────────────────
+	// Release the current model so the user can pick a different one and Load
+	// again. Resets the header back to its pre-load state.
+	unloadBtn.addEventListener( 'click', async function () {
+
+		if ( aiEngine.loading ) return;
+
+		unloadBtn.disabled = true;
+		aiStatus.textContent = 'unloading…';
+
+		try {
+
+			aiEngine.interrupt();
+			await aiEngine.unload();
+
+		} catch ( err ) {
+
+			console.debug( 'AI unload error:', err && err.message || err );
+
+		}
+
+		unloadBtn.disabled = false;
+		unloadBtn.style.display = 'none';
+		loadBtn.disabled = false;
+		loadBtn.textContent = 'Load AI';
+		modelSelect.disabled = false;
+		aiInput.disabled = true;
+		aiStatus.textContent = '';
+		appendOutput( 'AI unloaded — select a model and click "Load AI" to switch.', 'info' );
+
+	} );
+
 	// ── AI input keydown ──────────────────────────────────────────────────────
 
 	aiInput.addEventListener( 'keydown', function ( event ) {
 
 		event.stopPropagation();
+
+		// Escape to interrupt running AI stream
+		if ( event.key === 'Escape' ) {
+
+			event.preventDefault();
+			if ( ! stopBtn.disabled ) {
+				// Stream is running — trigger stop
+				stopBtn.click();
+			}
+			return;
+
+		}
 
 		if ( event.key === 'Enter' ) {
 

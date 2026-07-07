@@ -7,6 +7,7 @@ import { UIRow, UIText, UIButton } from './libs/ui.js';
 import { sceneContextString } from './scene/summarize.js';
 import { diffScenes } from './SceneDiff.js';
 import { MergeViewport } from './MergeViewport.js';
+import { externalizeScene, internalizeScene, u8ToBase64 } from './GitAssets.js';
 
 // ── Commit-message generation ─────────────────────────────────────────────────
 // Uses the already-loaded local AI engine (editor.aiEngine) to generate a
@@ -22,6 +23,31 @@ const COMMIT_MSG_SYSTEM = `You write git commit messages for 3D scene files. Rul
 - If the scene is empty, write "Initialize empty scene".`;
 
 const LS_LAST_CTX_KEY = 'git-last-scene-ctx';
+
+// Remember the commit SHA the local copy was last synced to (loaded or committed),
+// keyed by repo+branch+path. On startup we compare it against the branch head: if
+// they match and a local autosave exists, the local scene is already current and
+// we skip re-downloading it entirely.
+const LS_SYNC_PREFIX = 'git-sync-commit:';
+
+function syncKey( parsed, path, branch ) {
+
+	return `${ LS_SYNC_PREFIX }${ parsed.owner }/${ parsed.repo }/${ branch }/${ path }`;
+
+}
+
+function getSyncedCommit( parsed, path, branch ) {
+
+	return localStorage.getItem( syncKey( parsed, path, branch ) ) || null;
+
+}
+
+function setSyncedCommit( parsed, path, branch, sha ) {
+
+	if ( sha ) localStorage.setItem( syncKey( parsed, path, branch ), sha );
+	else localStorage.removeItem( syncKey( parsed, path, branch ) );
+
+}
 
 // ── Scene diff ────────────────────────────────────────────────────────────────
 // Parses the JS-comment context lines and returns a compact change summary.
@@ -165,7 +191,13 @@ async function ghGetSceneJSON( path, token ) {
 		cache: 'no-store',
 	} );
 
-	if ( ! res.ok ) throw new Error( `GitHub ${ res.status }: ${ await res.text() }` );
+	if ( ! res.ok ) {
+
+		const err = new Error( `GitHub ${ res.status }: ${ await res.text() }` );
+		err.status = res.status;   // let callers treat 404 (file not committed yet) specially
+		throw err;
+
+	}
 
 	const text = await res.text();
 	if ( ! text.trim() ) throw new Error( 'scene file is empty' );
@@ -182,10 +214,19 @@ async function ghGetSceneJSON( path, token ) {
 
 }
 
-async function ghPut( path, body, token ) {
+// ── Git Data API (atomic multi-file commit) ───────────────────────────────────
+// A single scene may need scene.json plus dozens of large binary asset blobs.
+// The Contents API only writes one file at a time (and each PUT is a commit),
+// so we use the low-level Git Data API to assemble one tree and one commit:
+//   ref → base commit → base tree → blobs → new tree → new commit → move ref.
+// Assets are content-addressed (filename embeds the SHA-1 of the bytes), so any
+// blob whose path already exists in the base tree is byte-identical and reused —
+// unchanged geometry is never re-uploaded.
+
+async function ghSend( method, path, body, token ) {
 
 	const res = await fetch( `https://api.github.com${ path }`, {
-		method: 'PUT',
+		method,
 		headers: {
 			Authorization: `Bearer ${ token }`,
 			Accept: 'application/vnd.github+json',
@@ -194,11 +235,146 @@ async function ghPut( path, body, token ) {
 		body: JSON.stringify( body ),
 	} );
 
-	if ( ! res.ok ) throw new Error( `GitHub ${ res.status }: ${ await res.text() }` );
+	if ( ! res.ok ) {
+
+		const err = new Error( `GitHub ${ res.status }: ${ await res.text() }` );
+		err.status = res.status;
+		throw err;
+
+	}
+
 	return res.json();
 
 }
 
+// Fetch a file's raw bytes (used to rehydrate externalized assets on load).
+// Content-addressed asset paths (assets/<sha1>.*) are immutable, so their bytes
+// are cached in the browser Cache Storage: on a later load only NEW blobs hit the
+// network — unchanged geometry is served locally. Non-asset paths bypass the cache.
+async function ghGetBytes( parsed, branch, path, token ) {
+
+	const immutable = path.startsWith( 'assets/' );
+	const cacheUrl  = `https://strata.local/git-asset/${ parsed.owner }/${ parsed.repo }/${ path }`;
+
+	let cache = null;
+	if ( immutable && typeof caches !== 'undefined' ) {
+
+		try {
+
+			cache = await caches.open( 'git-assets-v1' );
+			const hit = await cache.match( cacheUrl );
+			if ( hit ) return new Uint8Array( await hit.arrayBuffer() );
+
+		} catch { cache = null; }
+
+	}
+
+	const url = `https://api.github.com/repos/${ parsed.owner }/${ parsed.repo }/contents/${ path }?ref=${ branch }&_ts=${ Date.now() }`;
+
+	const res = await fetch( url, {
+		headers: { Authorization: `Bearer ${ token }`, Accept: 'application/vnd.github.raw' },
+		cache: 'no-store',
+	} );
+
+	if ( ! res.ok ) throw new Error( `GitHub ${ res.status } fetching ${ path }: ${ await res.text() }` );
+
+	const bytes = new Uint8Array( await res.arrayBuffer() );
+
+	if ( cache ) { try { await cache.put( cacheUrl, new Response( bytes ) ); } catch { /* cache full — non-fatal */ } }
+
+	return bytes;
+
+}
+
+// files: [ { path, base64, immutable } ]. `immutable` files (content-addressed
+// assets) are skipped when a blob already lives at that path in the base tree.
+async function commitFiles( parsed, branch, token, files, message, onProgress ) {
+
+	const base = `/repos/${ parsed.owner }/${ parsed.repo }`;
+
+	// Resolve the branch head + its tree. A missing branch (empty repo / typo)
+	// surfaces as a clear error rather than a cryptic 404 later.
+	let ref;
+	try {
+
+		ref = await ghGet( `${ base }/git/ref/heads/${ branch }`, token );
+
+	} catch ( err ) {
+
+		if ( err.message && err.message.includes( '404' ) ) {
+
+			throw new Error( `Branch "${ branch }" not found — create it with an initial commit first.` );
+
+		}
+
+		throw err;
+
+	}
+
+	const headSha    = ref.object.sha;
+	const headCommit = await ghGet( `${ base }/git/commits/${ headSha }`, token );
+	const baseTree   = headCommit.tree.sha;
+
+	// Existing paths let us skip re-uploading unchanged, content-addressed assets.
+	let existing = null;
+	try {
+
+		const tree = await ghGet( `${ base }/git/trees/${ baseTree }?recursive=1`, token );
+		if ( ! tree.truncated ) {
+
+			existing = new Set( ( tree.tree || [] ).map( t => t.path ) );
+
+		}
+
+	} catch { /* dedup is best-effort */ }
+
+	const treeItems = [];
+	let done = 0;
+
+	for ( const f of files ) {
+
+		if ( f.immutable && existing && existing.has( f.path ) ) { done ++; continue; }
+
+		const blob = await ghSend( 'POST', `${ base }/git/blobs`, { content: f.base64, encoding: 'base64' }, token );
+		treeItems.push( { path: f.path, mode: '100644', type: 'blob', sha: blob.sha } );
+
+		done ++;
+		if ( onProgress ) onProgress( done, files.length );
+
+	}
+
+	if ( treeItems.length === 0 ) {
+
+		// Nothing changed — return the current head so callers can report success.
+		return headCommit;
+
+	}
+
+	const newTree = await ghSend( 'POST', `${ base }/git/trees`, { base_tree: baseTree, tree: treeItems }, token );
+	const commit  = await ghSend( 'POST', `${ base }/git/commits`, { message, tree: newTree.sha, parents: [ headSha ] }, token );
+	await ghSend( 'PATCH', `${ base }/git/refs/heads/${ branch }`, { sha: commit.sha }, token );
+
+	return commit;
+
+}
+
+// Rehydrate a scene fetched from GitHub: replace every { $bin } / { $img }
+// reference with its bytes. Fetches are cached by path so buffers shared across
+// geometries (deduped on commit) are downloaded only once. No-op for legacy
+// inline scenes.
+async function internalizeFromGit( json, parsed, branch, token ) {
+
+	const cache = new Map();
+	const fetchBytes = ( path ) => {
+
+		if ( ! cache.has( path ) ) cache.set( path, ghGetBytes( parsed, branch, path, token ) );
+		return cache.get( path );
+
+	};
+
+	return internalizeScene( json, fetchBytes );
+
+}
 // ── Compare with remote (merge conflict viewport) ─────────────────────────────
 
 async function openGitCompare( editor, strings ) {
@@ -222,6 +398,7 @@ async function openGitCompare( editor, strings ) {
 
 		const apiPath  = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
 		const remote   = await ghGetSceneJSON( apiPath, cfg.pat );
+		await internalizeFromGit( remote, parsed, cfg.branch || 'main', cfg.pat );
 		const local    = editor.scene.toJSON();
 		const diff     = diffScenes( local, remote );
 
@@ -427,11 +604,20 @@ class GitLoadDialog {
 
 				const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
 				const json = await ghGetSceneJSON( apiPath, cfg.pat );
+				await internalizeFromGit( json, parsed, cfg.branch || 'main', cfg.pat );
 				editor.clear();
 				await editor.fromJSON( json );
 
 				// Establish baseline so the first commit after load diffs correctly
 				localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+
+				// Record the commit we loaded so the next startup can skip re-downloading.
+				try {
+
+					const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ cfg.branch || 'main' }`, cfg.pat );
+					setSyncedCommit( parsed, cfg.scenePath || 'scene.json', cfg.branch || 'main', ref && ref.object && ref.object.sha );
+
+				} catch { /* non-fatal */ }
 
 				status.textContent = strings.getKey( 'menubar/git/load/success' );
 				setTimeout( () => this.close(), 800 );
@@ -572,25 +758,38 @@ class GitCommitDialog {
 
 			try {
 
-				const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }`;
-				const branch  = cfg.branch || 'main';
+				const scenePath = cfg.scenePath || 'scene.json';
+				const branch    = cfg.branch || 'main';
+				const msg       = msgInput.value.trim() || 'Update scene';
 
-				let sha;
-				try {
+				// Split the scene into a small, diffable scene.json plus separate
+				// binary asset blobs (geometry buffers / images). This keeps the
+				// committed scene file tiny and avoids serializing hundreds of MB
+				// of float text — which previously overflowed btoa()/string limits
+				// and exceeded GitHub's per-file size cap.
+				status.textContent = 'Preparing assets…';
+				const { json, assets } = await externalizeScene( editor.toJSON() );
 
-					const existing = await ghGet( `${ apiPath }?ref=${ branch }`, cfg.pat );
-					sha = existing.sha;
+				const sceneBytes = new TextEncoder().encode( JSON.stringify( json, null, 2 ) );
 
-				} catch { /* new file */ }
+				const files = [];
+				for ( const [ path, u8 ] of assets ) {
 
-				const sceneJSON  = JSON.stringify( editor.toJSON(), null, 2 );
-				const contentB64 = btoa( unescape( encodeURIComponent( sceneJSON ) ) );
-				const msg        = msgInput.value.trim() || 'Update scene';
+					files.push( { path, base64: u8ToBase64( u8 ), immutable: true } );
 
-				const payload = { message: msg, content: contentB64, branch };
-				if ( sha ) payload.sha = sha;
+				}
+				files.push( { path: scenePath, base64: u8ToBase64( sceneBytes ), immutable: false } );
 
-				await ghPut( apiPath, payload, cfg.pat );
+				// One atomic commit for scene.json + all (new) assets.
+				const commit = await commitFiles( parsed, branch, cfg.pat, files, msg, ( done, total ) => {
+
+					status.textContent = `Uploading ${ done }/${ total }…`;
+
+				} );
+
+				// Record the commit we just synced to, so the next startup sees the
+				// local copy as current and skips re-downloading the whole scene.
+				setSyncedCommit( parsed, scenePath, branch, commit && commit.sha );
 
 				// Snapshot current context so the next commit can diff against it
 				localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
@@ -619,7 +818,7 @@ class GitCommitDialog {
 // the local autosave restored. Fails silently so the editor still opens normally
 // when offline or when credentials have expired.
 
-export async function autoLoadFromGit( editor ) {
+export async function autoLoadFromGit( editor, opts = {} ) {
 
 	// User explicitly chose File → New — respect that choice for this reload.
 	if ( localStorage.getItem( 'git-skip-autoload' ) ) {
@@ -634,12 +833,39 @@ export async function autoLoadFromGit( editor ) {
 
 	if ( ! parsed || ! cfg.pat ) return;  // not configured
 
+	const scenePath = cfg.scenePath || 'scene.json';
+	const branch    = cfg.branch || 'main';
+
+	// Fast path: ask GitHub only for the branch head (a few hundred bytes). If it
+	// matches the commit our local copy was last synced to — and a local autosave
+	// actually exists — the local scene is already current, so skip downloading
+	// the whole scene (and every asset blob) entirely.
+	if ( opts.hasLocalScene ) {
+
+		try {
+
+			const ref     = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, cfg.pat );
+			const headSha = ref && ref.object && ref.object.sha;
+
+			if ( headSha && headSha === getSyncedCommit( parsed, scenePath, branch ) ) {
+
+				_showBanner( `✓ Local scene is current with ${ parsed.owner }/${ parsed.repo }`, 2000 );
+				return;
+
+			}
+
+		} catch { /* head lookup failed — fall through to a normal full load */ }
+
+	}
+
 	const banner = _showBanner( `Loading scene from ${ parsed.owner }/${ parsed.repo }…` );
 
 	try {
 
-		const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
+		const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ branch }`;
 		const json    = await ghGetSceneJSON( apiPath, cfg.pat );
+
+		await internalizeFromGit( json, parsed, branch, cfg.pat );
 
 		editor.clear();
 		await editor.fromJSON( json );
@@ -647,11 +873,32 @@ export async function autoLoadFromGit( editor ) {
 		// Establish diff baseline for the next commit
 		localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 
+		// Record the commit we just loaded so subsequent startups can skip the
+		// full download while the local copy stays current.
+		try {
+
+			const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, cfg.pat );
+			setSyncedCommit( parsed, scenePath, branch, ref && ref.object && ref.object.sha );
+
+		} catch { /* non-fatal — next startup just does a normal load */ }
+
 		_showBanner( `✓ Scene loaded from ${ parsed.owner }/${ parsed.repo }`, 2500 );
 
 	} catch ( err ) {
 
-		_showBanner( `Git auto-load failed: ${ err.message }`, 4000 );
+		if ( err.status === 404 ) {
+
+			// Scene file not committed yet — keep whatever is loaded locally and
+			// let the first commit create it. This is a normal first-run state,
+			// not a failure. (The browser still logs the 404 network response.)
+			setSyncedCommit( parsed, scenePath, branch, null );
+			_showBanner( `No scene at ${ scenePath } yet — commit to create it`, 3000 );
+
+		} else {
+
+			_showBanner( `Git auto-load failed: ${ err.message }`, 4000 );
+
+		}
 
 	} finally {
 

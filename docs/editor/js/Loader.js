@@ -11,6 +11,8 @@ import { GLTFImportDialog } from './GLTFImportDialog.js';
 
 import { runImportPipeline } from './import/pipeline.js';
 
+import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
+
 import { unzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 
 function Loader( editor ) {
@@ -18,6 +20,62 @@ function Loader( editor ) {
 	const scope = this;
 
 	this.texturePath = '';
+
+	// Shared finish step for glTF/GLB imports: shows the import wizard (as-scene +
+	// optional geometry compression), applies compression when requested, then
+	// adds the result to the editor. Rejects when the user cancels the dialog.
+	this.finishGLTFImport = async function ( result, filename ) {
+
+		const scene = result.scene;
+		scene.name = filename;
+		scene.animations.push( ...result.animations );
+
+		const dialog = new GLTFImportDialog( editor.strings, scene );
+		const options = await dialog.show(); // throws if cancelled
+
+		if ( options.compress && options.compressionOptions ) {
+
+			const banner = createProgressBanner( 'Compressing geometry…' );
+
+			try {
+
+				const { before, after } = await optimizeObject(
+					scene,
+					options.compressionOptions,
+					( done, total ) => banner.update( done, total, `Compressing geometry… ${ done }/${ total }` )
+				);
+				const pct = before.bytes > 0 ? Math.round( ( 1 - after.bytes / before.bytes ) * 100 ) : 0;
+
+				if ( editor.importLog ) {
+
+					editor.importLog(
+						`🗜 Compressed "${ filename }": ` +
+						`${ before.triangles.toLocaleString() }→${ after.triangles.toLocaleString() } tris, ` +
+						`${ formatBytes( before.bytes ) }→${ formatBytes( after.bytes ) } (−${ pct }%)`
+					);
+
+				}
+
+			} finally {
+
+				banner.remove();
+
+			}
+
+		}
+
+		if ( options.asScene ) {
+
+			editor.execute( new SetSceneCommand( editor, scene ) );
+
+		} else {
+
+			editor.execute( new AddObjectCommand( editor, scene ) );
+			runImportPipeline( editor, scene, { log: editor.importLog } );
+
+		}
+
+	};
 
 	this.loadItemList = function ( items ) {
 
@@ -368,41 +426,26 @@ function Loader( editor ) {
 
 					const contents = event.target.result;
 
-					try {
+					const loader = await createGLTFLoader();
 
-						const dialog = new GLTFImportDialog( editor.strings );
-						const options = await dialog.show();
+					loader.parse( contents, '', async function ( result ) {
 
-						const loader = await createGLTFLoader();
+						try {
 
-						loader.parse( contents, '', function ( result ) {
+							await scope.finishGLTFImport( result, filename );
 
-							const scene = result.scene;
-							scene.name = filename;
+						} catch ( e ) {
 
-							scene.animations.push( ...result.animations );
+							// Import cancelled
 
-							if ( options.asScene ) {
-
-								editor.execute( new SetSceneCommand( editor, scene ) );
-
-							} else {
-
-								editor.execute( new AddObjectCommand( editor, scene ) );
-								runImportPipeline( editor, scene, { log: editor.importLog } );
-
-							}
+						} finally {
 
 							loader.dracoLoader.dispose();
 							loader.ktx2Loader.dispose();
 
-						} );
+						}
 
-					} catch ( e ) {
-
-						// Import cancelled
-
-					}
+					} );
 
 				}, false );
 				reader.readAsArrayBuffer( file );
@@ -419,41 +462,26 @@ function Loader( editor ) {
 
 					const contents = event.target.result;
 
-					try {
+					const loader = await createGLTFLoader( manager );
 
-						const dialog = new GLTFImportDialog( editor.strings );
-						const options = await dialog.show();
+					loader.parse( contents, '', async function ( result ) {
 
-						const loader = await createGLTFLoader( manager );
+						try {
 
-						loader.parse( contents, '', function ( result ) {
+							await scope.finishGLTFImport( result, filename );
 
-							const scene = result.scene;
-							scene.name = filename;
+						} catch ( e ) {
 
-							scene.animations.push( ...result.animations );
+							// Import cancelled
 
-							if ( options.asScene ) {
-
-								editor.execute( new SetSceneCommand( editor, scene ) );
-
-							} else {
-
-								editor.execute( new AddObjectCommand( editor, scene ) );
-								runImportPipeline( editor, scene, { log: editor.importLog } );
-
-							}
+						} finally {
 
 							loader.dracoLoader.dispose();
 							loader.ktx2Loader.dispose();
 
-						} );
+						}
 
-					} catch ( e ) {
-
-						// Import cancelled
-
-					}
+					} );
 
 				}, false );
 				reader.readAsArrayBuffer( file );
@@ -1053,39 +1081,26 @@ function Loader( editor ) {
 
 				{
 
-					try {
+					const loader = await createGLTFLoader();
 
-						const dialog = new GLTFImportDialog( editor.strings );
-						const options = await dialog.show();
+					loader.parse( file.buffer, '', async function ( result ) {
 
-						const loader = await createGLTFLoader();
+						try {
 
-						loader.parse( file.buffer, '', function ( result ) {
+							await scope.finishGLTFImport( result, path );
 
-							const scene = result.scene;
+						} catch ( e ) {
 
-							scene.animations.push( ...result.animations );
+							// Import cancelled
 
-							if ( options.asScene ) {
-
-								editor.execute( new SetSceneCommand( editor, scene ) );
-
-							} else {
-
-								editor.execute( new AddObjectCommand( editor, scene ) );
-
-							}
+						} finally {
 
 							loader.dracoLoader.dispose();
 							loader.ktx2Loader.dispose();
 
-						} );
+						}
 
-					} catch ( e ) {
-
-						// Import cancelled
-
-					}
+					} );
 
 					break;
 
@@ -1095,39 +1110,26 @@ function Loader( editor ) {
 
 				{
 
-					try {
+					const loader = await createGLTFLoader( manager );
 
-						const dialog = new GLTFImportDialog( editor.strings );
-						const options = await dialog.show();
+					loader.parse( strFromU8( file ), '', async function ( result ) {
 
-						const loader = await createGLTFLoader( manager );
+						try {
 
-						loader.parse( strFromU8( file ), '', function ( result ) {
+							await scope.finishGLTFImport( result, path );
 
-							const scene = result.scene;
+						} catch ( e ) {
 
-							scene.animations.push( ...result.animations );
+							// Import cancelled
 
-							if ( options.asScene ) {
-
-								editor.execute( new SetSceneCommand( editor, scene ) );
-
-							} else {
-
-								editor.execute( new AddObjectCommand( editor, scene ) );
-
-							}
+						} finally {
 
 							loader.dracoLoader.dispose();
 							loader.ktx2Loader.dispose();
 
-						} );
+						}
 
-					} catch ( e ) {
-
-						// Import cancelled
-
-					}
+					} );
 
 					break;
 

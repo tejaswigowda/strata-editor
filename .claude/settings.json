@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pkill -f \"remote-debugging-port\" 2>/dev/null; pkill -f \"http.server 878\" 2>/dev/null; rm -rf /tmp/cdp* /tmp/accordion.txt /tmp/newblock.txt /tmp/anim_new.js /tmp/*.mjs 2>/dev/null; echo cleaned)",
+      "Bash(pkill -f \"remote-debugging-port\" 2>/dev/null; pkill -f \"http.server 878\" 2>/dev/null; rm -rf /tmp/cdp* 2>/dev/null; echo cleaned)",
+      "Read(//Users/tejaswigowda/Downloads/**)",
+      "Bash(find / -name \"STRATA_STAGE3-4_WORKORDER.md\" -o -name \"IMPORT_AND_EDIT_SPEC.md\")",
+      "Bash(node --check js/commands/AddAnimationClipCommand.js)",
+      "Bash(node --check js/Shell.js)",
+      "Bash(awk 'NR>=383 && NR<=820 { if \\($0 ~ /^\\\\t\\\\t\\\\};/\\) { print \"scope-literal closes at line \" NR; exit } }' js/Shell.js)",
+      "Bash(grep -n \"listSelectors:\\\\|\\\\$\\\\$:\\\\|^\\\\t\\\\t\\\\t\\\\t\\\\top:\\\\|^\\\\t\\\\t\\\\t\\\\t\\\\tops:\" js/Shell.js)",
+      "Bash(grep -n \"query:\\\\|queryOne:\\\\|isValidSelector:\\\\|listSelectors:\\\\|op:\\\\|ops:\\\\|\\\\$\\\\$:\\\\|OP_VOCABULARY,\" js/Shell.js)",
+      "Bash(awk 'NR>=383 { if \\($0 ~ /^\\\\t\\\\t\\\\};$/\\) { print NR\": \"$0; exit } }' js/Shell.js)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(awk '/SCOPE_FUNCTIONS *=/{f=1} f{print NR\": \"$0} f&&/\\\\]\\\\\\)/{exit}' js/ai/apiIndex.js)",
+      "Bash(node --check js/ai/apiIndex.js)",
+      "Bash(node --input-type=module -e \"import { SCOPE_FUNCTIONS } from './js/ai/apiIndex.js'; console.log\\(['op','ops','\\\\$\\\\$','query','queryOne','listSelectors'].map\\(n=>n+':'+SCOPE_FUNCTIONS.has\\(n\\)\\).join\\('  '\\)\\);\")",
+      "Bash(awk '/opsSchema = |function opsSchema/{f=1} f{print NR\": \"$0; c++} f&&c>22{exit}' js/Shell.js)",
+      "Bash(node --check js/AIPrompt.js)",
+      "Bash(grep -c '```' README.md)",
+      "Bash(grep -v '^$')",
+      "Bash(node --check js/ai/editMatrix.js)",
+      "Bash(node --check js/ai/editEval.js)",
+      "Bash(node /tmp/apply.mjs)",
+      "Bash(node --check js/Sidebar.js)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

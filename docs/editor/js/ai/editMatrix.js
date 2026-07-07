@@ -95,6 +95,64 @@ export const EDIT_TASK_CASES = [
 		expect: { multiOp: true, opCount: 1, opType: 'recolor',
 			targetNodes: [ 'DumpTruck' ] } },                       // must NOT over-split per-part
 
+	// ── expanded multi-op set ─────────────────────────────────────────────────
+	// More genuine decompositions (clean N-splits, mixed op-types, same-target
+	// different-op) AND more traps (co-reference, "all/both", whole-asset) so the
+	// task-5 denominator is ~13 and a coder model can't inflate it by splitting
+	// everything: half the set PUNISHES over-splitting.
+
+	// clean 2-op splits — two parts, two recolors
+	{ id: 'wheels-and-grille', asset: 'dumptruck', prompt: 'make the wheels black and paint the grille gold',
+		expect: { multiOp: true, opCount: 2,
+			ops: [ { opType: 'recolor', targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] },
+				{ opType: 'recolor', targetNodes: [ 'Object_03' ] } ] } },
+
+	// 2-op split, DIFFERENT op-types (recolor + delete)
+	{ id: 'bed-and-lights', asset: 'dumptruck', prompt: 'paint the bed red and remove the tail lights',
+		expect: { multiOp: true, opCount: 2,
+			ops: [ { opType: 'recolor', targetNodes: [ 'Object_07' ] },
+				{ opType: 'delete', targetNodes: [ 'Object_12', 'Object_13' ] } ] } },
+
+	// 2-op split, animate + recolor
+	{ id: 'spin-and-color', asset: 'dumptruck', prompt: 'spin the wheels and make the bed grey',
+		expect: { multiOp: true, opCount: 2,
+			ops: [ { opType: 'spin', targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] },
+				{ opType: 'recolor', targetNodes: [ 'Object_07' ] } ] } },
+
+	// 2 ops on the SAME target, different op-types (must still be 2, not merged to 1)
+	{ id: 'lift-and-paint', asset: 'dumptruck', prompt: 'lift the cab up and paint it blue',
+		expect: { multiOp: true, opCount: 2,
+			ops: [ { opType: 'move', targetNodes: [ 'Object_03' ] },
+				{ opType: 'recolor', targetNodes: [ 'Object_03' ] } ] } },
+
+	// 3-op split across three op-types and three parts
+	{ id: 'color-move-delete', asset: 'dumptruck', prompt: 'paint the cab blue, move the bed up, and delete the front wheels',
+		expect: { multiOp: true, opCount: 3,
+			ops: [ { opType: 'recolor', targetNodes: [ 'Object_03' ] },
+				{ opType: 'move', targetNodes: [ 'Object_07' ] },
+				{ opType: 'delete', targetNodes: [ 'Object_20', 'Object_21' ] } ] } },
+
+	// TRAP — "all four" is ONE set op over the wheels, NOT four ops
+	{ id: 'all-four-wheels', asset: 'dumptruck', prompt: 'make all four wheels black',
+		expect: { multiOp: true, opCount: 1, opType: 'recolor',
+			targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] } },
+
+	// TRAP — "both" tail lights is ONE op, not two
+	{ id: 'both-lights', asset: 'dumptruck', prompt: 'make both tail lights bright red',
+		expect: { multiOp: true, opCount: 1, opType: 'recolor',
+			targetNodes: [ 'Object_12', 'Object_13' ] } },
+
+	// TRAP — "everything" is the whole asset, ONE op (not one-per-part)
+	{ id: 'everything-red', asset: 'dumptruck', prompt: 'make everything red',
+		expect: { multiOp: true, opCount: 1, opType: 'recolor',
+			targetNodes: [ 'DumpTruck' ] } },
+
+	// TRAP — ambiguous count via CO-REFERENCE: ".wheel" and ".rims" name the SAME
+	// four nodes, so "the wheels and rims" is ONE op, not two.
+	{ id: 'wheels-and-rims', asset: 'dumptruck', prompt: 'darken the wheels and rims',
+		expect: { multiOp: true, opCount: 1, opType: 'recolor',
+			targetNodes: [ 'Object_20', 'Object_21', 'Object_22', 'Object_23' ] } },
+
 	// graceful-fail (merged mesh) — selector resolution must NOT hit "everything"
 	{ id: 'merged-sheets', asset: 'merged-bed', prompt: 'make the bed sheets blue',
 		expect: { mergedFail: true, target: 'GothicBed' } },
@@ -152,17 +210,25 @@ export function parseEmittedOps( code ) {
 
 		const selector = m[ 1 ];
 		const chain = m[ 2 ];
+		const base = m.index;
 		const callRe = /\.\s*([A-Za-z_]\w*)\s*\(([^)]*)\)/g;
 		let c;
 		while ( ( c = callRe.exec( chain ) ) !== null ) {
 
 			const method = c[ 1 ];
 			if ( [ 'filter', 'each', 'result', 'op' ].includes( method ) && method !== 'op' ) continue;
-			ops.push( { op: method === 'op' ? _opTypeFromArgs( c[ 2 ] ) : method, selector, args: _parseArgs( c[ 2 ] ) } );
+			ops.push( { op: method === 'op' ? _opTypeFromArgs( c[ 2 ] ) : method, selector, args: _parseArgs( c[ 2 ] ), _i: base + c.index } );
 
 		}
 
 	}
+
+	// 1b) CLASS 1 — a $S('sel') target followed by a RAW three.js property mutation
+	//     (.material.color.set / .position.set / .scale.set / .rotation.set, or a
+	//     .position.<axis> = n assignment) instead of a named op. The selector is
+	//     there; the edit is a direct property set. Recover → canonical op. (Does not
+	//     collide with named-op chains: those are `.method(` not `.prop.prop`.)
+	_parseDirectMutations( code, ops );
 
 	// 2) op({ type:'…', selector:'…', …args })   (also inside ops([ op({…}) ]))
 	const opRe = /\bop\(\s*\{([^}]*)\}\s*\)/g;
@@ -171,31 +237,284 @@ export function parseEmittedOps( code ) {
 		const body = m[ 1 ];
 		const type = _field( body, 'type' );
 		const selector = _field( body, 'selector' );
-		if ( type ) ops.push( { op: type, selector: selector || null, args: _objArgs( body ) } );
+		if ( type ) ops.push( { op: type, selector: selector || null, args: _opObjArgs( body ), _i: m.index } );
 
 	}
 
 	// 3) ops([ { type:'…', selector:'…', … }, … ])  — BARE op-objects in an array
 	//    (the executable form: ops() maps each element through op()). op({…})
 	//    elements are already handled by pass 2; strip them first so they are
-	//    not double-counted, then read the remaining bare object literals.
+	//    not double-counted, then read the remaining bare object literals with a
+	//    BRACE-BALANCED scan (CLASS 3: a `material: new MeshXxxMaterial({color:…})`
+	//    arg has nested braces — the old innermost-brace scan matched the material's
+	//    inner object (no `type`) and DROPPED the whole op; balanced scan + arg
+	//    unpacking recovers it).
 	const opsArrRe = /\bops\(\s*\[([\s\S]*?)\]\s*\)/g;
 	while ( ( m = opsArrRe.exec( code ) ) !== null ) {
 
 		const arrBody = m[ 1 ].replace( /\bop\(\s*\{[^}]*\}\s*\)/g, '' );
-		const objRe = /\{([^{}]*)\}/g;
-		let o;
-		while ( ( o = objRe.exec( arrBody ) ) !== null ) {
+		const base = m.index;
+		for ( const obj of _extractJsonObjects( arrBody ) ) {
 
-			const type = _field( o[ 1 ], 'type' );
-			const selector = _field( o[ 1 ], 'selector' );
-			if ( type ) ops.push( { op: type, selector: selector || null, args: _objArgs( o[ 1 ] ) } );
+			const type = _field( obj, 'type' );
+			if ( ! type ) continue;
+			const selector = _field( obj, 'selector' );
+			ops.push( { op: type, selector: selector || null, args: _opObjArgs( obj ), _i: base + arrBody.indexOf( obj ) } );
 
 		}
 
 	}
 
-	return ops;
+	// 3b) CLASS 2 — editor.execute(new XxxCommand(editor, target, …)) — the old
+	//     command-object generation style, usually with `const o = findObject('name');
+	//     if(o){ execute(…) }`. Each execute() block is one op; multiple blocks → N
+	//     ops. Command class → canonical op; target from findObject(); value normalized.
+	_parseCommandForms( code, ops );
+
+	// 4) CONSTRAINED-DECODE form — pure JSON op(s). The 'constrained' condition
+	//    forces schema-valid JSON ({ "ops":[ { "op","selector","args" } ] }, a bare
+	//    { "op",… }, a top-level array, or one-JSON-per-line), NOT the $S/op() JS
+	//    surface. Only run this when the JS passes found nothing, so a code answer
+	//    that merely mentions JSON isn't double-counted.
+	if ( ops.length === 0 ) return _parseJsonOps( code );
+
+	// Emit in SOURCE ORDER — a mix of named-op chains and recovered raw mutations
+	// (e.g. spin; .material.color.set; remove) must keep the order the model wrote so
+	// the decomposition type-sequence is scored correctly. Strip the sort key.
+	ops.sort( ( a, b ) => ( a._i || 0 ) - ( b._i || 0 ) );
+	return ops.map( ( { _i, ...rest } ) => rest );
+
+}
+
+// ── DROPPED-OP RECOVERY (bounded to the 3 surveyed classes) ───────────────────
+
+// Normalize a color literal to '#rrggbb': 0xRRGGBB → #rrggbb, #RGB/#RRGGBB → lower,
+// leave named colors / already-normal strings untouched.
+function _hexColor( v ) {
+
+	if ( v == null ) return v;
+	let s = String( v ).trim().replace( /^['"]|['"]$/g, '' );
+	const hx = /^0x([0-9a-fA-F]+)$/.exec( s );
+	if ( hx ) {
+
+		let h = hx[ 1 ].toLowerCase();
+		if ( h.length === 3 ) h = h.split( '' ).map( ch => ch + ch ).join( '' );
+		if ( h.length < 6 ) h = h.padStart( 6, '0' );
+		return '#' + h;
+
+	}
+	if ( /^#[0-9a-fA-F]{3,8}$/.test( s ) ) return s.toLowerCase();
+	return s;
+
+}
+
+// Pull the numeric literals out of a string (ignores identifiers / member exprs).
+function _nums( s ) {
+
+	return ( String( s || '' ).match( /-?\d*\.?\d+/g ) || [] ).map( Number ).filter( n => ! Number.isNaN( n ) );
+
+}
+
+// Slice the paren-balanced argument list starting at the '(' index `open`.
+function _balancedParens( s, open ) {
+
+	let depth = 0;
+	for ( let i = open; i < s.length; i ++ ) {
+
+		if ( s[ i ] === '(' ) depth ++;
+		else if ( s[ i ] === ')' ) { depth --; if ( depth === 0 ) return s.slice( open + 1, i ); }
+
+	}
+	return s.slice( open + 1 );
+
+}
+
+// _objArgs + CLASS-3 unpack: if an op object carries `material: new MeshXxxMaterial(
+// { color:…, roughness:…, metalness:… } )`, lift those fields into args instead of
+// dropping them. (op-type stays as emitted; opTypeMatches folds a color-only
+// setMaterial into recolor at scoring time.)
+function _opObjArgs( body ) {
+
+	const args = _objArgs( body );
+	const mat = /new\s+Mesh\w*Material\s*\(\s*\{([^}]*)\}/.exec( body );
+	if ( mat ) {
+
+		const inner = mat[ 1 ];
+		const col = /\bcolor\s*:\s*(0x[0-9a-fA-F]+|'[^']*'|"[^"]*"|#[0-9a-fA-F]{3,8})/.exec( inner );
+		if ( col && args.color == null ) args.color = _hexColor( col[ 1 ] );
+		const rough = /\broughness\s*:\s*(-?[\d.]+)/.exec( inner );
+		if ( rough && args.roughness == null ) args.roughness = parseFloat( rough[ 1 ] );
+		const metal = /\bmetalness\s*:\s*(-?[\d.]+)/.exec( inner );
+		if ( metal && args.metalness == null ) args.metalness = parseFloat( metal[ 1 ] );
+
+	}
+	if ( args.color != null ) args.color = _hexColor( args.color );
+	return args;
+
+}
+
+// CLASS 1 — direct three.js property mutation on a $S/selected target.
+const _MUT_OP = { material: 'recolor', position: 'move', scale: 'scale', rotation: 'rotate', quaternion: 'rotate' };
+function _parseDirectMutations( code, ops ) {
+
+	// $S('sel') . (material|position|scale|rotation|quaternion) . <tail> ( args )   — .set(…) form
+	//                                                          . <tail> = value      — assignment form
+	const re = /(?:\$S|\$\$|Pick|pick)\(\s*['"]([^'"]+)['"]\s*\)\s*\.\s*(material|position|scale|rotation|quaternion)\s*\.\s*([\w.]+?)\s*(?:\(\s*([^)]*)\)|(\+?=)\s*([^;\n]+))/g;
+	let m;
+	while ( ( m = re.exec( code ) ) !== null ) {
+
+		const selector = m[ 1 ];
+		const prop = m[ 2 ];
+		const tail = m[ 3 ] || '';            // e.g. 'color.set', 'set', 'x'
+		const callArgs = m[ 4 ];              // inside .set( … )
+		const assignVal = m[ 6 ];             // after =
+		const op = _MUT_OP[ prop ];
+		const src = ( callArgs != null ? callArgs : ( assignVal || '' ) );
+		let args = {};
+		if ( op === 'recolor' ) {
+
+			args = { color: _hexColor( src.split( ',' )[ 0 ] ) };
+
+		} else if ( op === 'move' ) {
+
+			const n = _nums( src );
+			if ( callArgs != null && n.length >= 3 ) args = { dx: n[ 0 ], dy: n[ 1 ], dz: n[ 2 ] };
+			else if ( n.length ) { const ax = ( tail.split( '.' ).pop() || '' ).toLowerCase(); args = ax && 'xyz'.includes( ax ) ? { [ 'd' + ax ]: n[ 0 ] } : { dy: n[ 0 ] }; }
+
+		} else if ( op === 'scale' ) {
+
+			const n = _nums( src ); if ( n.length ) args = { factor: n[ 0 ] };
+
+		} else if ( op === 'rotate' ) {
+
+			const n = _nums( src );
+			if ( callArgs != null && n.length >= 3 ) args = { x: n[ 0 ], y: n[ 1 ], z: n[ 2 ] };
+			else if ( n.length ) { const ax = ( tail.split( '.' ).pop() || '' ).toLowerCase(); args = { axis: 'xyz'.includes( ax ) ? ax : 'y', degrees: n[ 0 ] }; }
+
+		}
+		ops.push( { op, selector, args, _i: m.index } );
+
+	}
+
+}
+
+// CLASS 2 — editor.execute(new XxxCommand(editor, target, …value)) command form.
+const _CMD_OP = {
+	SetMaterialColorCommand: 'recolor', SetColorCommand: 'recolor', SetMaterialValueCommand: 'recolor',
+	SetPositionCommand: 'move', SetRotationCommand: 'rotate', SetScaleCommand: 'scale',
+	RemoveObjectCommand: 'delete',
+};
+function _parseCommandForms( code, ops ) {
+
+	// Map local vars assigned from findObject('name') so a command referencing the var
+	// still resolves its target (const cab = findObject('cab'); … execute(new …(editor, cab, …))).
+	const varMap = {};
+	const vr = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*findObject\(\s*['"]([^'"]+)['"]\s*\)/g;
+	let v; while ( ( v = vr.exec( code ) ) !== null ) varMap[ v[ 1 ] ] = v[ 2 ];
+
+	const cr = /new\s+([A-Za-z_]\w*Command)\s*\(/g;
+	let m;
+	while ( ( m = cr.exec( code ) ) !== null ) {
+
+		const op = _CMD_OP[ m[ 1 ] ];
+		if ( ! op ) continue;                                   // bounded: unseen command → leave dropped
+		const argStr = _balancedParens( code, m.index + m[ 0 ].length - 1 );
+
+		let name = null;
+		const fo = /findObject\(\s*['"]([^'"]+)['"]\s*\)/.exec( argStr );
+		if ( fo ) name = fo[ 1 ];
+		else {
+
+			const ir = /\b([A-Za-z_$][\w$]*)\b/g; let im;
+			while ( ( im = ir.exec( argStr ) ) !== null ) { if ( varMap[ im[ 1 ] ] ) { name = varMap[ im[ 1 ] ]; break; } }
+
+		}
+		const selector = name ? '#' + name.trim().replace( /\s+/g, '-' ) : null;
+		ops.push( { op, selector, args: _cmdArgs( op, argStr ), _i: m.index } );
+
+	}
+
+}
+
+function _cmdArgs( op, argStr ) {
+
+	if ( op === 'recolor' ) {
+
+		const h = /0x[0-9a-fA-F]+|#[0-9a-fA-F]{3,8}/.exec( argStr );
+		return h ? { color: _hexColor( h[ 0 ] ) } : {};
+
+	}
+	if ( op === 'move' ) {
+
+		const vec = /new\s+Vector3\s*\(([^)]*)\)/.exec( argStr );
+		const n = _nums( vec ? vec[ 1 ] : '' );
+		return n.length >= 3 ? { dx: n[ 0 ], dy: n[ 1 ], dz: n[ 2 ] } : ( n.length ? { dy: n[ n.length - 1 ] } : {} );
+
+	}
+	if ( op === 'rotate' ) {
+
+		const eul = /new\s+Euler\s*\(([^)]*)\)/.exec( argStr );
+		const n = _nums( eul ? eul[ 1 ] : '' );
+		return n.length ? { x: n[ 0 ], y: n[ 1 ], z: n[ 2 ] } : {};
+
+	}
+	if ( op === 'scale' ) {
+
+		const vec = /new\s+Vector3\s*\(([^)]*)\)/.exec( argStr );
+		const n = _nums( vec ? vec[ 1 ] : argStr.replace( /findObject\([^)]*\)/g, '' ) );
+		return n.length ? { factor: n[ 0 ] } : {};
+
+	}
+	return {};
+
+}
+
+// Parse the constrained-decode JSON op surface into the same [{op,selector,args}]
+// shape. Accepts { ops:[…] }, a bare op object, a top-level array, or multiple
+// brace-balanced JSON objects (one-per-line / fenced). Unknown shapes → [].
+function _parseJsonOps( code ) {
+
+	const out = [];
+	const push = ( obj ) => {
+
+		if ( ! obj || typeof obj !== 'object' ) return;
+		if ( Array.isArray( obj ) ) { obj.forEach( push ); return; }
+		if ( Array.isArray( obj.ops ) ) { obj.ops.forEach( push ); return; }
+		const type = obj.op || obj.type;
+		if ( typeof type === 'string' ) out.push( {
+			op: type,
+			selector: typeof obj.selector === 'string' ? obj.selector : null,
+			args: obj.args && typeof obj.args === 'object' ? obj.args : {},
+		} );
+
+	};
+
+	const trimmed = String( code || '' ).trim();
+	try { push( JSON.parse( trimmed ) ); if ( out.length ) return out; } catch ( e ) { /* fall through */ }
+
+	for ( const blob of _extractJsonObjects( code ) ) {
+
+		try { push( JSON.parse( blob ) ); } catch ( e ) { /* skip non-JSON braces */ }
+
+	}
+	return out;
+
+}
+
+// Scan for top-level brace-balanced { … } substrings (handles nested args and
+// multiple objects across lines / inside ```json fences).
+function _extractJsonObjects( s ) {
+
+	const out = [];
+	let depth = 0, start = -1;
+	for ( let i = 0; i < s.length; i ++ ) {
+
+		const ch = s[ i ];
+		if ( ch === '{' ) { if ( depth === 0 ) start = i; depth ++; }
+		else if ( ch === '}' ) { if ( depth > 0 ) { depth --; if ( depth === 0 && start !== -1 ) { out.push( s.slice( start, i + 1 ) ); start = -1; } } }
+
+	}
+	return out;
 
 }
 
@@ -218,7 +537,8 @@ function _parseArgs( argStr ) {
 function _objArgs( body ) {
 
 	const out = {};
-	const re = /([A-Za-z_]\w*)\s*:\s*('[^']*'|"[^"]*"|[-\d.]+|true|false|\[[^\]]*\])/g;
+	// 0x-hex BEFORE the bare-number alternative, else `[-\d.]+` grabs the leading 0.
+	const re = /([A-Za-z_]\w*)\s*:\s*('[^']*'|"[^"]*"|0x[0-9a-fA-F]+|[-\d.]+|true|false|\[[^\]]*\])/g;
 	let m;
 	while ( ( m = re.exec( body ) ) !== null ) out[ m[ 1 ] ] = _lit( m[ 2 ] );
 	return out;
@@ -237,6 +557,7 @@ function _lit( s ) {
 	if ( s == null ) return s;
 	s = String( s ).trim();
 	if ( /^['"]/.test( s ) ) return s.slice( 1, -1 );
+	if ( /^0x[0-9a-fA-F]+$/.test( s ) ) return _hexColor( s );   // color hex literal → '#rrggbb'
 	if ( s === 'true' ) return true;
 	if ( s === 'false' ) return false;
 	if ( /^-?[\d.]+$/.test( s ) ) return parseFloat( s );
@@ -373,11 +694,53 @@ function _argBag( op ) {
 
 }
 
+// Op-type SYNONYMS — decomposition (task 5) only. Two ops count as the same
+// decomposition STEP if they share a family: the model split the request correctly
+// even when it named the op with a different-but-equivalent verb (rotate/spin both
+// "make it turn"; delete/remove; a COLOR-ONLY setMaterial IS a recolor). This does
+// NOT loosen op-selection (task 1), which keeps the exact verb — the honest gap on
+// decomposition should not be lost to a naming mismatch that the host would accept.
+const OP_SYNONYMS = {
+	recolor: [ 'recolor', 'setmaterial', 'material', 'retexture', 'paint', 'setcolor' ],
+	spin: [ 'spin', 'rotate' ],
+	rotate: [ 'rotate', 'spin' ],
+	delete: [ 'delete', 'remove' ],
+	move: [ 'move', 'translate', 'setposition' ],
+	scale: [ 'scale', 'resize' ],
+	duplicate: [ 'duplicate', 'clone', 'copy' ],
+};
+
+// True when an emitted op satisfies a wanted decomposition type, allowing synonyms.
+// The setMaterial/material/retexture → recolor equivalence is gated on the op being
+// COLOR-ONLY (it carries a `color`): a full material/texture swap with no color is a
+// different intent and must not pass as a recolor.
+export function opTypeMatches( emittedOp, wantType ) {
+
+	const got = String( ( emittedOp && emittedOp.op ) || '' ).toLowerCase();
+	const want = String( wantType || '' ).toLowerCase();
+	if ( ! got ) return false;
+	if ( got === want ) return true;
+	const syns = OP_SYNONYMS[ want ];
+	if ( ! syns || ! syns.includes( got ) ) return false;
+	if ( want === 'recolor' && ( got === 'setmaterial' || got === 'material' || got === 'retexture' ) ) {
+
+		const bag = _argBag( emittedOp );
+		return !! ( bag && bag.color != null );
+
+	}
+	return true;
+
+}
+
 // Task 5 — multi-op decomposition: right NUMBER of ops (under AND over both fail)
-// AND the right op TYPES in order. Count-only over-credits a coder model that emits
-// N arbitrary statements; requiring the type sequence makes it measure decomposition,
-// not verbosity. Targets are scored by selector-resolution (kept separate).
-export function scoreMultiOp( emitted, expect ) {
+// AND the right op TYPES in order (synonyms accepted) AND (when the runner supplies
+// resolvedSets) each op HITTING its expected targets. Count-only over-credits a
+// coder model that emits N arbitrary statements; requiring the type sequence makes
+// it measure decomposition, not verbosity. The target check is decomposition-level:
+// each op must HIT its expected node set (plural selectors that resolve to the whole
+// set count — plural-resolution-to-multiple-ids), but OVER-coverage/bleed is the
+// selector-resolution axis's job, not decomposition's, so extras do not fail here.
+export function scoreMultiOp( emitted, expect, resolvedSets = null ) {
 
 	if ( expect.mergedFail ) return { pass: true, reasons: [ 'n/a' ] };
 	const want = expect.opCount != null ? expect.opCount : ( expect.ops ? expect.ops.length : 1 );
@@ -386,10 +749,36 @@ export function scoreMultiOp( emitted, expect ) {
 	const wantTypes = expect.ops ? expect.ops.map( e => e.opType ) : ( expect.opType ? [ expect.opType ] : null );
 	if ( wantTypes ) {
 
-		const bad = wantTypes.findIndex( ( t, i ) => ! emitted[ i ] || emitted[ i ].op !== t );
+		const bad = wantTypes.findIndex( ( t, i ) => ! opTypeMatches( emitted[ i ], t ) );
 		if ( bad !== -1 ) return { pass: false, reasons: [ `op${ bad } "${ emitted[ bad ] ? emitted[ bad ].op : '∅' }" ≠ "${ wantTypes[ bad ] }"` ] };
 
 	}
+
+	// Target check (only when the runner resolved selectors for us). Each emitted op
+	// must HIT its expected node set — a right-count/right-type split that MISSES the
+	// expected parts is a wrong decomposition, so it fails here. Extra coverage
+	// (a plural selector hitting more than one id) is NOT penalised here (bleed is
+	// scored by scoreSelectorResolution); this is the plural-resolution allowance.
+	if ( resolvedSets ) {
+
+		const expectedList = expect.ops
+			? expect.ops.map( e => new Set( e.targetNodes || [] ) )
+			: [ new Set( expect.targetNodes || [] ) ];
+		for ( let i = 0; i < expectedList.length; i ++ ) {
+
+			const gotSet = resolvedSets[ i ] || new Set();
+			const wantSet = expectedList[ i ];
+			const missing = [ ...wantSet ].filter( n => ! gotSet.has( n ) );
+			if ( missing.length ) {
+
+				return { pass: false, reasons: [ `op${ i } wrong target (missed ${ missing.join( ',' ) })` ] };
+
+			}
+
+		}
+
+	}
+
 	return { pass: true, reasons: [ `${ got } op(s), types ok` ] };
 
 }
@@ -417,7 +806,7 @@ export function scoreMatrixCase( emitted, resolvedSets, expect, deps = {} ) {
 		opType: scoreOpType( emitted, expect ),
 		selectorResolution: scoreSelectorResolution( resolvedSets, expect ),
 		argExtraction: scoreArgExtraction( emitted, expect, deps ),
-		multiOp: scoreMultiOp( emitted, expect ),
+		multiOp: scoreMultiOp( emitted, expect, resolvedSets ),
 	};
 
 }
@@ -457,9 +846,9 @@ export function formatMatrix( matrix, opts = {} ) {
 	const cell = ( t, m, c ) => { const x = matrix.cells[ `${ t }|${ m }|${ c }` ]; return x ? `${ x.pct }%` : ' · '; };
 
 	const lines = [];
-	lines.push( 'EVAL MATRIX — 5 tasks × model × {bare, scaffolded}   (ceiling: ' + ( ceiling || 'none yet' ) + ')' );
-	lines.push( 'task                  model        bare   scaffolded   ' + ( ceiling || '' ) );
-	lines.push( '─'.repeat( 64 ) );
+	lines.push( 'EVAL MATRIX — 5 tasks × model × {bare, scaffolded, constrained}   (ceiling: ' + ( ceiling || 'none yet' ) + ')' );
+	lines.push( 'task                  model        bare   scaffolded   constrained   ' + ( ceiling || '' ) );
+	lines.push( '─'.repeat( 78 ) );
 	const short = ( m ) => String( m ).replace( /-\d{6,}$/, '' ).slice( 0, 12 );
 	for ( const t of tasks ) {
 
@@ -468,6 +857,7 @@ export function formatMatrix( matrix, opts = {} ) {
 			lines.push(
 				t.padEnd( 22 ) + short( m ).padEnd( 13 ) +
 				cell( t, m, 'bare' ).padEnd( 7 ) + cell( t, m, 'scaffolded' ).padEnd( 13 ) +
+				cell( t, m, 'constrained' ).padEnd( 14 ) +
 				( ceiling ? cell( t, ceiling, 'scaffolded' ) : '' ) );
 
 		}
@@ -523,6 +913,19 @@ export async function runEditMatrix( deps ) {
 		if ( c.expect.multiOp ) bump( 'multi-op', s.multiOp.pass );   // task-5 ONLY on genuine decomposition cases (not the trivial singles)
 		progress( `edit ${ i + 1 }/${ EDIT_TASK_CASES.length } (${ c.id }): ${ emitted.length } op(s) emitted` );
 
+		// Per-(task,case) JSONL row for the re-run artifact: the caller tags each row
+		// with model+condition and appends {task,id,score,raw,parsed} to the log so a
+		// run can be re-scored offline without re-invoking the model.
+		if ( deps.onRow ) {
+
+			const parsed = emitted.map( o => ( { op: o.op, selector: o.selector, args: o.args } ) );
+			deps.onRow( { task: 'op-selection', id: c.id, score: s.opType.pass, raw: code, parsed } );
+			deps.onRow( { task: 'selector-resolution', id: c.id, score: s.selectorResolution.pass, raw: code, parsed } );
+			deps.onRow( { task: 'arg-extraction', id: c.id, score: s.argExtraction.pass, raw: code, parsed } );
+			if ( c.expect.multiOp ) deps.onRow( { task: 'multi-op', id: c.id, score: s.multiOp.pass, raw: code, parsed } );
+
+		}
+
 		// Per-case detail for debugging WHY a cell is low (emitted selector/op vs
 		// expected, pass/fail per task). Wired to the shell's debug flag.
 		if ( deps.onCase ) deps.onCase( {
@@ -540,7 +943,9 @@ export async function runEditMatrix( deps ) {
 		const lc = LABELING_CASES[ i ];
 		let predicted = '';
 		try { predicted = await deps.labelOnce( lc ); } catch ( e ) { progress( `label error — ${ e.message }` ); }
-		bump( 'labeling', scoreLabel( predicted, lc.gold ).pass );
+		const labelPass = scoreLabel( predicted, lc.gold ).pass;
+		bump( 'labeling', labelPass );
+		if ( deps.onRow ) deps.onRow( { task: 'labeling', id: `${ lc.kind }-${ i }`, score: labelPass, raw: predicted, parsed: predicted } );
 		progress( `label ${ i + 1 }/${ LABELING_CASES.length } (${ lc.kind }): "${ predicted }"` );
 
 	}

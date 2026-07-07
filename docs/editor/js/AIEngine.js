@@ -67,6 +67,40 @@ export class AIEngine {
 
 	}
 
+	// ── Unload ────────────────────────────────────────────────────────────────
+	/**
+	 * Release the currently loaded model so a different one can be loaded. Frees
+	 * the WebLLM engine's GPU buffers / worker (or clears the external-API
+	 * override) and resets ready state. Safe to call when nothing is loaded.
+	 */
+	async unload() {
+
+		// External API mode: just drop the overrides.
+		this._externalAPIReady = false;
+		this._externalStream = null;
+		this._externalInterrupt = null;
+
+		// WebLLM engine: release GPU/worker resources.
+		if ( this._engine ) {
+
+			try {
+
+				if ( typeof this._engine.unload === 'function' ) await this._engine.unload();
+
+			} finally {
+
+				this._engine = null;
+
+			}
+
+		}
+
+		this.modelId = null;
+		this.contextWindow = null;
+		this.loading = false;
+
+	}
+
 	// ── Initialise ────────────────────────────────────────────────────────────
 	/**
 	 * Download (or load from cache) a model and warm up the engine.
@@ -131,11 +165,11 @@ export class AIEngine {
 	 * @param {number}   [opts.maxTokens]
 	 * @param {number}   [opts.temperature]
 	 */
-	async stream( messages, { onToken, maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0 } = {} ) {
+	async stream( messages, { onToken, maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0, schema = null } = {} ) {
 
 		// External API stream (if overridden)
 		if ( this._externalStream ) {
-			return this._externalStream( messages, { onToken, maxTokens, temperature } );
+			return this._externalStream( messages, { onToken, maxTokens, temperature, schema } );
 		}
 
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
@@ -146,14 +180,19 @@ export class AIEngine {
 		// kept at 0 — it punishes a token for appearing at all, which made the model
 		// DROP the last added object. Runaway loops are bounded by max_tokens + the
 		// "never spam near-duplicate objects" prompt rule instead.
-		const chunks = await this._engine.chat.completions.create( {
+		const req = {
 			messages,
 			temperature,
 			max_tokens: maxTokens,
 			frequency_penalty: frequencyPenalty,
 			presence_penalty: presencePenalty,
 			stream: true,
-		} );
+		};
+		// Constrained decoding (the 'constrained' eval condition): WebLLM/XGrammar
+		// enforces schema-valid JSON so malformed op output is impossible.
+		if ( schema ) req.response_format = { type: 'json_object', schema: JSON.stringify( schema ) };
+
+		const chunks = await this._engine.chat.completions.create( req );
 
 		let full = '';
 
@@ -174,23 +213,26 @@ export class AIEngine {
 	 * Run inference and return the full response as a single string.
 	 * Used for retry correction passes where live display isn't needed.
 	 */
-	async complete( messages, { maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0 } = {} ) {
+	async complete( messages, { maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0, schema = null } = {} ) {
 
 		// External API stream (if overridden) — use it for complete too
 		if ( this._externalStream ) {
-			return this._externalStream( messages, { maxTokens, temperature } );
+			return this._externalStream( messages, { maxTokens, temperature, schema } );
 		}
 
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
 
-		const reply = await this._engine.chat.completions.create( {
+		const req = {
 			messages,
 			temperature,
 			max_tokens: maxTokens,
 			frequency_penalty: frequencyPenalty,
 			presence_penalty: presencePenalty,
 			stream: false,
-		} );
+		};
+		if ( schema ) req.response_format = { type: 'json_object', schema: JSON.stringify( schema ) };
+
+		const reply = await this._engine.chat.completions.create( req );
 
 		return reply.choices[ 0 ].message.content;
 
