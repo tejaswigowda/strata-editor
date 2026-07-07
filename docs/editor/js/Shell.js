@@ -455,25 +455,21 @@ function Shell( editor ) {
 			const container = document.createElement( 'div' );
 			container.className = 'shell-code-block';
 			container.style.width = '100%';
-			container.style.minHeight = '350px';
-			container.style.boxSizing = 'border-box';
-			container.style.backgroundColor = '#1e1e1e';
-			container.style.border = '1px solid #333';
-			container.style.borderRadius = '4px';
-			container.style.padding = '12px';
-			container.style.fontFamily = 'Consolas, monospace';
-			container.style.fontSize = '13px';
-			container.style.lineHeight = '1.5';
-			container.style.color = '#d4d4d4';
-			container.style.marginBottom = '8px';
-			container.style.display = 'flex';
-			container.style.flexDirection = 'column';
-			container.style.gap = '8px';
-			container.style.pointerEvents = 'auto';
-
-			// Create Monaco editor container with auto-height and word wrap
-			const editorDiv = document.createElement( 'div' );
-			editorDiv.style.width = '100%';
+		container.style.boxSizing = 'border-box';
+		container.style.backgroundColor = '#1e1e1e';
+		container.style.border = '1px solid #333';
+		container.style.borderRadius = '4px';
+		container.style.padding = '12px';
+		container.style.fontFamily = 'Consolas, monospace';
+		container.style.fontSize = '13px';
+		container.style.lineHeight = '1.5';
+		container.style.color = '#d4d4d4';
+		container.style.marginBottom = '8px';
+		container.style.display = 'flex';
+		container.style.flexDirection = 'column';
+		container.style.gap = '8px';
+		container.style.pointerEvents = 'auto';
+		container.style.position = 'relative';
 			editorDiv.style.height = 'auto';
 			editorDiv.style.minHeight = '80px';
 			editorDiv.style.maxHeight = '40vh';
@@ -485,23 +481,10 @@ function Shell( editor ) {
 			editorDiv.style.overflow = 'hidden';
 			editorDiv.style.pointerEvents = 'auto';
 			editorDiv.style.backgroundColor = '#1e1e1e';
-
-			// Append to container FIRST, before Monaco initialization
-			container.appendChild( editorDiv );
-			
-			// Store reference to the shell-line that will contain this editor for cleanup
-			container.__shellLine = line;
-
-			// Initialize Monaco Editor with syntax highlighting
-			let monacoEditorInstance = null;
-			const editorReady = new Promise( ( resolve ) => {
-
-				require( [ 'vs/editor/editor.main' ], function () {
-
-					monacoEditorInstance = monaco.editor.create( editorDiv, {
+		editorDiv.style.position = 'relative';
 						value: code,
 						language: 'javascript',
-						lineNumbers: 'on',
+						lineNumbers: 'off',
 						minimap: { enabled: false },
 						theme: 'vs-dark',
 						tabSize: 2,
@@ -533,12 +516,14 @@ function Shell( editor ) {
 
 			} );
 
-			// Button container for Run and Fullscreen
-			const btnContainer = document.createElement( 'div' );
-			btnContainer.style.display = 'flex';
-			btnContainer.style.gap = '8px';
-			btnContainer.style.alignItems = 'flex-start';
-			btnContainer.style.position = 'relative';
+// Button container for Run button - positioned on top-right of editor
+		const btnContainer = document.createElement( 'div' );
+		btnContainer.style.display = 'flex';
+		btnContainer.style.gap = '8px';
+		btnContainer.style.alignItems = 'flex-start';
+		btnContainer.style.position = 'absolute';
+		btnContainer.style.top = '8px';
+		btnContainer.style.right = '8px';
 			btnContainer.style.zIndex = '100';
 			btnContainer.style.pointerEvents = 'auto';
 
@@ -590,96 +575,8 @@ function Shell( editor ) {
 
 			} );
 			btnContainer.appendChild( runBtn );
-
-			// Add "Fullscreen" button
-			const fullscreenBtn = document.createElement( 'button' );
-			fullscreenBtn.textContent = '⛶ Fullscreen';
-			fullscreenBtn.style.padding = '6px 12px';
-			fullscreenBtn.style.backgroundColor = '#2196F3';
-			fullscreenBtn.style.color = 'white';
-			fullscreenBtn.style.border = 'none';
-			fullscreenBtn.style.borderRadius = '4px';
-			fullscreenBtn.style.cursor = 'pointer';
-			fullscreenBtn.style.fontSize = '13px';
-			fullscreenBtn.style.fontWeight = '600';
-			fullscreenBtn.style.zIndex = '101';
-			fullscreenBtn.style.pointerEvents = 'auto';
-			fullscreenBtn.addEventListener( 'click', async function () {
-
-				await editorReady;
-
-				// Create fullscreen overlay
-				const overlay = document.createElement( 'div' );
-				overlay.style.position = 'fixed';
-				overlay.style.top = '0';
-				overlay.style.left = '0';
-				overlay.style.width = '100%';
-				overlay.style.height = '100%';
-				overlay.style.backgroundColor = '#1e1e1e';
-				overlay.style.zIndex = '10000';
-				overlay.style.display = 'flex';
-				overlay.style.flexDirection = 'column';
-				overlay.style.padding = '20px';
-				overlay.style.boxSizing = 'border-box';
-
-				// Close button
-				const closeBtn = document.createElement( 'button' );
-				closeBtn.textContent = '✕ Close';
-				closeBtn.style.alignSelf = 'flex-end';
-				closeBtn.style.marginBottom = '12px';
-				closeBtn.style.padding = '8px 16px';
-				closeBtn.style.backgroundColor = '#f44336';
-				closeBtn.style.color = 'white';
-				closeBtn.style.border = 'none';
-				closeBtn.style.borderRadius = '4px';
-				closeBtn.style.cursor = 'pointer';
-				closeBtn.style.fontSize = '14px';
-				closeBtn.style.fontWeight = '600';
-				closeBtn.addEventListener( 'click', function () {
-					overlay.remove();
-				} );
-				overlay.appendChild( closeBtn );
-
-				// Full-size editor container
-				const fullEditorDiv = document.createElement( 'div' );
-				fullEditorDiv.style.flex = '1';
-				fullEditorDiv.style.overflow = 'hidden';
-
-				// Create another Monaco instance for fullscreen
-				require( [ 'vs/editor/editor.main' ], function () {
-
-					const fullEditor = monaco.editor.create( fullEditorDiv, {
-						value: monacoEditorInstance.getValue(),
-						language: 'javascript',
-						lineNumbers: 'on',
-						minimap: { enabled: false },
-						theme: 'vs-dark',
-						tabSize: 2,
-						indentSize: 2,
-						insertSpaces: true,
-						readOnly: false,
-						scrollBeyondLastLine: false,
-						fontSize: 12,
-						fontFamily: 'Consolas, "Courier New", monospace'
-					} );
-
-					// Sync changes back to main editor on close
-					closeBtn.addEventListener( 'click', function () {
-						monacoEditorInstance.getModel().setValue( fullEditor.getValue() );
-						overlay.remove();
-					} );
-
-					fullEditor.focus();
-					fullEditor.layout();
-
-				} );
-
-				overlay.appendChild( fullEditorDiv );
-				document.body.appendChild( overlay );
-
-			} );
-			btnContainer.appendChild( fullscreenBtn );
-			container.appendChild( btnContainer );
+			editorDiv.appendChild( btnContainer );
+			container.appendChild( editorDiv );
 			line.appendChild( container );
 			
 			// Layout Monaco AFTER adding to DOM

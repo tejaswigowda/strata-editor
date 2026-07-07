@@ -940,9 +940,6 @@ body.sidebar-bottom #sidebar #shell {
 	padding: 4px 8px;
 	line-height: 1.6;
 	white-space: pre-wrap;
-	word-wrap: break-word;
-	overflow-wrap: break-word;
-	word-break: break-word;
 	cursor: pointer;
 	border-radius: 2px;
 	min-height: 20px;
