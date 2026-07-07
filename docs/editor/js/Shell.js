@@ -488,6 +488,9 @@ function Shell( editor ) {
 
 			// Append to container FIRST, before Monaco initialization
 			container.appendChild( editorDiv );
+			
+			// Store reference to the shell-line that will contain this editor for cleanup
+			container.__shellLine = line;
 
 			// Initialize Monaco Editor with syntax highlighting
 			let monacoEditorInstance = null;
@@ -563,16 +566,19 @@ function Shell( editor ) {
 					await execute( monacoEditorInstance.getValue() );
 					runBtn.textContent = '✓ done';
 					
-					// Destroy the editor after execution
-					setTimeout( () => {
-						if ( monacoEditorInstance ) {
-							monacoEditorInstance.dispose();
-							editorDiv.innerHTML = '';
-							container.remove();
+					// Destroy the editor and remove the shell-line immediately after execution
+					if ( monacoEditorInstance ) {
+						monacoEditorInstance.dispose();
+						editorDiv.innerHTML = '';
+						
+						// Remove the shell-line (and the shell-result that contains the code block)
+						if ( container.__shellLine && container.__shellLine.parentNode ) {
+							container.__shellLine.remove();
 						}
-						runBtn.textContent = '▶ Run';
-						runBtn.disabled = false;
-					}, 1500 );
+						container.remove();
+					}
+					runBtn.textContent = '▶ Run';
+					runBtn.disabled = false;
 
 				} catch ( err ) {
 

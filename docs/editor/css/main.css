@@ -967,7 +967,7 @@ body.sidebar-bottom #sidebar #shell {
 	background: rgba(120,200,100,0.18);
 }
 
-.shell-cmd       { color: #bbb; }
+.shell-cmd       { color: #bbb; overflow-y: auto;}
 .shell-result    { color: #79c0ff; }
 .shell-error     { color: #ff6b6b; }
 .shell-info      { color: #6a737d; font-style: italic; }
