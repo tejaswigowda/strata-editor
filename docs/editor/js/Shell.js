@@ -470,33 +470,51 @@ function Shell( editor ) {
 		container.style.gap = '8px';
 		container.style.pointerEvents = 'auto';
 		container.style.position = 'relative';
-			editorDiv.style.height = 'auto';
-			editorDiv.style.minHeight = '80px';
-			editorDiv.style.maxHeight = '40vh';
-			editorDiv.style.flex = '0 0 auto';
-			editorDiv.style.display = 'block';
-			editorDiv.style.boxSizing = 'border-box';
-			editorDiv.style.border = '1px solid #3e3e42';
-			editorDiv.style.borderRadius = '2px';
-			editorDiv.style.overflow = 'hidden';
-			editorDiv.style.pointerEvents = 'auto';
-			editorDiv.style.backgroundColor = '#1e1e1e';
+
+		// Create Monaco editor container with auto-height and word wrap
+		const editorDiv = document.createElement( 'div' );
+		editorDiv.style.width = '100%';
+		editorDiv.style.height = 'auto';
+		editorDiv.style.minHeight = '80px';
+		editorDiv.style.maxHeight = '40vh';
+		editorDiv.style.flex = '0 0 auto';
+		editorDiv.style.display = 'block';
+		editorDiv.style.boxSizing = 'border-box';
+		editorDiv.style.border = '1px solid #3e3e42';
+		editorDiv.style.borderRadius = '2px';
+		editorDiv.style.overflow = 'hidden';
+		editorDiv.style.pointerEvents = 'auto';
+		editorDiv.style.backgroundColor = '#1e1e1e';
 		editorDiv.style.position = 'relative';
-						value: code,
-						language: 'javascript',
-						lineNumbers: 'off',
-						minimap: { enabled: false },
-						theme: 'vs-dark',
-						tabSize: 2,
-						indentSize: 2,
-						insertSpaces: true,
-						readOnly: false,
-						scrollBeyondLastLine: false,
-						fontSize: 12,
-						fontFamily: 'Consolas, "Courier New", monospace',
-						wordWrap: 'on',
-						automaticLayout: true
-					} );
+
+		// Append to container FIRST, before Monaco initialization
+		container.appendChild( editorDiv );
+		
+		// Store reference to the shell-line that will contain this editor for cleanup
+		container.__shellLine = line;
+
+		// Initialize Monaco Editor with syntax highlighting
+		let monacoEditorInstance = null;
+		const editorReady = new Promise( ( resolve ) => {
+
+			require( [ 'vs/editor/editor.main' ], function () {
+
+				monacoEditorInstance = monaco.editor.create( editorDiv, {
+					value: code,
+					language: 'javascript',
+					lineNumbers: 'off',
+					minimap: { enabled: false },
+					theme: 'vs-dark',
+					tabSize: 2,
+					indentSize: 2,
+					insertSpaces: true,
+					readOnly: false,
+					scrollBeyondLastLine: false,
+					fontSize: 12,
+					fontFamily: 'Consolas, "Courier New", monospace',
+					wordWrap: 'on',
+					automaticLayout: true
+				} );
 
 					// Store for later layout call after DOM insertion
 					editorDiv.__monacoInstance = monacoEditorInstance;
@@ -514,9 +532,9 @@ function Shell( editor ) {
 
 				} );
 
-			} );
+		} );
 
-// Button container for Run button - positioned on top-right of editor
+		// Button container for Run button - positioned on top-right of editor
 		const btnContainer = document.createElement( 'div' );
 		btnContainer.style.display = 'flex';
 		btnContainer.style.gap = '8px';
@@ -524,62 +542,62 @@ function Shell( editor ) {
 		btnContainer.style.position = 'absolute';
 		btnContainer.style.top = '8px';
 		btnContainer.style.right = '8px';
-			btnContainer.style.zIndex = '100';
-			btnContainer.style.pointerEvents = 'auto';
+		btnContainer.style.zIndex = '100';
+		btnContainer.style.pointerEvents = 'auto';
 
-			// Add "Run" button
-			const runBtn = document.createElement( 'button' );
-			runBtn.textContent = '▶ Run';
-			runBtn.style.padding = '6px 12px';
-			runBtn.style.backgroundColor = '#4CAF50';
-			runBtn.style.color = 'white';
-			runBtn.style.border = 'none';
-			runBtn.style.borderRadius = '4px';
-			runBtn.style.cursor = 'pointer';
-			runBtn.style.fontSize = '13px';
-			runBtn.style.fontWeight = '600';
-			runBtn.style.zIndex = '101';
-			runBtn.style.pointerEvents = 'auto';
-			runBtn.addEventListener( 'click', async function () {
+		// Add "Run" button
+		const runBtn = document.createElement( 'button' );
+		runBtn.textContent = '▶ Run';
+		runBtn.style.padding = '6px 12px';
+		runBtn.style.backgroundColor = '#4CAF50';
+		runBtn.style.color = 'white';
+		runBtn.style.border = 'none';
+		runBtn.style.borderRadius = '4px';
+		runBtn.style.cursor = 'pointer';
+		runBtn.style.fontSize = '13px';
+		runBtn.style.fontWeight = '600';
+		runBtn.style.zIndex = '101';
+		runBtn.style.pointerEvents = 'auto';
+		runBtn.addEventListener( 'click', async function () {
 
-				runBtn.disabled = true;
-				runBtn.textContent = '⟳ running…';
+			runBtn.disabled = true;
+			runBtn.textContent = '⟳ running…';
 
-				try {
+			try {
 
-					await editorReady;
-					await execute( monacoEditorInstance.getValue() );
-					runBtn.textContent = '✓ done';
+				await editorReady;
+				await execute( monacoEditorInstance.getValue() );
+				runBtn.textContent = '✓ done';
+				
+				// Destroy the editor and remove the shell-line immediately after execution
+				if ( monacoEditorInstance ) {
+					monacoEditorInstance.dispose();
+					editorDiv.innerHTML = '';
 					
-					// Destroy the editor and remove the shell-line immediately after execution
-					if ( monacoEditorInstance ) {
-						monacoEditorInstance.dispose();
-						editorDiv.innerHTML = '';
-						
-						// Remove the shell-line (and the shell-result that contains the code block)
-						if ( container.__shellLine && container.__shellLine.parentNode ) {
-							container.__shellLine.remove();
-						}
-						container.remove();
+					// Remove the shell-line (and the shell-result that contains the code block)
+					if ( container.__shellLine && container.__shellLine.parentNode ) {
+						container.__shellLine.remove();
 					}
-					runBtn.textContent = '▶ Run';
-					runBtn.disabled = false;
-
-				} catch ( err ) {
-
-					appendOutput( '⚠ Execution error: ' + ( err.message || err ), 'error' );
-					runBtn.textContent = '▶ Run';
-					runBtn.disabled = false;
-
+					container.remove();
 				}
+				runBtn.textContent = '▶ Run';
+				runBtn.disabled = false;
 
-			} );
-			btnContainer.appendChild( runBtn );
-			editorDiv.appendChild( btnContainer );
-			container.appendChild( editorDiv );
-			line.appendChild( container );
-			
-			// Layout Monaco AFTER adding to DOM
+			} catch ( err ) {
+
+				appendOutput( '⚠ Execution error: ' + ( err.message || err ), 'error' );
+				runBtn.textContent = '▶ Run';
+				runBtn.disabled = false;
+
+			}
+
+		} );
+		btnContainer.appendChild( runBtn );
+		editorDiv.appendChild( btnContainer );
+		container.appendChild( editorDiv );
+		line.appendChild( container );
+		
+		// Layout Monaco AFTER adding to DOM
 			requestAnimationFrame( () => {
 				if ( editorDiv.__monacoInstance ) {
 					editorDiv.__monacoInstance.layout();
