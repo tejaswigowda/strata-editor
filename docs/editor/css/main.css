@@ -940,17 +940,23 @@ body.sidebar-bottom #sidebar #shell {
 	padding: 4px 8px;
 	line-height: 1.6;
 	white-space: pre-wrap;
-	word-break: break-all;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+	word-break: break-word;
 	cursor: pointer;
 	border-radius: 2px;
 	min-height: 20px;
 	margin-bottom: 8px;
+	max-width: 100%;
+	box-sizing: border-box;
 }
 
 .shell-code-block {
 	width: 100%;
-	min-height: 300px;
+	min-height: 80px;
+	max-height: 40vh;
 	flex: 0 0 auto;
+	overflow: hidden;
 }
 
 .shell-line:hover {

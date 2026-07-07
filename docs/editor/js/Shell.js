@@ -287,6 +287,18 @@ function Shell( editor ) {
 	stopBtn.title = 'Stop the current AI generation';
 	stopBtn.style.display = 'none';
 
+	const clearBtn = document.createElement( 'button' );
+	clearBtn.textContent = '⊖ Clear';
+	clearBtn.title = 'Clear console output';
+	clearBtn.style.padding = '4px 8px';
+	clearBtn.style.fontSize = '12px';
+	clearBtn.style.backgroundColor = 'transparent';
+	clearBtn.style.border = '1px solid #555';
+	clearBtn.style.color = '#999';
+	clearBtn.style.borderRadius = '3px';
+	clearBtn.style.cursor = 'pointer';
+	clearBtn.style.marginLeft = '8px';
+
 	const aiStatus = document.createElement( 'span' );
 	aiStatus.id = 'shell-ai-status';
 
@@ -296,6 +308,7 @@ function Shell( editor ) {
 	header.appendChild( unloadBtn );
 	header.appendChild( configApiBtn );
 	header.appendChild( mutableWrap );
+	header.appendChild( clearBtn );
 	container.dom.appendChild( header );
 
 	// ── Progress bar (shown during model load) ────────────────────────────────
@@ -314,6 +327,11 @@ function Shell( editor ) {
 	const output = document.createElement( 'div' );
 	output.id = 'shell-output';
 	container.dom.appendChild( output );
+
+	// Clear button handler
+	clearBtn.addEventListener( 'click', function () {
+		output.innerHTML = '';
+	} );
 
 	// ── AI input row ──────────────────────────────────────────────────────────
 
@@ -395,6 +413,13 @@ function Shell( editor ) {
 		line.style.flexDirection = 'column';
 		line.style.width = '100%';
 		line.style.boxSizing = 'border-box';
+
+		// Add visual separator before command lines (groups results together)
+		if ( type === 'cmd' && output.children.length > 0 ) {
+			line.style.marginTop = '12px';
+			line.style.paddingTop = '12px';
+			line.style.borderTop = '1px solid #333';
+		}
 		
 		// Helper to decode HTML entities
 		function decodeHTML( html ) {
@@ -446,12 +471,13 @@ function Shell( editor ) {
 			container.style.gap = '8px';
 			container.style.pointerEvents = 'auto';
 
-			// Create Monaco editor container with explicit sizing
+			// Create Monaco editor container with auto-height and word wrap
 			const editorDiv = document.createElement( 'div' );
 			editorDiv.style.width = '100%';
-			editorDiv.style.height = '300px';
-			editorDiv.style.minHeight = '300px';
-			editorDiv.style.flex = '0 0 300px';
+			editorDiv.style.height = 'auto';
+			editorDiv.style.minHeight = '80px';
+			editorDiv.style.maxHeight = '40vh';
+			editorDiv.style.flex = '0 0 auto';
 			editorDiv.style.display = 'block';
 			editorDiv.style.boxSizing = 'border-box';
 			editorDiv.style.border = '1px solid #3e3e42';
@@ -481,11 +507,23 @@ function Shell( editor ) {
 						readOnly: false,
 						scrollBeyondLastLine: false,
 						fontSize: 12,
-						fontFamily: 'Consolas, "Courier New", monospace'
+						fontFamily: 'Consolas, "Courier New", monospace',
+						wordWrap: 'on',
+						automaticLayout: true
 					} );
 
 					// Store for later layout call after DOM insertion
 					editorDiv.__monacoInstance = monacoEditorInstance;
+					
+					// Auto-height based on content
+					function updateEditorHeight() {
+						const contentHeight = Math.min( monacoEditorInstance.getContentHeight(), window.innerHeight * 0.4 );
+						editorDiv.style.height = contentHeight + 'px';
+						monacoEditorInstance.layout( { width: editorDiv.offsetWidth, height: contentHeight } );
+					}
+					
+					monacoEditorInstance.onDidChangeModelContent( updateEditorHeight );
+					updateEditorHeight();
 					resolve();
 
 				} );
