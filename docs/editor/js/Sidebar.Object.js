@@ -239,7 +239,20 @@ function SidebarObject( editor ) {
 		closeBtn.style.padding = '0';
 		closeBtn.style.width = '16px';
 		closeBtn.style.height = '16px';
-	closeBtn.addEventListener( 'click', () => removeCallback( className ) );
+		closeBtn.addEventListener( 'click', () => removeCallback( className ) );
+
+		chip.appendChild( label );
+		chip.appendChild( closeBtn );
+
+		return chip;
+
+	}
+
+	function updateChips( object ) {
+
+		chipsContainer.innerHTML = '';
+		const classes = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
+
 		for ( const cls of classes ) {
 
 			const chip = createChip( cls, ( className ) => {
