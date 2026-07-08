@@ -13,8 +13,6 @@ import * as selectorEngine from './selectorEngine.js';
 import { AddAnimationClipCommand } from '../commands/AddAnimationClipCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
 
-const THREE = window.THREE;
-
 // ── Recipe schema ───────────────────────────────────────────────────────────────
 
 export const RECIPE_SCHEMA = {
@@ -60,6 +58,7 @@ export function validateRecipe( recipeData ) {
  */
 function numberTrack( nodeName, property, times, values ) {
 
+	const THREE = window.THREE;
 	return new THREE.NumberKeyframeTrack( `${ nodeName }.${ property }`, times, values );
 
 }
@@ -74,6 +73,7 @@ function numberTrack( nodeName, property, times, values ) {
  */
 function vectorTrack( nodeName, property, times, values ) {
 
+	const THREE = window.THREE;
 	return new THREE.VectorKeyframeTrack( `${ nodeName }.${ property }`, times, values );
 
 }
@@ -88,6 +88,7 @@ function vectorTrack( nodeName, property, times, values ) {
  */
 function quaternionTrack( nodeName, times, values ) {
 
+	const THREE = window.THREE;
 	return new THREE.QuaternionKeyframeTrack( `${ nodeName }.quaternion`, times, values );
 
 }
@@ -102,6 +103,7 @@ function quaternionTrack( nodeName, times, values ) {
  */
 function colorTrack( nodeName, property, times, values ) {
 
+	const THREE = window.THREE;
 	// Convert hex to [r,g,b] floats
 	const floatValues = [];
 	for ( const hex of values ) {
@@ -124,6 +126,7 @@ function colorTrack( nodeName, property, times, values ) {
  */
 export function spinRecipe( node, params = {} ) {
 
+	const THREE = window.THREE;
 	const axis = ( params.axis || 'y' ).toLowerCase();
 	const turns = params.turns ?? 1;
 	const duration = params.duration ?? 2;
@@ -170,6 +173,7 @@ export function spinRecipe( node, params = {} ) {
  */
 export function bounceRecipe( node, params = {} ) {
 
+	const THREE = window.THREE;
 	const height = params.height ?? 0.5;
 	const duration = params.duration ?? 1;
 
@@ -188,6 +192,7 @@ export function bounceRecipe( node, params = {} ) {
  */
 export function pulseRecipe( node, params = {} ) {
 
+	const THREE = window.THREE;
 	const scale = params.scale ?? 1.2;
 	const duration = params.duration ?? 1;
 
@@ -214,6 +219,7 @@ export function pulseRecipe( node, params = {} ) {
  */
 export function fadeRecipe( node, params = {} ) {
 
+	const THREE = window.THREE;
 	const from = params.from ?? 1;
 	const to = params.to ?? 0;
 	const duration = params.duration ?? 1;
@@ -232,6 +238,7 @@ export function fadeRecipe( node, params = {} ) {
  */
 export function orbitRecipe( node, params = {} ) {
 
+	const THREE = window.THREE;
 	const center = params.center ? new THREE.Vector3( ...params.center ) : new THREE.Vector3( 0, 0, 0 );
 	const radius = params.radius ?? 2;
 	const duration = params.duration ?? 4;
@@ -264,6 +271,7 @@ export function orbitRecipe( node, params = {} ) {
  */
 export function scaleRecipe( node, params = {} ) {
 
+	const THREE = window.THREE;
 	const to = params.to ?? 2;
 	const duration = params.duration ?? 1;
 
@@ -283,6 +291,7 @@ export function scaleRecipe( node, params = {} ) {
  */
 export function shakeRecipe( node, params = {} ) {
 
+	const THREE = window.THREE;
 	const intensity = params.intensity ?? 0.1;
 	const duration = params.duration ?? 1;
 

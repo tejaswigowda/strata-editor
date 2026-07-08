@@ -22,13 +22,19 @@ export function addressablePartsBlock( editor ) {
 		.map( ( { selector, count } ) => count > 1 ? `${ selector }(×${ count })` : selector )
 		.join( '  ' );
 
+	// ⚠️  FIX 3: Enhanced block showing both EDIT and ANIMATION usage patterns
 	// Simple, direct enforcement: show ONLY allowed selectors, repeated, with examples
 	return '🔒 ADDRESSABLE PARTS MODE: Use ONLY these selectors (nothing else works):\n' +
 		'ALLOWED: ' + line + '\n\n' +
-		'TO EDIT A PART:\n' +
+		'TO EDIT A PART (instant transform):\n' +
 		"  $S('.body').recolor('#ff0000')\n" +
 		"  ops([{type:'recolor',selector:'.body',color:'#ff0000'}])\n" +
-		'Edit ops: recolor(color) scale(factor) move(dx,dy,dz) delete() setMaterial({color,roughness,metalness})\n' +
+		'Edit ops: recolor(color) scale(factor) move(dx,dy,dz) delete() setMaterial({color,roughness,metalness})\n\n' +
+		'🎬 TO ANIMATE A PART (keyframe-based, NOT instant):\n' +
+		"  const o=findObject('name'); if(o) addSpinClip(o, {axis:'y', turns:1, seconds:2});\n" +
+		"  — OR use ops recipe: ops([{type:'spin',selector:'.part',turns:1,duration:2000}])\n" +
+		'Animation ops: spin(turns,duration) bounce(height,duration) pulse(scale,duration) fade(from,to,duration) orbit(center,radius,duration)\n' +
+		'⚠️  NEVER: ops({type:"rotate",...}) for animation — rotate is INSTANT only. Use addSpinClip() or ops({type:"spin",...}).\n\n' +
 		'Wrap in (function(){ ... })();\n' +
 		'⚠️  MUST use EXACT selectors from the list above — do NOT combine or add spaces (e.g., ".tree bark" fails, use ".treebark" or "#tree-bark").\n' +
 		'Any selector not in ALLOWED list above will fail silently and do nothing.\n\n';

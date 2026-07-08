@@ -28,7 +28,7 @@ export const OP_VOCABULARY = {
 	recolor:     { kind: 'edit', args: { color: 'color' },                          summary: 'set base color (tints if textured)' },
 	scale:       { kind: 'edit', args: { factor: 'number', axis: 'axis?' },         summary: 'scale uniformly or on one axis' },
 	move:        { kind: 'edit', args: { dx: 'number', dy: 'number', dz: 'number' }, summary: 'translate by offset (grounded y>=0)' },
-	rotate:      { kind: 'edit', args: { axis: 'axis', degrees: 'number' },         summary: 'rotate once around an axis (NOT animated)' },
+	rotate:      { kind: 'edit', args: { axis: 'axis', degrees: 'number' },         summary: '⚠️  INSTANT rotation ONLY (NOT animated) — never use for "animate" requests. For animation, use addSpinClip() instead.' },
 	delete:      { kind: 'edit', args: {},                                          summary: 'remove nodes (merged-mesh parts fail gracefully)' },
 	duplicate:   { kind: 'edit', args: { dx: 'number', dy: 'number', dz: 'number' }, summary: 'clone with offset' },
 	retexture:   { kind: 'edit', args: { texture: 'string' },                       summary: 'apply a named/procedural texture map' },
@@ -200,6 +200,18 @@ export function op( editor, opJSON ) {
 
 	// ── edit ops (delegate to editOps with explicit args) ──
 	if ( EDIT_OPS.has( type ) ) {
+
+		// ⚠️  FIX 1: RUNTIME VALIDATION — Catch animation misuse of rotate
+		// If rotate is used with animation-like parameters, fail immediately with guidance
+		if ( type === 'rotate' && ( opJSON.seconds !== undefined || opJSON.duration !== undefined ) ) {
+
+			return {
+				success: false,
+				message: '❌ ops({type:"rotate",...}) is INSTANT, not animation. Use addSpinClip(findObject("..."), {axis:"x", turns:1, seconds:2}) instead.',
+				animated: true,
+			};
+
+		}
 
 		switch ( type ) {
 
