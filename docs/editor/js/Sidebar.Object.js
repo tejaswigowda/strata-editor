@@ -183,6 +183,10 @@ function SidebarObject( editor ) {
 	chipsContainer.style.gap = '4px';
 	chipsContainer.style.minHeight = '24px';
 	chipsContainer.style.alignItems = 'center';
+	chipsContainer.style.padding = '4px';
+	chipsContainer.style.backgroundColor = '#f5f5f5';
+	chipsContainer.style.borderRadius = '3px';
+	chipsContainer.style.minWidth = '100%';
 
 	// Input with autocomplete
 	const classInputWrapper = document.createElement( 'div' );
@@ -364,20 +368,18 @@ function SidebarObject( editor ) {
 	objectClassesContainer.appendChild( chipsContainer );
 	objectClassesContainer.appendChild( classInputWrapper );
 
-	const classesLabel = document.createElement( 'div' );
-	classesLabel.style.display = 'flex';
-	classesLabel.style.alignItems = 'flex-start';
-	classesLabel.style.gap = '8px';
-	classesLabel.style.width = '100%';
+	const classesLabelContainer = document.createElement( 'div' );
+	classesLabelContainer.style.display = 'flex';
+	classesLabelContainer.style.flexDirection = 'column';
+	classesLabelContainer.style.gap = '4px';
+	classesLabelContainer.style.width = '100%';
+	classesLabelContainer.style.minWidth = '0';
 
-	const label = new UIText( 'Classes' ).setClass( 'Label' );
-	label.dom.style.flexShrink = '0';
-	label.dom.style.marginTop = '2px';
+	const classesLabel = new UIText( 'Classes' ).setClass( 'Label' );
+	classesLabelContainer.appendChild( classesLabel.dom );
+	classesLabelContainer.appendChild( objectClassesContainer );
 
-	classesLabel.appendChild( label.dom );
-	classesLabel.appendChild( objectClassesContainer );
-
-	objectClassesRow.dom.appendChild( classesLabel );
+	objectClassesRow.dom.appendChild( classesLabelContainer );
 	container.add( objectClassesRow );
 
 	// fov
