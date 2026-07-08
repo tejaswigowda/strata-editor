@@ -43,6 +43,7 @@ class AddAnimationClipCommand extends Command {
 		// Animations panel rebuilds its clip list.
 		this.editor.signals.objectSelected.dispatch( target );
 		this.editor.signals.sceneGraphChanged.dispatch();
+		this.editor.signals.animationClipAdded.dispatch( this.clip );
 
 	}
 

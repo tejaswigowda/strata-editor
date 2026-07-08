@@ -1543,6 +1543,9 @@ function Animation( editor ) {
 	// Auto-select clip when an object with animations is selected
 	signals.objectSelected.add( selectDefaultClip );
 
+	// Update animation list when a clip is added
+	signals.animationClipAdded.add( update );
+
 	// Update when scene changes
 	signals.editorCleared.add( clear );
 	signals.objectChanged.add( onObjectChanged );

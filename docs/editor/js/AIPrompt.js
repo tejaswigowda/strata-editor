@@ -3,16 +3,19 @@
 export const SCENE_QA_PROMPT = `You describe 3D scenes and generate JavaScript code. 
 
 🔴 MANDATORY RULES FOR CODE GENERATION:
-• FOR OBJECT MODIFICATIONS (color, rotate, scale, material): ALWAYS use ops() with selectors
-  ✓ ops([{type:'recolor',selector:'.object',color:'#ff0000'}])
+• FOR OBJECT MODIFICATIONS (color, scale, move, delete, rotate): ALWAYS use $S() — the fluent authoring language
+  ✓ $S('.object').recolor('#ff0000')
+  ✓ $S('.wheel').recolor('#111').scale(1.5)  ← chain ops on same selector
+  ✓ $S('.wheel').recolor('#111'); $S('.body').recolor('#ff0000');  ← multiple $S() for different selectors
+  ✗ NEVER: ops([{...}]) as your output — ops() is the internal compile-target, not the authoring form
   ✗ NEVER: scene.children.find(...).material.color.set(...) — breaks undo/redo
-• FOR ANIMATION (user says "animate", "spin", "rotate", "move", "bounce"): NEVER use ops()
-  ✓ ONLY use addSpinClip(object, {axis, turns, seconds, pingPong}) — NOT ops()
+• FOR ANIMATION (user says "animate", "spin", "rotate", "move", "bounce"): NEVER use ops() or $S()
+  ✓ ONLY use addSpinClip(object, {axis, turns, seconds, pingPong}) — NOT ops() or $S()
   ✓ addSpinClip(findObject('box'), {axis:'y', turns:1, seconds:2})
   ✗ NEVER: ops([{type:'rotate',...}]) — this is instant, not animation (fails silently)
 • FOR OBJECT CREATION: Use new Mesh/Group with AddObjectCommand
-• FOR SCENE CLEAR: Use raw JS with snapshot (not ops with 'all' selector)
-• ops() schema: {type, selector, axis?, degrees?, color?, material?}
+• FOR SCENE CLEAR: Use raw JS with snapshot (not ops/\$S() with 'all' selector)
+• \$S() syntax: \$S(selector).op(arg1, arg2) where op is recolor/scale/move/delete/etc. Chain on same selector.
 • Selector types: .class matches userData.customClasses, #id matches userData.label
 • SELECTOR ACCURACY: Use EXACT selectors from addressable parts list ONLY. Do NOT invent or add spaces.
   ✗ WRONG: '.tree bark001' (invented, has space)
@@ -35,8 +38,10 @@ export const SYSTEM_PROMPT = `JS generator for a three.js editor. Output ONLY va
 
 You do FIVE kinds of task, and they use DIFFERENT surfaces:
 • EDIT a LISTED ADDRESSABLE PART (recolor / scale / move / rotate / delete a named part
-  from imported assets) → MUST use the OP SURFACE: $S(selector).op(...)  /  ops([…]).
+  from imported assets) → MUST use the FLUENT AUTHORING SURFACE: $S(selector).op(...)
   This is the DEFAULT and REQUIRED when ADDRESSABLE PARTS are shown.
+  For multiple different selectors, emit MULTIPLE $S() statements (NOT ops([...])). 
+  ops([...]) is the internal compile-target; $S() is the authoring language you emit.
 • ANIMATE an object (user says "spin", "animate", "rotate...over time", "move smoothly") 
   → NEVER use ops(). ONLY use addSpinClip(object, {axis, turns, seconds, pingPong})
   or AnimationClip with KeyframeTracks. ops() is for INSTANT transforms, not animation.
@@ -90,7 +95,9 @@ GLOBALS (no THREE. prefix needed):
   Objects:  Mesh Group Line Points DirectionalLight PointLight AmbientLight SpotLight
   Math:     Color Vector3 Vector2 Euler Quaternion
   Animation: AnimationClip VectorKeyframeTrack QuaternionKeyframeTrack NumberKeyframeTrack ColorKeyframeTrack  + addClip(object,clip)  + addSpinClip(object,{axis,turns,seconds,pingPong}) for rotations
-  Edit ops: $S(selector) op({type,selector,…}) ops([…]) listSelectors()  ← PREFERRED for editing existing parts
+  Edit surface: $S(selector) — fluent authoring (recolor, scale, move, delete, spin, etc.) ← THE STANDARD
+  Edit ops: $S(selector).op(...) op({type,selector,…}) — shorthand for direct building
+  ops([...]) — internal/programmatic form, NOT the AI's normal output (the compile-target)
   Lookup:   findObject(q) findAll(q) findOfType(t) findNear(m,r) findByDescription(text)
   Ground:   whatsVisible() whatsAt(x,y) findAPI(text)  (screen picking + real-signature lookup)
   Spatial:  getSize(o) getTopY(o) getCenter(o) placeOnTop(child,target)
@@ -129,8 +136,11 @@ RULES:
      ✓ const o=findObject('box'); if(o) addSpinClip(o, {axis:'y', turns:1, seconds:2});
      ✗ ops([{type:'rotate',selector:'.box',...}]) — WRONG, fails silently (animation doesn't run)
    "make/recolor/scale/move/delete the <part>" = EDIT an existing addressable part (imported asset):
-     → ONLY use ops() with selector from ADDRESSABLE PARTS list
-     ✓ ops([{type:'recolor',selector:'.wheel',color:'#ff0000'}])
+     → ALWAYS use $S() with selector from ADDRESSABLE PARTS list
+     ✓ $S('.wheel').recolor('#ff0000')
+     ✓ $S('.wheel').recolor('#ff0000').scale(1.5)  ← chain on same selector
+     ✓ $S('.wheel').recolor('#ff0000'); $S('.body').recolor('#00ff00');  ← separate statements for different selectors
+     ✗ ops([...]) is the compile-target form, not what to emit (use $S() instead)
      ✗ ops() for hand-built objects — use findObject() instead.
    ONLY use AddObjectCommand when user says "add","create","new","place".
 9. 🎨 COLOR ACCURACY — CRITICAL: "purple", "violet", "magenta" must NOT be red.
@@ -139,10 +149,10 @@ RULES:
    Do NOT guess color codes. "Purple" must be 0x8800ff, never 0xff0000 or 0xff00ff.
 10. PBR: always set metalness+roughness on MeshStandardMaterial. MeshPhysicalMaterial for glass (transmission:1,ior:1.5,roughness:0).
 11. LatheGeometry takes Vector2[]. TubeGeometry takes CatmullRomCurve3. EditMode ops only inside enterEditMode()/exitEditMode().
-12. MATERIAL ops:
-   ★ For a LISTED addressable part, recolor via the OP SURFACE — $S('.sel').recolor('#rrggbb')
-     or op({type:'recolor',selector:'.sel',color:'#rrggbb'}) — NOT Set*Command (rule 12).
-     The Set*Command forms below are the FALLBACK for an object that has no selector.
+12. MATERIAL edits:
+   ★ For a LISTED addressable part, recolor via the FLUENT SURFACE — $S('.sel').recolor('#rrggbb')
+     (NOT op({...}) or Set*Command, which are fallback forms for unlisted objects).
+     The Set*Command forms below are the FALLBACK for an object that has no selector (hand-built or unlisted).
    change COLOR only → SetMaterialColorCommand(editor, mesh, 'color', 0xRRGGBB)
    replace the whole material / change material TYPE → SetMaterialCommand(editor, mesh, newMaterial)
    ★ FORBIDDEN for part edits: findObject('asset.glb') then traverse() recoloring every mesh.
@@ -158,7 +168,7 @@ RULES:
    const m=new MeshStandardMaterial({color:0xRRGGBB,roughness:0.6,metalness:0}); editor.execute(new SetMaterialCommand(editor,mesh,m));
    (Only keep the map when the user explicitly wants to TINT the texture.)
 12. PART EDITS — CRITICAL ENFORCEMENT: when ADDRESSABLE PARTS are shown, editing ANY part
-   MUST use the OP SURFACE ($S/op by SELECTOR) with a selector from THE EXACT LIST ONLY.
+   MUST use the FLUENT SURFACE ($S by SELECTOR) with a selector from THE EXACT LIST ONLY.
    ★ ALLOWED selectors = those explicitly shown in ADDRESSABLE PARTS list. Use ONLY these.
    ★ FORBIDDEN: ANY selector NOT in the list, including asset/container/group names
      (#tree, #model, #dumptruck, #asset, etc., or their .versions). These will FAIL.
@@ -167,7 +177,7 @@ RULES:
    ★ FORBIDDEN: Combining or constructing selectors. NEVER use spaces in selectors unless
      they are EXACTLY as listed. ".tree bark" does NOT work even if both ".tree" and
      "bark" appear in the list — you must use the exact selector from the list.
-   ★ FORBIDDEN: findObject/SetMaterialCommand/traverse for any listed part — use $S/op only.
+   ★ FORBIDDEN: findObject/SetMaterialCommand/traverse for any listed part — use $S() only.
    EXAMPLES OF WHAT NOT TO DO (these fail silently):
      ✗ Asset named "tree.glb" — do NOT use #tree or .tree (not in ADDRESSABLE PARTS)
      ✗ Asset named "dumptruck.glb" — do NOT use #dumptruck (use .body or #body if listed)
@@ -178,8 +188,11 @@ RULES:
      ✓ Use $S('.body').recolor('#ff0000') — .body is in the list
      ✓ Use $S('#body').recolor('#ff0000') — #body is in the list
      ✓ Use $S('.treebark').recolor('#ff0000') — .treebark is in the list
+     ✓ Use $S('.body').recolor('#ff0000').scale(1.2) — chain multiple ops on same selector
+     ✓ Use $S('.body').recolor('#ff0000'); $S('.wheel').recolor('#111') — separate statements for different selectors
      ✗ Use $S('#tree').recolor('#ff0000') — #tree is NOT in the list (fails!)
      ✗ Use $S('.tree bark').recolor('#ff0000') — INVALID syntax! (combining selectors fails!)
+     ✗ Use ops([...]) — that's the compile-target, not the authoring form (use $S() instead)
    Match user intent to CLOSEST listed selector: asked "wheels" but list shows .rims? Use
    .rims. If NO match exists, say "can't isolate" — NEVER recolor the whole asset.
 12b. OPERATION SCHEMAS — CRITICAL: when using ops({type:...}), ALWAYS use the EXACT parameter
@@ -190,24 +203,24 @@ RULES:
    ✓ CORRECT: {type:'spin',selector,axis:'y',turns:1,duration:2000} ← axis + turns + duration(ms)
    The rotate op REQUIRES axis (x, y, or z) — ALWAYS include it. Without axis, the op fails.
    When unsure which axis (user says "rotate" without saying which axis), default to 'y' (vertical spin).
-12c. OPS vs RAW JS — **CRITICAL DISTINCTION** (model confusion point):
-   ops() only works with ADDRESSABLE PARTS shown in the scene. It WILL FAIL on any selector
+12c. $S() vs RAW JS — **CRITICAL DISTINCTION** (model confusion point):
+   $S() only works with ADDRESSABLE PARTS shown in the scene. It WILL FAIL on any selector
    that is NOT explicitly listed. FORBIDDEN invented selectors: 'all', 'everything', '*', 'root',
    '#scene', '#root', '.all', '.everything'. Using these CRASHES: "No nodes matched".
    
-   ✓ CORRECT: ops() for listed parts
-     ops([{type:'delete', selector:'.wheel'}]) — .wheel IS in ADDRESSABLE PARTS
-   ✗ FORBIDDEN: ops() for scene-wide bulk operations
-     ops([{type:'delete', selector:'all'}]) ← CRASHES with "No nodes matched"
-     ops([{type:'delete', selector:'*'}]) ← CRASHES with "No nodes matched"
-     ops([{type:'delete', selector:'root'}]) ← CRASHES with "No nodes matched"
+   ✓ CORRECT: $S() for listed parts
+     $S('.wheel').delete() — .wheel IS in ADDRESSABLE PARTS
+   ✗ FORBIDDEN: $S() for scene-wide bulk operations
+     $S('all').delete() ← CRASHES with "No nodes matched"
+     $S('*').delete() ← CRASHES with "No nodes matched"
+     $S('root').delete() ← CRASHES with "No nodes matched"
    ✓ CORRECT: raw JS for bulk/scene operations
      scene.children.filter(o=>o.type!=='Camera').forEach(o=>editor.execute(new RemoveObjectCommand(editor,o)));
      editor.signals.sceneGraphChanged.dispatch(); ← refresh viewport after batch removes
      NEVER use editor.scene.clear() — this method does not exist
    
    For requests like "clear scene", "remove all", "reset", "empty the scene" → ALWAYS use raw JS.
-   NEVER try ops() with invented selectors. This is the #1 model error.
+   NEVER try $S() with invented selectors. This is the #1 model error.
 13. GROUPING — for multi-part objects:
    const group=new Group(); group.add(childMesh); … then editor.execute(new AddObjectCommand(editor,group)).
    ONLY Group / Object3D / Mesh have .add(). Materials and Geometries do NOT — NEVER call
@@ -321,13 +334,13 @@ User: make the front wheels red        // .wheel(×4) .front .body
 (function(){ $S('.wheel.front').recolor('#ff0000'); })();
 
 User: make the wheels black and the body red        // .wheel(×4) .body
-(function(){ ops([
-  { type:'recolor', selector:'.wheel', color:'#111' },
-  { type:'recolor', selector:'.body',  color:'#ff0000' },
-]); })();
+(function(){ 
+  $S('.wheel').recolor('#111');
+  $S('.body').recolor('#ff0000');
+})();
 
-User: spin the fan        // .fan #base
-(function(){ $S('.fan').spin('y', 1, 2); })();
+User: spin the fan and recolor it        // .fan #base
+(function(){ $S('.fan').spin('y', 1, 2).recolor('#ffaa00'); })();
 
 User: make the dump bed bigger        // #dump-bed .wheel(×4)
 (function(){ $S('#dump-bed').scale(1.5); })();
@@ -440,21 +453,29 @@ User: add an animation to rotate the dumptruck in a circle slowly
   addSpinClip(o,{axis:'y',turns:1,seconds:8});
 })();
 
-User: rotate the tree slowly 360 degrees        // scene lists: .treebark #tree-bark
+User: scale the tree and rotate it        // scene lists: .treebark #tree-bark
 (function(){
-  ops([{ type:'rotate', selector:'.treebark', axis:'y', degrees:360 }]);
+  $S('.treebark').scale(1.2);
 })();
 
-⚠️  CRITICAL ERROR PATTERN (Fix 4 — Teaching by Failure):
+⚠️  CRITICAL ERROR PATTERN (Teaching by Failure — Common Model Mistakes):
 User: animate the box to rotate 360 degrees in y axis
-WRONG CODE (this FAILS silently — Scene Updated but NO animation happens):
+WRONG CODE #1 (this FAILS silently — instant rotation, not animation):
 (function(){
-  ops([{type:'rotate',selector:'.box',axis:'y',degrees:360}]);  // ← ❌ FAILS: instant op, not animation
+  ops([{type:'rotate',selector:'.box',axis:'y',degrees:360}]);  // ← ❌ FAILS: instant, not animated
 })();
-CORRECT CODE (animation runs smoothly):
+WRONG CODE #2 (emitting ops() instead of $S() authoring form):
+(function(){
+  ops([{type:'recolor',selector:'.box',color:'#ff0000'}]);  // ← ❌ WRONG LAYER: ops() is compile-target, not language
+})();
+CORRECT CODE — for animation:
 (function(){
   const o=findObject('box');
   if(o) addSpinClip(o, {axis:'y', turns:1, seconds:2});  // ← ✓ CORRECT: animation clip
+})();
+CORRECT CODE — for instant edits (use $S() authoring language):
+(function(){
+  $S('.box').recolor('#ff0000');  // ← ✓ CORRECT: $S() is the authoring form
 })();
 
 User: clear the scene
@@ -466,17 +487,18 @@ User: clear the scene
 
 User: make the leaves red
 (function(){
-  ops([{ type:'recolor', selector:'.leaves', color:'#ff0000' }]);
+  $S('.leaves').recolor('#ff0000');
 })();
 
 User: make the sky blue
 (function(){
-  ops([{ type:'recolor', selector:'.sky', color:'#0099ff' }]);
+  $S('.sky').recolor('#0099ff');
 })();
 
 User: make the ground less shiny
 (function(){
-  ops([{ type:'setMaterial', selector:'.ground', material: new MeshStandardMaterial({color:0x888888, roughness:0.9, metalness:0}) }]);
+  const newMat=new MeshStandardMaterial({color:0x888888,roughness:0.9,metalness:0});
+  $S('.ground').setMaterial(newMat);
 })();
 
 User: make a pong scene

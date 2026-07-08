@@ -26,9 +26,10 @@ export function addressablePartsBlock( editor ) {
 	// Simple, direct enforcement: show ONLY allowed selectors, repeated, with examples
 	return '🔒 ADDRESSABLE PARTS MODE: Use ONLY these selectors (nothing else works):\n' +
 		'ALLOWED: ' + line + '\n\n' +
-		'TO EDIT A PART (instant transform):\n' +
-		"  $S('.body').recolor('#ff0000')\n" +
-		"  ops([{type:'recolor',selector:'.body',color:'#ff0000'}])\n" +
+		'TO EDIT A PART (instant transform) — use $S() the fluent authoring language:\n' +
+		"  $S('.body').recolor('#ff0000')  ← primary form: fluent, chainable, readable\n" +
+		"  $S('.body').recolor('#ff0000').scale(1.5)  ← chain ops on same selector\n" +
+		"  $S('.body').recolor('#ff0000'); $S('.wheel').recolor('#111');  ← separate statements for different selectors\n" +
 		'Edit ops: recolor(color) scale(factor) move(dx,dy,dz) delete() setMaterial({color,roughness,metalness})\n\n' +
 		'🎬 TO ANIMATE A PART (keyframe-based, NOT instant):\n' +
 		"  const o=findObject('name'); if(o) addSpinClip(o, {axis:'y', turns:1, seconds:2});\n" +
