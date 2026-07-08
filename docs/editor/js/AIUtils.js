@@ -31,11 +31,12 @@ export function addressablePartsBlock( editor ) {
 		"  $S('.body').recolor('#ff0000').scale(1.5)  ← chain ops on same selector\n" +
 		"  $S('.body').recolor('#ff0000'); $S('.wheel').recolor('#111');  ← separate statements for different selectors\n" +
 		'Edit ops: recolor(color) scale(factor) move(dx,dy,dz) delete() setMaterial({color,roughness,metalness})\n\n' +
-		'🎬 TO ANIMATE A PART (keyframe-based, NOT instant):\n' +
-		"  const o=findObject('name'); if(o) addSpinClip(o, {axis:'y', turns:1, seconds:2});\n" +
-		"  — OR use ops recipe: ops([{type:'spin',selector:'.part',turns:1,duration:2000}])\n" +
-		'Animation ops: spin(turns,duration) bounce(height,duration) pulse(scale,duration) fade(from,to,duration) orbit(center,radius,duration)\n' +
-		'⚠️  NEVER: ops({type:"rotate",...}) for animation — rotate is INSTANT only. Use addSpinClip() or ops({type:"spin",...}).\n\n' +
+		'🎬 TO ANIMATE A PART (keyframe-based, NOT instant) — use $S() the fluent authoring language:\n' +
+		"  $S('.part').spin('y', 1, 2)  ← primary form: fluent, chainable, readable\n" +
+		"  $S('.part').recolor('#ff0000').spin('y', 1, 2)  ← chain edit + animation on same selector\n" +
+		"  — OR use addSpinClip for hand-built objects: const o=findObject('name'); if(o) addSpinClip(o, {axis:'y', turns:1, seconds:2});\n" +
+		"  Animation ops (chainable on $S()): spin(axis,turns,seconds) bounce(height,seconds) pulse(scale,seconds) fade(from,to,seconds) orbit(center,radius,seconds)\n" +
+		'⚠️  NEVER: $S().rotate() or ops({type:"rotate",...}) for animation — rotate is INSTANT only. Use $S().spin() or addSpinClip().\n\n' +
 		'Wrap in (function(){ ... })();\n' +
 		'⚠️  MUST use EXACT selectors from the list above — do NOT combine or add spaces (e.g., ".tree bark" fails, use ".treebark" or "#tree-bark").\n' +
 		'Any selector not in ALLOWED list above will fail silently and do nothing.\n\n';
@@ -228,15 +229,18 @@ export function buildQAMessages( qaSystemPrompt, editor, question ) {
 		'✓ PATTERN: const obj = new Mesh(<geometry>, new Mesh<Material>({color: 0xHHHHHH, ...})); obj.name = \'Name\'; editor.execute(new AddObjectCommand(editor, obj));\n' +
 		'✓ GEOMETRY CHOICES: BoxGeometry (cubes), SphereGeometry (balls), CylinderGeometry (pipes/trees), ConeGeometry (cones), TorusGeometry (rings), etc.\n\n' : '';
 	
-	// Detect modification requests and add ops() guidance
+	// Detect modification requests and add $S() authoring guidance
 	const isModifyRequest = /\b(make|change|set|rotate|scale|move|color|material|red|blue|green|yellow)\b/i.test( question ) && !/\badd\b|create\b|new\b/i.test( question );
 	const modifyWarning = isModifyRequest ?
-		'\n🔴 CRITICAL: OBJECT MODIFICATION MUST USE ops() — NOT raw JavaScript!\n' +
-		'✓ REQUIRED: ops([{type:\'recolor\',selector:\'.object-name\',color:\'#ff0000\'}])\n' +
+		'\n🔴 CRITICAL: OBJECT MODIFICATION MUST USE $S() — the fluent authoring language — NOT raw JavaScript!\n' +
+		"✓ REQUIRED: $S('.object-name').recolor('#ff0000')  ← fluent, chainable, readable\n" +
+		"✓ CHAIN on same selector: $S('.object-name').recolor('#ff0000').scale(1.5)\n" +
+		"✓ MULTIPLE selectors: emit separate statements — $S('.wheel').recolor('#111'); $S('.body').recolor('#ff0000');\n" +
 		'✗ FORBIDDEN: scene.children.find(...).material.color.set(...) — WRONG, breaks undo/redo\n' +
-		'✗ FORBIDDEN: Raw loops on scene.children — WRONG, use ops() instead\n' +
+		'✗ FORBIDDEN: Raw loops on scene.children — WRONG, use $S() instead\n' +
+		'✗ FORBIDDEN: ops([{...}]) as your output — ops() is the internal compile-target, not the authoring form. Emit $S().\n' +
 		'✗ FORBIDDEN: Inventing selectors with spaces like ".tree bark" — ONLY use exact selectors from the addressable parts list\n' +
-		'ALWAYS prefer ops() for any modification, color, rotation, or property changes.\n\n' : '';
+		'ALWAYS prefer $S() for any modification, color, rotation, or property changes.\n\n' : '';
 	
 	return [
 		{ role: 'system', content: qaSystemPrompt },

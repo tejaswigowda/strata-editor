@@ -859,16 +859,16 @@ body.sidebar-bottom #sidebar #shell {
 }
 
 #shell-output {
-	flex: 1;
-	overflow-y: auto;
-	overflow-x: hidden;
-	padding: 8px 12px 4px;
-	user-select: text;
-	-webkit-user-select: text;
-	min-height: 400px;
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 12px 4px;
+    user-select: text;
+    -webkit-user-select: text;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
 }
 
 #shell-ai-row {

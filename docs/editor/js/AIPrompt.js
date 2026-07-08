@@ -458,6 +458,68 @@ User: scale the tree and rotate it        // scene lists: .treebark #tree-bark
   $S('.treebark').scale(1.2);
 })();
 
+NEW CHAINABLE ANIMATIONS — The $S() API now supports rich animation presets from animate.style:
+
+User: make the box fade in
+(function(){
+  $S('.box').fadeIn(1);
+})();
+
+User: make the wheel zoom in
+(function(){
+  $S('.wheel').zoomIn(1.5, 1);
+})();
+
+User: slide the car in from the left
+(function(){
+  $S('.car').slideInLeft(2, 1.2);
+})();
+
+User: make the object bounce in
+(function(){
+  $S('.object').bounceIn(1.2);
+})();
+
+User: flip the card in on X axis
+(function(){
+  $S('.card').flipInX(0.8);
+})();
+
+User: make the tree fade out and disappear
+(function(){
+  $S('.tree').fadeOut(1);
+})();
+
+User: zoom out the building
+(function(){
+  $S('.building').zoomOut(0.3, 1);
+})();
+
+User: slide the box down and out
+(function(){
+  $S('.box').slideOutDown(1.5, 0.8);
+})();
+
+User: make the warning light flash
+(function(){
+  $S('.light').flash(4, 1);
+})();
+
+User: make the robot wobble
+(function(){
+  $S('.robot').wobble(20, 1.5);
+})();
+
+User: celebrate with a tada animation
+(function(){
+  $S('.character').tada(1, 1.15, 1.5);
+})();
+
+User: make the heart pulse like a heartbeat
+(function(){
+  $S('.heart').heartBeat(1.1, 1.3);
+})();
+
 ⚠️  CRITICAL ERROR PATTERN (Teaching by Failure — Common Model Mistakes):
 User: animate the box to rotate 360 degrees in y axis
 WRONG CODE #1 (this FAILS silently — instant rotation, not animation):

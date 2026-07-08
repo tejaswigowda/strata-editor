@@ -4,7 +4,10 @@
 //
 // op-JSON shape:  { type: <op>, selector: <css-like>, ...typed args }
 // Closed op set:  recolor scale move rotate delete duplicate retexture setMaterial
-//                 spin bounce pulse fade orbit scale shake raw
+//                 spin bounce pulse fade orbit shake raw
+//                 [NEW] fadeIn zoomIn slideIn* bounceIn flipIn* rotateIn
+//                 [NEW] fadeOut zoomOut slideOut* bounceOut flipOut* rotateOut
+//                 [NEW] flash rubberBand jello heartBeat tada wobble
 // Escape hatch:   { type:'raw', selector, code }  ← raw JS as ONE op type
 //
 // Non-negotiables honored:
@@ -41,6 +44,38 @@ export const OP_VOCABULARY = {
 	fade:        { kind: 'anim', args: { from: 'number?', to: 'number?', duration: 'number?' },         summary: 'opacity transition' },
 	orbit:       { kind: 'anim', args: { center: 'vec3?', radius: 'number?', duration: 'number?' },     summary: 'circular motion around a point' },
 	shake:       { kind: 'anim', args: { intensity: 'number?', duration: 'number?' },                   summary: 'jittery motion' },
+
+	// ── Entrance animations (appear with style) ──
+	fadeIn:      { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade in from transparent' },
+	zoomIn:      { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'scale from zero to full size' },
+	slideInUp:   { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from below' },
+	slideInDown: { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from above' },
+	slideInLeft: { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from left' },
+	slideInRight:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from right' },
+	bounceIn:    { kind: 'anim', args: { duration: 'number?' },                                         summary: 'scale in with bounce' },
+	flipInX:     { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate in around X-axis' },
+	flipInY:     { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate in around Y-axis' },
+	rotateIn:    { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'rotate in place' },
+
+	// ── Exit animations (disappear with style) ──
+	fadeOut:     { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade out to transparent' },
+	zoomOut:     { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'scale from full size to zero' },
+	slideOutUp:  { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out upward' },
+	slideOutDown:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out downward' },
+	slideOutLeft:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out to left' },
+	slideOutRight:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                  summary: 'slide out to right' },
+	bounceOut:   { kind: 'anim', args: { duration: 'number?' },                                         summary: 'scale out with bounce' },
+	flipOutX:    { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate out around X-axis' },
+	flipOutY:    { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate out around Y-axis' },
+	rotateOut:   { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'rotate out of place' },
+
+	// ── Attention seekers (grab focus on objects) ──
+	flash:       { kind: 'anim', args: { times: 'number?', duration: 'number?' },                      summary: 'rapidly toggle opacity' },
+	rubberBand:  { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'stretchy scale oscillation' },
+	jello:       { kind: 'anim', args: { intensity: 'number?', duration: 'number?' },                  summary: 'wobbly elastic deformation' },
+	heartBeat:   { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'pulse like a heartbeat' },
+	tada:        { kind: 'anim', args: { rotations: 'number?', scale: 'number?', duration: 'number?' }, summary: 'spin + scale celebration' },
+	wobble:      { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'gentle side-to-side sway' },
 
 	// ── Escape hatch ──
 	raw:         { kind: 'raw',  args: { code: 'string' },                          summary: 'raw JS (loop-protected, UNGUARDED) — last resort' },
@@ -295,6 +330,38 @@ class ChainableSet {
 	fade( from = 1, to = 0, duration = 1 )      { return this.op( { type: 'fade', from, to, duration } ); }
 	orbit( center = [ 0, 0, 0 ], radius = 2, duration = 4 ) { return this.op( { type: 'orbit', center, radius, duration } ); }
 	shake( intensity = 0.1, duration = 1 )      { return this.op( { type: 'shake', intensity, duration } ); }
+
+	// ── Entrance animations ──
+	fadeIn( duration = 1 )                            { return this.op( { type: 'fadeIn', duration } ); }
+	zoomIn( scale = 1.5, duration = 1 )               { return this.op( { type: 'zoomIn', scale, duration } ); }
+	slideInUp( distance = 1, duration = 0.8 )         { return this.op( { type: 'slideInUp', distance, duration } ); }
+	slideInDown( distance = 1, duration = 0.8 )       { return this.op( { type: 'slideInDown', distance, duration } ); }
+	slideInLeft( distance = 1, duration = 0.8 )       { return this.op( { type: 'slideInLeft', distance, duration } ); }
+	slideInRight( distance = 1, duration = 0.8 )      { return this.op( { type: 'slideInRight', distance, duration } ); }
+	bounceIn( duration = 1.2 )                        { return this.op( { type: 'bounceIn', duration } ); }
+	flipInX( duration = 0.8 )                         { return this.op( { type: 'flipInX', duration } ); }
+	flipInY( duration = 0.8 )                         { return this.op( { type: 'flipInY', duration } ); }
+	rotateIn( angle = 90, duration = 0.8 )            { return this.op( { type: 'rotateIn', angle, duration } ); }
+
+	// ── Exit animations ──
+	fadeOut( duration = 1 )                           { return this.op( { type: 'fadeOut', duration } ); }
+	zoomOut( scale = 0.3, duration = 1 )              { return this.op( { type: 'zoomOut', scale, duration } ); }
+	slideOutUp( distance = 1, duration = 0.8 )        { return this.op( { type: 'slideOutUp', distance, duration } ); }
+	slideOutDown( distance = 1, duration = 0.8 )      { return this.op( { type: 'slideOutDown', distance, duration } ); }
+	slideOutLeft( distance = 1, duration = 0.8 )      { return this.op( { type: 'slideOutLeft', distance, duration } ); }
+	slideOutRight( distance = 1, duration = 0.8 )     { return this.op( { type: 'slideOutRight', distance, duration } ); }
+	bounceOut( duration = 1.2 )                       { return this.op( { type: 'bounceOut', duration } ); }
+	flipOutX( duration = 0.8 )                        { return this.op( { type: 'flipOutX', duration } ); }
+	flipOutY( duration = 0.8 )                        { return this.op( { type: 'flipOutY', duration } ); }
+	rotateOut( angle = 90, duration = 0.8 )           { return this.op( { type: 'rotateOut', angle, duration } ); }
+
+	// ── Attention seekers ──
+	flash( times = 3, duration = 1 )                  { return this.op( { type: 'flash', times, duration } ); }
+	rubberBand( scale = 1.3, duration = 0.8 )         { return this.op( { type: 'rubberBand', scale, duration } ); }
+	jello( intensity = 0.05, duration = 0.9 )         { return this.op( { type: 'jello', intensity, duration } ); }
+	heartBeat( scale = 1.1, duration = 1.3 )          { return this.op( { type: 'heartBeat', scale, duration } ); }
+	tada( rotations = 1, scale = 1.1, duration = 1 )  { return this.op( { type: 'tada', rotations, scale, duration } ); }
+	wobble( angle = 15, duration = 1 )                { return this.op( { type: 'wobble', angle, duration } ); }
 
 	raw( code )                         { return this.op( { type: 'raw', code } ); }
 

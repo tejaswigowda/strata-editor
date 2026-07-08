@@ -20,7 +20,14 @@ export const RECIPE_SCHEMA = {
 	properties: {
 		recipe: {
 			type: 'string',
-			enum: [ 'spin', 'bounce', 'pulse', 'fade', 'orbit', 'scale', 'shake', 'spinWheels' ],
+			enum: [
+				'spin', 'bounce', 'pulse', 'fade', 'orbit', 'scale', 'shake', 'spinWheels',
+				'fadeIn', 'zoomIn', 'slideInUp', 'slideInDown', 'slideInLeft', 'slideInRight',
+				'bounceIn', 'flipInX', 'flipInY', 'rotateIn',
+				'fadeOut', 'zoomOut', 'slideOutUp', 'slideOutDown', 'slideOutLeft', 'slideOutRight',
+				'bounceOut', 'flipOutX', 'flipOutY', 'rotateOut',
+				'flash', 'rubberBand', 'jello', 'heartBeat', 'tada', 'wobble'
+			],
 		},
 		selector: { type: 'string' },
 		params: { type: 'object' },
@@ -319,6 +326,609 @@ export function shakeRecipe( node, params = {} ) {
 }
 
 /**
+ * FadeIn recipe: appear from transparent.
+ * Params: {duration:1}
+ */
+export function fadeInRecipe( node, params = {} ) {
+
+	const duration = params.duration ?? 1;
+	if ( node.material ) node.material.transparent = true;
+
+	const times = [ 0, duration ];
+	const values = [ 0, node.material?.opacity ?? 1 ];
+
+	const track = numberTrack( node.uuid, 'material.opacity', times, values );
+	return new THREE.AnimationClip( 'FadeIn', -1, [ track ] );
+
+}
+
+/**
+ * ZoomIn recipe: scale from zero to full size.
+ * Params: {scale:1.5, duration:1}
+ */
+export function zoomInRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 1;
+	const times = [ 0, duration ];
+	const values = [
+		0, 0, 0,
+		node.scale.x, node.scale.y, node.scale.z
+	];
+
+	const track = vectorTrack( node.uuid, 'scale', times, values );
+	return new THREE.AnimationClip( 'ZoomIn', -1, [ track ] );
+
+}
+
+/**
+ * SlideIn recipes: move into position from an offset.
+ */
+export function slideInUpRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startY = node.position.y;
+	const times = [ 0, duration ];
+	const values = [
+		node.position.x, startY - distance, node.position.z,
+		node.position.x, startY, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideInUp', -1, [ track ] );
+
+}
+
+export function slideInDownRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startY = node.position.y;
+	const times = [ 0, duration ];
+	const values = [
+		node.position.x, startY + distance, node.position.z,
+		node.position.x, startY, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideInDown', -1, [ track ] );
+
+}
+
+export function slideInLeftRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startX = node.position.x;
+	const times = [ 0, duration ];
+	const values = [
+		startX - distance, node.position.y, node.position.z,
+		startX, node.position.y, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideInLeft', -1, [ track ] );
+
+}
+
+export function slideInRightRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startX = node.position.x;
+	const times = [ 0, duration ];
+	const values = [
+		startX + distance, node.position.y, node.position.z,
+		startX, node.position.y, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideInRight', -1, [ track ] );
+
+}
+
+/**
+ * BounceIn recipe: scale in with bounce effect.
+ * Params: {duration:1.2}
+ */
+export function bounceInRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 1.2;
+
+	const times = [ 0, 0.25, 0.5, 0.75, 1.0 ];
+	const tVals = times.map( t => t * duration );
+
+	const values = [];
+	for ( const t of times ) {
+
+		// Bounce easing: out-bounce curve
+		let scale;
+		if ( t < 0.3 ) scale = 0.3;
+		else if ( t < 0.6 ) scale = 0.8;
+		else if ( t < 0.85 ) scale = 0.95;
+		else scale = 1.0;
+
+		values.push( node.scale.x * scale, node.scale.y * scale, node.scale.z * scale );
+
+	}
+
+	const track = vectorTrack( node.uuid, 'scale', tVals, values );
+	return new THREE.AnimationClip( 'BounceIn', -1, [ track ] );
+
+}
+
+/**
+ * FlipIn recipes: rotate in around an axis.
+ */
+export function flipInXRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 0.8;
+
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 1, 0, 0 );
+
+	const times = [ 0, duration ];
+	const values = [];
+
+	for ( const t of [ 0, 1 ] ) {
+
+		const angle = t * Math.PI;
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		values.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+
+	}
+
+	const track = quaternionTrack( node.uuid, times, values );
+	return new THREE.AnimationClip( 'FlipInX', -1, [ track ] );
+
+}
+
+export function flipInYRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 0.8;
+
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+
+	const times = [ 0, duration ];
+	const values = [];
+
+	for ( const t of [ 0, 1 ] ) {
+
+		const angle = t * Math.PI;
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		values.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+
+	}
+
+	const track = quaternionTrack( node.uuid, times, values );
+	return new THREE.AnimationClip( 'FlipInY', -1, [ track ] );
+
+}
+
+/**
+ * RotateIn recipe: rotate into view.
+ * Params: {angle:90, duration:0.8}
+ */
+export function rotateInRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const angle = ( params.angle ?? 90 ) * Math.PI / 180;
+	const duration = params.duration ?? 0.8;
+
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+
+	const times = [ 0, duration ];
+	const values = [];
+
+	for ( const t of [ 0, 1 ] ) {
+
+		const a = t * angle;
+		tmpQ.setFromAxisAngle( axisVec, a ).premultiply( baseQ );
+		values.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+
+	}
+
+	const track = quaternionTrack( node.uuid, times, values );
+	return new THREE.AnimationClip( 'RotateIn', -1, [ track ] );
+
+}
+
+/**
+ * FadeOut recipe: fade to transparent.
+ * Params: {duration:1}
+ */
+export function fadeOutRecipe( node, params = {} ) {
+
+	const duration = params.duration ?? 1;
+	if ( node.material ) node.material.transparent = true;
+
+	const times = [ 0, duration ];
+	const initialOpacity = node.material?.opacity ?? 1;
+	const values = [ initialOpacity, 0 ];
+
+	const track = numberTrack( node.uuid, 'material.opacity', times, values );
+	return new THREE.AnimationClip( 'FadeOut', -1, [ track ] );
+
+}
+
+/**
+ * ZoomOut recipe: scale down to zero.
+ * Params: {scale:0.3, duration:1}
+ */
+export function zoomOutRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 1;
+
+	const times = [ 0, duration ];
+	const values = [
+		node.scale.x, node.scale.y, node.scale.z,
+		0, 0, 0
+	];
+
+	const track = vectorTrack( node.uuid, 'scale', times, values );
+	return new THREE.AnimationClip( 'ZoomOut', -1, [ track ] );
+
+}
+
+/**
+ * SlideOut recipes: move away.
+ */
+export function slideOutUpRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startY = node.position.y;
+	const times = [ 0, duration ];
+	const values = [
+		node.position.x, startY, node.position.z,
+		node.position.x, startY + distance, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideOutUp', -1, [ track ] );
+
+}
+
+export function slideOutDownRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startY = node.position.y;
+	const times = [ 0, duration ];
+	const values = [
+		node.position.x, startY, node.position.z,
+		node.position.x, startY - distance, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideOutDown', -1, [ track ] );
+
+}
+
+export function slideOutLeftRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startX = node.position.x;
+	const times = [ 0, duration ];
+	const values = [
+		startX, node.position.y, node.position.z,
+		startX - distance, node.position.y, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideOutLeft', -1, [ track ] );
+
+}
+
+export function slideOutRightRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 1;
+	const duration = params.duration ?? 0.8;
+
+	const startX = node.position.x;
+	const times = [ 0, duration ];
+	const values = [
+		startX, node.position.y, node.position.z,
+		startX + distance, node.position.y, node.position.z
+	];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'SlideOutRight', -1, [ track ] );
+
+}
+
+/**
+ * BounceOut recipe: scale out with bounce.
+ * Params: {duration:1.2}
+ */
+export function bounceOutRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 1.2;
+
+	const times = [ 0, 0.25, 0.5, 0.75, 1.0 ];
+	const tVals = times.map( t => t * duration );
+
+	const values = [];
+	for ( const t of times ) {
+
+		// Bounce easing: out-bounce curve reversed
+		let scale;
+		if ( t < 0.15 ) scale = 1.0;
+		else if ( t < 0.4 ) scale = 0.95;
+		else if ( t < 0.7 ) scale = 0.8;
+		else scale = 0.2;
+
+		values.push( node.scale.x * scale, node.scale.y * scale, node.scale.z * scale );
+
+	}
+
+	const track = vectorTrack( node.uuid, 'scale', tVals, values );
+	return new THREE.AnimationClip( 'BounceOut', -1, [ track ] );
+
+}
+
+/**
+ * FlipOut recipes: rotate out.
+ */
+export function flipOutXRecipe( node, params = {} ) {
+
+	return flipInXRecipe( node, params ); // Same rotation out effect
+
+}
+
+export function flipOutYRecipe( node, params = {} ) {
+
+	return flipInYRecipe( node, params ); // Same rotation out effect
+
+}
+
+/**
+ * RotateOut recipe: rotate away.
+ * Params: {angle:90, duration:0.8}
+ */
+export function rotateOutRecipe( node, params = {} ) {
+
+	return rotateInRecipe( node, params ); // Same rotation effect
+
+}
+
+/**
+ * Flash recipe: rapidly toggle opacity.
+ * Params: {times:3, duration:1}
+ */
+export function flashRecipe( node, params = {} ) {
+
+	const duration = params.duration ?? 1;
+	const times = params.times ?? 3;
+	if ( node.material ) node.material.transparent = true;
+
+	const initialOpacity = node.material?.opacity ?? 1;
+	const steps = times * 2 + 1;
+	const keyTimes = [];
+	const values = [];
+
+	for ( let i = 0; i <= steps; i ++ ) {
+
+		keyTimes.push( ( i / steps ) * duration );
+		values.push( i % 2 === 0 ? initialOpacity : 0 );
+
+	}
+
+	const track = numberTrack( node.uuid, 'material.opacity', keyTimes, values );
+	return new THREE.AnimationClip( 'Flash', -1, [ track ] );
+
+}
+
+/**
+ * RubberBand recipe: stretchy scale oscillation.
+ * Params: {scale:1.3, duration:0.8}
+ */
+export function rubberBandRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const scale = params.scale ?? 1.3;
+	const duration = params.duration ?? 0.8;
+
+	const times = [ 0, 0.2, 0.4, 0.6, 0.8, 1.0 ];
+	const tVals = times.map( t => t * duration );
+
+	const values = [];
+	for ( const t of times ) {
+
+		let s;
+		if ( t < 0.2 ) s = 1.0 + ( scale - 1 ) * ( t / 0.2 );
+		else if ( t < 0.4 ) s = scale - ( scale - 1 ) * ( ( t - 0.2 ) / 0.2 );
+		else if ( t < 0.6 ) s = 1.0 + ( scale - 1 ) * 0.5 * ( ( t - 0.4 ) / 0.2 );
+		else if ( t < 0.8 ) s = 1.0 + ( scale - 1 ) * 0.25 * ( ( t - 0.6 ) / 0.2 );
+		else s = 1.0;
+
+		values.push( node.scale.x * s, node.scale.y * s, node.scale.z * s );
+
+	}
+
+	const track = vectorTrack( node.uuid, 'scale', tVals, values );
+	return new THREE.AnimationClip( 'RubberBand', -1, [ track ] );
+
+}
+
+/**
+ * Jello recipe: wobbly elastic deformation.
+ * Params: {intensity:0.05, duration:0.9}
+ */
+export function jelloRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const intensity = params.intensity ?? 0.05;
+	const duration = params.duration ?? 0.9;
+
+	const steps = 8;
+	const times = [];
+	const xValues = [];
+	const yValues = [];
+	const zValues = [];
+
+	for ( let i = 0; i <= steps; i ++ ) {
+
+		const t = i / steps;
+		times.push( t * duration );
+
+		const skew = Math.sin( t * Math.PI * 4 ) * intensity;
+		xValues.push( node.scale.x * ( 1 + skew ) );
+		yValues.push( node.scale.y * ( 1 - skew * 0.5 ) );
+		zValues.push( node.scale.z );
+
+	}
+
+	const values = [];
+	for ( let i = 0; i <= steps; i ++ ) {
+
+		values.push( xValues[ i ], yValues[ i ], zValues[ i ] );
+
+	}
+
+	const track = vectorTrack( node.uuid, 'scale', times, values );
+	return new THREE.AnimationClip( 'Jello', -1, [ track ] );
+
+}
+
+/**
+ * HeartBeat recipe: pulse like a heartbeat.
+ * Params: {scale:1.1, duration:1.3}
+ */
+export function heartBeatRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const scale = params.scale ?? 1.1;
+	const duration = params.duration ?? 1.3;
+
+	// Heartbeat: quick pulse, pause, quick pulse again
+	const times = [ 0, 0.15, 0.3, 0.45, 1.0 ];
+	const tVals = times.map( t => t * duration );
+
+	const values = [];
+	for ( const t of times ) {
+
+		let s;
+		if ( t < 0.15 ) s = 1.0 + ( scale - 1 ) * ( t / 0.15 );
+		else if ( t < 0.3 ) s = scale - ( scale - 1 ) * ( ( t - 0.15 ) / 0.15 );
+		else if ( t < 0.45 ) s = 1.0 + ( scale - 1 ) * 0.5 * ( ( t - 0.3 ) / 0.15 );
+		else s = 1.0;
+
+		values.push( node.scale.x * s, node.scale.y * s, node.scale.z * s );
+
+	}
+
+	const track = vectorTrack( node.uuid, 'scale', tVals, values );
+	return new THREE.AnimationClip( 'HeartBeat', -1, [ track ] );
+
+}
+
+/**
+ * Tada recipe: spin + scale celebration.
+ * Params: {rotations:1, scale:1.1, duration:1}
+ */
+export function tadaRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const rotations = params.rotations ?? 1;
+	const scale = params.scale ?? 1.1;
+	const duration = params.duration ?? 1;
+
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+
+	const steps = 12;
+	const times = [];
+	const qValues = [];
+	const sValues = [];
+
+	for ( let i = 0; i <= steps; i ++ ) {
+
+		const t = i / steps;
+		times.push( t * duration );
+
+		// Rotation
+		const angle = t * rotations * Math.PI * 2;
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		qValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+
+		// Scale pulse
+		let s = 1.0 + ( scale - 1 ) * Math.sin( t * Math.PI * 3 ) * 0.5;
+		sValues.push( node.scale.x * s, node.scale.y * s, node.scale.z * s );
+
+	}
+
+	const qTrack = quaternionTrack( node.uuid, times, qValues );
+	const sTrack = vectorTrack( node.uuid, 'scale', times, sValues );
+
+	return new THREE.AnimationClip( 'Tada', -1, [ qTrack, sTrack ] );
+
+}
+
+/**
+ * Wobble recipe: gentle side-to-side sway.
+ * Params: {angle:15, duration:1}
+ */
+export function wobbleRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const angle = ( params.angle ?? 15 ) * Math.PI / 180;
+	const duration = params.duration ?? 1;
+
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+
+	const steps = 8;
+	const times = [];
+	const values = [];
+
+	for ( let i = 0; i <= steps; i ++ ) {
+
+		const t = i / steps;
+		times.push( t * duration );
+
+		// Wobble: sine wave back and forth
+		const a = Math.sin( t * Math.PI * 2 ) * angle;
+		tmpQ.setFromAxisAngle( axisVec, a ).premultiply( baseQ );
+		values.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+
+	}
+
+	const track = quaternionTrack( node.uuid, times, values );
+	return new THREE.AnimationClip( 'Wobble', -1, [ track ] );
+
+}
+
+/**
  * SpinWheels recipe: specialized spin for wheel sets (e.g., car wheels).
  * Spins around X-axis (like wheels on ground).
  * Params: {speed:1, duration:auto}
@@ -377,6 +987,65 @@ export function executeRecipe( node, recipeData ) {
 				return shakeRecipe( node, params );
 			case 'spinWheels':
 				return spinWheelsRecipe( Array.isArray( node ) ? node : [ node ], params );
+
+			// Entrance animations
+			case 'fadeIn':
+				return fadeInRecipe( node, params );
+			case 'zoomIn':
+				return zoomInRecipe( node, params );
+			case 'slideInUp':
+				return slideInUpRecipe( node, params );
+			case 'slideInDown':
+				return slideInDownRecipe( node, params );
+			case 'slideInLeft':
+				return slideInLeftRecipe( node, params );
+			case 'slideInRight':
+				return slideInRightRecipe( node, params );
+			case 'bounceIn':
+				return bounceInRecipe( node, params );
+			case 'flipInX':
+				return flipInXRecipe( node, params );
+			case 'flipInY':
+				return flipInYRecipe( node, params );
+			case 'rotateIn':
+				return rotateInRecipe( node, params );
+
+			// Exit animations
+			case 'fadeOut':
+				return fadeOutRecipe( node, params );
+			case 'zoomOut':
+				return zoomOutRecipe( node, params );
+			case 'slideOutUp':
+				return slideOutUpRecipe( node, params );
+			case 'slideOutDown':
+				return slideOutDownRecipe( node, params );
+			case 'slideOutLeft':
+				return slideOutLeftRecipe( node, params );
+			case 'slideOutRight':
+				return slideOutRightRecipe( node, params );
+			case 'bounceOut':
+				return bounceOutRecipe( node, params );
+			case 'flipOutX':
+				return flipOutXRecipe( node, params );
+			case 'flipOutY':
+				return flipOutYRecipe( node, params );
+			case 'rotateOut':
+				return rotateOutRecipe( node, params );
+
+			// Attention seekers
+			case 'flash':
+				return flashRecipe( node, params );
+			case 'rubberBand':
+				return rubberBandRecipe( node, params );
+			case 'jello':
+				return jelloRecipe( node, params );
+			case 'heartBeat':
+				return heartBeatRecipe( node, params );
+			case 'tada':
+				return tadaRecipe( node, params );
+			case 'wobble':
+				return wobbleRecipe( node, params );
+
 			default:
 				return null;
 
