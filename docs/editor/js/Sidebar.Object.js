@@ -251,7 +251,9 @@ function SidebarObject( editor ) {
 	function updateChips( object ) {
 
 		chipsContainer.innerHTML = '';
-		const classes = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
+		const classes = object && object.userData && object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
+
+		console.log( '[DEBUG] updateChips called for', object?.name || object?.uuid, 'classes:', classes );
 
 		for ( const cls of classes ) {
 
