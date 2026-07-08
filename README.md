@@ -275,6 +275,17 @@ $S('.wheel').slideInUp(1, 0.8).bounce(1)  // enter then pulse
 
 The agent authors clips only. Runtime `requestAnimationFrame` loops remain out of scope. Skeletal motion (BVH) and captured performance are on the roadmap as imported data, not generation.
 
+### Animation lifecycle management
+
+When an object with attached animations is deleted, the cascade delete system automatically cleans up its animations to prevent orphaned clips:
+
+- **Single-object clips** (only reference the deleted object) are removed entirely from the scene
+- **Multi-object clips** (reference multiple objects) are preserved if other objects remain
+- **Undo/Redo** fully restores animations when an object deletion is undone
+- **Playing animations** stop gracefully if their object is deleted mid-playback
+
+This ensures animation integrity and prevents memory leaks when managing complex animated scenes.
+
 ---
 
 ## Reliable AI assist (the agentic loop)
