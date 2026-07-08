@@ -67,6 +67,8 @@ function Editor() {
 		objectChanged: new Signal(),
 		objectRemoved: new Signal(),
 
+		animationsChanged: new Signal(),
+
 		cameraAdded: new Signal(),
 		cameraRemoved: new Signal(),
 

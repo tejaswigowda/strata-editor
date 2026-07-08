@@ -1620,6 +1620,7 @@ function Animation( editor ) {
 	signals.objectChanged.add( onObjectChanged );
 	signals.objectAdded.add( update );
 	signals.objectRemoved.add( update );
+	signals.animationsChanged.add( update );
 
 	update();
 
