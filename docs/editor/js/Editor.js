@@ -683,6 +683,7 @@ Editor.prototype = {
 		this.materialsRefCounter.clear();
 
 		this.animations = {};
+		this.scene.animations = [];
 		this.mixer.stopAllAction();
 
 		this.deselect();
