@@ -10,6 +10,8 @@ import { SetRotationCommand } from './commands/SetRotationCommand.js';
 import { SetScaleCommand } from './commands/SetScaleCommand.js';
 import { SetColorCommand } from './commands/SetColorCommand.js';
 import { SetShadowValueCommand } from './commands/SetShadowValueCommand.js';
+import { SetLabelCommand } from './commands/SetLabelCommand.js';
+import { SetClassCommand } from './commands/SetClassCommand.js';
 
 function SidebarObject( editor ) {
 
@@ -146,7 +148,16 @@ function SidebarObject( editor ) {
 	// id
 
 	const objectIdRow = new UIRow();
-	const objectId = new UIText().setWidth( '150px' ).setFontSize( '11px' );
+	const objectId = new UIInput().setWidth( '150px' ).setFontSize( '11px' ).onChange( function () {
+
+		const object = editor.selected;
+		if ( object !== null && objectId.getValue() !== ( object.userData.label || '' ) ) {
+
+			editor.execute( new SetLabelCommand( editor, object, objectId.getValue() ) );
+
+		}
+
+	} );
 
 	objectIdRow.add( new UIText( 'ID' ).setClass( 'Label' ) );
 	objectIdRow.add( objectId );
@@ -156,7 +167,30 @@ function SidebarObject( editor ) {
 	// classes
 
 	const objectClassesRow = new UIRow();
-	const objectClasses = new UIText().setWidth( '150px' ).setFontSize( '11px' );
+	const objectClasses = new UIInput().setWidth( '150px' ).setFontSize( '11px' ).onChange( function () {
+
+		const object = editor.selected;
+		if ( object !== null ) {
+
+			const classArray = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
+			const currentClasses = classArray.join( ', ' );
+			const newValue = objectClasses.getValue();
+
+			if ( newValue !== currentClasses ) {
+
+				// Parse comma-separated class string into individual classes
+				const newClasses = newValue
+					.split( ',' )
+					.map( c => c.trim() )
+					.filter( c => c.length > 0 );
+
+				editor.execute( new SetClassCommand( editor, object, newClasses ) );
+
+			}
+
+		}
+
+	} );
 
 	objectClassesRow.add( new UIText( 'Classes' ).setClass( 'Label' ) );
 	objectClassesRow.add( objectClasses );
@@ -901,10 +935,10 @@ function SidebarObject( editor ) {
 		objectUserData.setBorderColor( 'transparent' );
 		objectUserData.setBackgroundColor( '' );
 
-		// Display ID and Classes
-		objectId.setValue( object.userData.label || '(no label)' );
+		// Display and enable editing of ID and Classes
+		objectId.setValue( object.userData.label || '' );
 		const classArray = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
-		objectClasses.setValue( classArray.length > 0 ? classArray.join( ', ' ) : '(none)' );
+		objectClasses.setValue( classArray.length > 0 ? classArray.join( ', ' ) : '' );
 
 		updateTransformRows( object );
 
