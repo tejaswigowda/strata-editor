@@ -123,6 +123,21 @@ ops([ {}, {} ])                     // several ops in one undoable batch (multi-
 recolor(color)  scale(factor, axis?)  move(dx,dy,dz)  rotate(axis, deg)
 delete()  duplicate(dx,dy,dz)  setMaterial({})  retexture(tex)
 spin(axis?,turns?,dur?)  bounce()  pulse()  fade()  orbit()  shake()   // keyframe clips
+
+// ── Entrance animations (appear with style) ──
+fadeIn(dur?)  zoomIn(scale?, dur?)
+slideInUp(dist?, dur?)  slideInDown(dist?, dur?)  slideInLeft(dist?, dur?)  slideInRight(dist?, dur?)
+bounceIn(dur?)  flipInX(dur?)  flipInY(dur?)  rotateIn(angle?, dur?)
+
+// ── Exit animations (disappear with style) ──
+fadeOut(dur?)  zoomOut(scale?, dur?)
+slideOutUp(dist?, dur?)  slideOutDown(dist?, dur?)  slideOutLeft(dist?, dur?)  slideOutRight(dist?, dur?)
+bounceOut(dur?)  flipOutX(dur?)  flipOutY(dur?)  rotateOut(angle?, dur?)
+
+// ── Attention seekers (grab focus) ──
+flash(times?, dur?)  rubberBand(scale?, dur?)  jello(intensity?, dur?)
+heartBeat(scale?, dur?)  tada(rotations?, scale?, dur?)  wobble(angle?, dur?)
+
 op({ type:'raw', selector, code })   // escape hatch: raw JS as one op (loop-protected)
 ```
 
@@ -199,8 +214,63 @@ The AI authors clips from natural language: "make the box bounce", "spin the whe
 
 Recipes register through `AddAnimationClipCommand` (undoable). The lower-level `addClip(object, clip)` helper also exists for hand-built tracks. It validates clips by shape (tracks plus duration), not by an `isAnimationClip` flag, because three.js omits that flag.
 
+**Entrance animations** (objects appear with style):
+
 ```js
-$S('.wheel').spin('y', 1, 2)        // recipe: 1 turn on Y over 2s, winding-safe
+$S('.box').fadeIn(1)                    // fade in from transparent (default 1s)
+$S('.wheel').zoomIn(1.5, 1)             // scale from zero to full size (scale, duration)
+$S('.car').slideInLeft(2, 1.2)          // slide in from left (distance, duration)
+$S('.object').slideInUp(1, 0.8)         // slide in from below
+$S('.object').slideInDown(1, 0.8)       // slide in from above
+$S('.object').slideInRight(1, 0.8)      // slide in from right
+$S('.cube').bounceIn(1.2)               // scale in with bounce effect
+$S('.card').flipInX(0.8)                // rotate in around X-axis
+$S('.card').flipInY(0.8)                // rotate in around Y-axis
+$S('.plane').rotateIn(90, 0.8)          // rotate in place (angle in degrees)
+```
+
+**Exit animations** (objects disappear with style):
+
+```js
+$S('.box').fadeOut(1)                   // fade out to transparent
+$S('.building').zoomOut(0.3, 1)         // scale down to zero
+$S('.object').slideOutLeft(1, 0.8)      // slide out to left
+$S('.object').slideOutUp(1, 0.8)        // slide out upward
+$S('.object').slideOutDown(1, 0.8)      // slide out downward
+$S('.object').slideOutRight(1, 0.8)     // slide out to right
+$S('.object').bounceOut(1.2)            // scale out with bounce
+$S('.card').flipOutX(0.8)               // rotate out around X-axis
+$S('.card').flipOutY(0.8)               // rotate out around Y-axis
+$S('.plane').rotateOut(90, 0.8)         // rotate out of place
+```
+
+**Attention seekers** (grab focus on visible objects):
+
+```js
+$S('.light').flash(4, 1)                // rapidly toggle opacity (cycles, duration)
+$S('.object').rubberBand(1.3, 0.8)      // stretchy scale oscillation
+$S('.object').jello(0.05, 0.9)          // wobbly elastic deformation
+$S('.heart').heartBeat(1.1, 1.3)        // pulse like a heartbeat
+$S('.character').tada(1, 1.15, 1.5)     // spin + scale celebration (rotations, scale, duration)
+$S('.object').wobble(15, 1)             // gentle side-to-side sway (angle in degrees)
+```
+
+**Original recipes:**
+
+```js
+$S('.wheel').spin('y', 1, 2)            // recipe: 1 turn on Y over 2s, winding-safe
+$S('.object').bounce(1.5)               // bounce up and down
+$S('.object').pulse(1.2, 1)             // scale up/down (scale, duration)
+$S('.object').fade(0, 1, 1)             // opacity transition (from, to, duration)
+$S('.planet').orbit({center:[0,0,0]}, 3, 4)  // orbit around a point
+$S('.object').shake(0.2, 1)             // jittery motion (intensity, duration)
+```
+
+All animations are **winding-safe** (rotations sub-divide to prevent antipodal flips), **command-backed** (undoable), and support **chaining** with other ops:
+
+```js
+$S('.box').fadeIn(1).spin('y', 1, 2)    // chain entrance + spin
+$S('.wheel').slideInUp(1, 0.8).bounce(1)  // enter then pulse
 ```
 
 The agent authors clips only. Runtime `requestAnimationFrame` loops remain out of scope. Skeletal motion (BVH) and captured performance are on the roadmap as imported data, not generation.
