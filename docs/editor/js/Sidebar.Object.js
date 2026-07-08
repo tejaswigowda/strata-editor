@@ -143,6 +143,26 @@ function SidebarObject( editor ) {
 
 	container.add( objectScaleRow );
 
+	// id
+
+	const objectIdRow = new UIRow();
+	const objectId = new UIText().setWidth( '150px' ).setFontSize( '11px' );
+
+	objectIdRow.add( new UIText( 'ID' ).setClass( 'Label' ) );
+	objectIdRow.add( objectId );
+
+	container.add( objectIdRow );
+
+	// classes
+
+	const objectClassesRow = new UIRow();
+	const objectClasses = new UIText().setWidth( '150px' ).setFontSize( '11px' );
+
+	objectClassesRow.add( new UIText( 'Classes' ).setClass( 'Label' ) );
+	objectClassesRow.add( objectClasses );
+
+	container.add( objectClassesRow );
+
 	// fov
 
 	const objectFovRow = new UIRow();
@@ -880,6 +900,11 @@ function SidebarObject( editor ) {
 
 		objectUserData.setBorderColor( 'transparent' );
 		objectUserData.setBackgroundColor( '' );
+
+		// Display ID and Classes
+		objectId.setValue( object.userData.label || '(no label)' );
+		const classArray = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
+		objectClasses.setValue( classArray.length > 0 ? classArray.join( ', ' ) : '(none)' );
 
 		updateTransformRows( object );
 

@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 
-import { UIPanel, UIText, UIButton, UINumber, UICheckbox } from './libs/ui.js';
+import { UIPanel, UIText, UIButton, UINumber, UICheckbox, UISelect } from './libs/ui.js';
 
 import { AnimationPathHelper } from 'three/addons/helpers/AnimationPathHelper.js';
+import { AddAnimationClipCommand } from './commands/AddAnimationClipCommand.js';
+import * as AnimationRecipes from './intelligence/animationRecipes.js';
 
 function Animation( editor ) {
 
@@ -163,6 +165,73 @@ function Animation( editor ) {
 		update();
 
 	} );
+
+	// Animation presets dropdown
+	const presetSelect = new UISelect().setWidth( '140px' );
+	presetSelect.setOptions( {
+		'Presets': '▼ Animation Presets',
+		'fadeIn': 'Entrance: Fade In',
+		'zoomIn': 'Entrance: Zoom In',
+		'slideInUp': 'Entrance: Slide Up',
+		'slideInDown': 'Entrance: Slide Down',
+		'slideInLeft': 'Entrance: Slide Left',
+		'slideInRight': 'Entrance: Slide Right',
+		'bounceIn': 'Entrance: Bounce In',
+		'flipInX': 'Entrance: Flip X',
+		'flipInY': 'Entrance: Flip Y',
+		'rotateIn': 'Entrance: Rotate In',
+		'fadeOut': 'Exit: Fade Out',
+		'zoomOut': 'Exit: Zoom Out',
+		'slideOutUp': 'Exit: Slide Up',
+		'slideOutDown': 'Exit: Slide Down',
+		'slideOutLeft': 'Exit: Slide Left',
+		'slideOutRight': 'Exit: Slide Right',
+		'bounceOut': 'Exit: Bounce Out',
+		'flipOutX': 'Exit: Flip X',
+		'flipOutY': 'Exit: Flip Y',
+		'rotateOut': 'Exit: Rotate Out',
+		'flash': 'Attention: Flash',
+		'rubberBand': 'Attention: Rubber Band',
+		'jello': 'Attention: Jello',
+		'heartBeat': 'Attention: Heartbeat',
+		'tada': 'Attention: Tada',
+		'wobble': 'Attention: Wobble'
+	} );
+	presetSelect.onChange( function () {
+
+		const recipe = presetSelect.getValue();
+		if ( recipe === 'Presets' || ! editor.selected ) return;
+
+		const object = editor.selected;
+		let clip;
+
+		try {
+
+			const recipeFunc = AnimationRecipes[ recipe + 'Recipe' ];
+			if ( ! recipeFunc ) {
+				console.warn( 'Recipe not found:', recipe );
+				return;
+			}
+
+			clip = recipeFunc( object, {} );
+			if ( ! clip ) return;
+
+			if ( ! object.animations ) object.animations = [];
+			object.animations.push( clip );
+
+			editor.execute( new AddAnimationClipCommand( editor, object, clip ) );
+			presetSelect.setValue( 'Presets' );
+			update();
+
+		} catch ( e ) {
+
+			console.error( 'Error creating animation preset:', e );
+			presetSelect.setValue( 'Presets' );
+
+		}
+
+	} );
+	authorPanel.add( presetSelect );
 
 	toolButton( '◆ Key', 'Insert/update a keyframe for the selected object at the playhead', function () {
 
