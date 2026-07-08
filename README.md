@@ -1,5 +1,7 @@
 # Strata: A CSS-like interface for editing and versioning 3D scenes
 
+<img src='docs/demo.gif'/>
+
 **Address parts by selector, edit by op, version with git. Drive it by hand or in natural language. Sovereign, browser-native, no build.**
 
 Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors, change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely **by hand, without any AI**.
@@ -9,8 +11,6 @@ Because that interface is small, a stock on-device model can map natural languag
 > **The thesis (short).** 3D editing decomposes into a deterministic shell plus **5 fuzzy tasks** (op-selection, selector-resolution, argument-extraction, labeling, multi-op). So a stock on-device model suffices, with no task-specific training.
 
 **Sovereign by default.** Nothing leaves the device except by your explicit action (git sync, `fetchAPI`). Inference is local. Scene state stays on-device.
-
-<img src='docs/demo.gif'/>
 
 ---
 
