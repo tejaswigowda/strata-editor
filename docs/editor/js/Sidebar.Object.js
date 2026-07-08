@@ -95,12 +95,17 @@ function SidebarObject( editor ) {
 
 	container.add( objectUUIDRow );
 
-	// name
+	// name (also updates userData.label for semantic identification)
 
 	const objectNameRow = new UIRow();
 	const objectName = new UIInput().setWidth( '150px' ).setFontSize( '12px' ).onChange( function () {
 
-		editor.execute( new SetValueCommand( editor, editor.selected, 'name', objectName.getValue() ) );
+		const object = editor.selected;
+		const newName = objectName.getValue();
+		
+		// Update both object.name and userData.label
+		editor.execute( new SetValueCommand( editor, object, 'name', newName ) );
+		editor.execute( new SetLabelCommand( editor, object, newName ) );
 
 	} );
 
@@ -145,56 +150,232 @@ function SidebarObject( editor ) {
 
 	container.add( objectScaleRow );
 
-	// id
+	// Helper: collect all existing classes from scene for autocomplete
+	function getAllExistingClasses() {
 
-	const objectIdRow = new UIRow();
-	const objectId = new UIInput().setWidth( '150px' ).setFontSize( '11px' ).onChange( function () {
+		const classSet = new Set();
+		editor.scene.traverse( obj => {
 
-		const object = editor.selected;
-		if ( object !== null && objectId.getValue() !== ( object.userData.label || '' ) ) {
+			if ( obj.userData.customClasses && obj.userData.customClasses instanceof Set ) {
 
-			editor.execute( new SetLabelCommand( editor, object, objectId.getValue() ) );
-
-		}
-
-	} );
-
-	objectIdRow.add( new UIText( 'ID' ).setClass( 'Label' ) );
-	objectIdRow.add( objectId );
-
-	container.add( objectIdRow );
-
-	// classes
-
-	const objectClassesRow = new UIRow();
-	const objectClasses = new UIInput().setWidth( '150px' ).setFontSize( '11px' ).onChange( function () {
-
-		const object = editor.selected;
-		if ( object !== null ) {
-
-			const classArray = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
-			const currentClasses = classArray.join( ', ' );
-			const newValue = objectClasses.getValue();
-
-			if ( newValue !== currentClasses ) {
-
-				// Parse comma-separated class string into individual classes
-				const newClasses = newValue
-					.split( ',' )
-					.map( c => c.trim() )
-					.filter( c => c.length > 0 );
-
-				editor.execute( new SetClassCommand( editor, object, newClasses ) );
+				obj.userData.customClasses.forEach( cls => classSet.add( cls ) );
 
 			}
 
+		} );
+		return Array.from( classSet ).sort();
+
+	}
+
+	// classes - chip-based UI with autocomplete
+
+	const objectClassesRow = new UIRow();
+	const objectClassesContainer = document.createElement( 'div' );
+	objectClassesContainer.style.display = 'flex';
+	objectClassesContainer.style.flexDirection = 'column';
+	objectClassesContainer.style.gap = '8px';
+	objectClassesContainer.style.width = '100%';
+
+	// Chip display area
+	const chipsContainer = document.createElement( 'div' );
+	chipsContainer.style.display = 'flex';
+	chipsContainer.style.flexWrap = 'wrap';
+	chipsContainer.style.gap = '4px';
+	chipsContainer.style.minHeight = '24px';
+	chipsContainer.style.alignItems = 'center';
+
+	// Input with autocomplete
+	const classInputWrapper = document.createElement( 'div' );
+	classInputWrapper.style.position = 'relative';
+	classInputWrapper.style.flexGrow = '1';
+	classInputWrapper.style.minWidth = '120px';
+
+	const classInput = document.createElement( 'input' );
+	classInput.type = 'text';
+	classInput.placeholder = 'Add class...';
+	classInput.style.padding = '4px 8px';
+	classInput.style.fontSize = '11px';
+	classInput.style.border = '1px solid #ccc';
+	classInput.style.borderRadius = '3px';
+	classInput.style.width = '100%';
+	classInput.style.boxSizing = 'border-box';
+
+	const autocompleteList = document.createElement( 'div' );
+	autocompleteList.style.position = 'absolute';
+	autocompleteList.style.top = '100%';
+	autocompleteList.style.left = '0';
+	autocompleteList.style.right = '0';
+	autocompleteList.style.backgroundColor = '#f9f9f9';
+	autocompleteList.style.border = '1px solid #ddd';
+	autocompleteList.style.borderRadius = '3px';
+	autocompleteList.style.maxHeight = '150px';
+	autocompleteList.style.overflowY = 'auto';
+	autocompleteList.style.display = 'none';
+	autocompleteList.style.zIndex = '10';
+
+	function createChip( className, removeCallback ) {
+
+		const chip = document.createElement( 'div' );
+		chip.style.display = 'inline-flex';
+		chip.style.alignItems = 'center';
+		chip.style.gap = '6px';
+		chip.style.padding = '4px 8px';
+		chip.style.backgroundColor = '#e0e0e0';
+		chip.style.color = '#333';
+		chip.style.borderRadius = '16px';
+		chip.style.fontSize = '11px';
+		chip.style.fontWeight = '500';
+
+		const label = document.createElement( 'span' );
+		label.textContent = className;
+
+		const closeBtn = document.createElement( 'button' );
+		closeBtn.textContent = '×';
+		closeBtn.style.border = 'none';
+		closeBtn.style.background = 'none';
+		closeBtn.style.color = '#666';
+		closeBtn.style.cursor = 'pointer';
+		closeBtn.style.fontSize = '16px';
+		closeBtn.style.padding = '0';
+		closeBtn.style.width = '16px';
+		closeBtn.style.height = '16px';
+		closeBtn.onClick( () => removeCallback( className ) );
+
+		chip.appendChild( label );
+		chip.appendChild( closeBtn );
+
+		return chip;
+
+	}
+
+	function updateChips( object ) {
+
+		chipsContainer.innerHTML = '';
+		const classes = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
+
+		for ( const cls of classes ) {
+
+			const chip = createChip( cls, ( className ) => {
+
+				editor.execute( new SetClassCommand( editor, object, className, false ) );
+
+			} );
+			chipsContainer.appendChild( chip );
+
+		}
+
+	}
+
+	function showAutocomplete( inputValue ) {
+
+		const allClasses = getAllExistingClasses();
+		const object = editor.selected;
+		const currentClasses = new Set( object && object.userData.customClasses ? object.userData.customClasses : [] );
+
+		// Filter: existing classes not already added + match input
+		const filtered = allClasses.filter( cls => ! currentClasses.has( cls ) && cls.toLowerCase().includes( inputValue.toLowerCase() ) );
+
+		autocompleteList.innerHTML = '';
+
+		if ( inputValue.length > 0 && filtered.length > 0 ) {
+
+			for ( const cls of filtered.slice( 0, 5 ) ) {
+
+				const item = document.createElement( 'div' );
+				item.style.padding = '6px 8px';
+				item.style.cursor = 'pointer';
+				item.style.fontSize = '11px';
+				item.textContent = cls;
+
+				item.onmouseover = () => item.style.backgroundColor = '#e8e8e8';
+				item.onmouseout = () => item.style.backgroundColor = 'transparent';
+
+				item.onclick = () => {
+
+					const object = editor.selected;
+					if ( object ) {
+
+						editor.execute( new SetClassCommand( editor, object, cls, true ) );
+
+					}
+					classInput.value = '';
+					autocompleteList.style.display = 'none';
+
+				};
+
+				autocompleteList.appendChild( item );
+
+			}
+
+			autocompleteList.style.display = 'block';
+
+		} else if ( inputValue.length > 0 ) {
+
+			// Allow free entry: show "Press Enter" hint
+			const item = document.createElement( 'div' );
+			item.style.padding = '6px 8px';
+			item.style.fontSize = '11px';
+			item.style.color = '#999';
+			item.textContent = '+ Add "' + inputValue + '"';
+			autocompleteList.appendChild( item );
+			autocompleteList.style.display = 'block';
+
+		} else {
+
+			autocompleteList.style.display = 'none';
+
+		}
+
+	}
+
+	classInput.addEventListener( 'input', ( e ) => showAutocomplete( e.target.value ) );
+	classInput.addEventListener( 'keydown', ( e ) => {
+
+		if ( e.key === 'Enter' && classInput.value.trim().length > 0 ) {
+
+			e.preventDefault();
+			const className = classInput.value.trim();
+			const object = editor.selected;
+
+			if ( object && ! ( object.userData.customClasses && object.userData.customClasses.has( className ) ) ) {
+
+				editor.execute( new SetClassCommand( editor, object, className, true ) );
+
+			}
+
+			classInput.value = '';
+			autocompleteList.style.display = 'none';
+
 		}
 
 	} );
 
-	objectClassesRow.add( new UIText( 'Classes' ).setClass( 'Label' ) );
-	objectClassesRow.add( objectClasses );
+	classInput.addEventListener( 'blur', () => {
 
+		setTimeout( () => autocompleteList.style.display = 'none', 100 );
+
+	} );
+
+	classInputWrapper.appendChild( classInput );
+	classInputWrapper.appendChild( autocompleteList );
+
+	objectClassesContainer.appendChild( chipsContainer );
+	objectClassesContainer.appendChild( classInputWrapper );
+
+	const classesLabel = document.createElement( 'div' );
+	classesLabel.style.display = 'flex';
+	classesLabel.style.alignItems = 'flex-start';
+	classesLabel.style.gap = '8px';
+	classesLabel.style.width = '100%';
+
+	const label = new UIText( 'Classes' ).setClass( 'Label' );
+	label.dom.style.flexShrink = '0';
+	label.dom.style.marginTop = '2px';
+
+	classesLabel.appendChild( label.dom );
+	classesLabel.appendChild( objectClassesContainer );
+
+	objectClassesRow.dom.appendChild( classesLabel );
 	container.add( objectClassesRow );
 
 	// fov
@@ -935,10 +1116,8 @@ function SidebarObject( editor ) {
 		objectUserData.setBorderColor( 'transparent' );
 		objectUserData.setBackgroundColor( '' );
 
-		// Display and enable editing of ID and Classes
-		objectId.setValue( object.userData.label || '' );
-		const classArray = object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
-		objectClasses.setValue( classArray.length > 0 ? classArray.join( ', ' ) : '' );
+		// Update chips display for classes
+		updateChips( object );
 
 		updateTransformRows( object );
 
