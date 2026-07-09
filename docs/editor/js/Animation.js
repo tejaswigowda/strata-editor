@@ -166,10 +166,15 @@ function Animation( editor ) {
 
 	} );
 
+	toolButton( '◆ Key', 'Insert/update a keyframe for the selected object at the playhead', function () {
+
+		setKey();
+
+	} );
 	// Animation presets dropdown
 	const presetSelect = new UISelect().setWidth( '140px' );
 	presetSelect.setOptions( {
-		'Presets': '▼ Animation Presets',
+		'Presets': '+ Animation',
 		'fadeIn': 'Entrance: Fade In',
 		'zoomIn': 'Entrance: Zoom In',
 		'slideInUp': 'Entrance: Slide Up',
@@ -203,6 +208,7 @@ function Animation( editor ) {
 		'tada': 'Attention: Tada',
 		'wobble': 'Attention: Wobble'
 	} );
+	presetSelect.setValue( 'Presets' );
 	presetSelect.onChange( function () {
 
 		const recipe = presetSelect.getValue();
@@ -225,10 +231,7 @@ function Animation( editor ) {
 			if ( ! object.animations ) object.animations = [];
 			object.animations.push( clip );
 
-			editor.execute( new AddAnimationClipCommand( editor, object, clip ) );
-			presetSelect.setValue( 'Presets' );
-			update();
-
+		editor.execute( new AddAnimationClipCommand( editor, clip, object ) );
 		} catch ( e ) {
 
 			console.error( 'Error creating animation preset:', e );
@@ -238,12 +241,9 @@ function Animation( editor ) {
 
 	} );
 	authorPanel.add( presetSelect );
+	presetSelect.dom.disabled = true; // Disabled until an object is selected
 
-	toolButton( '◆ Key', 'Insert/update a keyframe for the selected object at the playhead', function () {
 
-		setKey();
-
-	} );
 
 	toolButton( 'Del Key', 'Delete the selected keyframe', function () {
 
@@ -1615,14 +1615,31 @@ function Animation( editor ) {
 
 	updateTime();
 
+	// Enable/disable preset select based on object selection
+	function updatePresetSelectState() {
+
+		presetSelect.dom.disabled = ! editor.selected || editor.selected === editor.scene;
+
+	}
+
 	// Auto-select clip when an object with animations is selected
-	signals.objectSelected.add( selectDefaultClip );
+	signals.objectSelected.add( function ( object ) {
+
+		selectDefaultClip( object );
+		updatePresetSelectState();
+
+	} );
 
 	// Update animation list when a clip is added
 	signals.animationClipAdded.add( update );
 
 	// Update when scene changes
-	signals.editorCleared.add( clear );
+	signals.editorCleared.add( function () {
+
+		clear();
+		updatePresetSelectState();
+
+	} );
 	signals.objectChanged.add( onObjectChanged );
 	signals.objectAdded.add( update );
 	signals.objectRemoved.add( update );

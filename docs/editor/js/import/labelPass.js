@@ -145,23 +145,35 @@ export function parseLabelReply( text ) {
  * @param {THREE.Object3D} root indexed (descriptors present) imported root
  * @param {object} [opts]
  * @param {boolean} [opts.force=false] re-run even if labels already cached
+ * @param {(msg:string|null)=>void} [opts.onProgress] progress callback; null to clear
  * @returns {Promise<{ labeled:number, total:number, skipped?:string }>}
  */
 export async function labelImportedAsset( editor, root, opts = {} ) {
 
 	const aiEngine = editor && editor.aiEngine;
-	if ( ! aiEngine || ! aiEngine.ready ) return { labeled: 0, total: 0, skipped: 'no-llm' };
+	const onProgress = opts.onProgress || ( () => {} );
+	if ( ! aiEngine || ! aiEngine.ready ) {
+		onProgress( null );
+		return { labeled: 0, total: 0, skipped: 'no-llm' };
+	}
 
 	// Run once: if the root already carries a label pass, don't re-spend tokens.
-	if ( ! opts.force && root.userData.labelPass ) return { labeled: 0, total: 0, skipped: 'cached' };
+	if ( ! opts.force && root.userData.labelPass ) {
+		onProgress( null );
+		return { labeled: 0, total: 0, skipped: 'cached' };
+	}
 
 	const { idMap, table, nodes } = buildLabelTable( root );
-	if ( nodes.length === 0 ) return { labeled: 0, total: 0, skipped: 'no-nodes' };
+	if ( nodes.length === 0 ) {
+		onProgress( null );
+		return { labeled: 0, total: 0, skipped: 'no-nodes' };
+	}
 
 	// Merged mesh: one renderable node — label the whole object, note non-separable.
 	if ( nodes.length === 1 ) {
 
 		const node = nodes[ 0 ];
+		onProgress( 'Labeling merged mesh...' );
 		try {
 
 			const reply = await aiEngine.complete( [
@@ -175,11 +187,13 @@ export async function labelImportedAsset( editor, root, opts = {} ) {
 
 		node.userData.partsSeparable = false;
 		root.userData.labelPass = { v: 1, mergedMesh: true, labeled: node.userData.label ? 1 : 0 };
+		onProgress( null );
 		return { labeled: node.userData.label ? 1 : 0, total: 1 };
 
 	}
 
 	let labels;
+	onProgress( `Labeling ${ nodes.length } part(s)...` );
 	try {
 
 		const reply = await aiEngine.complete( [
@@ -191,6 +205,7 @@ export async function labelImportedAsset( editor, root, opts = {} ) {
 	} catch ( e ) {
 
 		root.userData.labelPass = { v: 1, error: String( e && e.message || e ), labeled: 0 };
+		onProgress( null );
 		return { labeled: 0, total: nodes.length, skipped: 'llm-error' };
 
 	}
@@ -217,6 +232,7 @@ export async function labelImportedAsset( editor, root, opts = {} ) {
 	}
 
 	root.userData.labelPass = { v: 1, mergedMesh: false, labeled, lowConfidence, total: nodes.length };
+	onProgress( null );
 	return { labeled, lowConfidence, total: nodes.length };
 
 }

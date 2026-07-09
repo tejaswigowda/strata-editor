@@ -82,11 +82,31 @@ function MenubarView( editor ) {
 	const option = new UIRow();
 	option.setClass( 'option' );
 	setMenuIcon( option, 'showJS', strings.getKey( 'menubar/view/showJS' ) );
+	option.dom.style.opacity = '0.5';
+	option.dom.style.pointerEvents = 'none';
 	option.onClick( function () {
 
 		signals.showJSForSelection.dispatch();
 
 	} );
+
+	// Enable/disable based on selection
+	signals.objectSelected.add( function ( object ) {
+
+		const hasSelection = object !== null && object !== editor.scene;
+		option.dom.style.opacity = hasSelection ? '1' : '0.5';
+		option.dom.style.pointerEvents = hasSelection ? 'auto' : 'none';
+
+	} );
+
+	// Disable when editor is cleared
+	signals.editorCleared.add( function () {
+
+		option.dom.style.opacity = '0.5';
+		option.dom.style.pointerEvents = 'none';
+
+	} );
+
 	options.add( option );
 
 	return container;

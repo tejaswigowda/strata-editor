@@ -18,6 +18,7 @@ import { normalizeImportedObject } from './normalize.js';
 import { diagnoseImport, diagnosticMessages } from './diagnostics.js';
 import { labelImportedAsset, applyHeuristicLabels } from './labelPass.js';
 import { registerOp } from '../mesh/ops/index.js';
+import { createProgressBanner } from '../mesh/GeometryOptimizer.js';
 
 function defaultLog( msg ) { try { console.log( msg ); } catch { /* noop */ } }
 
@@ -112,9 +113,29 @@ export async function runImportPipeline( editor, root, opts = {} ) {
 	// Stage 4 — LLM labeling pass (once, cached). ★
 	if ( opts.label !== false ) {
 
+		const banner = createProgressBanner( 'Labeling...' );
+		let labelingStarted = false;
+
 		try {
 
-			const labels = await labelImportedAsset( editor, root );
+			const labels = await labelImportedAsset( editor, root, {
+				onProgress: ( msg ) => {
+
+					if ( msg !== null && msg !== undefined ) {
+
+						labelingStarted = true;
+						banner.setLabel( msg );
+						banner.done();
+
+					} else if ( labelingStarted ) {
+
+						// Progress callback with null = labeling done
+						banner.remove();
+
+					}
+
+				},
+			} );
 			result.labels = labels;
 			if ( labels.labeled > 0 ) {
 
@@ -142,6 +163,7 @@ export async function runImportPipeline( editor, root, opts = {} ) {
 
 		} catch ( e ) {
 
+			banner.remove();
 			log( `↳ Labeling skipped: ${ e && e.message || e }` );
 
 		}
