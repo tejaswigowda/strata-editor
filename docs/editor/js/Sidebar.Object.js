@@ -96,25 +96,6 @@ function SidebarObject( editor ) {
 
 	container.add( objectUUIDRow );
 
-	// name (also updates userData.label for semantic identification)
-
-	const objectNameRow = new UIRow();
-	const objectName = new UIInput().setWidth( '150px' ).setFontSize( '12px' ).onChange( function () {
-
-		const object = editor.selected;
-		const newName = objectName.getValue();
-		
-		// Update both object.name and userData.label
-		editor.execute( new SetValueCommand( editor, object, 'name', newName ) );
-		editor.execute( new SetLabelCommand( editor, object, newName ) );
-
-	} );
-
-	objectNameRow.add( new UIText( strings.getKey( 'sidebar/object/name' ) ).setClass( 'Label' ) );
-	objectNameRow.add( objectName );
-
-	container.add( objectNameRow );
-
 	// position
 
 	const objectPositionRow = new UIRow();
@@ -164,6 +145,26 @@ function SidebarObject( editor ) {
 		return Array.from( classSet ).sort();
 
 	}
+
+		// name (also updates userData.label for semantic identification)
+
+	const objectNameRow = new UIRow();
+	const objectName = new UIInput().setWidth( '150px' ).setFontSize( '12px' ).onChange( function () {
+
+		const object = editor.selected;
+		const newName = objectName.getValue();
+		
+		// Update both object.name and userData.label
+		editor.execute( new SetValueCommand( editor, object, 'name', newName ) );
+		editor.execute( new SetLabelCommand( editor, object, newName ) );
+
+	} );
+
+	objectNameRow.add( new UIText( strings.getKey( 'sidebar/object/name' ) ).setClass( 'Label' ) );
+	objectNameRow.add( objectName );
+
+	container.add( objectNameRow );
+
 
 	// classes - chip-based UI with autocomplete
 

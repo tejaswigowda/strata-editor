@@ -173,6 +173,41 @@ test( 'parseEmittedOps prefers the JS surface when BOTH are present (no double c
 
 } );
 
+// ── Parser: reason-then-constrain (reasoning field before ops) ───────────────────
+// The 'reason-constrained' condition emits { "reasoning":"…", "ops":[…] }. The
+// parser must extract ONLY the ops and IGNORE the free-text reasoning scratch.
+
+test( 'parseEmittedOps extracts ops and ignores the leading reasoning field', () => {
+
+	const out = '{"reasoning":"this is one op: recolor the wheels black","ops":[{"op":"recolor","selector":".wheel","args":{"color":"black"}}]}';
+	const ops = parseEmittedOps( out );
+	assert.strictEqual( ops.length, 1 );
+	assert.strictEqual( ops[ 0 ].op, 'recolor' );
+	assert.strictEqual( ops[ 0 ].selector, '.wheel' );
+	assert.strictEqual( ops[ 0 ].args.color, 'black' );
+
+} );
+
+test( 'parseEmittedOps reads a multi-op reason-constrained envelope (reasoning ignored)', () => {
+
+	const out = '{"reasoning":"two distinct ops: spin the wheels, then paint the bed grey","ops":[{"op":"spin","selector":".wheel","args":{}},{"op":"recolor","selector":".bed","args":{"color":"grey"}}]}';
+	const ops = parseEmittedOps( out );
+	assert.deepStrictEqual( ops.map( o => o.op ), [ 'spin', 'recolor' ] );
+	assert.strictEqual( ops[ 1 ].args.color, 'grey' );
+
+} );
+
+test( 'reasoning text that mentions op-like words is NOT parsed as an op', () => {
+
+	// The reasoning is free prose — words like "recolor"/"delete" inside it must not
+	// leak into the op list; only the schema-valid ops[] array counts.
+	const out = '{"reasoning":"I should recolor and maybe delete, but really just move it","ops":[{"op":"move","selector":"#dump-bed","args":{"dy":0.3}}]}';
+	const ops = parseEmittedOps( out );
+	assert.strictEqual( ops.length, 1 );
+	assert.strictEqual( ops[ 0 ].op, 'move' );
+
+} );
+
 // ── Dropped-op RECOVERY (bounded to the 3 surveyed classes) ─────────────────────
 
 test( 'CLASS 1 — recovers a direct .material.color.set(0xHEX) mutation as recolor', () => {

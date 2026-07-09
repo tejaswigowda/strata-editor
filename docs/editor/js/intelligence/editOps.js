@@ -68,6 +68,37 @@ export function buildConstrainedOpsSchema() {
 
 }
 
+// ── Reason-then-constrain schema ──────────────────────────────────────────────
+// "Best of both worlds": constrain the OUTPUT surface, leave the REASONING free.
+// Plain buildConstrainedOpsSchema() forces the model to emit { ops:[…] } with no
+// room to think first — that wins multi-op (complete structure) but slightly
+// suppresses op-selection (premature schema commitment). This schema adds an
+// UNCONSTRAINED leading `reasoning` string BEFORE the ops array. Because JSON-
+// schema-constrained decoders emit fields in schema-property order, the model
+// fills `reasoning` FIRST (free text — it plans which ops/selectors/how many),
+// THEN emits the schema-valid `ops`. One generation, low latency: the model
+// reasons before committing to the op surface. Parsing extracts ONLY `ops`;
+// `reasoning` is scratch (parseEmittedOps ignores non-ops fields).
+
+export function buildReasonConstrainedOpsSchema() {
+
+	const base = buildConstrainedOpsSchema();
+	return {
+		type: 'object',
+		// `reasoning` first so ordered-field decoders think before emitting ops.
+		properties: {
+			reasoning: { type: 'string' },
+			ops: base.properties.ops,
+		},
+		// BOTH required: a grammar-based decoder (WebLLM/XGrammar, Ollama) only
+		// emits required fields; if `reasoning` were optional the model could skip
+		// the think-first slot and the mechanism would collapse back to plain
+		// constrained. Required + declared-first = reasoning is emitted before ops.
+		required: [ 'reasoning', 'ops' ],
+	};
+
+}
+
 // ── Validation ──────────────────────────────────────────────────────────────────
 
 /**

@@ -846,9 +846,9 @@ export function formatMatrix( matrix, opts = {} ) {
 	const cell = ( t, m, c ) => { const x = matrix.cells[ `${ t }|${ m }|${ c }` ]; return x ? `${ x.pct }%` : ' · '; };
 
 	const lines = [];
-	lines.push( 'EVAL MATRIX — 5 tasks × model × {bare, scaffolded, constrained}   (ceiling: ' + ( ceiling || 'none yet' ) + ')' );
-	lines.push( 'task                  model        bare   scaffolded   constrained   ' + ( ceiling || '' ) );
-	lines.push( '─'.repeat( 78 ) );
+	lines.push( 'EVAL MATRIX — 5 tasks × model × {bare, scaffolded, constrained, reason-constrained}   (ceiling: ' + ( ceiling || 'none yet' ) + ')' );
+	lines.push( 'task                  model        bare   scaffolded   constrained   reason-con   ' + ( ceiling || '' ) );
+	lines.push( '─'.repeat( 90 ) );
 	const short = ( m ) => String( m ).replace( /-\d{6,}$/, '' ).slice( 0, 12 );
 	for ( const t of tasks ) {
 
@@ -858,6 +858,7 @@ export function formatMatrix( matrix, opts = {} ) {
 				t.padEnd( 22 ) + short( m ).padEnd( 13 ) +
 				cell( t, m, 'bare' ).padEnd( 7 ) + cell( t, m, 'scaffolded' ).padEnd( 13 ) +
 				cell( t, m, 'constrained' ).padEnd( 14 ) +
+				cell( t, m, 'reason-constrained' ).padEnd( 13 ) +
 				( ceiling ? cell( t, ceiling, 'scaffolded' ) : '' ) );
 
 		}

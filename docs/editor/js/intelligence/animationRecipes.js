@@ -371,14 +371,30 @@ export function slideInUpRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startY = node.position.y;
-	const times = [ 0, duration ];
-	const values = [
-		node.position.x, startY - distance, node.position.z,
-		node.position.x, startY, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide: come from below and slightly back, with rotation
+	const pValues = [
+		node.position.x, startY - distance, startZ + distance * 0.5,  // start: below and back
+		node.position.x, startY - distance * 0.3, startZ + distance * 0.25,  // mid: rising
+		node.position.x, startY, startZ  // end: at target
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideInUp', -1, [ track ] );
+	// Add slight X-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 1, 0, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = ( 1 - t ) * Math.PI * 0.2;  // rotate from 36° down to 0°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideInUp', -1, [ pTrack, rotTrack ] );
 
 }
 
@@ -389,14 +405,30 @@ export function slideInDownRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startY = node.position.y;
-	const times = [ 0, duration ];
-	const values = [
-		node.position.x, startY + distance, node.position.z,
-		node.position.x, startY, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide: come from above and slightly back, with rotation
+	const pValues = [
+		node.position.x, startY + distance, startZ + distance * 0.5,  // start: above and back
+		node.position.x, startY + distance * 0.3, startZ + distance * 0.25,  // mid: falling
+		node.position.x, startY, startZ  // end: at target
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideInDown', -1, [ track ] );
+	// Add slight X-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 1, 0, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = ( 1 - t ) * -Math.PI * 0.2;  // rotate from -36° up to 0°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideInDown', -1, [ pTrack, rotTrack ] );
 
 }
 
@@ -407,14 +439,30 @@ export function slideInLeftRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startX = node.position.x;
-	const times = [ 0, duration ];
-	const values = [
-		startX - distance, node.position.y, node.position.z,
-		startX, node.position.y, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide: come from left and slightly back, with rotation
+	const pValues = [
+		startX - distance, node.position.y, startZ + distance * 0.5,  // start: left and back
+		startX - distance * 0.3, node.position.y, startZ + distance * 0.25,  // mid: moving right
+		startX, node.position.y, startZ  // end: at target
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideInLeft', -1, [ track ] );
+	// Add slight Y-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = ( 1 - t ) * Math.PI * 0.25;  // rotate from 45° down to 0°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideInLeft', -1, [ pTrack, rotTrack ] );
 
 }
 
@@ -425,14 +473,125 @@ export function slideInRightRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startX = node.position.x;
-	const times = [ 0, duration ];
-	const values = [
-		startX + distance, node.position.y, node.position.z,
-		startX, node.position.y, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide: come from right and slightly back, with rotation
+	const pValues = [
+		startX + distance, node.position.y, startZ + distance * 0.5,  // start: right and back
+		startX + distance * 0.3, node.position.y, startZ + distance * 0.25,  // mid: moving left
+		startX, node.position.y, startZ  // end: at target
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideInRight', -1, [ track ] );
+	// Add slight Y-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = ( 1 - t ) * -Math.PI * 0.25;  // rotate from -45° up to 0°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideInRight', -1, [ pTrack, rotTrack ] );
+
+}
+
+/**
+ * 3D Depth animations: slide in/out along Z-axis (depth)
+ */
+export function slideInForwardRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 2;
+	const duration = params.duration ?? 0.8;
+
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D depth slide: come from far back, moving forward with scale
+	const pValues = [
+		node.position.x, node.position.y, startZ - distance,  // start: far away
+		node.position.x, node.position.y, startZ - distance * 0.3,  // mid: approaching
+		node.position.x, node.position.y, startZ  // end: at target
+	];
+
+	// Add scale growth for perspective effect
+	const scaleValues = [
+		node.scale.x * 0.3, node.scale.y * 0.3, node.scale.z * 0.3,  // small at distance
+		node.scale.x * 0.7, node.scale.y * 0.7, node.scale.z * 0.7,  // medium mid-way
+		node.scale.x, node.scale.y, node.scale.z  // full at target
+	];
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const sTrack = vectorTrack( node.uuid, 'scale', times, scaleValues );
+	return new THREE.AnimationClip( 'SlideInForward', -1, [ pTrack, sTrack ] );
+
+}
+
+export function slideInBackRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 2;
+	const duration = params.duration ?? 0.8;
+
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D depth slide: start at normal scale, move back and shrink
+	const pValues = [
+		node.position.x, node.position.y, startZ,  // start: at target position
+		node.position.x, node.position.y, startZ + distance * 0.3,  // mid: moving back
+		node.position.x, node.position.y, startZ + distance  // end: far away
+	];
+
+	// Scale down as it moves back
+	const scaleValues = [
+		node.scale.x, node.scale.y, node.scale.z,  // full at start
+		node.scale.x * 0.7, node.scale.y * 0.7, node.scale.z * 0.7,  // medium mid-way
+		node.scale.x * 0.3, node.scale.y * 0.3, node.scale.z * 0.3  // small at distance
+	];
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const sTrack = vectorTrack( node.uuid, 'scale', times, scaleValues );
+	return new THREE.AnimationClip( 'SlideInBack', -1, [ pTrack, sTrack ] );
+
+}
+
+/**
+ * 3D Rotation: flip around Z-axis (spinning like a coin)
+ */
+export function flipInZRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 0.8;
+
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 0, 1 );
+
+	const times = [ 0, duration ];
+	const values = [];
+
+	for ( const t of [ 0, 1 ] ) {
+
+		const angle = t * Math.PI;
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		values.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+
+	}
+
+	const track = quaternionTrack( node.uuid, times, values );
+	return new THREE.AnimationClip( 'FlipInZ', -1, [ track ] );
+
+}
+
+export function flipOutZRecipe( node, params = {} ) {
+
+	return flipInZRecipe( node, params ); // Same rotation effect
 
 }
 
@@ -589,7 +748,7 @@ export function zoomOutRecipe( node, params = {} ) {
 }
 
 /**
- * SlideOut recipes: move away.
+ * SlideOut recipes: move away with 3D depth and rotation.
  */
 export function slideOutUpRecipe( node, params = {} ) {
 
@@ -598,14 +757,30 @@ export function slideOutUpRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startY = node.position.y;
-	const times = [ 0, duration ];
-	const values = [
-		node.position.x, startY, node.position.z,
-		node.position.x, startY + distance, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide out: move up and back, with rotation
+	const pValues = [
+		node.position.x, startY, startZ,  // start: at target
+		node.position.x, startY + distance * 0.3, startZ + distance * 0.25,  // mid: moving up and back
+		node.position.x, startY + distance, startZ + distance * 0.5  // end: up and far back
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideOutUp', -1, [ track ] );
+	// Add slight X-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 1, 0, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = t * Math.PI * 0.2;  // rotate from 0° to 36°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideOutUp', -1, [ pTrack, rotTrack ] );
 
 }
 
@@ -616,14 +791,30 @@ export function slideOutDownRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startY = node.position.y;
-	const times = [ 0, duration ];
-	const values = [
-		node.position.x, startY, node.position.z,
-		node.position.x, startY - distance, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide out: move down and back, with rotation
+	const pValues = [
+		node.position.x, startY, startZ,  // start: at target
+		node.position.x, startY - distance * 0.3, startZ + distance * 0.25,  // mid: moving down and back
+		node.position.x, startY - distance, startZ + distance * 0.5  // end: down and far back
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideOutDown', -1, [ track ] );
+	// Add slight X-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 1, 0, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = t * -Math.PI * 0.2;  // rotate from 0° to -36°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideOutDown', -1, [ pTrack, rotTrack ] );
 
 }
 
@@ -634,14 +825,30 @@ export function slideOutLeftRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startX = node.position.x;
-	const times = [ 0, duration ];
-	const values = [
-		startX, node.position.y, node.position.z,
-		startX - distance, node.position.y, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide out: move left and back, with rotation
+	const pValues = [
+		startX, node.position.y, startZ,  // start: at target
+		startX - distance * 0.3, node.position.y, startZ + distance * 0.25,  // mid: moving left and back
+		startX - distance, node.position.y, startZ + distance * 0.5  // end: left and far back
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideOutLeft', -1, [ track ] );
+	// Add slight Y-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = t * -Math.PI * 0.25;  // rotate from 0° to -45°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideOutLeft', -1, [ pTrack, rotTrack ] );
 
 }
 
@@ -652,14 +859,91 @@ export function slideOutRightRecipe( node, params = {} ) {
 	const duration = params.duration ?? 0.8;
 
 	const startX = node.position.x;
-	const times = [ 0, duration ];
-	const values = [
-		startX, node.position.y, node.position.z,
-		startX + distance, node.position.y, node.position.z
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D slide out: move right and back, with rotation
+	const pValues = [
+		startX, node.position.y, startZ,  // start: at target
+		startX + distance * 0.3, node.position.y, startZ + distance * 0.25,  // mid: moving right and back
+		startX + distance, node.position.y, startZ + distance * 0.5  // end: right and far back
 	];
 
-	const track = vectorTrack( node.uuid, 'position', times, values );
-	return new THREE.AnimationClip( 'SlideOutRight', -1, [ track ] );
+	// Add slight Y-axis rotation for dynamic 3D effect
+	const baseQ = node.quaternion.clone();
+	const tmpQ = new THREE.Quaternion();
+	const axisVec = new THREE.Vector3( 0, 1, 0 );
+	const rotValues = [];
+	for ( const t of [ 0, 0.5, 1 ] ) {
+		const angle = t * Math.PI * 0.25;  // rotate from 0° to 45°
+		tmpQ.setFromAxisAngle( axisVec, angle ).premultiply( baseQ );
+		rotValues.push( tmpQ.x, tmpQ.y, tmpQ.z, tmpQ.w );
+	}
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const rotTrack = quaternionTrack( node.uuid, times, rotValues );
+	return new THREE.AnimationClip( 'SlideOutRight', -1, [ pTrack, rotTrack ] );
+
+}
+
+/**
+ * 3D Exit depth animations
+ */
+export function slideOutForwardRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 2;
+	const duration = params.duration ?? 0.8;
+
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D depth slide out: shrink and move forward toward camera
+	const pValues = [
+		node.position.x, node.position.y, startZ,  // start: at target
+		node.position.x, node.position.y, startZ - distance * 0.3,  // mid: moving forward
+		node.position.x, node.position.y, startZ - distance  // end: very close
+	];
+
+	// Scale up as it moves toward camera
+	const scaleValues = [
+		node.scale.x, node.scale.y, node.scale.z,  // normal at start
+		node.scale.x * 1.3, node.scale.y * 1.3, node.scale.z * 1.3,  // larger mid-way
+		node.scale.x * 2, node.scale.y * 2, node.scale.z * 2  // very large up close
+	];
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const sTrack = vectorTrack( node.uuid, 'scale', times, scaleValues );
+	return new THREE.AnimationClip( 'SlideOutForward', -1, [ pTrack, sTrack ] );
+
+}
+
+export function slideOutBackRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const distance = params.distance ?? 2;
+	const duration = params.duration ?? 0.8;
+
+	const startZ = node.position.z;
+	const times = [ 0, 0.5, duration ];
+
+	// 3D depth slide out: shrink and move far back
+	const pValues = [
+		node.position.x, node.position.y, startZ,  // start: at target
+		node.position.x, node.position.y, startZ + distance * 0.3,  // mid: moving back
+		node.position.x, node.position.y, startZ + distance  // end: far away
+	];
+
+	// Scale down as it moves away
+	const scaleValues = [
+		node.scale.x, node.scale.y, node.scale.z,  // full at start
+		node.scale.x * 0.7, node.scale.y * 0.7, node.scale.z * 0.7,  // medium mid-way
+		node.scale.x * 0.3, node.scale.y * 0.3, node.scale.z * 0.3  // small at distance
+	];
+
+	const pTrack = vectorTrack( node.uuid, 'position', times, pValues );
+	const sTrack = vectorTrack( node.uuid, 'scale', times, scaleValues );
+	return new THREE.AnimationClip( 'SlideOutBack', -1, [ pTrack, sTrack ] );
 
 }
 
@@ -1001,38 +1285,46 @@ export function executeRecipe( node, recipeData ) {
 				return slideInLeftRecipe( node, params );
 			case 'slideInRight':
 				return slideInRightRecipe( node, params );
+			case 'slideInForward':
+				return slideInForwardRecipe( node, params );
+			case 'slideInBack':
+				return slideInBackRecipe( node, params );
 			case 'bounceIn':
 				return bounceInRecipe( node, params );
 			case 'flipInX':
 				return flipInXRecipe( node, params );
 			case 'flipInY':
 				return flipInYRecipe( node, params );
-			case 'rotateIn':
-				return rotateInRecipe( node, params );
+		case 'flipInZ':
+			return flipInZRecipe( node, params );
+		case 'rotateIn':
+			return rotateInRecipe( node, params );
 
-			// Exit animations
-			case 'fadeOut':
-				return fadeOutRecipe( node, params );
-			case 'zoomOut':
-				return zoomOutRecipe( node, params );
-			case 'slideOutUp':
-				return slideOutUpRecipe( node, params );
-			case 'slideOutDown':
-				return slideOutDownRecipe( node, params );
-			case 'slideOutLeft':
-				return slideOutLeftRecipe( node, params );
-			case 'slideOutRight':
-				return slideOutRightRecipe( node, params );
-			case 'bounceOut':
-				return bounceOutRecipe( node, params );
-			case 'flipOutX':
-				return flipOutXRecipe( node, params );
-			case 'flipOutY':
-				return flipOutYRecipe( node, params );
-			case 'rotateOut':
-				return rotateOutRecipe( node, params );
-
-			// Attention seekers
+		// Exit animations
+		case 'fadeOut':
+			return fadeOutRecipe( node, params );
+		case 'zoomOut':
+			return zoomOutRecipe( node, params );
+		case 'slideOutUp':
+			return slideOutUpRecipe( node, params );
+		case 'slideOutDown':
+			return slideOutDownRecipe( node, params );
+		case 'slideOutLeft':
+			return slideOutLeftRecipe( node, params );
+		case 'slideOutRight':
+			return slideOutRightRecipe( node, params );
+		case 'slideOutForward':
+			return slideOutForwardRecipe( node, params );
+		case 'slideOutBack':
+			return slideOutBackRecipe( node, params );
+		case 'bounceOut':
+			return bounceOutRecipe( node, params );
+		case 'flipOutX':
+			return flipOutXRecipe( node, params );
+		case 'flipOutY':
+			return flipOutYRecipe( node, params );
+		case 'flipOutZ':
+			return flipOutZRecipe( node, params );
 			case 'flash':
 				return flashRecipe( node, params );
 			case 'rubberBand':

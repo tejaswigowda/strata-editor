@@ -938,17 +938,20 @@ body.sidebar-bottom #sidebar #shell {
 }
 
 .shell-line {
-	display: block;
-	padding: 0;
-	white-space: pre-wrap;
-	cursor: pointer;
-	border-radius: 2px;
-	min-height: 20px;
-	margin-bottom: 2px;
-	max-width: 100%;
-	box-sizing: border-box;
-	overflow: visible;
-	flex: 0 0 auto;
+    display: block;
+    padding: 0;
+    white-space: pre-wrap;
+    cursor: pointer;
+    border-radius: 2px;
+    min-height: 20px;
+    margin-bottom: 2px;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: visible;
+    flex: 0 0 auto;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+    margin-bottom: 5px;
 }
 
 .shell-code-block {

@@ -33,7 +33,7 @@ import { SceneIntelligence, findByDescription, describeObject, listCandidates, r
 import { findParts } from './intelligence/sceneIndex.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
-import { buildConstrainedOpsSchema } from './intelligence/editOps.js';
+import { buildConstrainedOpsSchema, buildReasonConstrainedOpsSchema } from './intelligence/editOps.js';
 import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
 import { colorBase as editColorBase } from './ai/editEval.js';
 import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog } from './ai/clientAPI.js';
@@ -1626,10 +1626,12 @@ function Shell( editor ) {
 				// loop and print a 3-axis (structure/spatial/semantic) pass/fail table.
 				evalAI: function ( prompts ) { return evalAI( prompts ); },
 
-				// evalEditMatrix('bare'|'scaffolded'|'constrained') — run the 5 fuzzy
-				// editing tasks on the current model; accumulates the model×condition
-				// matrix and prints it. Load each model / flip condition / add Haiku for
-				// the ceiling. 'constrained' = scaffolded + JSON-schema constrained decode.
+				// evalEditMatrix('bare'|'scaffolded'|'constrained'|'reason-constrained')
+				// — run the 5 fuzzy editing tasks on the current model; accumulates the
+				// model×condition matrix and prints it. Load each model / flip condition
+				// / add Haiku for the ceiling. 'constrained' = scaffolded + JSON-schema
+				// constrained decode; 'reason-constrained' = constrained + a free-text
+				// reasoning field before the ops (reason freely, constrain the output).
 				evalEditMatrix: function ( condition ) { return evalEditMatrix( condition ); },
 				// saveEvalRows() — download the accumulated per-case rows as JSONL.
 				saveEvalRows: function () { return saveEvalRows(); },
@@ -2020,6 +2022,19 @@ CONSTRAINED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code f
 - "op" is one of the edit ops above; "selector" targets the part(s); "args" holds op-specific values (e.g. recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).
 - Do NOT split a single set edit ("all four wheels") into one op per node — one op, one selector.`;
 
+	// Output contract for the 'reason-constrained' condition (reason-then-constrain).
+	// Same constrained op envelope, but with a leading free-text "reasoning" field:
+	// the model plans FIRST (which ops, which selectors, how many; don't over-split
+	// co-referring sets like wheels⊇rims), THEN emits the schema-valid ops. The
+	// reasoning is scratch — the parser reads only "ops".
+	const REASON_CONSTRAINED_JSON_INSTRUCTION = `
+
+REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose, no code fences:
+{"reasoning":"<think first: which ops, which selectors, how many>","ops":[{"op":"<op>","selector":"<css-selector>","args":{ … }}]}
+- Fill "reasoning" FIRST — briefly plan the edit: is it one op or several? which selector targets each part? do any sets co-refer (e.g. wheels already include the rims — don't split them)? — THEN emit "ops".
+- "op" is one of the edit ops above; "selector" targets the part(s); "args" holds op-specific values (e.g. recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).
+- One array entry per DISTINCT operation. Do NOT split a single set edit ("all four wheels") into one op per node — one op, one selector.`;
+
 	async function evalEditMatrix( condition = 'scaffolded', opts = {} ) {
 
 		if ( ! aiEngine.ready ) { appendOutput( 'AI not loaded — click "Load AI" first.', 'error' ); return; }
@@ -2027,12 +2042,18 @@ CONSTRAINED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code f
 		_matrixRunning = true;
 		const debug = opts.debug === true;
 		const model = aiEngine.modelId || 'unknown';
-		// Conditions: 'bare' (no scaffolding), 'scaffolded' (parts injection), and
-		// 'constrained' (scaffolded + JSON-schema constrained decoding). The last two
-		// both inject parts; 'constrained' additionally forces schema-valid op JSON.
+		// Conditions: 'bare' (no scaffolding), 'scaffolded' (parts injection),
+		// 'constrained' (scaffolded + JSON-schema constrained decoding), and
+		// 'reason-constrained' (scaffolded + constrained decode with a free-text
+		// reasoning field BEFORE the ops array — reason freely, constrain the output).
+		// All but 'bare' inject parts; the two constrained conditions force schema-
+		// valid op JSON, and 'reason-constrained' additionally gives the model a
+		// think-first slot to recover the op-selection cost of premature commitment.
 		const injectParts = condition !== 'bare';
-		const constrainDecode = condition === 'constrained';
-		const opsResponseSchema = constrainDecode ? buildConstrainedOpsSchema() : null;
+		const reasonConstrain = condition === 'reason-constrained';
+		const constrainDecode = condition === 'constrained' || reasonConstrain;
+		const opsResponseSchema = ! constrainDecode ? null
+			: reasonConstrain ? buildReasonConstrainedOpsSchema() : buildConstrainedOpsSchema();
 		appendOutput( `Eval matrix: ${ model } / ${ condition } — measuring the 5 tasks (single-shot, quiet)…`, 'info' );
 
 		// runOnce — ONE quiet generation (no agentic loop, no retries, NO execution).
@@ -2050,10 +2071,13 @@ CONSTRAINED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code f
 			} else {
 				systemPrompt = getCachedSystemPrompt( editor );
 			}
-			// In the constrained condition the model must emit schema-valid op JSON
+			// In the constrained conditions the model must emit schema-valid op JSON
 			// (enforced by decoding) rather than the $S/op() JS surface, so tell it the
-			// output contract explicitly; the schema handles well-formedness.
-			if ( constrainDecode ) systemPrompt += CONSTRAINED_JSON_INSTRUCTION;
+			// output contract explicitly; the schema handles well-formedness. The
+			// reason-constrained variant additionally asks it to plan in a leading
+			// free-text `reasoning` field before the ops.
+			if ( reasonConstrain ) systemPrompt += REASON_CONSTRAINED_JSON_INSTRUCTION;
+			else if ( constrainDecode ) systemPrompt += CONSTRAINED_JSON_INSTRUCTION;
 			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts } );
 			const raw = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: opsResponseSchema } );
 			// Constrained output is raw JSON (no code fence) — parseEmittedOps reads it

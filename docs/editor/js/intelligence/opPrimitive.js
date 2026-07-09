@@ -46,28 +46,34 @@ export const OP_VOCABULARY = {
 	shake:       { kind: 'anim', args: { intensity: 'number?', duration: 'number?' },                   summary: 'jittery motion' },
 
 	// ── Entrance animations (appear with style) ──
-	fadeIn:      { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade in from transparent' },
-	zoomIn:      { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'scale from zero to full size' },
-	slideInUp:   { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from below' },
-	slideInDown: { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from above' },
-	slideInLeft: { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from left' },
-	slideInRight:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from right' },
-	bounceIn:    { kind: 'anim', args: { duration: 'number?' },                                         summary: 'scale in with bounce' },
-	flipInX:     { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate in around X-axis' },
-	flipInY:     { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate in around Y-axis' },
-	rotateIn:    { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'rotate in place' },
+	fadeIn:        { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade in from transparent' },
+	zoomIn:        { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'scale from zero to full size' },
+	slideInUp:     { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from below with 3D rotation' },
+	slideInDown:   { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from above with 3D rotation' },
+	slideInLeft:   { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from left with 3D rotation' },
+	slideInRight:  { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide in from right with 3D rotation' },
+	slideInForward:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: '3D: zoom in from far back' },
+	slideInBack:   { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: '3D: zoom out to far back' },
+	bounceIn:      { kind: 'anim', args: { duration: 'number?' },                                         summary: 'scale in with bounce' },
+	flipInX:       { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate in around X-axis' },
+	flipInY:       { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate in around Y-axis' },
+	flipInZ:       { kind: 'anim', args: { duration: 'number?' },                                         summary: '3D: flip/spin around Z-axis' },
+	rotateIn:      { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'rotate in place' },
 
 	// ── Exit animations (disappear with style) ──
-	fadeOut:     { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade out to transparent' },
-	zoomOut:     { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'scale from full size to zero' },
-	slideOutUp:  { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out upward' },
-	slideOutDown:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out downward' },
-	slideOutLeft:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out to left' },
-	slideOutRight:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                  summary: 'slide out to right' },
-	bounceOut:   { kind: 'anim', args: { duration: 'number?' },                                         summary: 'scale out with bounce' },
-	flipOutX:    { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate out around X-axis' },
-	flipOutY:    { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate out around Y-axis' },
-	rotateOut:   { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'rotate out of place' },
+	fadeOut:       { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade out to transparent' },
+	zoomOut:       { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                      summary: 'scale from full size to zero' },
+	slideOutUp:    { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out upward with 3D rotation' },
+	slideOutDown:  { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out downward with 3D rotation' },
+	slideOutLeft:  { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out to left with 3D rotation' },
+	slideOutRight: { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: 'slide out to right with 3D rotation' },
+	slideOutForward:{ kind: 'anim', args: { distance: 'number?', duration: 'number?' },                  summary: '3D: zoom out toward camera' },
+	slideOutBack:  { kind: 'anim', args: { distance: 'number?', duration: 'number?' },                   summary: '3D: zoom out to far back' },
+	bounceOut:     { kind: 'anim', args: { duration: 'number?' },                                         summary: 'scale out with bounce' },
+	flipOutX:      { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate out around X-axis' },
+	flipOutY:      { kind: 'anim', args: { duration: 'number?' },                                         summary: 'rotate out around Y-axis' },
+	flipOutZ:      { kind: 'anim', args: { duration: 'number?' },                                         summary: '3D: flip/spin out around Z-axis' },
+	rotateOut:     { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'rotate out of place' },
 
 	// ── Attention seekers (grab focus on objects) ──
 	flash:       { kind: 'anim', args: { times: 'number?', duration: 'number?' },                      summary: 'rapidly toggle opacity' },
@@ -297,6 +303,12 @@ class ChainableSet {
 
 			this.selector = String( selectorOrNodes );
 			this.nodes = selectorEngine.query( editor.scene, this.selector );
+			
+			// Track when selector matches no nodes
+			if ( this.nodes.length === 0 && this.selector !== '*' ) {
+				this._noMatchWarning = `⚠️ No parts matched selector '${ this.selector }'`;
+				console.warn( this._noMatchWarning );
+			}
 
 		}
 
@@ -307,11 +319,29 @@ class ChainableSet {
 	/** The op primitive over THIS set's selector. Returns the set (chainable). */
 	op( partialOpJSON ) {
 
+		// Warn and skip operation if selector matched no nodes
+		if ( this.nodes.length === 0 ) {
+			if ( this._noMatchWarning ) {
+				console.warn( this._noMatchWarning );
+			}
+			return this; // return self, don't execute
+		}
+
 		const opJSON = { selector: this.selector, ...partialOpJSON };
 		const result = op( this.editor, opJSON );
 		this._last = result;
 		return this; // chainable
 
+	}
+
+	/** Prevent dumping entire scene when stringified (for console logging). */
+	toJSON() {
+		return {
+			_type: 'ChainableSet',
+			selector: this.selector,
+			matchCount: this.nodes.length,
+			warning: this._noMatchWarning || undefined
+		};
 	}
 
 	// ── Named-method sugar (thin wrappers over .op()) ──
@@ -332,28 +362,34 @@ class ChainableSet {
 	shake( intensity = 0.1, duration = 1 )      { return this.op( { type: 'shake', intensity, duration } ); }
 
 	// ── Entrance animations ──
-	fadeIn( duration = 1 )                            { return this.op( { type: 'fadeIn', duration } ); }
-	zoomIn( scale = 1.5, duration = 1 )               { return this.op( { type: 'zoomIn', scale, duration } ); }
-	slideInUp( distance = 1, duration = 0.8 )         { return this.op( { type: 'slideInUp', distance, duration } ); }
-	slideInDown( distance = 1, duration = 0.8 )       { return this.op( { type: 'slideInDown', distance, duration } ); }
-	slideInLeft( distance = 1, duration = 0.8 )       { return this.op( { type: 'slideInLeft', distance, duration } ); }
-	slideInRight( distance = 1, duration = 0.8 )      { return this.op( { type: 'slideInRight', distance, duration } ); }
-	bounceIn( duration = 1.2 )                        { return this.op( { type: 'bounceIn', duration } ); }
-	flipInX( duration = 0.8 )                         { return this.op( { type: 'flipInX', duration } ); }
-	flipInY( duration = 0.8 )                         { return this.op( { type: 'flipInY', duration } ); }
-	rotateIn( angle = 90, duration = 0.8 )            { return this.op( { type: 'rotateIn', angle, duration } ); }
+	fadeIn( duration = 1 )                               { return this.op( { type: 'fadeIn', duration } ); }
+	zoomIn( scale = 1.5, duration = 1 )                  { return this.op( { type: 'zoomIn', scale, duration } ); }
+	slideInUp( distance = 1, duration = 0.8 )            { return this.op( { type: 'slideInUp', distance, duration } ); }
+	slideInDown( distance = 1, duration = 0.8 )          { return this.op( { type: 'slideInDown', distance, duration } ); }
+	slideInLeft( distance = 1, duration = 0.8 )          { return this.op( { type: 'slideInLeft', distance, duration } ); }
+	slideInRight( distance = 1, duration = 0.8 )         { return this.op( { type: 'slideInRight', distance, duration } ); }
+	slideInForward( distance = 2, duration = 0.8 )       { return this.op( { type: 'slideInForward', distance, duration } ); }
+	slideInBack( distance = 2, duration = 0.8 )          { return this.op( { type: 'slideInBack', distance, duration } ); }
+	bounceIn( duration = 1.2 )                           { return this.op( { type: 'bounceIn', duration } ); }
+	flipInX( duration = 0.8 )                            { return this.op( { type: 'flipInX', duration } ); }
+	flipInY( duration = 0.8 )                            { return this.op( { type: 'flipInY', duration } ); }
+	flipInZ( duration = 0.8 )                            { return this.op( { type: 'flipInZ', duration } ); }
+	rotateIn( angle = 90, duration = 0.8 )               { return this.op( { type: 'rotateIn', angle, duration } ); }
 
 	// ── Exit animations ──
-	fadeOut( duration = 1 )                           { return this.op( { type: 'fadeOut', duration } ); }
-	zoomOut( scale = 0.3, duration = 1 )              { return this.op( { type: 'zoomOut', scale, duration } ); }
-	slideOutUp( distance = 1, duration = 0.8 )        { return this.op( { type: 'slideOutUp', distance, duration } ); }
-	slideOutDown( distance = 1, duration = 0.8 )      { return this.op( { type: 'slideOutDown', distance, duration } ); }
-	slideOutLeft( distance = 1, duration = 0.8 )      { return this.op( { type: 'slideOutLeft', distance, duration } ); }
-	slideOutRight( distance = 1, duration = 0.8 )     { return this.op( { type: 'slideOutRight', distance, duration } ); }
-	bounceOut( duration = 1.2 )                       { return this.op( { type: 'bounceOut', duration } ); }
-	flipOutX( duration = 0.8 )                        { return this.op( { type: 'flipOutX', duration } ); }
-	flipOutY( duration = 0.8 )                        { return this.op( { type: 'flipOutY', duration } ); }
-	rotateOut( angle = 90, duration = 0.8 )           { return this.op( { type: 'rotateOut', angle, duration } ); }
+	fadeOut( duration = 1 )                            { return this.op( { type: 'fadeOut', duration } ); }
+	zoomOut( scale = 0.3, duration = 1 )               { return this.op( { type: 'zoomOut', scale, duration } ); }
+	slideOutUp( distance = 1, duration = 0.8 )         { return this.op( { type: 'slideOutUp', distance, duration } ); }
+	slideOutDown( distance = 1, duration = 0.8 )       { return this.op( { type: 'slideOutDown', distance, duration } ); }
+	slideOutLeft( distance = 1, duration = 0.8 )       { return this.op( { type: 'slideOutLeft', distance, duration } ); }
+	slideOutRight( distance = 1, duration = 0.8 )      { return this.op( { type: 'slideOutRight', distance, duration } ); }
+	slideOutForward( distance = 2, duration = 0.8 )    { return this.op( { type: 'slideOutForward', distance, duration } ); }
+	slideOutBack( distance = 2, duration = 0.8 )       { return this.op( { type: 'slideOutBack', distance, duration } ); }
+	bounceOut( duration = 1.2 )                        { return this.op( { type: 'bounceOut', duration } ); }
+	flipOutX( duration = 0.8 )                         { return this.op( { type: 'flipOutX', duration } ); }
+	flipOutY( duration = 0.8 )                         { return this.op( { type: 'flipOutY', duration } ); }
+	flipOutZ( duration = 0.8 )                         { return this.op( { type: 'flipOutZ', duration } ); }
+	rotateOut( angle = 90, duration = 0.8 )            { return this.op( { type: 'rotateOut', angle, duration } ); }
 
 	// ── Attention seekers ──
 	flash( times = 3, duration = 1 )                  { return this.op( { type: 'flash', times, duration } ); }

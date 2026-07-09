@@ -758,6 +758,7 @@ Editor.prototype = {
 
 			this.scene.animations = scene.animations;
 			this.signals.sceneGraphChanged.dispatch();
+			this.signals.animationsChanged.dispatch();
 
 		}
 
