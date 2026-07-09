@@ -12,6 +12,7 @@ import { SetColorCommand } from './commands/SetColorCommand.js';
 import { SetShadowValueCommand } from './commands/SetShadowValueCommand.js';
 import { SetLabelCommand } from './commands/SetLabelCommand.js';
 import { SetClassCommand } from './commands/SetClassCommand.js';
+import { getAllClasses } from './intelligence/classDerive.js';
 
 function SidebarObject( editor ) {
 
@@ -156,11 +157,8 @@ function SidebarObject( editor ) {
 		const classSet = new Set();
 		editor.scene.traverse( obj => {
 
-			if ( obj.userData.customClasses && obj.userData.customClasses instanceof Set ) {
-
-				obj.userData.customClasses.forEach( cls => classSet.add( cls ) );
-
-			}
+			const objClasses = getAllClasses( obj );
+			objClasses.forEach( cls => classSet.add( cls ) );
 
 		} );
 		return Array.from( classSet ).sort();
@@ -217,36 +215,66 @@ function SidebarObject( editor ) {
 	autocompleteList.style.display = 'none';
 	autocompleteList.style.zIndex = '10';
 
-	function createChip( className, removeCallback ) {
+	function createChip( className, removeCallback, isCustom = false ) {
 
 		const chip = document.createElement( 'div' );
 		chip.style.display = 'inline-flex';
 		chip.style.alignItems = 'center';
 		chip.style.gap = '6px';
 		chip.style.padding = '4px 8px';
-		chip.style.backgroundColor = '#e0e0e0';
+		chip.style.backgroundColor = isCustom ? '#e0e0e0' : '#d0d0d0';
 		chip.style.color = '#333';
 		chip.style.borderRadius = '16px';
 		chip.style.fontSize = '11px';
 		chip.style.fontWeight = '500';
+		chip.style.opacity = isCustom ? '1.0' : '0.7';
 
 		const label = document.createElement( 'span' );
 		label.textContent = className;
-
-		const closeBtn = document.createElement( 'button' );
-		closeBtn.textContent = '×';
-		closeBtn.style.border = 'none';
-		closeBtn.style.background = 'none';
-		closeBtn.style.color = '#666';
-		closeBtn.style.cursor = 'pointer';
-		closeBtn.style.fontSize = '16px';
-		closeBtn.style.padding = '0';
-		closeBtn.style.width = '16px';
-		closeBtn.style.height = '16px';
-		closeBtn.addEventListener( 'click', () => removeCallback( className ) );
+		if ( ! isCustom ) {
+			label.style.fontStyle = 'italic';
+			label.title = 'Auto-derived class';
+		}
 
 		chip.appendChild( label );
-		chip.appendChild( closeBtn );
+
+		// Only add close button for custom classes
+		if ( removeCallback ) {
+
+			const closeBtn = document.createElement( 'button' );
+			closeBtn.textContent = '×';
+			closeBtn.style.border = 'none';
+			closeBtn.style.background = 'none';
+			closeBtn.style.color = '#999';
+			closeBtn.style.cursor = 'pointer';
+			closeBtn.style.fontSize = '18px';
+			closeBtn.style.padding = '0';
+			closeBtn.style.margin = '0 -4px 0 2px';
+			closeBtn.style.width = '18px';
+			closeBtn.style.height = '18px';
+			closeBtn.style.display = 'flex';
+			closeBtn.style.alignItems = 'center';
+			closeBtn.style.justifyContent = 'center';
+			closeBtn.style.lineHeight = '1';
+			
+			// Hover effect
+			closeBtn.onmouseover = () => {
+				closeBtn.style.color = '#333';
+				closeBtn.style.fontWeight = 'bold';
+			};
+			closeBtn.onmouseout = () => {
+				closeBtn.style.color = '#999';
+				closeBtn.style.fontWeight = 'normal';
+			};
+			
+			closeBtn.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				removeCallback( className );
+			} );
+
+			chip.appendChild( closeBtn );
+
+		}
 
 		return chip;
 
@@ -255,17 +283,28 @@ function SidebarObject( editor ) {
 	function updateChips( object ) {
 
 		chipsContainer.innerHTML = '';
-		const classes = object && object.userData && object.userData.customClasses ? Array.from( object.userData.customClasses ) : [];
+		
+		// Get all classes (derived + custom) using the same method as listSelectors()
+		const allClasses = getAllClasses( object );
+		const customClasses = object && object.userData && object.userData.customClasses ? new Set( object.userData.customClasses ) : new Set();
 
-		console.log( '[DEBUG] updateChips called for', object?.name || object?.uuid, 'classes:', classes );
+		console.log( '[DEBUG] updateChips called for', object?.name || object?.uuid );
+		console.log( '[DEBUG] allClasses (derived + custom):', Array.from( allClasses ) );
+		console.log( '[DEBUG] customClasses only:', Array.from( customClasses ) );
 
-		for ( const cls of classes ) {
+		// Display all classes sorted, with custom classes as removable chips
+		const sortedClasses = Array.from( allClasses ).sort();
 
-			const chip = createChip( cls, ( className ) => {
+		for ( const cls of sortedClasses ) {
+
+			const isCustom = customClasses.has( cls );
+			const removeCallback = isCustom ? ( className ) => {
 
 				editor.execute( new SetClassCommand( editor, object, className, false ) );
 
-			} );
+			} : null;
+
+			const chip = createChip( cls, removeCallback, isCustom );
 			chipsContainer.appendChild( chip );
 
 		}
@@ -945,6 +984,14 @@ function SidebarObject( editor ) {
 	}
 
 	// events
+
+	// Debug: log when objects are added
+	signals.objectAdded.add( function ( object ) {
+
+		const classes = getAllClasses( object );
+		console.log( '[DEBUG] Object added:', object.name || object.uuid, '| classes:', Array.from( classes ) );
+
+	} );
 
 	signals.objectSelected.add( function ( object ) {
 
