@@ -969,17 +969,79 @@ body.sidebar-bottom #sidebar #shell {
 	background: rgba(120,200,100,0.18);
 }
 
-.shell-cmd       { color: #bbb; }
-.shell-result    { color: #79c0ff; overflow: visible; }
+.shell-cmd       { color: #e9e5e5;
+    border-top: 1px solid rgb(51, 51, 51);
+    border-bottom: 1px solid rgb(51, 51, 51);
+    padding: 10px 5px !important;
+    background: black;
+    border-radius: 10px;
+    position: relative;
+    padding-right: 40px !important;
+}
+.shell-cmd-copy-btn {
+    position: absolute;
+    top: -5px;
+    right: 2px;
+    cursor: pointer;
+    font-size: 3.1em;
+    opacity: 0.7;
+    user-select: none;
+    transition: opacity 0.2s;
+}
+.shell-cmd-copy-btn:hover {
+    opacity: 1;
+}
+
+#shell-unload-btn{
+	background-color: #08f;
+	border: 1px solid #08f;
+	border-radius: 2px;
+}
+
+#shell-config-api-btn{
+	background-color: #08f;
+	border: 1px solid #08f;
+	border-radius: 2px;
+}
+
+.shell-cmd br{
+	display: block;
+	height: 1px;
+}
+.shell-result    {     color: #79c0ff;
+    overflow: visible;
+    border-bottom: 1px white solid;
+    padding-bottom: 10px;
+    box-shadow: 0px 1px 1px black;
+    margin-bottom: 10px; }
 .shell-error     { color: #ff6b6b; }
 .shell-info      { color: #6a737d; font-style: italic; }
-.shell-ai-prompt { color: #c9a227; font-style: italic; overflow: visible; }
+.shell-ai-prompt { color: #c9a227;
+    font-style: italic;
+    overflow: visible;
+    margin-left: -3px;
+    font-size: 120%;
+    margin-bottom: -5px;
+}
+.shell-ai-prompt::before {
+    content: '[AI] ';
+    font-weight: bold;
+}
 .shell-ai-stream { color: #7a8099; font-style: italic; white-space: pre-wrap; word-break: break-all; }
 
 /* Cost display chips */
-.shell-cost { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.9em; font-weight: 500; font-style: normal; }
+.shell-cost { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.9em; font-weight: 500; font-style: normal; cursor: pointer; transition: opacity 0.2s; }
+.shell-cost:hover { opacity: 0.8; }
 .shell-cost-external { background-color: rgba(255, 100, 100, 0.2); color: #ff6464; border: 1px solid #ff6464; }
+.shell-cost-external:hover { background-color: rgba(255, 100, 100, 0.3); }
 .shell-cost-local { background-color: rgba(100, 200, 100, 0.2); color: #64c864; border: 1px solid #64c864; }
+.shell-cost-local:hover { background-color: rgba(100, 200, 100, 0.3); }
+
+/* Toast notification */
+.shell-toast { position: fixed; bottom: 20px; right: 20px; background-color: #1e1e1e; color: #fff; padding: 16px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); max-width: 400px; font-size: 0.9em; line-height: 1.5; border-left: 4px solid #ff6464; z-index: 10000; animation: slideIn 0.3s ease-out; }
+.shell-toast.local { border-left-color: #64c864; }
+@keyframes slideIn { from { transform: translateX(420px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(420px); opacity: 0; } }
 
 #menubar {
 	position: absolute;

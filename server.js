@@ -577,6 +577,11 @@ const server = http.createServer((req, res) => {
     handleApiHealth(res);
     return;
   }
+  if (pathname === '/api/config' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ dev: DEV }));
+    return;
+  }
 
   // ── Static File Serving ────────────────────────────────────────────────
   // Resolve URL to a file path inside docs/

@@ -83,6 +83,24 @@ function Shell( editor ) {
 	const modelSelect = document.createElement( 'select' );
 	modelSelect.id = 'shell-model-select';
 
+	// ── Vetted Models for Production Mode ──────────────────────────────────────
+	// In production (not DEV=1), only these models are shown in the dropdown.
+	// Each model specifies the model_id that must be matched exactly.
+	const vettedModels = [
+		{
+			model_id: 'Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC',
+			description: 'Fast code generation (Qwen 1.5B, 1.8gb ram required)',
+		},
+		{
+			model_id: 'Qwen2.5-Coder-3B-Instruct-q4f32_1-MLC',
+			description: 'Powerful code generation (Qwen 3B, 2.8gb ram required)',
+		},
+		{
+			model_id: 'Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC',
+			description: 'High-quality code generation (Qwen 7B, 5.8 gb ram required)',
+		}
+	];
+
 	// Populate from WebLLM's full built-in model registry (same pattern as webllm-eg).
 	// Each option shows: model_id -- X.X GB  (or MB for small models)
 	function fmtVram( mb ) {
@@ -115,20 +133,56 @@ function Shell( editor ) {
 
 	};
 
-	getModelList()
-		.filter( m => DROPDOWN_KEYWORDS.some( kw => m.model_id.toLowerCase().includes( kw ) ) && quantTag( m.model_id ) !== null )
-		.forEach( m => {
-
-			const opt = document.createElement( 'option' );
-			opt.value = m.model_id;
-			opt.textContent = m.model_id + fmtVram( m.vram_required_MB ) + quantTag( m.model_id );
-			modelSelect.appendChild( opt );
-
-		} );
-
-	// Load external API models (Ollama, OpenAI, Claude) if available
+	// Populate WebLLM models with proper filtering based on DEV mode
 	( async () => {
+		let productionMode = true;
+		try {
+			const res = await fetch( '/api/config' );
+			const config = await res.json();
+			productionMode = ! config.dev;
+		} catch ( e ) {
+			console.debug( 'Config endpoint unavailable, assuming production mode' );
+		}
 
+		getModelList()
+			.filter( m => {
+				// In production mode, only show vetted models
+				if ( productionMode ) {
+					return vettedModels.some( v => v.model_id === m.model_id );
+				}
+				// In DEV mode, show all local models with valid quantizations
+				return quantTag( m.model_id ) !== null;
+			} )
+			.forEach( m => {
+
+				const opt = document.createElement( 'option' );
+				opt.value = m.model_id;
+				
+				// In production mode, use vetted model description as label; in DEV mode use model_id
+				if ( productionMode ) {
+					const vetted = vettedModels.find( v => v.model_id === m.model_id );
+					opt.textContent = vetted.description;
+				} else {
+					opt.textContent = m.model_id + fmtVram( m.vram_required_MB ) + quantTag( m.model_id );
+				}
+				
+				modelSelect.appendChild( opt );
+
+			} );
+
+		// Set default preferred model
+		const PREFERRED = [
+			'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',
+			'Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC',
+			'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+			'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+		];
+		for ( const p of PREFERRED ) {
+			const found = [ ...modelSelect.options ].find( o => o.value === p );
+			if ( found ) { modelSelect.value = p; break; }
+		}
+
+		// Load external API models (Ollama, OpenAI, Claude) if available
 		try {
 
 			const res = await fetch( '/api/models' );
@@ -170,7 +224,7 @@ function Shell( editor ) {
 
 		}
 
-	} )();
+	} )()
 
 	// ── Client-side external API models (browser → provider) ──────────────────
 	// Coexists with the DEV-mode server proxy above. Adds a separator + one option
@@ -207,20 +261,6 @@ function Shell( editor ) {
 
 	refreshClientModels();
 
-	// Default to a preferred coder model if present in the list
-	const PREFERRED = [
-		'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',
-		'Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC',
-		'Llama-3.2-1B-Instruct-q4f32_1-MLC',
-		'Llama-3.2-1B-Instruct-q4f16_1-MLC',
-	];
-	for ( const p of PREFERRED ) {
-
-		const found = [ ...modelSelect.options ].find( o => o.value === p );
-		if ( found ) { modelSelect.value = p; break; }
-
-	}
-
 	// Restore previously used model (weights already cached in browser)
 	const _savedModel = localStorage.getItem( 'shell-ai-model' );
 	if ( _savedModel ) modelSelect.value = _savedModel;
@@ -242,7 +282,7 @@ function Shell( editor ) {
 	// model dropdown. This is independent of (and coexists with) the DEV proxy.
 	const configApiBtn = document.createElement( 'button' );
 	configApiBtn.id = 'shell-config-api-btn';
-	configApiBtn.textContent = '⚙ API';
+	configApiBtn.textContent = 'API';
 	configApiBtn.title = 'Configure a client-side external API (browser → provider). Coexists with the DEV-mode server proxy.';
 	configApiBtn.addEventListener( 'click', () => {
 
@@ -288,7 +328,7 @@ function Shell( editor ) {
 	stopBtn.style.display = 'none';
 
 	const clearBtn = document.createElement( 'button' );
-	clearBtn.textContent = '⊖ Clear';
+	clearBtn.textContent = 'Clear';
 	clearBtn.title = 'Clear console output';
 	clearBtn.style.padding = '4px 8px';
 	clearBtn.style.fontSize = '12px';
@@ -417,6 +457,7 @@ function Shell( editor ) {
 			line.style.marginTop = '12px';
 			line.style.paddingTop = '12px';
 			line.style.borderTop = '1px solid #333';
+			line.style.position = 'relative';
 		}
 		
 		// Helper to decode HTML entities
@@ -630,18 +671,55 @@ function Shell( editor ) {
 				.replace( />/g, '&gt;' )
 				.replace( /\n/g, '<br>' );
 
-			// Click copies the raw text to clipboard
-			line.addEventListener( 'click', function () {
+			// For cmd lines: click to fill input, or copy for other types
+			line.addEventListener( 'click', function ( e ) {
 
-				navigator.clipboard.writeText( text ).then( function () {
+				// Don't trigger on emoji click for cmd lines
+				if ( type === 'cmd' && ! e.target.matches( '.shell-cmd-copy-btn' ) ) {
+					// Extract command text (remove "> " prefix)
+					const cmdText = text.replace( /^>\s+/, '' );
+					input.value = cmdText;
+					input.focus();
+					input.select();
+				} else if ( type !== 'cmd' ) {
+					// For non-cmd, copy to clipboard
+					navigator.clipboard.writeText( text ).then( function () {
 
-					line.classList.add( 'shell-copied' );
-					setTimeout( () => line.classList.remove( 'shell-copied' ), 600 );
+						line.classList.add( 'shell-copied' );
+						setTimeout( () => line.classList.remove( 'shell-copied' ), 600 );
 
-				} );
+					} );
+				}
 
 			} );
 
+		}
+
+		// Add copy button for cmd lines
+		if ( type === 'cmd' ) {
+			const copyBtn = document.createElement( 'span' );
+			copyBtn.className = 'shell-cmd-copy-btn';
+			copyBtn.innerHTML = '⎘';
+			copyBtn.addEventListener( 'click', ( e ) => {
+				e.stopPropagation();
+				const cmdText = text.replace( /^>\s+/, '' ).trim();
+				// Copy to clipboard
+				if ( navigator.clipboard && navigator.clipboard.writeText ) {
+					navigator.clipboard.writeText( cmdText ).then( () => {
+						copyBtn.innerHTML = '✓';
+						// On successful copy, fill input and move focus
+						input.value = cmdText;
+						input.focus();
+						input.select();
+						// Simulate down arrow key press
+						input.dispatchEvent( new KeyboardEvent( 'keydown', { key: 'ArrowDown', code: 'ArrowDown', bubbles: true } ) );
+						setTimeout( () => { copyBtn.innerHTML = '⎘'; }, 1000 );
+					} ).catch( ( err ) => {
+						console.error( 'Clipboard write failed:', err );
+					} );
+				}
+			} );
+			line.appendChild( copyBtn );
 		}
 
 		output.appendChild( line );
@@ -668,6 +746,7 @@ function Shell( editor ) {
 		line.style.boxSizing = 'border-box';
 
 		const fullMessage = aiEngine.formatUsage();
+		const usage = aiEngine.getUsage();
 		// Split message: "1 request • 150 tokens ($0.00)" or "1 request • 150 tokens ($0.0025) (est)"
 		const costMatch = fullMessage.match( /^(.*?)\s+\((\$.+?)\)\s*(\(est\))?$/ );
 		
@@ -684,6 +763,12 @@ function Shell( editor ) {
 			const chip = document.createElement( 'span' );
 			chip.className = 'shell-cost ' + ( aiEngine.isExternal() ? 'shell-cost-external' : 'shell-cost-local' );
 			chip.textContent = costValue + ( estLabel ? ' ' + estLabel : '' );
+			
+			// Make chip clickable to show details
+			chip.addEventListener( 'click', () => {
+				showCostToast( usage );
+			} );
+			
 			line.appendChild( chip );
 		} else {
 			// Fallback: show entire message as chip
@@ -695,6 +780,37 @@ function Shell( editor ) {
 
 		output.appendChild( line );
 		scrollToBottom();
+
+	}
+
+	// Show toast notification with request cost details
+	function showCostToast( usage ) {
+
+		const isExternal = aiEngine.isExternal();
+		const toast = document.createElement( 'div' );
+		toast.className = 'shell-toast' + ( isExternal ? '' : ' local' );
+		
+		const modelName = aiEngine.modelId || 'Unknown';
+		const cost = usage.estimatedCost || 0;
+		const costDisplay = isExternal ? `$${cost.toFixed(4)}` : '$0.00';
+		const provider = isExternal ? 'your AI API provider' : 'local (no cost)';
+		
+		toast.innerHTML = `
+			<strong>Request Cost Details</strong><br>
+			<small>Model: ${modelName}</small><br>
+			<small>Tokens: ${usage.totalTokens}</small><br>
+			<small>Cost: ${costDisplay}</small><br>
+			<br>
+			<small style="opacity: 0.8;">This cost was billed to ${provider}, not Strata.</small>
+		`;
+		
+		document.body.appendChild( toast );
+		
+		// Auto-remove toast after 5 seconds
+		setTimeout( () => {
+			toast.style.animation = 'slideOut 0.3s ease-in';
+			setTimeout( () => toast.remove(), 300 );
+		}, 5000 );
 
 	}
 
