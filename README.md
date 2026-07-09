@@ -509,11 +509,22 @@ Select a model from the shell header and click **Load AI**. Weights download onc
 
 ### Browser-based models (WebLLM)
 
+#### Production Mode (default)
+
+In production mode (standard `node server.js`), a curated list of vetted models is displayed to users:
+
 | Label | Model ID | Size | Notes |
 |-------|----------|------|-------|
-| **Default** | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` | ~1 GB | Fast. Best for structural and edit work |
-| **Power** | `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | ~4.5 GB | Best at decomposition. Needs 8 GB+ VRAM |
-| **Lite** | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | ~900 MB | Weak. Integrated GPUs only |
+| **Fast code generation** | `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` | ~1 GB | Fast. Best for structural and edit work |
+| **Powerful code generation** | `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | ~4.5 GB | Best at decomposition. Needs 8 GB+ VRAM |
+| **Fast general-purpose** | `Llama-3.2-1B-Instruct-q4f16_1-MLC` | ~2 GB | Fast general-purpose model |
+| **General-purpose (slower)** | `Llama-3.2-1B-Instruct-q4f32_1-MLC** | ~900 MB | Full precision variant (slower) |
+
+To customize the vetted models list, edit the `vettedModels` array in `docs/editor/js/Shell.js`.
+
+#### Development Mode (DEV=1)
+
+In development mode (`DEV=1 node server.js`), **all** available WebLLM models are shown with their full technical details (model ID, VRAM requirement, quantization info). This allows testing and experimentation with a broader range of models.
 
 ### External API models (Dev Mode)
 
@@ -526,6 +537,31 @@ Enable with `DEV=1 node server.js` to add current Ollama, OpenAI, and Claude mod
 | **Anthropic** | `export ANTHROPIC_API_KEY="sk-ant-..."` | Cloud. Strong for complex decomposition |
 
 External models appear in the dropdown below the WebLLM models. On load the engine requests a **16384-token** context window (overriding the 4096 default). 8192 proved too tight: a labeled ~30-part asset's system prompt + injected selector block + scene summary already reaches ~8.4k tokens, so a small on-device model would overflow before emitting a single op. 16384 clears the headroom (Qwen2.5-Coder natively supports 32k). It falls back to 4096 if the compiled model rejects the larger window.
+
+### Cost tracking and API usage display
+
+Every AI request displays a **cost chip** showing usage statistics and estimated costs:
+
+- **Green chip (local models):** Shows request count and token usage. No cost (runs locally on your device).
+- **Red chip (external APIs):** Shows request count, token usage, and estimated USD cost.
+
+Click the cost chip to see detailed information:
+- Model name
+- Prompt and completion tokens
+- Estimated cost (with "(est)" for external APIs)
+- Billing disclaimer for cloud providers
+
+**Cost accumulation:** Costs are tracked cumulatively across all requests in the session. Refresh the page to reset the counter.
+
+### Command history and copy functionality
+
+In the JS Shell, every executed command has a **copy icon (⎘)** in the top-right corner:
+
+- **Click the icon:** Copies the command to clipboard and auto-populates the shell input
+- **Checkmark (✓):** Visual feedback that the copy succeeded
+- **Focus shift:** After successful copy, focus automatically moves to the shell input so you can press arrow keys to navigate history or immediately execute
+
+This simplifies re-running complex commands and debugging.
 
 ### Client-side API models (no server)
 

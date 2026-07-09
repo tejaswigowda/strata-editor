@@ -89,15 +89,15 @@ function Shell( editor ) {
 	const vettedModels = [
 		{
 			model_id: 'Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC',
-			description: 'Fast code generation (Qwen 1.5B, 1.8gb ram required)',
+			description: 'Fast code generation (Qwen 1.5B, 1.8 GB RAM required)',
 		},
 		{
 			model_id: 'Qwen2.5-Coder-3B-Instruct-q4f32_1-MLC',
-			description: 'Powerful code generation (Qwen 3B, 2.8gb ram required)',
+			description: 'Powerful code generation (Qwen 3B, 2.8 GB RAM required)',
 		},
 		{
 			model_id: 'Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC',
-			description: 'High-quality code generation (Qwen 7B, 5.8 gb ram required)',
+			description: 'High-quality code generation (Qwen 7B, 5.8 GB RAM required)',
 		}
 	];
 
