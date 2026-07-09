@@ -100,6 +100,13 @@ function SidebarSettingsShortcuts( editor ) {
 
 	document.addEventListener( 'keydown', function ( event ) {
 
+		// Ignore shortcuts when text input is focused
+		if ( event.target && ( event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' ) ) {
+
+			return;
+
+		}
+
 		switch ( event.key.toLowerCase() ) {
 
 			case 'backspace':
