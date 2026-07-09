@@ -1,14 +1,16 @@
-# Strata: A CSS-like interface for editing and versioning 3D scenes
+# Strata: A CSS-like language for 3D scenes
 
 <img src='docs/demo.gif'/>
 
-**Address parts by selector, edit by op, version with git. Drive it by hand or in natural language. Sovereign, browser-native, no build.**
+**A deterministic, human-readable selector language for editing and versioning 3D scenes. Sovereign, browser-native, no build. Optional AI that stays within bounds.**
 
-Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors, change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely **by hand, without any AI**.
+**The language is the workhorse.** Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors, change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely **by hand, without any AI**. It is the primary product. Every mutation is undoable, git-tracked, and human-readable.
 
-Because that interface is small, a stock on-device model can map natural language onto it. No task-specific training is needed. AI is the natural-language layer over the interface, not the foundation. It debuts most vividly at **animation**: "make it bounce" becomes a real keyframe clip. Generation (blocking out a scene from a prompt) is kept as **scaffolding**, not the headline.
+**AI is a slim optional front door.** Because the language is small and explicit, a stock on-device model can map natural language onto it. No task-specific training is needed. It is the natural-language layer *over* the deterministic interface, not the foundation. It debuts most vividly at **animation**: "make it bounce" becomes a real keyframe clip. Generation (blocking out a scene from a prompt) is kept as **scaffolding**, not the headline.
 
-> **The thesis (short).** 3D editing decomposes into a deterministic shell plus **5 fuzzy tasks** (op-selection, selector-resolution, argument-extraction, labeling, multi-op). So a stock on-device model suffices, with no task-specific training.
+**Production ships validated AI only.** Development mode (`DEV=1`) exposes all models for research. Production mode (default) shows only models that have passed the edit eval matrix. This confirms the zero-training claim.
+
+> **The thesis (short).** 3D editing decomposes into a deterministic shell (selector language + ops + undo/git) plus **5 optional fuzzy tasks** (op-selection, selector-resolution, argument-extraction, labeling, multi-op decomposition). A stock on-device model suffices for those tasks, with no task-specific training.
 
 **Sovereign by default.** Nothing leaves the device except by your explicit action (git sync, `fetchAPI`). Inference is local. Scene state stays on-device.
 
@@ -35,21 +37,34 @@ DEV=1 node server.js
 
 ---
 
-## The thesis: deterministic shell, small fuzzy core
+## The workhorse: a deterministic language
 
-3D editing splits into a deterministic shell and a small fuzzy core. The shell is host code: selector matching, command execution, undo, versioning, normalization, guards. The fuzzy core is **5 tasks** a small model handles.
+3D editing splits into a deterministic shell (the language) and optional fuzzy layers (AI). The shell is host code: selector matching, command execution, undo, versioning, normalization, guards. **The language is sufficient for manual editing and is the primary interface.**
 
-**The 5 fuzzy tasks (the entire model surface):**
+**Optional AI layer (fuzzy tasks).** When using AI, it handles **5 bounded tasks**: op-type selection, selector resolution, argument extraction, labeling, and multi-op decomposition. These tasks are **optional**—you can edit entirely by hand. When AI is used, it stays within bounds: it emits a selector plus an op. The host enforces correctness.
 
-1. **Op-type selection.** Request verb to op. "make it bigger" to `scale`.
-2. **Selector resolution.** Request noun to selector. "the front wheels" to `.wheel.front`.
-3. **Argument extraction.** Modifiers to args. "black" to `#111`, "slowly" to `dur:4`.
-4. **Labeling (on import).** Descriptors plus material names to human labels. `{round, low, paired, mat:"Rims"}` to "wheel".
-5. **Multi-op decomposition.** One request to N ops. "wheels black and body red" to 2 ops.
+**Manual editing:** Select and edit by hand. Chain commands. Version with git. Undo any change.
+
+```js
+$S('.rims').recolor('#111')         // by hand: recolor 4 wheels
+$S('.wheel.front').spin('y', 1, 2)  // by hand: compound selector + animation
+$S('#dump-bed').scale(1.2)          // by hand: edit a labelled part
+op({ type:'recolor', selector:'.rims', color:'red' })   // explicit op-JSON (same thing)
+ops([ {}, {} ])                     // several ops in one undoable batch
+```
+
+**With optional AI:** Say what you want. The model translates to the selector language. The shell executes.
+
+```js
+// Type in the AI input:
+// "make the wheels black"
+// → AI emits: $S('.rims').recolor('#111')
+// → shell executes, scene updates, git records
+```
 
 Everything else is deterministic. If a feature seems to need the model to reason more, the fix is to decompose it, not to expand the model's job.
 
-**CSS-via-JS.** The model maps language to op-JSON. The shape of that op-JSON is CSS thinking: a selector, an op (the property), a value, plus chained transforms. It is emitted as JS/JSON and executed on the one surface. Strata borrows CSS's selecting-and-value grammar. It does not borrow the cascade or specificity.
+**CSS-via-JS.** The language borrows CSS's selecting-and-value grammar. A selector, an op (the property), a value, plus chained transforms. It is emitted as JS/JSON and executed on the one surface.
 
 ```
 Author and label the scene   ->  the "HTML" (structure: parts, labels, hierarchy)
@@ -61,25 +76,22 @@ Behavior and runtime          ->  handed off to engines (out of scope)
 
 ## Features
 
-Strata is the structure and design layer for 3D. You author and label the scene (the "HTML"), then style and animate it by selector (the "CSS"). Behavior and runtime are handed off to engines.
-
 | | |
 |---|---|
-| **Selector-based editing** | Address imported parts by CSS-like selector (`$S('.wheel.front')`). Edit them with a closed set of command-backed, guarded ops (`recolor`, `scale`, `spin`). Resolution is deterministic. The model only translates language to a selector. |
-| **Scene intelligence** | Resolve descriptive part references on imported GLBs with meaningless node names. Geometry, color, and symmetry descriptors become auto-classes. No vision model. |
-| **Git versioning** | Auto-load on open, commit, and a split-screen merge-conflict viewport. The AI writes diff-aware commit messages. Scenes are diffable JSON. |
+| **Selector-based language** | Address imported parts by CSS-like selector (`$S('.wheel.front')`). Edit them with a closed set of command-backed, guarded ops (`recolor`, `scale`, `spin`). Resolution is deterministic. |
 | **One execution surface** | **All** code (manual, AI-generated, eval fixtures) runs through a single `execute()` binding. Monaco editors present AI-generated code with live syntax highlighting; the Run button executes only the edited code. Same undo stack, same error handling, no second path. The editor is disposed immediately after execution. |
 | **Everything reversible** | Every mutation goes through `editor.execute(new Command())`. Selectors, ops, labels, and class edits are all undoable. |
-| **Verify UX (on import)** | After labeling, a panel surfaces the semantic guesses. Symmetric parts collapse to one decision ("Wheel x4"). Low-confidence guesses come first. |
+| **Git versioning** | Auto-load on open, commit, and a split-screen merge-conflict viewport. The AI (when used) writes diff-aware commit messages. Scenes are diffable JSON. |
+| **JS Shell** | Manual or AI-driven JavaScript REPL. Type queries, edit manually, or ask the AI. Every command is undoable and versioned. |
 | **Sovereign by default** | On-device inference via WebGPU (WebLLM / MLC). Nothing leaves the device except your explicit git sync or `fetchAPI` call. |
-| **Agentic loop** | AI requests run a bounded generate, validate, execute, observe, fix loop. The model checks its output against the real API and the resulting scene change, then self-corrects. |
-| **No API hallucination** | Real command, op, material, and geometry signatures are indexed locally. They are injected before generation and linted after. |
-| **Model-free grounding** | GPU color-picking answers "what is visible" and "what is under this point" from the renderer. No vision model. |
-| **Keyframe animation** | An Animations tab to author clips by hand. The AI authors clips too, via deterministic recipes (`spin`, `bounce`, `pulse`). |
-| **Modeling ops** | Boolean CSG, mirror, array, subdivision. Undoable and AI-callable. The manual-editing layer. |
+| **Keyframe animation** | An Animations tab to author clips by hand. The AI (when used) authors clips too, via deterministic recipes (`spin`, `bounce`, `pulse`). |
+| **Scene intelligence** | Resolve descriptive part references on imported GLBs with meaningless node names. Geometry, color, and symmetry descriptors become auto-classes. No vision model. |
+| **Optional AI assist** | Natural-language natural-language interface over the deterministic shell. Bounded 5-task decomposition. Self-correcting agentic loop. Production ships only validated models. |
+| **Verify UX (on import)** | After labeling, a panel surfaces the semantic guesses. Symmetric parts collapse to one decision ("Wheel x4"). Low-confidence guesses come first. |
+| **Modeling ops** | Boolean CSG, mirror, array, subdivision. Undoable and callable by hand or AI. The manual-editing layer. |
 | **Edit Mode** | Half-edge mesh editing: vertex, edge, and face selection, extrude, inset, bevel, delete, weld, UV projection. |
 | **No build step** | Serve `docs/` as-is. Plain ES modules, importmap, no bundler. |
-| **Generation (scaffolding)** | The model can block out structure from a prompt. This is the weaker, ceded task. It is kept as scaffolding, not the headline. |
+| **Generation (scaffolding)** | The model can (optionally) block out structure from a prompt. This is the weaker, ceded task. It is kept as scaffolding, not the headline. |
 
 ---
 
@@ -359,9 +371,9 @@ This ensures animation integrity and prevents memory leaks when managing complex
 
 ---
 
-## Reliable AI assist (the agentic loop)
+## Optional AI acceleration (the agentic loop)
 
-Every AI request runs a bounded, self-correcting loop. All on-device, no extra models:
+When you use AI (opt-in), every request runs a bounded, self-correcting loop. All on-device, no extra models. The language is the contract—the AI stays within bounds and emits selector-op JSON.
 
 ```
 generate -> validate -> execute -> observe -> fix   (max 3 retries, every action on the undo stack)
@@ -377,9 +389,9 @@ generate -> validate -> execute -> observe -> fix   (max 3 retries, every action
 
 ---
 
-## AI scene context
+## AI scene context (optional)
 
-Every request gets a compact JS-comment scene description. This is the format a code model reads most naturally:
+When using AI, every request gets a compact JS-comment scene description. This is the format a code model reads most naturally:
 
 ```
 // [selected] "Body" Mesh BoxGeometry(0.6,1.8,0.5) mat:"Red Paint" size(0.6,1.8,0.5) color:#cc2200(red) at(0,0.9,0) desc(blocky,red)
@@ -392,17 +404,17 @@ Each line includes the object name (glTF `_0XX_` escapes decoded), material name
 
 ---
 
-## JS Shell
+## JS Shell (the primary interface)
 
-The shell is the **SHELL tab** in the right sidebar (toggle with **View, JS Shell**). Type JavaScript directly or use the AI input row.
+The shell is the **SHELL tab** in the right sidebar (toggle with **View, JS Shell**). It is the primary editing surface. Type JavaScript directly to edit manually. Optionally use the AI input row to generate code.
 
 | Key / Input | Action |
 |-------------|--------|
 | `Enter` | Execute |
 | `Shift+Enter` | New line |
 | `Up` / `Down` | Command history |
-| AI input + `Enter` | Generate and run code |
-| AI input `? question` | Ask about the scene. Plain-text answer, no code |
+| AI input + `Enter` | (Optional) Generate and run code |
+| AI input `? question` | (Optional) Ask about the scene. Plain-text answer, no code |
 
 ### Code Editor Integration (Monaco)
 
@@ -574,15 +586,15 @@ Readable, replayable, and git-diffable ("added: bevel" vs "400 floats changed").
 
 ---
 
-## AI models, tiers, and eval
+## Optional AI configuration (for natural-language acceleration)
 
-Select a model from the shell header and click **Load AI**. Weights download once and cache in browser storage.
+**The shell and language work perfectly well without AI.** If you want natural-language acceleration, select a model from the shell header and click **Load AI**. Weights download once and cache in browser storage.
 
 ### Browser-based models (WebLLM)
 
-#### Production Mode (default)
+#### Production Mode (default) — Validated models only
 
-In production mode (standard `node server.js`), a curated list of vetted models is displayed to users:
+In production mode (standard `node server.js`), a curated list of **validated, production-ready** models is displayed:
 
 | Label | Model ID | Size | Notes |
 |-------|----------|------|-------|
@@ -591,15 +603,15 @@ In production mode (standard `node server.js`), a curated list of vetted models 
 | **Fast general-purpose** | `Llama-3.2-1B-Instruct-q4f16_1-MLC` | ~2 GB | Fast general-purpose model |
 | **General-purpose (slower)** | `Llama-3.2-1B-Instruct-q4f32_1-MLC** | ~900 MB | Full precision variant (slower) |
 
-To customize the vetted models list, edit the `vettedModels` array in `docs/editor/js/Shell.js`.
+These models have passed the edit eval matrix. To customize the vetted models list, edit the `vettedModels` array in `docs/editor/js/Shell.js`.
 
-#### Development Mode (DEV=1)
+#### Development Mode (DEV=1) — Full model access for research
 
-In development mode (`DEV=1 node server.js`), **all** available WebLLM models are shown with their full technical details (model ID, VRAM requirement, quantization info). This allows testing and experimentation with a broader range of models.
+In development mode (`DEV=1 node server.js`), **all** available WebLLM models are shown with their full technical details (model ID, VRAM requirement, quantization info). This allows testing and experimentation with a broader range of models during development.
 
-### External API models (Dev Mode)
+### External API models (Development mode only)
 
-Enable with `DEV=1 node server.js` to add current Ollama, OpenAI, and Claude models.
+Enable with `DEV=1 node server.js` to optionally integrate Ollama, OpenAI, and Anthropic Claude. These are development/research tools, not production-validated:
 
 | Provider | Setup | Notes |
 |----------|-------|-------|
@@ -609,9 +621,9 @@ Enable with `DEV=1 node server.js` to add current Ollama, OpenAI, and Claude mod
 
 External models appear in the dropdown below the WebLLM models. On load the engine requests a **16384-token** context window (overriding the 4096 default). 8192 proved too tight: a labeled ~30-part asset's system prompt + injected selector block + scene summary already reaches ~8.4k tokens, so a small on-device model would overflow before emitting a single op. 16384 clears the headroom (Qwen2.5-Coder natively supports 32k). It falls back to 4096 if the compiled model rejects the larger window.
 
-### Cost tracking and API usage display
+### Cost tracking (optional, when using external APIs)
 
-Every AI request displays a **cost chip** showing usage statistics and estimated costs:
+When using external API models (OpenAI, Anthropic), every AI request displays a **cost chip** showing usage statistics and estimated costs:
 
 - **Green chip (local models):** Shows request count and token usage. No cost (runs locally on your device).
 - **Red chip (external APIs):** Shows request count, token usage, and estimated USD cost.
@@ -624,7 +636,7 @@ Click the cost chip to see detailed information:
 
 **Cost accumulation:** Costs are tracked cumulatively across all requests in the session. Refresh the page to reset the counter.
 
-### Command history and copy functionality
+### Command history and copy (works with or without AI)
 
 In the JS Shell, every executed command has a **copy icon (⎘)** in the top-right corner:
 
@@ -632,7 +644,7 @@ In the JS Shell, every executed command has a **copy icon (⎘)** in the top-rig
 - **Checkmark (✓):** Visual feedback that the copy succeeded
 - **Focus shift:** After successful copy, focus automatically moves to the shell input so you can press arrow keys to navigate history or immediately execute
 
-This simplifies re-running complex commands and debugging.
+This simplifies re-running complex commands and debugging, whether you're editing manually or reviewing AI-generated code.
 
 ### Client-side API models (no server)
 
@@ -669,7 +681,7 @@ When `evalEditMatrix` generates edit code:
 4. Scene state is captured before and after to measure correctness
 5. Editor is disposed after execution
 
-**The full matrix run is the gate that has not yet been completed.** It is what confirms the zero-training claim and sets the model size to ship. Until it runs, treat the 5 tasks as built, not validated. The current "scaffolded" condition means selector injection is on. Constrained decoding is not yet wired.
+**The full matrix run is the gate that has not yet been completed.** It is what confirms the zero-training claim and sets the model size to ship. Until it runs, treat the 5 tasks as built, not validated. The current "scaffolded" condition uses both selector injection and constrained decoding (reason-then-constrain schema: model reasons first, then emits schema-valid ops).
 
 **Live spot-checks (not the matrix).** Two manual runs of "make the leaves red" on a labeled tree GLB confirm the op-path steering end to end: both Claude Haiku 4.5 (cloud) and the **1.5B on-device model** emit the op surface (`$S('.leaves').recolor('#ff0000')`) with the correct narrow selector, not raw three.js and not the whole asset. The 1.5B occasionally wraps the op in a function it forgets to invoke (a format slip our few-shots' IIFE style invites), which the observe-and-retry loop catches. These are anecdotes that motivate the harness, not a substitute for it.
 
@@ -681,11 +693,11 @@ When `evalEditMatrix` generates edit code:
 
 ---
 
-## Dev Mode: external APIs
+## Dev Mode: optional external APIs (for research and development)
 
-Dev mode enables optional integration with Ollama, OpenAI, and Anthropic Claude. The editor stays sovereign by default (browser-only). Developers can opt into more powerful models when needed.
+Dev mode enables optional integration with Ollama, OpenAI, and Anthropic Claude for research and development. **The editor works perfectly well without it.** The shell and language are fully sovereign by default (browser-only). Developers can opt into more powerful cloud models for testing when needed.
 
-### Setup
+### Setup (optional)
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -784,12 +796,13 @@ docs/editor/js/
 
 ## Design principles
 
-These state the thesis. They come first conceptually.
+These state the thesis. The language is primary; AI is optional.
 
-- **Deterministic shell, small fuzzy core.** The shell is host code: selector matching, command execution, undo, versioning, normalization, guards. The model handles 5 fuzzy tasks: op-type selection, selector resolution, argument extraction, labeling, multi-op decomposition. Everything else is deterministic. If a feature seems to need more model reasoning, decompose it.
+- **Language is the workhorse.** The shell is the primary interface: selector matching, command execution, undo, versioning, normalization, guards. It is fully functional without AI. Manual editing is first-class.
+- **AI stays in bounds (optional fuzzy core).** When AI is used, it handles 5 bounded tasks: op-type selection, selector resolution, argument extraction, labeling, multi-op decomposition. The AI emits a selector plus an op—the contract is explicit. Everything else is deterministic. If a feature seems to need more model reasoning, decompose it.
 - **Model expresses intent. Host enforces correctness.** The model emits a selector plus an op. Guards (clone-on-write, texture-tint, merged-mesh, ground/clamp, subset-sanity) and arg-normalization ("black" to `#111`) are host-side. The model never has to remember them.
 - **Resolution is deterministic.** Selectors match over verified labels and auto-classes. The model only translates fuzzy language to a selector. Once labeled, resolution needs no model.
-- **One execution surface.** AI and human code run through the same `execute()` binding.
+- **One execution surface.** Manual and AI code run through the same `execute()` binding.
 - **Sovereign by default.** Inference is on-device. Nothing leaves except by explicit user action (git, `fetchAPI`).
 - **No new model.** Scene intelligence uses deterministic math, the renderer, and the already-loaded code LLM only.
 - **No build step.** Plain ES modules. No bundler.
@@ -801,7 +814,7 @@ These state the thesis. They come first conceptually.
 
 ## Prior art
 
-Selector-over-scene-graph exists (three-query-selector, scene.querySelectorAll, Unity-Scene-Query). NL grounding over 3D scene graphs exists (Cypher-for-3DSG, BBQ, FreeQ-Graph). Strata's synthesis is the new part: descriptor-derived classes, user-verified labels, selectors as the editing and versioning substrate, sovereign and zero-training. This is positioned as an extension, not an invention.
+Selector-over-scene-graph exists (three-query-selector, scene.querySelectorAll, Unity-Scene-Query). NL grounding over 3D scene graphs exists (Cypher-for-3DSG, BBQ, FreeQ-Graph). Strata's synthesis is the new part: descriptor-derived classes, user-verified labels, selectors as the editing and versioning substrate, manual-first design, and a bounded optional AI layer. This is positioned as an extension, not an invention.
 
 ---
 
@@ -836,6 +849,12 @@ DONE
     Traversal: .not() / .first() / .last() / .eq(n) / .parent() / .children() / .closest() / .add()
     Appearance: .setOpacity() / .setVisible() / .show() / .hide() / .wireframe()
     Transforms: .moveTo() / .rotateTo() / .scaleTo() / .reset() / .lookAt() (clarified relative vs absolute)
+  Constrained decoding (JSON-schema-restricted output + reason-then-constrain)
+    buildConstrainedOpsSchema() wraps ops array with no reasoning field
+    buildReasonConstrainedOpsSchema() adds unconstrained reasoning field first (model reasons before committing to ops)
+    All four code paths (WebLLM, Ollama, OpenAI, Anthropic) integrated
+    26/26 tests passing: format-perfect output with mild reasoning cost
+    Evaluated and working: small models emit valid op-JSON with better decomposition
 
 NEXT (the gate)
   Run the eval matrix across model sizes + a Haiku ceiling. Make the size decision.
@@ -843,7 +862,6 @@ NEXT (the gate)
 
 THEN
   Show/hide lifecycle: .show() / .hide() should TRIGGER entrance/exit animations (backend wiring)
-  Constrained decoding (JSON-schema-restricted output) as a scaffolding lever for small models
   Import + Verify UX: in-viewport part highlight, lazy label-on-first-reference
   Renderer-agnostic export PIPELINE: label-through-extras survival + Blender / UE / any-renderer handoff
     (glTF export + animations already work; auto-classes don't yet serialize, path untested end-to-end)
