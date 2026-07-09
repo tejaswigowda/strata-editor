@@ -976,6 +976,11 @@ body.sidebar-bottom #sidebar #shell {
 .shell-ai-prompt { color: #c9a227; font-style: italic; overflow: visible; }
 .shell-ai-stream { color: #7a8099; font-style: italic; white-space: pre-wrap; word-break: break-all; }
 
+/* Cost display chips */
+.shell-cost { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.9em; font-weight: 500; font-style: normal; }
+.shell-cost-external { background-color: rgba(255, 100, 100, 0.2); color: #ff6464; border: 1px solid #ff6464; }
+.shell-cost-local { background-color: rgba(100, 200, 100, 0.2); color: #64c864; border: 1px solid #64c864; }
+
 #menubar {
 	position: absolute;
 	width: 100%;

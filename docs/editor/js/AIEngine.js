@@ -39,6 +39,32 @@ export class AIEngine {
 		// fallback if the compiled model rejected the override).
 		this.contextWindow = null;
 
+		// ── Cost tracking for external APIs ────────────────────────────────────
+		this._usage = {
+			promptTokens: 0,
+			completionTokens: 0,
+			totalTokens: 0,
+			estimatedCost: 0, // USD
+			requestCount: 0,
+		};
+
+		// Token pricing (USD per 1K tokens) for common external APIs
+		// Update as needed for your providers
+		this._pricing = {
+			// Anthropic Claude models (current versions)
+			'claude-haiku-4-5-20251001': { input: 0.00025, output: 0.00125 },
+			'claude-sonnet-4-20250514': { input: 0.003, output: 0.015 },
+			'claude-opus-4-1-20250805': { input: 0.015, output: 0.075 },
+			// Anthropic Claude models (legacy naming)
+			'claude-3-5-sonnet': { input: 0.003, output: 0.015 },
+			'claude-3-opus': { input: 0.015, output: 0.075 },
+			'claude-3-haiku': { input: 0.00025, output: 0.00125 },
+			// OpenAI models
+			'gpt-4o': { input: 0.005, output: 0.015 },
+			'gpt-4-turbo': { input: 0.01, output: 0.03 },
+			'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 },
+		};
+
 	}
 
 	/** True once a model has been loaded successfully (WebLLM or external). */
@@ -101,6 +127,101 @@ export class AIEngine {
 
 	}
 
+	// ── Cost tracking ─────────────────────────────────────────────────────────
+	/**
+	 * Track API usage (tokens, cost). Called automatically when external APIs return responses.
+	 * @param {number} promptTokens
+	 * @param {number} completionTokens
+	 */
+	_trackUsage( promptTokens = 0, completionTokens = 0 ) {
+
+		this._usage.promptTokens += promptTokens;
+		this._usage.completionTokens += completionTokens;
+		this._usage.totalTokens += promptTokens + completionTokens;
+		this._usage.requestCount += 1;
+
+		// Calculate cost if pricing available for this model
+		const rate = this._pricing[ this.modelId ];
+		if ( rate ) {
+			const inputCost = ( promptTokens / 1000 ) * rate.input;
+			const outputCost = ( completionTokens / 1000 ) * rate.output;
+			this._usage.estimatedCost += inputCost + outputCost;
+		}
+
+	}
+
+	/**
+	 * Get current usage stats.
+	 * @returns {Object} { promptTokens, completionTokens, totalTokens, estimatedCost, requestCount }
+	 */
+	getUsage() {
+
+		return { ...this._usage };
+
+	}
+
+	/**
+	 * Check if using external API (vs local WebLLM).
+	 * @returns {boolean}
+	 */
+	isExternal() {
+
+		return this._externalAPIReady;
+
+	}
+
+	/**
+	 * Format usage stats as a human-readable string.
+	 * @returns {string}
+	 */
+	formatUsage() {
+
+		const u = this._usage;
+		const isExternal = this.isExternal();
+		
+		// Show cost for external API, show $0.00 for local
+		let costStr = isExternal
+			? ` ($${u.estimatedCost.toFixed(4)})`
+			: ' ($0.00)';
+		
+		// Add (est) only for non-zero external costs
+		if ( isExternal && u.estimatedCost > 0 ) {
+			costStr += ' (est)';
+		}
+
+		const reqLabel = u.requestCount === 1 ? 'request' : 'requests';
+
+		return `${u.requestCount} ${reqLabel} • ${u.totalTokens} tokens${costStr}`;
+
+	}
+
+	/**
+	 * Reset usage tracking (e.g., start of new session).
+	 */
+	resetUsage() {
+
+		this._usage = {
+			promptTokens: 0,
+			completionTokens: 0,
+			totalTokens: 0,
+			estimatedCost: 0,
+			requestCount: 0,
+		};
+
+	}
+
+	/**
+	 * Set pricing for a custom model.
+	 * @param {string} modelId
+	 * @param {number} inputRate USD per 1K input tokens
+	 * @param {number} outputRate USD per 1K output tokens
+	 */
+	setPricing( modelId, inputRate, outputRate ) {
+
+		this._pricing[ modelId ] = { input: inputRate, output: outputRate };
+
+	}
+
 	// ── Initialise ────────────────────────────────────────────────────────────
 	/**
 	 * Download (or load from cache) a model and warm up the engine.
@@ -157,19 +278,27 @@ export class AIEngine {
 	// ── Streaming inference ───────────────────────────────────────────────────
 	/**
 	 * Run inference with token-by-token streaming.
-	 * Returns a Promise that resolves to the full response string.
+	 * Returns a Promise that resolves to the full response string (or { text, usage } for external APIs).
 	 *
 	 * @param {Array}    messages
 	 * @param {Object}   [opts]
 	 * @param {Function} [opts.onToken]    (delta, fullSoFar) called for each token
 	 * @param {number}   [opts.maxTokens]
 	 * @param {number}   [opts.temperature]
+	 * @param {Function} [opts.onUsage]    (usage) called if token counts available
 	 */
-	async stream( messages, { onToken, maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0, schema = null } = {} ) {
+	async stream( messages, { onToken, maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0, schema = null, onUsage } = {} ) {
 
 		// External API stream (if overridden)
 		if ( this._externalStream ) {
-			return this._externalStream( messages, { onToken, maxTokens, temperature, schema } );
+			const result = await this._externalStream( messages, { onToken, maxTokens, temperature, schema, onUsage } );
+			// If external API passed usage, track it
+			if ( result && result.usage ) {
+				this._trackUsage( result.usage.prompt_tokens || 0, result.usage.completion_tokens || 0 );
+				if ( onUsage ) onUsage( this.getUsage() );
+			}
+			// Return full object with { text, usage } for external APIs so callers can access usage
+			return result;
 		}
 
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
@@ -212,12 +341,21 @@ export class AIEngine {
 	/**
 	 * Run inference and return the full response as a single string.
 	 * Used for retry correction passes where live display isn't needed.
+	 * @param {Array}    messages
+	 * @param {Object}   [opts]
+	 * @param {Function} [opts.onUsage]    (usage) called if token counts available
 	 */
-	async complete( messages, { maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0, schema = null } = {} ) {
+	async complete( messages, { maxTokens = 600, temperature = 0.1, frequencyPenalty = 0.1, presencePenalty = 0, schema = null, onUsage } = {} ) {
 
 		// External API stream (if overridden) — use it for complete too
 		if ( this._externalStream ) {
-			return this._externalStream( messages, { maxTokens, temperature, schema } );
+			const result = await this._externalStream( messages, { maxTokens, temperature, schema, onUsage } );
+			// If external API passed usage, track it
+			if ( result && result.usage ) {
+				this._trackUsage( result.usage.prompt_tokens || 0, result.usage.completion_tokens || 0 );
+				if ( onUsage ) onUsage( this.getUsage() );
+			}
+			return typeof result === 'string' ? result : ( result.text || result );
 		}
 
 		if ( ! this._engine ) throw new Error( 'AIEngine: not initialised' );
@@ -252,6 +390,11 @@ export class AIEngine {
 		this._externalStream = streamFn;
 		this._externalInterrupt = interruptFn;
 		this._externalAPIReady = true;
+
+		// Optionally set pricing if model is recognized
+		if ( ! this._pricing[ modelId ] ) {
+			console.warn( `AIEngine: pricing not configured for model "${modelId}" — cost tracking will be unavailable` );
+		}
 
 	}
 

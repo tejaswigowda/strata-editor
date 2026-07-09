@@ -658,6 +658,46 @@ function Shell( editor ) {
 
 	}
 
+	// Display cost as a styled chip (red for external API, green for local)
+	// Only wraps the $ value (and optional (est)) in the chip
+	function appendCostChip() {
+
+		const line = document.createElement( 'div' );
+		line.className = 'shell-line';
+		line.style.width = '100%';
+		line.style.boxSizing = 'border-box';
+
+		const fullMessage = aiEngine.formatUsage();
+		// Split message: "1 request • 150 tokens ($0.00)" or "1 request • 150 tokens ($0.0025) (est)"
+		const costMatch = fullMessage.match( /^(.*?)\s+\((\$.+?)\)\s*(\(est\))?$/ );
+		
+		if ( costMatch ) {
+			const statsText = costMatch[ 1 ];              // "1 request • 150 tokens"
+			const costValue = costMatch[ 2 ];              // "$0.00" or "$0.0025"
+			const estLabel = costMatch[ 3 ] || '';         // "(est)" or ""
+			
+			const statsSpan = document.createElement( 'span' );
+			statsSpan.style.color = 'inherit';
+			statsSpan.textContent = statsText + ' ';
+			line.appendChild( statsSpan );
+			
+			const chip = document.createElement( 'span' );
+			chip.className = 'shell-cost ' + ( aiEngine.isExternal() ? 'shell-cost-external' : 'shell-cost-local' );
+			chip.textContent = costValue + ( estLabel ? ' ' + estLabel : '' );
+			line.appendChild( chip );
+		} else {
+			// Fallback: show entire message as chip
+			const chip = document.createElement( 'span' );
+			chip.className = 'shell-cost ' + ( aiEngine.isExternal() ? 'shell-cost-external' : 'shell-cost-local' );
+			chip.textContent = fullMessage;
+			line.appendChild( chip );
+		}
+
+		output.appendChild( line );
+		scrollToBottom();
+
+	}
+
 	// Registers a finished AnimationClip on an object (default: scene). Shared by
 	// the addClip / addSpinClip sandbox helpers — defined here (closure scope) so
 	// neither relies on `this`, which is unbound when helpers are called bare.
@@ -1534,10 +1574,26 @@ function Shell( editor ) {
 						}
 
 					},
-				} ).then( answer => {
+				} ).then( response => {
 
 					streamDiv.remove();
+
+					// Extract text and usage from response
+					const answer = typeof response === 'string' ? response : response?.text || '';
+					const usage = typeof response === 'object' ? response?.usage : null;
+
 					appendOutput( answer, 'result' );
+
+					// Track usage: external APIs have token counts, local models don't
+					if ( usage && ( usage.prompt_tokens || usage.completion_tokens ) ) {
+						aiEngine._trackUsage( usage.prompt_tokens || 0, usage.completion_tokens || 0 );
+					} else {
+						// For local models, still track the request
+						aiEngine._trackUsage( 0, 0 );
+					}
+					
+					// Always display cost chip
+					appendCostChip();
 
 				} ).catch( err => {
 
@@ -1669,16 +1725,16 @@ function Shell( editor ) {
 					msg += ` — ${cmdDelta} command${cmdDelta > 1 ? 's' : ''} executed`;
 				}
 				appendOutput( msg, 'result' );
-			}
-
-		} catch ( err ) {
-
-			if ( ! quiet ) appendOutput( err.toString(), 'error' );
-			return { ok: false, error: err.toString() };
-
 		}
 
-		return { ok: true };
+	} catch ( err ) {
+
+		if ( ! quiet ) appendOutput( err.toString(), 'error' );
+		return { ok: false, error: err.toString() };
+
+	}
+
+	return { ok: true };
 
 	}
 
@@ -1706,7 +1762,7 @@ function Shell( editor ) {
 
 		let scrollQueued = false;
 
-		const fullText = await aiEngine.stream( messages, {
+		const response = await aiEngine.stream( messages, {
 			onToken: ( delta ) => {
 				if ( delta ) textNode.appendData( delta );
 				if ( ! scrollQueued ) {
@@ -1716,7 +1772,23 @@ function Shell( editor ) {
 			},
 		} );
 
+		// Extract text and usage data from response
+		const fullText = typeof response === 'string' ? response : response?.text || '';
+		const usage = typeof response === 'object' ? response?.usage : null;
+
 		streamDiv.remove();
+
+		// Track usage: external APIs have token counts, local models don't
+		if ( usage && ( usage.prompt_tokens || usage.completion_tokens ) ) {
+			aiEngine._trackUsage( usage.prompt_tokens || 0, usage.completion_tokens || 0 );
+		} else {
+			// For local models, still track the request
+			aiEngine._trackUsage( 0, 0 );
+		}
+
+		// Always display cost chip (shows $0.00 for local models, actual cost for external)
+		appendCostChip();
+
 		return fullText;
 
 	}
@@ -2079,7 +2151,17 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 			if ( reasonConstrain ) systemPrompt += REASON_CONSTRAINED_JSON_INSTRUCTION;
 			else if ( constrainDecode ) systemPrompt += CONSTRAINED_JSON_INSTRUCTION;
 			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts } );
-			const raw = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: opsResponseSchema } );
+			const response = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: opsResponseSchema } );
+
+			// Extract text from response (handle both string and {text, usage} formats)
+			const raw = typeof response === 'string' ? response : response?.text || '';
+			const usage = typeof response === 'object' ? response?.usage : null;
+
+			// Track cost for internal operations (silent, no user display)
+			if ( usage && ( usage.prompt_tokens || usage.completion_tokens ) ) {
+				aiEngine._trackUsage( usage.prompt_tokens || 0, usage.completion_tokens || 0 );
+			}
+
 			// Constrained output is raw JSON (no code fence) — parseEmittedOps reads it
 			// directly; the JS-code conditions still go through the fenced-code extractor.
 			return { code: constrainDecode ? raw : extractCode( raw ) };
@@ -2307,7 +2389,7 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 
 							const reader = res.body.getReader();
 							const decoder = new TextDecoder();
-							let buf = '', full = '';
+							let buf = '', full = '', usage = null;
 
 							for ( ;; ) {
 
@@ -2333,6 +2415,7 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 										try { o = JSON.parse( payload ); } catch { continue; }
 										if ( o.error ) throw new Error( o.error );
 										if ( o.delta ) { full += o.delta; opts.onToken( o.delta, full ); }
+										if ( o.usage ) { usage = o.usage; } // Capture usage from stream events
 
 									}
 
@@ -2340,7 +2423,8 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 
 							}
 
-							return full;
+							// Return object with both text and usage for AIEngine cost tracking
+							return { text: full, usage };
 
 						}
 
@@ -2361,11 +2445,23 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 						// Handle both Ollama and OpenAI response formats
 						const answer = data.message?.content || data.choices?.[ 0 ]?.message?.content || '';
 
+						// ── Extract usage for cost tracking ────────────────────────────────
+						// OpenAI: data.usage = { prompt_tokens, completion_tokens }
+						// Ollama: data.usage = { prompt_tokens, completion_tokens }
+						// Claude: data.usage = { input_tokens, output_tokens }
+						const usage = data.usage || (
+							data.usage?.input_tokens ? {
+								prompt_tokens: data.usage.input_tokens,
+								completion_tokens: data.usage.output_tokens
+							} : null
+						);
+
 						// Deliver the full answer to a streaming UI in one chunk when the
 						// server didn't stream (keeps the live output div populated).
 						if ( opts.onToken ) opts.onToken( '', answer );
 
-						return answer;
+						// Return object with both text and usage for AIEngine cost tracking
+						return { text: answer, usage };
 
 					}
 

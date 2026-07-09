@@ -159,7 +159,7 @@ async function relayProviderStream(res, upstream, onLine) {
 
 // Per-provider line → delta extractor. Ollama emits NDJSON; OpenAI and Claude
 // emit SSE `data:` lines (OpenAI: choices[].delta.content; Claude:
-// content_block_delta.delta.text).
+// content_block_delta.delta.text). Usage data is captured when available.
 function providerLineHandler(kind) {
   return (rawLine, res) => {
     const line = rawLine.replace(/\r$/, '');
@@ -168,6 +168,10 @@ function providerLineHandler(kind) {
       let o; try { o = JSON.parse(line); } catch { return; }
       const d = o.message?.content || '';
       if (d) sseSend(res, { delta: d });
+      // Ollama includes usage in final message
+      if (o.message?.content && !o.message?.content.includes('\n') && o.eval_count) {
+        sseSend(res, { usage: { prompt_tokens: o.prompt_eval_count || 0, completion_tokens: o.eval_count || 0 } });
+      }
       return;
     }
     if (!line.startsWith('data:')) return;
@@ -177,10 +181,16 @@ function providerLineHandler(kind) {
     if (kind === 'openai') {
       const d = o.choices?.[0]?.delta?.content || '';
       if (d) sseSend(res, { delta: d });
+      // OpenAI sends usage in message_stop or final event
+      if (o.usage) sseSend(res, { usage: { prompt_tokens: o.usage.prompt_tokens, completion_tokens: o.usage.completion_tokens } });
     } else if (kind === 'claude') {
       if (o.type === 'content_block_delta') {
         const d = o.delta?.text || '';
         if (d) sseSend(res, { delta: d });
+      }
+      // Claude sends usage in message_delta and message_stop events
+      if ((o.type === 'message_delta' || o.type === 'message_stop') && o.usage) {
+        sseSend(res, { usage: { prompt_tokens: o.usage.input_tokens, completion_tokens: o.usage.output_tokens } });
       }
     }
   };
