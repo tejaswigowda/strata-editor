@@ -121,6 +121,32 @@ function Animation( editor ) {
 	const durationText = new UIText( '0.00' ).setWidth( '36px' );
 	timeDisplay.appendChild( durationText.dom );
 
+	// Editable duration (changes clip.duration directly)
+	const durationInput = new UINumber( 0 ).setWidth( '56px' ).setPrecision( 3 ).setRange( 0, Infinity );
+	durationInput.dom.title = 'Clip duration in seconds (editable)';
+	durationInput.onChange( function () {
+
+		if ( ! currentClip ) return;
+
+		const newDuration = Math.max( 0, durationInput.getValue() );
+		if ( newDuration !== currentClip.duration ) {
+
+			currentClip.duration = newDuration;
+			editor.mixer.uncacheClip( currentClip );
+			if ( currentAction ) {
+
+				currentAction.stop();
+				currentAction = currentRoot ? editor.mixer.clipAction( currentClip, currentRoot ) : null;
+
+			}
+
+			update();
+			updatePlayheadUI();
+
+		}
+
+	} );
+
 	// Time Scale
 	const mixerTimeScaleNumber = new UINumber( 1 ).setWidth( '60px' ).setRange( - 10, 10 );
 	mixerTimeScaleNumber.onChange( function () {
@@ -992,11 +1018,37 @@ function Animation( editor ) {
 
 	}
 
-	// Play every CHECKED clip together. Unticked clips (in disabledClips) are
-	// skipped. The selected clip (or first checked) drives the playhead/timeline.
+	// Play animation only for the selected object (if any). If nothing is selected,
+	// play the currently selected clip. Unticked clips (in disabledClips) are skipped.
 	function play() {
 
-		const clips = getAnimationClips().filter( ( { clip } ) => disabledClips.has( clip.uuid ) === false && ( clip.duration || 0 ) > 0 );
+		let clips;
+
+		if ( editor.selected && editor.selected !== editor.scene ) {
+
+			// Play only animations for the selected object
+			const selectedAnimations = editor.selected.animations || [];
+			const seen = new Set();
+			clips = [];
+
+			for ( const clip of selectedAnimations ) {
+
+				if ( ! seen.has( clip.uuid ) && ! disabledClips.has( clip.uuid ) && ( clip.duration || 0 ) > 0 ) {
+
+					seen.add( clip.uuid );
+					clips.push( { clip: clip, root: editor.selected } );
+
+				}
+
+			}
+
+		} else {
+
+			// No selection: fall back to all checked clips
+			clips = getAnimationClips().filter( ( { clip } ) => disabledClips.has( clip.uuid ) === false && ( clip.duration || 0 ) > 0 );
+
+		}
+
 		if ( clips.length === 0 ) return;
 
 		editor.mixer.stopAllAction();
@@ -1049,6 +1101,7 @@ function Animation( editor ) {
 		playhead.style.left = ( labelWidth + frac * timelineWidth ) + 'px';
 		timeText.setValue( playheadTime.toFixed( 2 ) );
 		timeInput.setValue( playheadTime );
+		durationInput.setValue( dur );
 
 	}
 
@@ -1220,8 +1273,10 @@ function Animation( editor ) {
 
 				const startTime = times[ 0 ];
 				const endTime = times[ times.length - 1 ];
-				const startPercent = ( startTime / duration ) * 100;
-				const widthPercent = ( ( endTime - startTime ) / duration ) * 100;
+				// Use actual clip duration; don't fall back to arbitrary values
+				const actualDuration = clip.duration || ( endTime - startTime ) || 1;
+				const startPercent = ( startTime / actualDuration ) * 100;
+				const widthPercent = ( ( endTime - startTime ) / actualDuration ) * 100;
 
 				const trackRow = document.createElement( 'div' );
 				trackRow.style.display = 'flex';
