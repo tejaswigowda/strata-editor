@@ -120,6 +120,7 @@ ops([ {}, {} ])                     // several ops in one undoable batch (multi-
 **Closed op set.** The human sugar; each is also an op-JSON `type`:
 
 ```js
+// ── Write ops (mutations) ──
 recolor(color)  scale(factor, axis?)  move(dx,dy,dz)  rotate(axis, deg)
 delete()  duplicate(dx,dy,dz)  setMaterial({})  retexture(tex)
 spin(axis?,turns?,dur?)  bounce()  pulse()  fade()  orbit()  shake()   // keyframe clips
@@ -140,6 +141,76 @@ heartBeat(scale?, dur?)  tada(rotations?, scale?, dur?)  wobble(angle?, dur?)
 
 op({ type:'raw', selector, code })   // escape hatch: raw JS as one op (loop-protected)
 ```
+
+### $S() API: Query and traversal
+
+The selector language now has **read operations** for querying the scene and **traversal methods** for graph navigation, complementing the **write operations** (mutations) documented above.
+
+#### Query / Inspection (read-only)
+```js
+// ── Essential cardinality checks ──
+.count()                        // how many nodes matched? → essential feedback
+.exists() / .isEmpty()          // did selector match anything? (boolean check before mutation)
+
+// ── Node introspection ──
+.names() / .ids()               // get resolved node names or UUIDs (what am I about to edit?)
+.classes(node)                  // what classes does this node have? (introspection)
+.bounds() / .size()             // bounding box dimensions (needed for spatial reasoning)
+```
+
+#### Value getters (read-only, before write)
+```js
+.position(node)  .rotation(node)  .scale(node)     // current world transforms
+.color(node)                                        // sampled material color (hex string)
+.material(node)                                     // current material props {type, color, metalness, roughness, opacity, ...}
+.opacity(node)                                      // current transparency (0–1)
+.visible(node)                                      // visibility state (boolean)
+```
+
+#### Traversal (graph navigation)
+```js
+// ── Existing ──
+.filter(selector)               // narrow selection
+.each(fn)                        // iterate (read-only)
+
+// ── New traversal methods ──
+.not(selector)                  // exclude ("all wheels except front")
+.first() / .last()              // pick one from a set (returns new ChainableSet)
+.eq(n) / .at(n)                 // nth match (zero-indexed, returns new ChainableSet)
+.parent() / .children()         // graph traversal (returns new ChainableSet)
+.closest(selector)              // walk up to nearest ancestor matching selector
+.add(selector)                  // union: combine two selections into one
+```
+
+#### Appearance ops (mutations)
+```js
+.setOpacity(value)              // set transparency (0–1, distinct from fade animation)
+.setVisible(bool)               // set visibility
+.show() / .hide()               // shortcuts for setVisible(true) / setVisible(false)
+  // LIFECYCLE: show() / hide() trigger entrance/exit animations if attached
+.wireframe(bool)                // toggle wireframe render mode
+```
+
+#### Transform ops: relative vs absolute (standardized pair)
+```js
+// ── Relative (incremental change) ──
+.move(dx, dy, dz)               // relative offset (existing)
+.rotate(axis, degrees)          // relative rotation (existing, now clarified as relative)
+.scale(factor, axis?)           // relative scale (existing, now clarified as relative)
+
+// ── Absolute (set to target value) ──
+.moveTo(x, y, z)                // set absolute world position
+.rotateTo(x, y, z)              // set absolute rotation (Euler in degrees)
+.scaleTo(factor)                // set absolute uniform scale
+.reset()                         // restore original transform
+.lookAt(target)                 // orient toward a point or object
+```
+
+**Standardization note:** The relative-vs-absolute distinction is now explicit:
+- **.move / .rotate / .scale** = relative (incremental change)
+- **.moveTo / .rotateTo / .scaleTo** = absolute (set to target value)
+
+This regularity is essential for a proper read/write language. Both humans and models can now reason about transform operations unambiguously.
 
 **Host-enforced guards.** The model expresses intent. The host enforces correctness. Clone-on-write for shared materials (no bleed). Texture-tint warning (`recolor` on a textured part tints; use `setMaterial` for solid). Merged-mesh graceful fail. Ground and clamp. A "subset named but all changed" flag: a part selector that resolves to every mesh is surfaced as a likely wrong resolution, never a silent pass.
 
@@ -759,12 +830,19 @@ DONE
   glTF / GLB / USDZ / OBJ export (GLTFExporter + optimized animations)
   Name-stem auto-classes: "Chair 1"/"Chair 2" share .chair so plural selectors resolve
   Selector picker is $S (aliases Pick, pick); the old $$ name was removed
+  $S() API: query and traversal layer (READ half of the language)
+    Query methods: .count() / .exists() / .isEmpty() / .names() / .ids() / .classes() / .bounds() / .size()
+    Value getters: .position() / .rotation() / .scale() / .color() / .material() / .opacity() / .visible()
+    Traversal: .not() / .first() / .last() / .eq(n) / .parent() / .children() / .closest() / .add()
+    Appearance: .setOpacity() / .setVisible() / .show() / .hide() / .wireframe()
+    Transforms: .moveTo() / .rotateTo() / .scaleTo() / .reset() / .lookAt() (clarified relative vs absolute)
 
 NEXT (the gate)
   Run the eval matrix across model sizes + a Haiku ceiling. Make the size decision.
     This confirms the zero-training claim. It is the publication evidence
 
 THEN
+  Show/hide lifecycle: .show() / .hide() should TRIGGER entrance/exit animations (backend wiring)
   Constrained decoding (JSON-schema-restricted output) as a scaffolding lever for small models
   Import + Verify UX: in-viewport part highlight, lazy label-on-first-reference
   Renderer-agnostic export PIPELINE: label-through-extras survival + Blender / UE / any-renderer handoff

@@ -29,7 +29,7 @@ export const OP_SCHEMA = {
 	properties: {
 		op: {
 			type: 'string',
-			enum: [ 'recolor', 'scale', 'move', 'rotate', 'delete', 'duplicate', 'retexture', 'setMaterial' ],
+			enum: [ 'recolor', 'scale', 'move', 'rotate', 'delete', 'duplicate', 'retexture', 'setMaterial', 'setOpacity', 'setVisible', 'wireframe', 'moveTo', 'rotateTo', 'scaleTo', 'reset', 'lookAt' ],
 		},
 		selector: { type: 'string' },
 		args: { type: 'object' },
@@ -669,6 +669,391 @@ export function setMaterialOp( editor, selector, materialProps ) {
 
 }
 
+/**
+ * Set opacity (0-1) on matched nodes.
+ */
+export function setOpacityOp( editor, selector, value ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `setOpacityOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	const safeValue = clamp( parseFloat( value ) || 1, 0, 1 );
+	let count = 0;
+
+	// Expand matched nodes to all descendant meshes
+	const meshes = [];
+	for ( const node of nodes ) {
+
+		for ( const mesh of expandToMeshes( node ) ) {
+
+			meshes.push( mesh );
+
+		}
+
+	}
+
+	for ( const node of meshes ) {
+
+		try {
+
+			if ( node.material ) {
+
+				const materials = Array.isArray( node.material ) ? node.material : [ node.material ];
+				for ( const mat of materials ) {
+
+					mat.transparent = true;
+					mat.opacity = safeValue;
+
+				}
+
+				count ++;
+
+			}
+
+		} catch ( e ) {
+
+			console.error( `Failed to set opacity on "${ node.name }":`, e );
+
+		}
+
+	}
+
+	return { success: count > 0, count };
+
+}
+
+/**
+ * Set visibility (true/false) on matched nodes.
+ */
+export function setVisibleOp( editor, selector, visible ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `setVisibleOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	const cmds = [];
+
+	for ( const node of nodes ) {
+
+		try {
+
+			node.visible = Boolean( visible );
+			// Note: visibility changes are immediate, not command-backed (no undo needed)
+			cmds.push( node );
+
+		} catch ( e ) {
+
+			console.error( `Failed to set visibility on "${ node.name }":`, e );
+
+		}
+
+	}
+
+	return { success: cmds.length > 0, count: cmds.length };
+
+}
+
+/**
+ * Toggle wireframe mode on matched nodes.
+ */
+export function wireframeOp( editor, selector, wireframeMode ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `wireframeOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	let count = 0;
+
+	// Expand matched nodes to all descendant meshes
+	const meshes = [];
+	for ( const node of nodes ) {
+
+		for ( const mesh of expandToMeshes( node ) ) {
+
+			meshes.push( mesh );
+
+		}
+
+	}
+
+	for ( const node of meshes ) {
+
+		try {
+
+			if ( node.material ) {
+
+				const materials = Array.isArray( node.material ) ? node.material : [ node.material ];
+				for ( const mat of materials ) {
+
+					mat.wireframe = Boolean( wireframeMode );
+
+				}
+
+				count ++;
+
+			}
+
+		} catch ( e ) {
+
+			console.error( `Failed to set wireframe on "${ node.name }":`, e );
+
+		}
+
+	}
+
+	return { success: count > 0, count };
+
+}
+
+/**
+ * Set absolute world position on matched nodes.
+ */
+export function moveToOp( editor, selector, x, y, z ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `moveToOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	const safePos = {
+		x: clamp( parseFloat( x ) || 0, -1000, 1000 ),
+		y: clamp( parseFloat( y ) || 0, 0, 1000 ),
+		z: clamp( parseFloat( z ) || 0, -1000, 1000 ),
+	};
+
+	const cmds = [];
+
+	for ( const node of nodes ) {
+
+		try {
+
+			const newPos = new window.THREE.Vector3( safePos.x, safePos.y, safePos.z );
+			cmds.push( new SetPositionCommand( editor, node, newPos ) );
+
+		} catch ( e ) {
+
+			console.error( `Failed to move "${ node.name }" to ${ x },${ y },${ z }:`, e );
+
+		}
+
+	}
+
+	if ( cmds.length === 0 ) return { success: false, count: 0 };
+	editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	return { success: true, count: cmds.length };
+
+}
+
+/**
+ * Set absolute rotation (Euler angles in degrees) on matched nodes.
+ */
+export function rotateToOp( editor, selector, x, y, z ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `rotateToOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	// Convert degrees to radians and clamp
+	const toRad = Math.PI / 180;
+	const safeRot = {
+		x: ( parseFloat( x ) || 0 ) * toRad,
+		y: ( parseFloat( y ) || 0 ) * toRad,
+		z: ( parseFloat( z ) || 0 ) * toRad,
+	};
+
+	const THREE = window.THREE;
+	const cmds = [];
+
+	for ( const node of nodes ) {
+
+		try {
+
+			const euler = new THREE.Euler( safeRot.x, safeRot.y, safeRot.z, 'XYZ' );
+			const quaternion = new THREE.Quaternion();
+			quaternion.setFromEuler( euler );
+			cmds.push( new SetRotationCommand( editor, node, quaternion ) );
+
+		} catch ( e ) {
+
+			console.error( `Failed to rotate "${ node.name }" to ${ x },${ y },${ z }:`, e );
+
+		}
+
+	}
+
+	if ( cmds.length === 0 ) return { success: false, count: 0 };
+	editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	return { success: true, count: cmds.length };
+
+}
+
+/**
+ * Set absolute uniform scale on matched nodes.
+ */
+export function scaleToOp( editor, selector, factor ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `scaleToOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	const safeFactor = clamp( parseFloat( factor ) || 1, 0.01, 100 );
+	const THREE = window.THREE;
+	const cmds = [];
+
+	for ( const node of nodes ) {
+
+		try {
+
+			const newScale = new THREE.Vector3( safeFactor, safeFactor, safeFactor );
+			cmds.push( new SetScaleCommand( editor, node, newScale ) );
+
+		} catch ( e ) {
+
+			console.error( `Failed to scale "${ node.name }" to ${ factor }:`, e );
+
+		}
+
+	}
+
+	if ( cmds.length === 0 ) return { success: false, count: 0 };
+	editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	return { success: true, count: cmds.length };
+
+}
+
+/**
+ * Reset matched nodes to their original transform.
+ */
+export function resetOp( editor, selector ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `resetOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	const cmds = [];
+
+	for ( const node of nodes ) {
+
+		try {
+
+			// Reset to identity transform
+			cmds.push( new SetPositionCommand( editor, node, new window.THREE.Vector3( 0, 0, 0 ) ) );
+			cmds.push( new SetRotationCommand( editor, node, new window.THREE.Quaternion() ) );
+			cmds.push( new SetScaleCommand( editor, node, new window.THREE.Vector3( 1, 1, 1 ) ) );
+
+		} catch ( e ) {
+
+			console.error( `Failed to reset "${ node.name }":`, e );
+
+		}
+
+	}
+
+	if ( cmds.length === 0 ) return { success: false, count: 0 };
+	editor.execute( new MultiCmdsCommand( editor, cmds ) );
+	return { success: true, count: cmds.length };
+
+}
+
+/**
+ * Orient matched nodes toward a target point.
+ * Target can be [x,y,z] array or node name string.
+ */
+export function lookAtOp( editor, selector, target ) {
+
+	const nodes = selectorEngine.query( editor.scene, selector );
+	if ( nodes.length === 0 ) {
+
+		console.warn( `lookAtOp: selector "${ selector }" matched no nodes` );
+		return { success: false, message: 'No nodes matched', count: 0 };
+
+	}
+
+	const THREE = window.THREE;
+	let targetVec;
+
+	// Parse target: array [x,y,z] or node name string
+	if ( Array.isArray( target ) && target.length >= 3 ) {
+
+		targetVec = new THREE.Vector3( target[ 0 ], target[ 1 ], target[ 2 ] );
+
+	} else if ( typeof target === 'string' ) {
+
+		const targetNode = selectorEngine.query( editor.scene, target )[ 0 ];
+		if ( ! targetNode ) {
+
+			return { success: false, message: `lookAt: target "${ target }" not found`, count: 0 };
+
+		}
+
+		targetVec = new THREE.Vector3();
+		targetNode.getWorldPosition( targetVec );
+
+	} else {
+
+		return { success: false, message: 'lookAt: target must be [x,y,z] or node name', count: 0 };
+
+	}
+
+	const cmds = [];
+
+	for ( const node of nodes ) {
+
+		try {
+
+			// Create a matrix to look at the target
+			const matrix = new THREE.Matrix4();
+			const pos = new THREE.Vector3();
+			node.getWorldPosition( pos );
+			matrix.lookAt( pos, targetVec, new THREE.Vector3( 0, 1, 0 ) );
+
+			// Extract quaternion from the matrix
+			const quat = new THREE.Quaternion();
+			quat.setFromRotationMatrix( matrix );
+			cmds.push( new SetRotationCommand( editor, node, quat ) );
+
+		} catch ( e ) {
+
+			console.error( `Failed to lookAt on "${ node.name }":`, e );
+
+		}
+
+	}
+
+	if ( cmds.length === 0 ) return { success: false, count: 0 };
+	editor.execute( new MultiCmdsCommand( editor, cmds ) );
+	return { success: true, count: cmds.length };
+
+}
+
 // ── Dispatcher ──────────────────────────────────────────────────────────────────
 
 /**
@@ -704,6 +1089,22 @@ export function executeEditOp( editor, opData ) {
 				return duplicateOp( editor, selector, args.dx, args.dy, args.dz );
 			case 'setMaterial':
 				return setMaterialOp( editor, selector, args.props );
+			case 'setOpacity':
+				return setOpacityOp( editor, selector, args.value );
+			case 'setVisible':
+				return setVisibleOp( editor, selector, args.visible );
+			case 'wireframe':
+				return wireframeOp( editor, selector, args.wireframe );
+			case 'moveTo':
+				return moveToOp( editor, selector, args.x, args.y, args.z );
+			case 'rotateTo':
+				return rotateToOp( editor, selector, args.x, args.y, args.z );
+			case 'scaleTo':
+				return scaleToOp( editor, selector, args.factor );
+			case 'reset':
+				return resetOp( editor, selector );
+			case 'lookAt':
+				return lookAtOp( editor, selector, args.target );
 			default:
 				return { success: false, message: `Unknown op: ${ op }` };
 

@@ -36,6 +36,14 @@ export const OP_VOCABULARY = {
 	duplicate:   { kind: 'edit', args: { dx: 'number', dy: 'number', dz: 'number' }, summary: 'clone with offset' },
 	retexture:   { kind: 'edit', args: { texture: 'string' },                       summary: 'apply a named/procedural texture map' },
 	setMaterial: { kind: 'edit', args: { props: 'object' },                         summary: 'replace material with props' },
+	setOpacity:  { kind: 'edit', args: { value: 'number' },                         summary: 'set transparency (0–1)' },
+	setVisible:  { kind: 'edit', args: { visible: 'boolean' },                      summary: 'set visibility' },
+	wireframe:   { kind: 'edit', args: { wireframe: 'boolean' },                    summary: 'toggle wireframe render mode' },
+	moveTo:      { kind: 'edit', args: { x: 'number', y: 'number', z: 'number' },  summary: 'set absolute world position' },
+	rotateTo:    { kind: 'edit', args: { x: 'number', y: 'number', z: 'number' },  summary: 'set absolute rotation (Euler in degrees)' },
+	scaleTo:     { kind: 'edit', args: { factor: 'number' },                        summary: 'set absolute uniform scale' },
+	reset:       { kind: 'edit', args: {},                                          summary: 'restore to original transform' },
+	lookAt:      { kind: 'edit', args: { target: 'vector3|string' },               summary: 'orient toward a point or object' },
 
 	// ── Animation recipe ops (deterministic winding-safe keyframes) ──
 	spin:        { kind: 'anim', args: { axis: 'axis?', turns: 'number?', duration: 'number?' },        summary: 'continuous rotation (winding-safe)' },
@@ -400,6 +408,223 @@ class ChainableSet {
 	wobble( angle = 15, duration = 1 )                { return this.op( { type: 'wobble', angle, duration } ); }
 
 	raw( code )                         { return this.op( { type: 'raw', code } ); }
+
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── QUERY / INSPECTION (READ-ONLY) ──────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────────
+
+	/** How many nodes matched this selector? */
+	count() { return this.nodes.length; }
+
+	/** Did the selector match anything? (opposite of isEmpty) */
+	exists() { return this.nodes.length > 0; }
+
+	/** Is this selection empty? */
+	isEmpty() { return this.nodes.length === 0; }
+
+	/** Get names of all matched nodes. */
+	names() { return this.nodes.map( n => n.name || 'unnamed' ); }
+
+	/** Get UUIDs of all matched nodes. */
+	ids() { return this.nodes.map( n => n.uuid ); }
+
+	/** Get custom classes on a node (or first node if multiple matched). */
+	classes( node = this.nodes[ 0 ] ) {
+		if ( ! node ) return [];
+		const customClasses = node.userData?.customClasses || new Set();
+		return Array.from( customClasses );
+	}
+
+	/** Get bounding box dimensions of this selection. */
+	bounds() {
+		if ( this.nodes.length === 0 ) return null;
+		const box3 = new THREE.Box3();
+		this.nodes.forEach( n => box3.expandByObject( n ) );
+		return { min: box3.min, max: box3.max, size: box3.getSize( new THREE.Vector3() ) };
+	}
+
+	/** Alias for bounds().size */
+	size() {
+		const b = this.bounds();
+		return b ? b.size : null;
+	}
+
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── VALUE GETTERS (READ-ONLY) ──────────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────────
+
+	/** Get world-space position of first node. */
+	position( node = this.nodes[ 0 ] ) {
+		if ( ! node ) return null;
+		node.updateWorldMatrix( true, false );
+		return node.getWorldPosition( new THREE.Vector3() );
+	}
+
+	/** Get world-space rotation (Euler) of first node. */
+	rotation( node = this.nodes[ 0 ] ) {
+		if ( ! node ) return null;
+		node.updateWorldMatrix( true, false );
+		const euler = new THREE.Euler();
+		euler.setFromQuaternion( node.getWorldQuaternion( new THREE.Quaternion() ) );
+		return euler;
+	}
+
+	/** Get world-space scale of first node. */
+	scale( node = this.nodes[ 0 ] ) {
+		if ( ! node ) return null;
+		const scale = new THREE.Vector3();
+		node.getWorldScale( scale );
+		return scale;
+	}
+
+	/** Get material color of first node (if it's a Mesh). */
+	color( node = this.nodes[ 0 ] ) {
+		if ( ! node || ! node.material ) return null;
+		return node.material.color ? node.material.color.getHexString() : null;
+	}
+
+	/** Get material properties of first node. */
+	material( node = this.nodes[ 0 ] ) {
+		if ( ! node || ! node.material ) return null;
+		return {
+			type: node.material.type,
+			color: node.material.color?.getHexString() || null,
+			metalness: node.material.metalness,
+			roughness: node.material.roughness,
+			emissive: node.material.emissive?.getHexString() || null,
+			opacity: node.material.opacity,
+			transparent: node.material.transparent
+		};
+	}
+
+	/** Get opacity (0-1) of first node. */
+	opacity( node = this.nodes[ 0 ] ) {
+		if ( ! node || ! node.material ) return null;
+		return node.material.opacity;
+	}
+
+	/** Get visibility state of first node. */
+	visible( node = this.nodes[ 0 ] ) {
+		if ( ! node ) return null;
+		return node.visible;
+	}
+
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── TRAVERSAL (GRAPH NAVIGATION) ────────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────────
+
+	/** Exclude nodes matching a selector. Returns new ChainableSet. */
+	not( selector ) {
+		const exclude = new Set( selectorEngine.query( this.editor.scene, selector ) );
+		const next = new ChainableSet( this.editor, this.nodes.filter( n => ! exclude.has( n ) ) );
+		return next;
+	}
+
+	/** Get first matched node as a new ChainableSet. */
+	first() {
+		if ( this.nodes.length === 0 ) return new ChainableSet( this.editor, [] );
+		return new ChainableSet( this.editor, [ this.nodes[ 0 ] ] );
+	}
+
+	/** Get last matched node as a new ChainableSet. */
+	last() {
+		if ( this.nodes.length === 0 ) return new ChainableSet( this.editor, [] );
+		return new ChainableSet( this.editor, [ this.nodes[ this.nodes.length - 1 ] ] );
+	}
+
+	/** Get nth matched node (zero-indexed) as a new ChainableSet. */
+	eq( index ) {
+		if ( index < 0 || index >= this.nodes.length ) return new ChainableSet( this.editor, [] );
+		return new ChainableSet( this.editor, [ this.nodes[ index ] ] );
+	}
+
+	/** Alias for eq(). */
+	at( index ) { return this.eq( index ); }
+
+	/** Get parent nodes of matched nodes. */
+	parent() {
+		const parents = new Set();
+		this.nodes.forEach( n => {
+			if ( n.parent ) parents.add( n.parent );
+		} );
+		return new ChainableSet( this.editor, Array.from( parents ) );
+	}
+
+	/** Get direct child nodes of matched nodes. */
+	children() {
+		const allChildren = [];
+		this.nodes.forEach( n => {
+			allChildren.push( ...n.children );
+		} );
+		return new ChainableSet( this.editor, allChildren );
+	}
+
+	/** Find nearest ancestor matching selector. */
+	closest( selector ) {
+		const matching = new Set( selectorEngine.query( this.editor.scene, selector ) );
+		const ancestors = [];
+		this.nodes.forEach( n => {
+			let current = n.parent;
+			while ( current ) {
+				if ( matching.has( current ) ) {
+					ancestors.push( current );
+					break;
+				}
+				current = current.parent;
+			}
+		} );
+		return new ChainableSet( this.editor, ancestors );
+	}
+
+	/** Union: combine with results of another selector. */
+	add( selector ) {
+		const others = selectorEngine.query( this.editor.scene, selector );
+		const combined = [ ...new Set( [ ...this.nodes, ...others ] ) ];
+		return new ChainableSet( this.editor, combined );
+	}
+
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── APPEARANCE OPS (MUTATIONS) ──────────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────────
+
+	/** Set opacity (0-1). */
+	setOpacity( value ) { return this.op( { type: 'setOpacity', value } ); }
+
+	/** Set visibility (true/false). */
+	setVisible( bool ) { return this.op( { type: 'setVisible', visible: bool } ); }
+
+	/** Show (alias for setVisible(true)). */
+	show() { return this.op( { type: 'setVisible', visible: true } ); }
+
+	/** Hide (alias for setVisible(false)). */
+	hide() { return this.op( { type: 'setVisible', visible: false } ); }
+
+	/** Toggle wireframe mode. */
+	wireframe( bool = true ) { return this.op( { type: 'wireframe', wireframe: bool } ); }
+
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── TRANSFORMS: RELATIVE vs ABSOLUTE ────────────────────────────────────────
+	// ────────────────────────────────────────────────────────────────────────────
+
+	// Relative forms (already exist):
+	// .move(dx, dy, dz) - relative offset
+	// .rotate(axis, degrees) - relative rotation
+	// .scale(factor, axis?) - relative scale
+
+	/** Set absolute world position. */
+	moveTo( x, y, z ) { return this.op( { type: 'moveTo', x, y, z } ); }
+
+	/** Set absolute rotation (Euler angles in degrees). */
+	rotateTo( x, y, z ) { return this.op( { type: 'rotateTo', x, y, z } ); }
+
+	/** Set absolute uniform scale. */
+	scaleTo( factor ) { return this.op( { type: 'scaleTo', factor } ); }
+
+	/** Reset to original transform. */
+	reset() { return this.op( { type: 'reset' } ); }
+
+	/** Orient nodes toward a target point or object. */
+	lookAt( target ) { return this.op( { type: 'lookAt', target } ); }
 
 	/** Narrow the set with an additional selector (compound on results). */
 	filter( extraSelector ) {
