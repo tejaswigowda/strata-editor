@@ -128,12 +128,10 @@ function ViewportInfo( editor ) {
 
 	editor.signals.viewportShadingChanged.add( function () {
 
-		const isRealisticShading = ( editor.viewportShading === 'realistic' );
+		samplesText.setHidden( true );
+		samplesUnitText.setHidden( true );
 
-		samplesText.setHidden( ! isRealisticShading );
-		samplesUnitText.setHidden( ! isRealisticShading );
-
-		container.setBottom( isRealisticShading ? '62px' : '50px' );
+		container.setBottom( '50px' );
 
 	} );
 

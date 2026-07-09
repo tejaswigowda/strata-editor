@@ -231,7 +231,7 @@ function Viewport( editor ) {
 	const transformControls = new TransformControls( camera );
 	transformControls.addEventListener( 'axis-changed', function () {
 
-		if ( editor.viewportShading !== 'realistic' ) render();
+		render();
 
 	} );
 	transformControls.addEventListener( 'objectChange', function () {
@@ -1102,10 +1102,6 @@ function Viewport( editor ) {
 
 		switch ( viewportShading ) {
 
-			case 'realistic':
-				if ( pathtracer ) pathtracer.init( scene, editor.viewportCamera );
-				break;
-
 			case 'solid':
 				scene.overrideMaterial = null;
 				break;
@@ -1256,52 +1252,31 @@ function Viewport( editor ) {
 
 	function initPT() {
 
-		if ( pathtracer && editor.viewportShading === 'realistic' ) {
-
-			pathtracer.init( scene, editor.viewportCamera );
-
-		}
+		// Realistic viewport shading is no longer available
 
 	}
 
 	function updatePTBackground() {
 
-		if ( pathtracer && editor.viewportShading === 'realistic' ) {
-
-			pathtracer.setBackground( scene.background, scene.backgroundBlurriness );
-
-		}
+		// Realistic viewport shading is no longer available
 
 	}
 
 	function updatePTEnvironment() {
 
-		if ( pathtracer && editor.viewportShading === 'realistic' ) {
-
-			pathtracer.setEnvironment( scene.environment );
-
-		}
+		// Realistic viewport shading is no longer available
 
 	}
 
 	function updatePTMaterials() {
 
-		if ( pathtracer && editor.viewportShading === 'realistic' ) {
-
-			pathtracer.updateMaterials();
-
-		}
+		// Realistic viewport shading is no longer available
 
 	}
 
 	function updatePT() {
 
-		if ( pathtracer && editor.viewportShading === 'realistic' ) {
-
-			pathtracer.update();
-			editor.signals.pathTracerUpdated.dispatch( pathtracer.getSamples() );
-
-		}
+		// Realistic viewport shading is no longer available
 
 	}
 
