@@ -113,57 +113,62 @@ export async function runImportPipeline( editor, root, opts = {} ) {
 	// Stage 4 — LLM labeling pass (once, cached). ★
 	if ( opts.label !== false ) {
 
-		const banner = createProgressBanner( 'Labeling...' );
-		let labelingStarted = false;
-
 		try {
 
-			const labels = await labelImportedAsset( editor, root, {
-				onProgress: ( msg ) => {
-
-					if ( msg !== null && msg !== undefined ) {
-
-						labelingStarted = true;
-						banner.setLabel( msg );
-						banner.done();
-
-					} else if ( labelingStarted ) {
-
-						// Progress callback with null = labeling done
-						banner.remove();
-
-					}
-
-				},
-			} );
-			result.labels = labels;
-			if ( labels.labeled > 0 ) {
-
-				log( `↳ Labeled ${ labels.labeled }/${ labels.total } part(s) — you can now refer to them by description.` );
-				// Open the Import+Verify panel (M7) so only the SEMANTIC guesses are
-				// confirmed/corrected (facts are auto-assigned). Optional hook — the
-				// host (Shell) wires it; pipeline stays UI-agnostic.
-				if ( typeof editor.onVerifyReady === 'function' ) {
-					try { editor.onVerifyReady( root ); } catch { /* non-fatal */ }
-				}
-
-			} else if ( labels.skipped === 'no-llm' ) {
+			// Check if AI is available before showing banner
+			const aiEngine = editor && editor.aiEngine;
+			if ( ! aiEngine || ! aiEngine.ready ) {
 
 				log( '↳ Load an AI model to auto-label this asset\'s parts for natural-language editing.' );
 
-			}
+			} else {
 
-			// Fallback: fill in any remaining unlabeled meshes with heuristics (size, name)
-			const heurCount = applyHeuristicLabels( root );
-			if ( heurCount > 0 ) {
+				const banner = createProgressBanner( 'Labeling...' );
+				let labelingStarted = false;
 
-				log( `↳ Applied heuristic labels to ${ heurCount } part(s) (size/name-based).` );
+				const labels = await labelImportedAsset( editor, root, {
+					onProgress: ( msg ) => {
+
+						if ( msg !== null && msg !== undefined ) {
+
+							labelingStarted = true;
+							banner.setLabel( msg );
+							banner.indeterminate();
+
+						} else if ( labelingStarted ) {
+
+							// Progress callback with null = labeling done
+							banner.remove();
+
+						}
+
+					},
+				} );
+				result.labels = labels;
+				if ( labels.labeled > 0 ) {
+
+					log( `↳ Labeled ${ labels.labeled }/${ labels.total } part(s) — you can now refer to them by description.` );
+					// Open the Import+Verify panel (M7) so only the SEMANTIC guesses are
+					// confirmed/corrected (facts are auto-assigned). Optional hook — the
+					// host (Shell) wires it; pipeline stays UI-agnostic.
+					if ( typeof editor.onVerifyReady === 'function' ) {
+						try { editor.onVerifyReady( root ); } catch { /* non-fatal */ }
+					}
+
+				}
+
+				// Fallback: fill in any remaining unlabeled meshes with heuristics (size, name)
+				const heurCount = applyHeuristicLabels( root );
+				if ( heurCount > 0 ) {
+
+					log( `↳ Applied heuristic labels to ${ heurCount } part(s) (size/name-based).` );
+
+				}
 
 			}
 
 		} catch ( e ) {
 
-			banner.remove();
 			log( `↳ Labeling skipped: ${ e && e.message || e }` );
 
 		}

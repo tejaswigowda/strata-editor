@@ -266,6 +266,23 @@ export function createProgressBanner( label = '' ) {
 	track.appendChild( bar );
 	el.appendChild( track );
 
+	// Add CSS for indeterminate animation
+	if ( ! document.getElementById( '__progress-banner-keyframes' ) ) {
+		const style = document.createElement( 'style' );
+		style.id = '__progress-banner-keyframes';
+		style.textContent = `
+			@keyframes indeterminate-progress {
+				0% { width: 30%; }
+				50% { width: 70%; }
+				100% { width: 30%; }
+			}
+			.__progress-indeterminate {
+				animation: indeterminate-progress 1.5s ease-in-out infinite !important;
+			}
+		`;
+		document.head.appendChild( style );
+	}
+
 	document.body.appendChild( el );
 
 	let removed = false;
@@ -286,6 +303,15 @@ export function createProgressBanner( label = '' ) {
 			if ( msg !== undefined ) text.textContent = msg;
 			const pct = total > 0 ? Math.max( 0, Math.min( 100, Math.round( ( done / total ) * 100 ) ) ) : 0;
 			bar.style.width = pct + '%';
+			bar.classList.remove( '__progress-indeterminate' );
+
+		},
+
+		// Show indeterminate/loading animation (no specific percentage).
+		indeterminate( msg ) {
+
+			if ( msg !== undefined ) text.textContent = msg;
+			bar.classList.add( '__progress-indeterminate' );
 
 		},
 
@@ -294,6 +320,7 @@ export function createProgressBanner( label = '' ) {
 
 			if ( msg !== undefined ) text.textContent = msg;
 			bar.style.width = '100%';
+			bar.classList.remove( '__progress-indeterminate' );
 
 		},
 
