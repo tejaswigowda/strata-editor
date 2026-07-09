@@ -1053,7 +1053,9 @@ function Animation( editor ) {
 
 		editor.mixer.stopAllAction();
 
-		const ref = clips.find( ( { clip } ) => clip === currentClip ) || clips[ 0 ];
+		// Use the longest duration clip as the timeline master so all animations fit within it
+		const maxDuration = Math.max( ...clips.map( c => c.clip.duration || 0 ) );
+		const ref = clips.find( ( { clip } ) => clip.duration === maxDuration ) || clips[ 0 ];
 		currentClip = ref.clip;
 		currentRoot = ref.root;
 		currentAction = null;
