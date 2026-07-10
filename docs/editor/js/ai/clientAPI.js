@@ -273,19 +273,32 @@ async function openaiChat( config, messages, opts, signal ) {
 
 	if ( wantStream && ( res.headers.get( 'content-type' ) || '' ).includes( 'text/event-stream' ) ) {
 
-		return readSSE( res, signal, ( json, push ) => {
+		const result = await readSSE( res, signal, ( json, push ) => {
 
 			const delta = json.choices?.[ 0 ]?.delta?.content;
 			if ( delta ) push( delta );
 
 		}, opts.onToken );
+		
+		// readSSE now returns { text, usage }, normalize for OpenAI
+		return {
+			text: typeof result === 'string' ? result : result.text,
+			usage: result.usage || { prompt_tokens: 0, completion_tokens: 0 },
+		};
 
 	}
 
 	const data = await res.json().catch( () => ( {} ) );
 	const answer = data.choices?.[ 0 ]?.message?.content || '';
 	if ( opts.onToken ) opts.onToken( '', answer );
-	return answer;
+	// Return usage data for token tracking
+	return {
+		text: answer,
+		usage: {
+			prompt_tokens: data.usage?.prompt_tokens || 0,
+			completion_tokens: data.usage?.completion_tokens || 0,
+		},
+	};
 
 }
 
@@ -336,29 +349,47 @@ async function anthropicChat( config, messages, opts, signal ) {
 
 	if ( wantStream && ( res.headers.get( 'content-type' ) || '' ).includes( 'text/event-stream' ) ) {
 
-		return readSSE( res, signal, ( json, push ) => {
+		const result = await readSSE( res, signal, ( json, push ) => {
 
 			if ( json.type === 'content_block_delta' && json.delta?.type === 'text_delta' ) push( json.delta.text );
 
 		}, opts.onToken );
+		
+		// readSSE now returns { text, usage }, normalize for Anthropic (convert input/output tokens)
+		return {
+			text: typeof result === 'string' ? result : result.text,
+			usage: {
+				prompt_tokens: result.usage?.prompt_tokens || 0,
+				completion_tokens: result.usage?.completion_tokens || 0,
+			},
+		};
 
 	}
 
 	const data = await res.json().catch( () => ( {} ) );
 	const answer = Array.isArray( data.content ) ? data.content.map( c => c.text || '' ).join( '' ) : '';
 	if ( opts.onToken ) opts.onToken( '', answer );
-	return answer;
+	// Return usage data for token tracking (Anthropic uses input_tokens/output_tokens)
+	return {
+		text: answer,
+		usage: {
+			prompt_tokens: data.usage?.input_tokens || 0,
+			completion_tokens: data.usage?.output_tokens || 0,
+		},
+	};
 
 }
 
 // ── Shared SSE reader ───────────────────────────────────────────────────────────
 // `extract(json, push)` pulls the text delta out of one parsed SSE data payload.
+// Returns { text, usage } to support token tracking.
 
 async function readSSE( res, signal, extract, onToken ) {
 
 	const reader = res.body.getReader();
 	const decoder = new TextDecoder();
 	let buf = '', full = '';
+	let usage = { prompt_tokens: 0, completion_tokens: 0 };
 	const push = ( delta ) => { if ( delta ) { full += delta; onToken( delta, full ); } };
 
 	try {
@@ -384,7 +415,15 @@ async function readSSE( res, signal, extract, onToken ) {
 					let json;
 					try { json = JSON.parse( payload ); } catch { continue; }
 					if ( json.error ) throw new Error( json.error.message || String( json.error ) );
+					
+					// Extract text using the provided callback
 					extract( json, push );
+					
+					// Capture usage data when available (OpenAI final message or Anthropic message_stop)
+					if ( json.usage ) {
+						usage.prompt_tokens = json.usage.prompt_tokens || json.usage.input_tokens || 0;
+						usage.completion_tokens = json.usage.completion_tokens || json.usage.output_tokens || 0;
+					}
 
 				}
 
@@ -398,7 +437,7 @@ async function readSSE( res, signal, extract, onToken ) {
 
 	}
 
-	return full;
+	return { text: full, usage };
 
 }
 

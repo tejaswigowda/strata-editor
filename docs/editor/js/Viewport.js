@@ -47,7 +47,7 @@ function Viewport( editor ) {
 	// helpers
 
 	const GRID_COLORS_LIGHT = [ 0x999999, 0x777777 ];
-	const GRID_COLORS_DARK = [ 0x555555, 0x888888 ];
+	const GRID_COLORS_DARK = [ 0xdadada, 0xffffff ];
 
 	const grid = new THREE.Group();
 
@@ -59,7 +59,7 @@ function Viewport( editor ) {
 		uniforms: {
 			uColor1: { value: new THREE.Color( GRID_COLORS_LIGHT[ 0 ] ) },
 			uColor2: { value: new THREE.Color( GRID_COLORS_LIGHT[ 1 ] ) },
-			uDistance: { value: 100 }
+			uDistance: { value: 10 }
 		},
 		vertexShader: /* glsl */`
 			varying vec3 vWorldPos;
