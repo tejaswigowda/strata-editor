@@ -50,6 +50,26 @@ function Toolbar( editor ) {
 	} );
 	container.add( scale );
 
+	// ── Lasso selection tool ──────────────────────────────────────────────────
+
+	let lassoActive = false;
+
+	const lassoBtn = new UIButton();
+	lassoBtn.dom.className = 'Button';
+	lassoBtn.dom.title = 'Lasso select (L) — drag to draw a boundary around objects to select multiple at once';
+	lassoBtn.dom.style.cssText = 'margin-left:8px;font-size:11px;padding:0 8px;letter-spacing:0.03em;';
+	lassoBtn.setTextContent( 'Lasso' );
+
+	lassoBtn.onClick( function () {
+
+		lassoActive = ! lassoActive;
+		signals.lassoModeChanged.dispatch( { active: lassoActive } );
+		lassoBtn.dom.classList.toggle( 'selected', lassoActive );
+
+	} );
+
+	container.add( lassoBtn );
+
 	// ── Edit Mode button ──────────────────────────────────────────────────────
 
 	const editBtn = new UIButton();

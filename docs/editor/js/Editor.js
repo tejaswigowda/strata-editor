@@ -6,6 +6,8 @@ import { History as _History } from './History.js';
 import { Strings } from './Strings.js';
 import { Storage as _Storage } from './Storage.js';
 import { Selector } from './Selector.js';
+import { TimelineModel } from './intelligence/timeline.js';
+import { syncTimeline } from './intelligence/timelineController.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 _DEFAULT_CAMERA.name = 'Camera';
@@ -103,12 +105,18 @@ function Editor() {
 
 		morphTargetsUpdated: new Signal(),
 
+		// Universal timeline (one scene-wide absolute clock — the "op-JSON of time")
+		timelineChanged:      new Signal(),
+
 		toggleShell:          new Signal(),
 		showJSForSelection:   new Signal(),
 
 		// Edit Mode signals
 		editModeChanged:      new Signal(),  // { active, mesh, mode? }
 		subObjectSelected:    new Signal(),  // { mode, ids }
+
+		// Lasso selection mode
+		lassoModeChanged:     new Signal(),  // { active }
 
 	};
 
@@ -140,6 +148,10 @@ function Editor() {
 	this.materialsRefCounter = new Map(); // tracks how often is a material used by a 3D object
 
 	this.mixer = new THREE.AnimationMixer( this.scene );
+
+	// The universal timeline — one scene-wide absolute clock (the canonical,
+	// versionable representation; the $S .then() sugar compiles into it).
+	this.timeline = new TimelineModel();
 
 	this.selected = null;
 	this.selectionMultiple = []; // all currently selected objects ( includes `selected` as primary )
@@ -184,6 +196,11 @@ Editor.prototype = {
 		this.signals.sceneGraphChanged.dispatch();
 
 		this.signals.sceneEnvironmentChanged.dispatch( this.environmentType, scene.environment );
+
+		// Restore the universal timeline from the (versioned) scene JSON, then
+		// recompile it into the scene-wide clip so it plays / exports immediately.
+		this.timeline = TimelineModel.fromJSON( this.scene.userData && this.scene.userData.timeline );
+		syncTimeline( this );
 
 	},
 
@@ -685,6 +702,8 @@ Editor.prototype = {
 		this.animations = {};
 		this.scene.animations = [];
 		this.mixer.stopAllAction();
+
+		this.timeline = new TimelineModel();
 
 		this.deselect();
 

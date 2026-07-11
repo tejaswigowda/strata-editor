@@ -21,6 +21,8 @@ import {
 	recolorOp, scaleOp, moveOp, rotateOp, deleteOp, duplicateOp, setMaterialOp,
 } from './editOps.js';
 import { executeRecipeOp } from './animationRecipes.js';
+import { TimelineModel } from './timeline.js';
+import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 
 // ── The single op vocabulary definition ──────────────────────────────────────
 // Drives: model tool-list, decoding grammar, dispatcher, and human sugar.
@@ -52,6 +54,10 @@ export const OP_VOCABULARY = {
 	fade:        { kind: 'anim', args: { from: 'number?', to: 'number?', duration: 'number?' },         summary: 'opacity transition' },
 	orbit:       { kind: 'anim', args: { center: 'vec3?', radius: 'number?', duration: 'number?' },     summary: 'circular motion around a point' },
 	shake:       { kind: 'anim', args: { intensity: 'number?', duration: 'number?' },                   summary: 'jittery motion' },
+
+	// ── Absolute-target tweens (camera dolly / object move over time) ──
+	flyTo:       { kind: 'anim', args: { x: 'number?', y: 'number?', z: 'number?', duration: 'number?' }, summary: 'animate to an absolute position (the animated moveTo; camera/object dolly)' },
+	turnTo:      { kind: 'anim', args: { x: 'number?', y: 'number?', z: 'number?', duration: 'number?' }, summary: 'animate to an absolute rotation (Euler degrees; the animated rotateTo)' },
 
 	// ── Entrance animations (appear with style) ──
 	fadeIn:        { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade in from transparent' },
@@ -311,7 +317,15 @@ class ChainableSet {
 
 			this.selector = String( selectorOrNodes );
 			this.nodes = selectorEngine.query( editor.scene, this.selector );
-			
+
+			// The viewport camera is $S-addressable but lives outside the scene
+			// graph — resolve `camera`/`#camera` to it so it's a real, non-empty set.
+			if ( this.nodes.length === 0 && /^#?camera$/i.test( this.selector ) && editor.camera ) {
+
+				this.nodes = [ editor.camera ];
+
+			}
+
 			// Track when selector matches no nodes
 			if ( this.nodes.length === 0 && this.selector !== '*' ) {
 				this._noMatchWarning = `⚠️ No parts matched selector '${ this.selector }'`;
@@ -327,6 +341,20 @@ class ChainableSet {
 	/** The op primitive over THIS set's selector. Returns the set (chainable). */
 	op( partialOpJSON ) {
 
+		// ── Animation ops author the UNIVERSAL TIMELINE (the "op-JSON of time") ──
+		// Every anim op becomes an absolute-time event on the scene-wide clock; the
+		// sugar (.then/.with/.at cursor) assigns the absolute `at`. A lone anim op
+		// is simply a one-event chain at t=0 — same visible result as before, but
+		// now stored as the versionable, exportable absolute representation. These
+		// are recorded by SELECTOR STRING (resolved at compile time), so scene-wide
+		// addressables that live outside the graph — e.g. the camera — still record
+		// even when the live set is empty.
+		if ( ANIM_OPS.has( partialOpJSON.type ) ) {
+
+			return this._recordAnim( partialOpJSON );
+
+		}
+
 		// Warn and skip operation if selector matched no nodes
 		if ( this.nodes.length === 0 ) {
 			if ( this._noMatchWarning ) {
@@ -341,6 +369,76 @@ class ChainableSet {
 		return this; // chainable
 
 	}
+
+	// ── Timeline authoring cursor (.then / .with / .at compile to absolute) ──────
+
+	_ensureChain() {
+
+		if ( ! this._chain ) {
+
+			this._chain = { cursor: 0, prevAt: 0, prevDur: 0, parallelNext: false, started: false };
+
+		}
+
+		return this._chain;
+
+	}
+
+	/** Duration this anim op occupies on the clock (drives block width + `dur`). */
+	_animDuration( opJSON ) {
+
+		const d = opJSON.duration ?? opJSON.dur;
+		const n = Number( d );
+		return Number.isFinite( n ) && n >= 0 ? n : 1;
+
+	}
+
+	/**
+	 * Record an anim op as an absolute-time timeline event, command-backed so the
+	 * edit is undoable and the scene-wide clip recompiles live.
+	 */
+	_recordAnim( partialOpJSON ) {
+
+		const c = this._ensureChain();
+		const dur = this._animDuration( partialOpJSON );
+		const at = ( c.parallelNext && c.started ) ? c.prevAt : c.cursor;
+
+		const { type, ...rest } = partialOpJSON;
+		delete rest.selector;
+
+		const model = TimelineModel.fromJSON( this.editor.timeline ? this.editor.timeline.toJSON() : null );
+		model.addEvent( this.selector, { at, op: type, args: rest, dur } );
+		this.editor.execute( new SetTimelineCommand( this.editor, model.toJSON(), `Timeline: ${ type } ${ this.selector }` ) );
+
+		// Advance cursor state: a bare following op stays parallel until .then().
+		c.prevAt = at;
+		c.prevDur = dur;
+		c.cursor = at;
+		c.parallelNext = false;
+		c.started = true;
+		this._last = { success: true, at, dur, op: type };
+		return this;
+
+	}
+
+	/** Next op starts when the previous ENDS (+ optional gap seconds). Chainable. */
+	then( gap = 0 ) {
+
+		const c = this._ensureChain();
+		c.cursor = c.prevAt + c.prevDur + ( Number( gap ) || 0 );
+		c.parallelNext = false;
+		return this;
+
+	}
+
+	/** Next op starts at the SAME absolute time as the previous (parallel). */
+	with() {
+
+		this._ensureChain().parallelNext = true;
+		return this;
+
+	}
+
 
 	/** Prevent dumping entire scene when stringified (for console logging). */
 	toJSON() {
@@ -368,6 +466,10 @@ class ChainableSet {
 	fade( from = 1, to = 0, duration = 1 )      { return this.op( { type: 'fade', from, to, duration } ); }
 	orbit( center = [ 0, 0, 0 ], radius = 2, duration = 4 ) { return this.op( { type: 'orbit', center, radius, duration } ); }
 	shake( intensity = 0.1, duration = 1 )      { return this.op( { type: 'shake', intensity, duration } ); }
+
+	// ── Absolute-target tweens (animated moveTo/rotateTo — camera dolly) ──
+	flyTo( x, y, z, duration = 1 )   { return this.op( { type: 'flyTo', x, y, z, duration } ); }
+	turnTo( x, y, z, duration = 1 )  { return this.op( { type: 'turnTo', x, y, z, duration } ); }
 
 	// ── Entrance animations ──
 	fadeIn( duration = 1 )                               { return this.op( { type: 'fadeIn', duration } ); }
@@ -538,8 +640,21 @@ class ChainableSet {
 		return new ChainableSet( this.editor, [ this.nodes[ index ] ] );
 	}
 
-	/** Alias for eq(). */
-	at( index ) { return this.eq( index ); }
+	/**
+	 * Timeline `.at(t)` — place the NEXT animation op at absolute time `t` on the
+	 * scene clock (the "raw" escape of timing). This starts a timeline chain, so
+	 * it works at the head of a chain too: `$S('.a-cube').at(2).spin('y',1,1)`.
+	 * For picking the nth matched node, use `.eq()` (unambiguous node index).
+	 */
+	at( value ) {
+
+		const c = this._ensureChain();
+		c.cursor = Math.max( 0, Number( value ) || 0 );
+		c.parallelNext = false;
+		c.started = true;
+		return this;
+
+	}
 
 	/** Get parent nodes of matched nodes. */
 	parent() {

@@ -22,6 +22,7 @@ export const RECIPE_SCHEMA = {
 			type: 'string',
 			enum: [
 				'spin', 'bounce', 'pulse', 'fade', 'orbit', 'scale', 'shake', 'spinWheels',
+				'flyTo', 'turnTo',
 				'fadeIn', 'zoomIn', 'slideInUp', 'slideInDown', 'slideInLeft', 'slideInRight',
 				'bounceIn', 'flipInX', 'flipInY', 'rotateIn',
 				'fadeOut', 'zoomOut', 'slideOutUp', 'slideOutDown', 'slideOutLeft', 'slideOutRight',
@@ -1234,6 +1235,66 @@ export function spinWheelsRecipe( nodes, params = {} ) {
 
 }
 
+// ── Camera / dolly tweens (absolute-target animations) ────────────────────────
+
+/**
+ * FlyTo recipe: animate position from the current pose to an ABSOLUTE point.
+ * The animated counterpart of the instant `moveTo` edit — used to author camera
+ * (or object) keyframes on the timeline: $S('camera').flyTo(x,y,z,dur).
+ * Params: {x, y, z, duration}
+ */
+export function flyToRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 1;
+
+	const sx = node.position.x, sy = node.position.y, sz = node.position.z;
+	const tx = params.x ?? sx, ty = params.y ?? sy, tz = params.z ?? sz;
+
+	const times = [ 0, duration ];
+	const values = [ sx, sy, sz, tx, ty, tz ];
+
+	const track = vectorTrack( node.uuid, 'position', times, values );
+	return new THREE.AnimationClip( 'FlyTo', -1, [ track ] );
+
+}
+
+/**
+ * TurnTo recipe: animate rotation from the current pose to an ABSOLUTE Euler
+ * orientation (degrees). Winding-safe via slerp sub-division.
+ * Params: {x, y, z, duration}
+ */
+export function turnToRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = params.duration ?? 1;
+
+	const baseQ = node.quaternion.clone();
+	const euler = new THREE.Euler(
+		THREE.MathUtils.degToRad( params.x ?? 0 ),
+		THREE.MathUtils.degToRad( params.y ?? 0 ),
+		THREE.MathUtils.degToRad( params.z ?? 0 )
+	);
+	const targetQ = new THREE.Quaternion().setFromEuler( euler );
+
+	const steps = 4; // ≤90°-ish steps keep the slerp winding-safe
+	const times = [];
+	const values = [];
+	const tmp = new THREE.Quaternion();
+	for ( let i = 0; i <= steps; i ++ ) {
+
+		const t = i / steps;
+		times.push( ( duration * i ) / steps );
+		tmp.copy( baseQ ).slerp( targetQ, t );
+		values.push( tmp.x, tmp.y, tmp.z, tmp.w );
+
+	}
+
+	const track = quaternionTrack( node.uuid, times, values );
+	return new THREE.AnimationClip( 'TurnTo', -1, [ track ] );
+
+}
+
 // ── Dispatcher ──────────────────────────────────────────────────────────────────
 
 /**
@@ -1271,6 +1332,12 @@ export function executeRecipe( node, recipeData ) {
 				return shakeRecipe( node, params );
 			case 'spinWheels':
 				return spinWheelsRecipe( Array.isArray( node ) ? node : [ node ], params );
+
+			// Camera / dolly tweens (absolute-target)
+			case 'flyTo':
+				return flyToRecipe( node, params );
+			case 'turnTo':
+				return turnToRecipe( node, params );
 
 			// Entrance animations
 			case 'fadeIn':

@@ -554,11 +554,151 @@ function Viewport( editor ) {
 
 	}
 
-	container.dom.addEventListener( 'mousedown', onMouseDown );
+	// ── Lasso selection tool ──────────────────────────────────────────────────
+	let lassoMode = false;
+	let lassoActive = false;
+	let lassoPoints = [];
+
+	const lassoCanvas = document.createElement( 'canvas' );
+	lassoCanvas.style.cssText = 'position:absolute;top:0;left:0;cursor:crosshair;display:none;z-index:10;';
+	container.dom.appendChild( lassoCanvas );
+	const lassoCtx = lassoCanvas.getContext( '2d' );
+
+	function resizeLassoCanvas() {
+		lassoCanvas.width = container.dom.clientWidth;
+		lassoCanvas.height = container.dom.clientHeight;
+	}
+
+	resizeLassoCanvas();
+	window.addEventListener( 'resize', resizeLassoCanvas );
+
+	function drawLasso() {
+		lassoCtx.clearRect( 0, 0, lassoCanvas.width, lassoCanvas.height );
+		lassoCtx.strokeStyle = '#ff6600';
+		lassoCtx.lineWidth = 2;
+		lassoCtx.lineJoin = 'round';
+		lassoCtx.lineCap = 'round';
+		if ( lassoPoints.length > 1 ) {
+			lassoCtx.beginPath();
+			lassoCtx.moveTo( lassoPoints[ 0 ].x, lassoPoints[ 0 ].y );
+			for ( let i = 1; i < lassoPoints.length; i ++ ) {
+				lassoCtx.lineTo( lassoPoints[ i ].x, lassoPoints[ i ].y );
+			}
+			lassoCtx.stroke();
+		}
+	}
+
+	function isPointInLasso( point, lasso ) {
+		// Simple point-in-polygon test (ray casting algorithm)
+		if ( lasso.length < 3 ) return false;
+		let inside = false;
+		for ( let i = 0, j = lasso.length - 1; i < lasso.length; j = i ++ ) {
+			if ( ( lasso[ i ].y > point.y ) !== ( lasso[ j ].y > point.y ) &&
+				point.x < ( lasso[ j ].x - lasso[ i ].x ) * ( point.y - lasso[ i ].y ) / ( lasso[ j ].y - lasso[ i ].y ) + lasso[ i ].x ) {
+				inside = ! inside;
+			}
+		}
+		return inside;
+	}
+
+	function finalizeLasso() {
+		lassoActive = false;
+		lassoCanvas.style.display = 'none';
+
+		if ( lassoPoints.length < 3 ) {
+			lassoPoints = [];
+			return;
+		}
+
+		// Raycast from multiple points along a grid and collect intersected objects
+		const selectedObjects = new Set();
+		const raycaster = new THREE.Raycaster();
+		const rect = container.dom.getBoundingClientRect();
+		const step = 15; // grid step in pixels for raycasting
+
+		// Determine bounding box of lasso points
+		const minX = Math.min( ...lassoPoints.map( p => p.x ) );
+		const maxX = Math.max( ...lassoPoints.map( p => p.x ) );
+		const minY = Math.min( ...lassoPoints.map( p => p.y ) );
+		const maxY = Math.max( ...lassoPoints.map( p => p.y ) );
+
+		// Raycast from grid points within the lasso boundary
+		for ( let x = minX; x < maxX; x += step ) {
+			for ( let y = minY; y < maxY; y += step ) {
+				const point = { x, y };
+				if ( isPointInLasso( point, lassoPoints ) ) {
+					// Convert pixel coordinates to normalized device coordinates
+					const normalizedX = ( x / lassoCanvas.width ) * 2 - 1;
+					const normalizedY = - ( ( y / lassoCanvas.height ) * 2 - 1 );
+					const screenPoint = new THREE.Vector2( normalizedX, normalizedY );
+					raycaster.setFromCamera( screenPoint, camera );
+					const intersects = raycaster.intersectObjects( scene.children, true );
+
+					for ( const intersect of intersects ) {
+						const obj = intersect.object;
+						// Add the object or its parent if it's a helper/part
+						if ( obj.isMesh || obj.isLight ) {
+							selectedObjects.add( obj );
+						}
+					}
+				}
+			}
+		}
+
+		lassoPoints = [];
+
+		// Dispatch selection
+		if ( selectedObjects.size > 0 ) {
+			const objectsArray = Array.from( selectedObjects );
+			const intersects = objectsArray.map( obj => ( { object: obj } ) );
+			signals.intersectionsDetected.dispatch( intersects, false );
+		}
+	}
+
+	const onLassoMouseMove = ( event ) => {
+		if ( ! lassoActive ) return;
+		const rect = container.dom.getBoundingClientRect();
+		const x = event.clientX - rect.left;
+		const y = event.clientY - rect.top;
+		lassoPoints.push( { x, y } );
+		drawLasso();
+	};
+
+	const onLassoMouseUp = ( event ) => {
+		if ( ! lassoActive ) return;
+		finalizeLasso();
+		document.removeEventListener( 'mousemove', onLassoMouseMove );
+		document.removeEventListener( 'mouseup', onLassoMouseUp );
+	};
+
+	function onLassoStart( event ) {
+		if ( ! lassoMode ) return;
+		if ( event.target !== renderer.domElement ) return;
+		lassoActive = true;
+		lassoPoints = [];
+		lassoCanvas.style.display = 'block';
+		const rect = container.dom.getBoundingClientRect();
+		lassoPoints.push( { x: event.clientX - rect.left, y: event.clientY - rect.top } );
+		document.addEventListener( 'mousemove', onLassoMouseMove );
+		document.addEventListener( 'mouseup', onLassoMouseUp );
+	}
+
+	container.dom.addEventListener( 'mousedown', ( event ) => {
+		if ( lassoMode && ! event.shiftKey && ! event.ctrlKey && ! event.metaKey ) {
+			onLassoStart( event );
+		} else {
+			onMouseDown( event );
+		}
+	} );
+
+	// Listen for lasso mode change
+	signals.lassoModeChanged.add( ( { active } ) => {
+		lassoMode = active;
+		container.dom.style.cursor = active ? 'crosshair' : 'auto';
+	} );
+
 	container.dom.addEventListener( 'touchstart', onTouchStart, { passive: false } );
 	container.dom.addEventListener( 'dblclick', onDoubleClick );
-
-	// controls need to be added *after* main logic,
 	// otherwise controls.enabled doesn't work.
 
 	const controls = new EditorControls( camera );

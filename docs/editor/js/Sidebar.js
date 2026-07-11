@@ -7,7 +7,7 @@ import { SidebarSettings } from './Sidebar.Settings.js';
 import { SidebarGit } from './Sidebar.Git.js';
 import { SidebarExport } from './Sidebar.Export.js';
 import { SidebarStencils } from './Sidebar.Stencils.js';
-import { Animation } from './Animation.js';
+import { Timeline } from './Timeline.js';
 import { Shell } from './Shell.js';
 
 // ── Inline SVG icon helper (22×22, no inline styles — CSS handles layout) ─────────────────
@@ -67,7 +67,10 @@ function Sidebar( editor ) {
 	const git = new SidebarGit( editor );
 	const exporter = new SidebarExport( editor );
 	const stencils = new SidebarStencils( editor );
-	const animation = new Animation( editor );
+	// Animations tab: the scene-wide universal Timeline is the single source of
+	// truth for authoring/retiming/playback. (The legacy per-clip editor in
+	// Animation.js is superseded by it and no longer mounted.)
+	const animations = new Timeline( editor );
 	const shell = new Shell( editor );
 
 	// Helper: addTab then inject icon+label into the tab's innerHTML. Returns the tab.
@@ -168,7 +171,7 @@ function Sidebar( editor ) {
 	// Tab id 'shelltab' must NOT collide with the Shell container's own id 'shell'.
 	attachAiStatusDot( addIconTab( 'shelltab', 'Shell', shell ) );
 	// Tab id avoids 'animation' so the wrapper panel doesn't pick up the old #animation CSS.
-	addIconTab( 'animations', strings.getKey( 'sidebar/animations' ), animation );
+	addIconTab( 'animations', strings.getKey( 'sidebar/animations' ), animations );
 	addIconTab( 'stencils', 'Stencils', stencils );
 	addIconTab( 'export', strings.getKey( 'menubar/file/export' ), exporter );
 	// Merged Settings + Project into one tab.

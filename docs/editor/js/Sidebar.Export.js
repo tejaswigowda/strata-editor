@@ -174,11 +174,19 @@ function SidebarExport( editor ) {
 
 		const exporter = new GLTFExporter();
 
+		const restoreCamera = includeCameraForExport( scene, optimizedAnimations );
+
 		exporter.parse( scene, function ( result ) {
 
+			restoreCamera();
 			saveArrayBuffer( result, 'scene.glb' );
 
-		}, undefined, { binary: true, animations: optimizedAnimations } );
+		}, function ( error ) {
+
+			restoreCamera();
+			console.error( 'GLB export failed:', error );
+
+		}, { binary: true, animations: optimizedAnimations } );
 
 	} );
 
@@ -313,11 +321,19 @@ function SidebarExport( editor ) {
 
 		const exporter = new GLTFExporter();
 
+		const restoreCamera = includeCameraForExport( scene, optimizedAnimations );
+
 		exporter.parse( scene, function ( result ) {
 
+			restoreCamera();
 			saveString( JSON.stringify( result, null, 2 ), 'scene.gltf' );
 
-		}, undefined, { animations: optimizedAnimations } );
+		}, function ( error ) {
+
+			restoreCamera();
+			console.error( 'GLTF export failed:', error );
+
+		}, { animations: optimizedAnimations } );
 
 	} );
 
@@ -431,6 +447,24 @@ function SidebarExport( editor ) {
 		} );
 
 		return tracks.length > 0 ? [ new AnimationClip( 'Animation', - 1, tracks ) ] : [];
+
+	}
+
+	// The Universal Timeline can animate the viewport camera, which lives OUTSIDE
+	// the exported scene graph. When a combined clip references the camera, parent
+	// it under the scene for the duration of the export so GLTFExporter can bind
+	// its channel and emit a camera node. Returns a restore() to undo it after.
+	function includeCameraForExport( scene, animations ) {
+
+		const cam = editor.camera;
+		if ( ! cam ) return function () {};
+
+		const referenced = animations.some( clip => clip.tracks.some( t => t.name.indexOf( cam.uuid ) === 0 ) );
+		if ( ! referenced || cam.parent === scene ) return function () {};
+
+		const prevParent = cam.parent;
+		scene.add( cam );
+		return function () { if ( prevParent ) prevParent.add( cam ); else scene.remove( cam ); };
 
 	}
 
