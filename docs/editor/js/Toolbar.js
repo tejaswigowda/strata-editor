@@ -8,6 +8,17 @@ function Toolbar( editor ) {
 	const container = new UIPanel();
 	container.setId( 'toolbar' );
 
+	// Add CSS styles for disabled tools
+	const style = document.createElement( 'style' );
+	style.textContent = `
+		.Button.disabled-tool {
+			opacity: 0.5;
+			pointer-events: auto;
+			cursor: not-allowed !important;
+		}
+	`;
+	document.head.appendChild( style );
+
 	// translate / rotate / scale
 
 	const translateIcon = document.createElement( 'img' );
@@ -135,12 +146,26 @@ function Toolbar( editor ) {
 
 		}
 
+		// Deactivate lasso when a transform tool is selected
+		if ( lassoActive ) {
+			lassoActive = false;
+			signals.lassoModeChanged.dispatch( { active: false } );
+			lassoBtn.dom.classList.remove( 'selected' );
+		}
+
 	} );
 
 	signals.editModeChanged.add( function ( { active, mode } ) {
 
 		editBtn.dom.classList.toggle( 'selected', active );
 		modeBar.style.display = active ? 'inline' : 'none';
+
+		// Deactivate lasso when edit mode is activated
+		if ( active && lassoActive ) {
+			lassoActive = false;
+			signals.lassoModeChanged.dispatch( { active: false } );
+			lassoBtn.dom.classList.remove( 'selected' );
+		}
 
 		if ( active && mode ) {
 
@@ -157,6 +182,35 @@ function Toolbar( editor ) {
 	signals.objectSelected.add( function ( obj ) {
 
 		editBtn.dom.disabled = ! ( obj && obj.isMesh );
+
+	} );
+
+	// Make lasso and transform tools mutually exclusive
+	signals.lassoModeChanged.add( function ( { active } ) {
+
+		// Update local lasso state
+		lassoActive = active;
+
+		// Disable transform buttons using a CSS class instead of DOM disabled attribute
+		// so they can still respond to clicks
+		if ( active ) {
+
+			translate.dom.classList.add( 'disabled-tool' );
+			rotate.dom.classList.add( 'disabled-tool' );
+			scale.dom.classList.add( 'disabled-tool' );
+			editBtn.dom.classList.add( 'disabled-tool' );
+
+		} else {
+
+			translate.dom.classList.remove( 'disabled-tool' );
+			rotate.dom.classList.remove( 'disabled-tool' );
+			scale.dom.classList.remove( 'disabled-tool' );
+			// Keep edit button disabled if no mesh is selected
+			if ( editor.selected && editor.selected.isMesh ) {
+				editBtn.dom.classList.remove( 'disabled-tool' );
+			}
+
+		}
 
 	} );
 
