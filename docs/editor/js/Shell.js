@@ -43,6 +43,7 @@ import { executeRecipeOp } from './intelligence/animationRecipes.js';
 import { op as runOp, ops as runOps, makeQuery, OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import { colorToName } from './intelligence/colorName.js';
 import { whatsVisible, whatsAt } from './intelligence/gpuPick.js';
+import { lassoSelect } from './intelligence/lassoSelect.js';
 import { snapshotScene, sceneDiff, confirmChange, diffSummary, inspectScene } from './intelligence/observe.js';
 import { buildIndex, retrieveForPrompt, findAPI } from './ai/apiIndex.js';
 import { validateCode } from './ai/validate.js';
@@ -1352,6 +1353,10 @@ function Shell( editor ) {
 				whatsVisible: () => whatsVisible( editor ),
 				// whatsAt(x,y) — GPU color-pick: object under a viewport pixel
 				whatsAt: ( x, y ) => whatsAt( editor, x, y ),
+				// lasso(polygon) — screen-space lasso select over a polygon of viewport
+				// pixels ([[x,y],…] or [{x,y},…]). Applies the selection AND returns a
+				// chainable $S set: lasso([[20,20],[400,20],[400,300],[20,300]]).recolor('#f00')
+				lasso: ( polygon, opts ) => query( lassoSelect( editor, polygon, { apply: true, ...( opts || {} ) } ) ),
 
 				// ── Modeling ops (M1/M2) — same surface for UI and AI ─────────────────
 				// Closures capture `editor` so the AI can call them without it.

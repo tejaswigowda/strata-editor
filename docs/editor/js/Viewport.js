@@ -20,6 +20,8 @@ import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ViewportPathtracer } from './Viewport.Pathtracer.js';
+import { createProgressBanner } from './mesh/GeometryOptimizer.js';
+import { lassoSelect } from './intelligence/lassoSelect.js';
 
 function Viewport( editor ) {
 
@@ -558,6 +560,14 @@ function Viewport( editor ) {
 	let lassoMode = false;
 	let lassoActive = false;
 	let lassoPoints = [];
+	let lassoProgress = null; // indeterminate progress banner shown while lassoing
+
+	function removeLassoProgress() {
+		if ( lassoProgress ) {
+			lassoProgress.remove();
+			lassoProgress = null;
+		}
+	}
 
 	const lassoCanvas = document.createElement( 'canvas' );
 	lassoCanvas.style.cssText = 'position:absolute;top:0;left:0;cursor:crosshair;display:none;z-index:10;pointer-events:none;';
@@ -602,81 +612,26 @@ function Viewport( editor ) {
 		}
 	}
 
-	function isPointInLasso( point, lasso ) {
-		// Simple point-in-polygon test (ray casting algorithm)
-		if ( lasso.length < 3 ) return false;
-		let inside = false;
-		for ( let i = 0, j = lasso.length - 1; i < lasso.length; j = i ++ ) {
-			if ( ( lasso[ i ].y > point.y ) !== ( lasso[ j ].y > point.y ) &&
-				point.x < ( lasso[ j ].x - lasso[ i ].x ) * ( point.y - lasso[ i ].y ) / ( lasso[ j ].y - lasso[ i ].y ) + lasso[ i ].x ) {
-				inside = ! inside;
-			}
-		}
-		return inside;
-	}
-
 	function finalizeLasso() {
 		lassoActive = false;
 		lassoCanvas.style.display = 'none';
 		if ( editor.controls ) editor.controls.enabled = true; // Re-enable camera controls
 
-		if ( lassoPoints.length < 3 ) {
-			lassoPoints = [];
-			return;
-		}
-
-		// Raycast from multiple points along a grid and collect intersected objects
-		const selectedObjects = new Set();
-		const raycaster = new THREE.Raycaster();
-		const step = 15; // grid step in pixels for raycasting
-
-		// Determine bounding box of lasso points
-		const minX = Math.min( ...lassoPoints.map( p => p.x ) );
-		const maxX = Math.max( ...lassoPoints.map( p => p.x ) );
-		const minY = Math.min( ...lassoPoints.map( p => p.y ) );
-		const maxY = Math.max( ...lassoPoints.map( p => p.y ) );
-
-		// Build list of all objects to raycast against (like Selector does)
-		const objects = [];
-		scene.traverseVisible( function ( child ) {
-			objects.push( child );
-		} );
-
-		// Raycast from grid points within the lasso boundary
-		for ( let x = minX; x < maxX; x += step ) {
-			for ( let y = minY; y < maxY; y += step ) {
-				const point = { x, y };
-				if ( isPointInLasso( point, lassoPoints ) ) {
-					// Convert pixel coordinates to normalized device coordinates
-					const normalizedX = ( x / lassoCanvas.width ) * 2 - 1;
-					const normalizedY = - ( ( y / lassoCanvas.height ) * 2 - 1 );
-					const screenPoint = new THREE.Vector2( normalizedX, normalizedY );
-					raycaster.setFromCamera( screenPoint, camera );
-					const intersects = raycaster.intersectObjects( objects, false );
-
-					for ( const intersect of intersects ) {
-						const obj = intersect.object;
-						// Skip the scene and helpers, only add visible meshes/lights
-						if ( obj !== scene && obj.isMesh && ! obj.name.startsWith( '__' ) ) {
-							selectedObjects.add( obj );
-						}
-					}
-				}
-			}
-		}
-
+		const points = lassoPoints;
 		lassoPoints = [];
 
-		// Multi-select all objects: deselect first, then add each one
-		if ( selectedObjects.size > 0 ) {
-			const objectsArray = Array.from( selectedObjects );
-			// Clear selection first
-			editor.selector.select( null, false );
-			// Add each object to selection
-			for ( const obj of objectsArray ) {
-				editor.selector.select( obj, true );
-			}
-		}
+		if ( points.length < 3 ) { removeLassoProgress(); return; }
+
+		// Delegate to the shared screen-space lasso (same code path as the shell's
+		// $S lasso() surface) so interactive and programmatic selection are identical.
+		lassoSelect( editor, points, {
+			camera,
+			width: lassoCanvas.width,
+			height: lassoCanvas.height,
+			apply: true
+		} );
+
+		removeLassoProgress();
 	}
 
 	const onLassoMouseMove = ( event ) => {
@@ -703,6 +658,10 @@ function Viewport( editor ) {
 		// Ensure canvas has correct size
 		resizeLassoCanvas();
 		if ( editor.controls ) editor.controls.enabled = false; // Disable camera controls during lasso drawing
+		// Indeterminate progress bar shown while the lasso is being drawn.
+		removeLassoProgress();
+		lassoProgress = createProgressBanner();
+		lassoProgress.indeterminate( 'Lasso selecting…' );
 		const rect = container.dom.getBoundingClientRect();
 		lassoPoints.push( { x: event.clientX - rect.left, y: event.clientY - rect.top } );
 		document.addEventListener( 'mousemove', onLassoMouseMove );
@@ -725,6 +684,7 @@ function Viewport( editor ) {
 	signals.lassoModeChanged.add( ( { active } ) => {
 		lassoMode = active;
 		container.dom.style.cursor = active ? 'crosshair' : 'auto';
+		if ( ! active ) removeLassoProgress();
 	} );
 
 	container.dom.addEventListener( 'touchstart', onTouchStart, { passive: false } );
@@ -912,21 +872,53 @@ function Viewport( editor ) {
 
 	} );
 
+	function useCenteredPivot( object ) {
+
+		// Container objects have no geometry of their own, so their transform origin
+		// carries no visual meaning — center the gizmo on their contents instead.
+		return object.isGroup === true || object.type === 'Object3D' || object.type === 'Group';
+
+	}
+
 	function updateSelectionPivot() {
 
 		const selection = editor.getSelectedObjects();
 		const center = new THREE.Vector3();
-		const objectPosition = new THREE.Vector3();
 
-		for ( let i = 0; i < selection.length; i ++ ) {
+		if ( selection.length > 0 ) {
 
-			selection[ i ].updateMatrixWorld( true );
-			objectPosition.setFromMatrixPosition( selection[ i ].matrixWorld );
-			center.add( objectPosition );
+			const bounds = new THREE.Box3();
+			const objectBox = new THREE.Box3();
+
+			for ( let i = 0; i < selection.length; i ++ ) {
+
+				selection[ i ].updateMatrixWorld( true );
+				objectBox.setFromObject( selection[ i ], true );
+				if ( objectBox.isEmpty() === false ) bounds.union( objectBox );
+
+			}
+
+			if ( bounds.isEmpty() === false ) {
+
+				bounds.getCenter( center );
+
+			} else {
+
+				// Fallback for objects with no renderable bounds: average of origins.
+				const objectPosition = new THREE.Vector3();
+
+				for ( let i = 0; i < selection.length; i ++ ) {
+
+					objectPosition.setFromMatrixPosition( selection[ i ].matrixWorld );
+					center.add( objectPosition );
+
+				}
+
+				center.divideScalar( selection.length );
+
+			}
 
 		}
-
-		if ( selection.length > 0 ) center.divideScalar( selection.length );
 
 		selectionPivot.position.copy( center );
 		selectionPivot.rotation.set( 0, 0, 0 );
@@ -951,7 +943,19 @@ function Viewport( editor ) {
 
 		const transformable = selection.filter( o => o !== null && o !== scene && o !== camera );
 
-		if ( transformable.length === 1 ) {
+		if ( transformable.length === 1 && useCenteredPivot( transformable[ 0 ] ) ) {
+
+			// Container objects ( Group / plain Object3D ) keep their transform origin at
+			// an arbitrary point — usually the world origin — so the gizmo would sit at
+			// 0,0,0 instead of on the object. Drive the transform through a pivot placed
+			// at the object's bounding-box center instead.
+
+			sceneHelpers.add( selectionPivot );
+			updateSelectionPivot();
+			pivotActive = true;
+			transformControls.attach( selectionPivot );
+
+		} else if ( transformable.length === 1 ) {
 
 			transformControls.attach( transformable[ 0 ] );
 

@@ -23,6 +23,10 @@ import {
 import { executeRecipeOp } from './animationRecipes.js';
 import { TimelineModel } from './timeline.js';
 import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
+import { SetClassCommand } from '../commands/SetClassCommand.js';
+import { SetLabelCommand } from '../commands/SetLabelCommand.js';
+import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
+import { hasClass, normalizeClassName } from './classDerive.js';
 
 // ── The single op vocabulary definition ──────────────────────────────────────
 // Drives: model tool-list, decoding grammar, dispatcher, and human sugar.
@@ -318,6 +322,16 @@ class ChainableSet {
 			this.selector = String( selectorOrNodes );
 			this.nodes = selectorEngine.query( editor.scene, this.selector );
 
+			// `:lasso` / `:selected` (and the bare forms) resolve to the CURRENT
+			// editor selection — i.e. whatever the interactive lasso / click select
+			// last produced. This is how the mouse-driven lasso is addressable from
+			// the shell: $S(':lasso').recolor('#f00').
+			if ( this.nodes.length === 0 && /^:?(lasso|selected)$/i.test( this.selector ) && typeof editor.getSelectedObjects === 'function' ) {
+
+				this.nodes = editor.getSelectedObjects().filter( o => o && o !== editor.scene && o !== editor.camera );
+
+			}
+
 			// The viewport camera is $S-addressable but lives outside the scene
 			// graph — resolve `camera`/`#camera` to it so it's a real, non-empty set.
 			if ( this.nodes.length === 0 && /^#?camera$/i.test( this.selector ) && editor.camera ) {
@@ -460,7 +474,46 @@ class ChainableSet {
 	retexture( texture )                { return this.op( { type: 'retexture', texture } ); }
 	setMaterial( props )                { return this.op( { type: 'setMaterial', props } ); }
 
-	spin( axis = 'y', turns = 1, duration = 2 ) { return this.op( { type: 'spin', axis, turns, duration } ); }
+	// ── Semantic class / id authoring (jQuery-style, command-backed, chainable) ──
+	// Classes (→ .foo) and ids (→ #foo) drive selector resolution AND the injected
+	// ADDRESSABLE PARTS list, so tagging here makes the set addressable next time.
+	// Every mutation goes through a Command (undoable) and batches into ONE undo.
+
+	/** Add a semantic class to every node in the set. `$S(':selected').addClass('wheel')` */
+	addClass( cls ) { return this._classCmd( cls, () => true ); }
+
+	/** Remove a semantic class from every node in the set. */
+	removeClass( cls ) { return this._classCmd( cls, () => false ); }
+
+	/**
+	 * Toggle a class per node. Pass `force` to set an explicit state on all nodes
+	 * (true = add, false = remove), mirroring DOM `classList.toggle`.
+	 */
+	toggleClass( cls, force ) {
+		const decide = ( typeof force === 'boolean' )
+			? () => force
+			: ( node ) => ! hasClass( node, normalizeClassName( cls ) );
+		return this._classCmd( cls, decide );
+	}
+
+	/** Internal: build one batched, undoable class-mutation command over the set. */
+	_classCmd( cls, decide ) {
+		const name = typeof cls === 'string' ? normalizeClassName( cls ) : '';
+		if ( ! name || this.nodes.length === 0 ) return this;
+		const cmds = this.nodes.map( n => new SetClassCommand( this.editor, n, name, !! decide( n ) ) );
+		this.editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( this.editor, cmds ) );
+		return this;
+	}
+
+	/** Set the semantic id (→ #id / userData.label) on every node in the set. */
+	editID( newId ) {
+		const label = typeof newId === 'string' ? newId.trim() : '';
+		if ( ! label || this.nodes.length === 0 ) return this;
+		const cmds = this.nodes.map( n => new SetLabelCommand( this.editor, n, label ) );
+		this.editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( this.editor, cmds ) );
+		return this;
+	}
+
 	bounce( height = 0.5, duration = 1 )        { return this.op( { type: 'bounce', height, duration } ); }
 	pulse( scale = 1.2, duration = 1 )          { return this.op( { type: 'pulse', scale, duration } ); }
 	fade( from = 1, to = 0, duration = 1 )      { return this.op( { type: 'fade', from, to, duration } ); }
@@ -535,6 +588,27 @@ class ChainableSet {
 		if ( ! node ) return [];
 		const customClasses = node.userData?.customClasses || new Set();
 		return Array.from( customClasses );
+	}
+
+	/**
+	 * jQuery-style: true if ANY node in the set has the class (auto-derived,
+	 * custom, or label). Read-only. `$S('.wheel').isClass('front')`
+	 */
+	isClass( cls ) {
+		if ( ! cls ) return false;
+		const name = normalizeClassName( cls );
+		return this.nodes.some( n => hasClass( n, name ) );
+	}
+
+	/**
+	 * Read the semantic id (→ #id) of the set: `userData.label`, falling back to
+	 * the object name. Returns a string for a single node, an array for many,
+	 * or null when empty. Read-only — use `editID()` to change it.
+	 */
+	id() {
+		const ids = this.nodes.map( n => n.userData?.label ?? n.name ?? null );
+		if ( ids.length === 0 ) return null;
+		return ids.length === 1 ? ids[ 0 ] : ids;
 	}
 
 	/** Get bounding box dimensions of this selection. */
@@ -765,6 +839,17 @@ class ChainableSet {
  * @returns {(selector:string)=>ChainableSet}
  */
 export function makeQuery( editor ) {
+
+	// Make `:selected` / `:lasso` first-class selectors EVERYWHERE (op() dispatch,
+	// validateOpJSON, subset sanity) — not just in the ChainableSet constructor —
+	// by resolving them to the editor's live selection. Without this, chained ops
+	// like $S(':selected').recolor('#000') re-query the raw selector string in the
+	// edit op and match nothing. Selection lives on the editor, not the scene.
+	selectorEngine.setSelectionProvider( () =>
+		typeof editor.getSelectedObjects === 'function'
+			? editor.getSelectedObjects().filter( o => o && o !== editor.scene && o !== editor.camera )
+			: ( editor.selected ? [ editor.selected ] : [] )
+	);
 
 	return ( selectorOrNodes ) => new ChainableSet( editor, selectorOrNodes );
 

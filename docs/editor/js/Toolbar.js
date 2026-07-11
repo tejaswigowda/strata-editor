@@ -30,7 +30,7 @@ function Toolbar( editor ) {
 	translate.dom.appendChild( translateIcon );
 	translate.onClick( function () {
 
-		signals.transformModeChanged.dispatch( 'translate' );
+		selectTransform( 'translate' );
 
 	} );
 	container.add( translate );
@@ -43,7 +43,7 @@ function Toolbar( editor ) {
 	rotate.dom.appendChild( rotateIcon );
 	rotate.onClick( function () {
 
-		signals.transformModeChanged.dispatch( 'rotate' );
+		selectTransform( 'rotate' );
 
 	} );
 	container.add( rotate );
@@ -56,7 +56,7 @@ function Toolbar( editor ) {
 	scale.dom.appendChild( scaleIcon );
 	scale.onClick( function () {
 
-		signals.transformModeChanged.dispatch( 'scale' );
+		selectTransform( 'scale' );
 
 	} );
 	container.add( scale );
@@ -64,6 +64,8 @@ function Toolbar( editor ) {
 	// ── Lasso selection tool ──────────────────────────────────────────────────
 
 	let lassoActive = false;
+	let editActive = false;
+	let currentTransformMode = 'translate';
 
 	const lassoBtn = new UIButton();
 	lassoBtn.dom.className = 'Button';
@@ -73,17 +75,12 @@ function Toolbar( editor ) {
 
 	lassoBtn.onClick( function () {
 
-		lassoActive = ! lassoActive;
-		
-		// Clear selected state from transform buttons when activating lasso
-		if ( lassoActive ) {
-			translate.dom.classList.remove( 'selected' );
-			rotate.dom.classList.remove( 'selected' );
-			scale.dom.classList.remove( 'selected' );
-		}
-		
-		signals.lassoModeChanged.dispatch( { active: lassoActive } );
-		lassoBtn.dom.classList.toggle( 'selected', lassoActive );
+		const next = ! lassoActive;
+
+		// Entering lasso must leave edit mode (mutually exclusive tools).
+		if ( next && editActive && editor.editModeController ) editor.editModeController.exit();
+
+		signals.lassoModeChanged.dispatch( { active: next } );
 
 	} );
 
@@ -107,6 +104,8 @@ function Toolbar( editor ) {
 
 		} else if ( editor.selected && editor.selected.isMesh ) {
 
+			// Entering edit mode must leave lasso (mutually exclusive tools).
+			if ( lassoActive ) signals.lassoModeChanged.dispatch( { active: false } );
 			emc.enter( editor.selected );
 
 		}
@@ -140,40 +139,52 @@ function Toolbar( editor ) {
 
 	// ── Signal handlers ───────────────────────────────────────────────────────
 
+	// ── Tool state (mutually exclusive: transform | lasso | edit) ──────────────
+
+	function selectTransform( mode ) {
+
+		// Choosing a transform tool leaves lasso and edit mode.
+		if ( lassoActive ) signals.lassoModeChanged.dispatch( { active: false } );
+		if ( editActive && editor.editModeController ) editor.editModeController.exit();
+
+		signals.transformModeChanged.dispatch( mode );
+
+	}
+
+	function updateToolButtons() {
+
+		// A transform tool is the active tool only when neither lasso nor edit is on.
+		const transformIsActive = ! lassoActive && ! editActive;
+
+		// Highlight exactly one active tool. All tool buttons stay fully clickable
+		// so the user can always switch directly between tools (e.g. leave lasso).
+		translate.dom.classList.toggle( 'selected', transformIsActive && currentTransformMode === 'translate' );
+		rotate.dom.classList.toggle( 'selected', transformIsActive && currentTransformMode === 'rotate' );
+		scale.dom.classList.toggle( 'selected', transformIsActive && currentTransformMode === 'scale' );
+
+		lassoBtn.dom.classList.toggle( 'selected', lassoActive );
+		editBtn.dom.classList.toggle( 'selected', editActive );
+
+		// Edit is the only button with a real precondition: it needs a mesh selected.
+		// (This is not tool-exclusivity — the other tools are never greyed out.)
+		const canEdit = editActive || ( editor.selected && editor.selected.isMesh );
+		editBtn.dom.classList.toggle( 'disabled-tool', ! canEdit );
+
+	}
+
+	// ── Signal handlers ───────────────────────────────────────────────────────
+
 	signals.transformModeChanged.add( function ( mode ) {
 
-		translate.dom.classList.remove( 'selected' );
-		rotate.dom.classList.remove( 'selected' );
-		scale.dom.classList.remove( 'selected' );
-
-		switch ( mode ) {
-
-			case 'translate': translate.dom.classList.add( 'selected' ); break;
-			case 'rotate':    rotate.dom.classList.add( 'selected' );    break;
-			case 'scale':     scale.dom.classList.add( 'selected' );     break;
-
-		}
-
-		// Deactivate lasso when a transform tool is selected
-		if ( lassoActive ) {
-			lassoActive = false;
-			signals.lassoModeChanged.dispatch( { active: false } );
-			lassoBtn.dom.classList.remove( 'selected' );
-		}
+		currentTransformMode = mode;
+		updateToolButtons();
 
 	} );
 
 	signals.editModeChanged.add( function ( { active, mode } ) {
 
-		editBtn.dom.classList.toggle( 'selected', active );
+		editActive = active;
 		modeBar.style.display = active ? 'inline' : 'none';
-
-		// Deactivate lasso when edit mode is activated
-		if ( active && lassoActive ) {
-			lassoActive = false;
-			signals.lassoModeChanged.dispatch( { active: false } );
-			lassoBtn.dom.classList.remove( 'selected' );
-		}
 
 		if ( active && mode ) {
 
@@ -184,43 +195,26 @@ function Toolbar( editor ) {
 
 		}
 
-	} );
-
-	// Disable Edit button when no mesh is selected
-	signals.objectSelected.add( function ( obj ) {
-
-		editBtn.dom.disabled = ! ( obj && obj.isMesh );
+		updateToolButtons();
 
 	} );
 
-	// Make lasso and transform tools mutually exclusive
 	signals.lassoModeChanged.add( function ( { active } ) {
 
-		// Update local lasso state
 		lassoActive = active;
-
-		// Disable transform buttons using a CSS class instead of DOM disabled attribute
-		// so they can still respond to clicks
-		if ( active ) {
-
-			translate.dom.classList.add( 'disabled-tool' );
-			rotate.dom.classList.add( 'disabled-tool' );
-			scale.dom.classList.add( 'disabled-tool' );
-			editBtn.dom.classList.add( 'disabled-tool' );
-
-		} else {
-
-			translate.dom.classList.remove( 'disabled-tool' );
-			rotate.dom.classList.remove( 'disabled-tool' );
-			scale.dom.classList.remove( 'disabled-tool' );
-			// Keep edit button disabled if no mesh is selected
-			if ( editor.selected && editor.selected.isMesh ) {
-				editBtn.dom.classList.remove( 'disabled-tool' );
-			}
-
-		}
+		updateToolButtons();
 
 	} );
+
+	// Edit availability depends on the current selection.
+	signals.objectSelected.add( function () {
+
+		updateToolButtons();
+
+	} );
+
+	// Normalise initial button state.
+	updateToolButtons();
 
 	return container;
 

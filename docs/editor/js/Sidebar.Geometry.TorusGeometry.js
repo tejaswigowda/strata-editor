@@ -70,6 +70,10 @@ function GeometryParametersPanel( editor, object ) {
 
 		const parameters = object.geometry.parameters;
 
+		// After edit-mode baking the geometry is a plain BufferGeometry with no
+		// parameters — skip the refresh instead of throwing.
+		if ( parameters === undefined ) return;
+
 		radius.setValue( parameters.radius );
 		tube.setValue( parameters.tube );
 		radialSegments.setValue( parameters.radialSegments );

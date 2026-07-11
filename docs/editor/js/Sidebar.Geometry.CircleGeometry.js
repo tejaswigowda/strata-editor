@@ -60,6 +60,10 @@ function GeometryParametersPanel( editor, object ) {
 
 		const parameters = object.geometry.parameters;
 
+		// After edit-mode baking the geometry is a plain BufferGeometry with no
+		// parameters — skip the refresh instead of throwing.
+		if ( parameters === undefined ) return;
+
 		radius.setValue( parameters.radius );
 		segments.setValue( parameters.segments );
 		thetaStart.setValue( parameters.thetaStart * THREE.MathUtils.RAD2DEG );

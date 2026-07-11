@@ -338,6 +338,31 @@ export function match( root, ast ) {
 
 }
 
+// ── Selection pseudo-selectors (:selected / :lasso) ───────────────────────────
+// `:selected` (and its alias `:lasso`) resolve to the editor's LIVE selection —
+// whatever the interactive click / lasso tools last produced — rather than to a
+// scene-graph query. Selection lives on the editor, not the scene, so the host
+// registers a provider. Making these first-class here (not just in ChainableSet)
+// means EVERY consumer — op() dispatch, validateOpJSON, subset sanity checks —
+// resolves them uniformly, so `$S(':selected').recolor('#000')` works end-to-end.
+const SELECTION_PSEUDO = /^\s*:?(selected|lasso)\s*$/i;
+
+let _selectionProvider = null;
+
+/** Register how `:selected` / `:lasso` resolve (host supplies live selection). */
+export function setSelectionProvider( fn ) {
+
+	_selectionProvider = typeof fn === 'function' ? fn : null;
+
+}
+
+/** True when the selector is a selection pseudo (`:selected` / `:lasso`). */
+export function isSelectionPseudo( selector ) {
+
+	return typeof selector === 'string' && SELECTION_PSEUDO.test( selector );
+
+}
+
 /**
  * Convenience: parse and match in one call.
  * @param {THREE.Object3D} root
@@ -345,6 +370,13 @@ export function match( root, ast ) {
  * @returns {Array<THREE.Object3D>}
  */
 export function query( root, selector ) {
+
+	// Selection pseudo resolves to the live editor selection, not a graph query.
+	if ( isSelectionPseudo( selector ) ) {
+
+		return _selectionProvider ? ( _selectionProvider() || [] ) : [];
+
+	}
 
 	try {
 
@@ -398,6 +430,8 @@ export function hasNamedMatcher( selector ) {
  * @returns {boolean}
  */
 export function isValid( selector ) {
+
+	if ( isSelectionPseudo( selector ) ) return true;
 
 	try {
 

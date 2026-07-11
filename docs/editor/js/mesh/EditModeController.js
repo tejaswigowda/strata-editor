@@ -131,18 +131,29 @@ export class EditModeController {
 
 		if ( ! this.active ) return;
 
-		// Bake geometry back — skip undo entry during recipe replay
-		const newGeom = this.em.compact().toBufferGeometry();
+		// Bake geometry back — skip undo entry during recipe replay.
+		// Guard the bake so that an error in a downstream listener (e.g. a sidebar
+		// refresh) can never leave edit mode half-exited: the selection override,
+		// overlay and key handlers below must always be restored.
+		try {
 
-		if ( this.mesh.userData._recipeReplay ) {
+			const newGeom = this.em.compact().toBufferGeometry();
 
-			this.mesh.geometry.dispose();
-			this.mesh.geometry = newGeom;
-			this.mesh.geometry.computeBoundingSphere();
+			if ( this.mesh.userData._recipeReplay ) {
 
-		} else {
+				this.mesh.geometry.dispose();
+				this.mesh.geometry = newGeom;
+				this.mesh.geometry.computeBoundingSphere();
 
-			this.editor.execute( new SetGeometryCommand( this.editor, this.mesh, newGeom ) );
+			} else {
+
+				this.editor.execute( new SetGeometryCommand( this.editor, this.mesh, newGeom ) );
+
+			}
+
+		} catch ( err ) {
+
+			console.error( 'EditModeController.exit: geometry bake failed', err );
 
 		}
 
