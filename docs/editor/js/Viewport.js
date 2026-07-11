@@ -560,13 +560,27 @@ function Viewport( editor ) {
 	let lassoPoints = [];
 
 	const lassoCanvas = document.createElement( 'canvas' );
-	lassoCanvas.style.cssText = 'position:absolute;top:0;left:0;cursor:crosshair;display:none;z-index:10;';
+	lassoCanvas.style.cssText = 'position:absolute;top:0;left:0;cursor:crosshair;display:none;z-index:10;pointer-events:none;';
 	container.dom.appendChild( lassoCanvas );
 	const lassoCtx = lassoCanvas.getContext( '2d' );
 
 	function resizeLassoCanvas() {
-		lassoCanvas.width = container.dom.clientWidth;
-		lassoCanvas.height = container.dom.clientHeight;
+		// Get dimensions from container.dom, or fallback to viewport element if available
+		let width = container.dom.clientWidth;
+		let height = container.dom.clientHeight;
+		
+		// If container has no size, try to get viewport element by ID
+		if ( ( width === 0 || height === 0 ) && typeof document !== 'undefined' ) {
+			const viewportElement = document.getElementById( 'viewport' );
+			if ( viewportElement ) {
+				width = viewportElement.clientWidth;
+				height = viewportElement.clientHeight;
+			}
+		}
+		
+		// Always set dimensions (even if 0, to clear old content)
+		lassoCanvas.width = width;
+		lassoCanvas.height = height;
 	}
 
 	resizeLassoCanvas();
@@ -667,7 +681,6 @@ function Viewport( editor ) {
 
 	const onLassoMouseMove = ( event ) => {
 		if ( ! lassoActive ) return;
-		event.stopPropagation();
 		const rect = container.dom.getBoundingClientRect();
 		const x = event.clientX - rect.left;
 		const y = event.clientY - rect.top;
@@ -677,7 +690,6 @@ function Viewport( editor ) {
 
 	const onLassoMouseUp = ( event ) => {
 		if ( ! lassoActive ) return;
-		event.stopPropagation();
 		finalizeLasso();
 		document.removeEventListener( 'mousemove', onLassoMouseMove );
 		document.removeEventListener( 'mouseup', onLassoMouseUp );
@@ -685,11 +697,11 @@ function Viewport( editor ) {
 
 	function onLassoStart( event ) {
 		if ( ! lassoMode ) return;
-		if ( event.target !== renderer.domElement ) return;
-		event.stopPropagation();
 		lassoActive = true;
 		lassoPoints = [];
 		lassoCanvas.style.display = 'block';
+		// Ensure canvas has correct size
+		resizeLassoCanvas();
 		if ( editor.controls ) editor.controls.enabled = false; // Disable camera controls during lasso drawing
 		const rect = container.dom.getBoundingClientRect();
 		lassoPoints.push( { x: event.clientX - rect.left, y: event.clientY - rect.top } );
@@ -699,10 +711,14 @@ function Viewport( editor ) {
 
 	container.dom.addEventListener( 'mousedown', ( event ) => {
 		if ( lassoMode && ! event.shiftKey && ! event.ctrlKey && ! event.metaKey ) {
-			onLassoStart( event );
-		} else {
-			onMouseDown( event );
+			// Check if the event target is the renderer canvas or within the viewport container
+			const isOnCanvas = event.target === renderer.domElement || container.dom.contains( event.target );
+			if ( isOnCanvas ) {
+				onLassoStart( event );
+				return;
+			}
 		}
+		onMouseDown( event );
 	} );
 
 	// Listen for lasso mode change
@@ -713,6 +729,8 @@ function Viewport( editor ) {
 
 	container.dom.addEventListener( 'touchstart', onTouchStart, { passive: false } );
 	container.dom.addEventListener( 'dblclick', onDoubleClick );
+
+	// controls need to be added *after* main logic,
 	// otherwise controls.enabled doesn't work.
 
 	const controls = new EditorControls( camera );
