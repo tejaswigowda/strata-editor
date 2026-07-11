@@ -74,6 +74,14 @@ function Toolbar( editor ) {
 	lassoBtn.onClick( function () {
 
 		lassoActive = ! lassoActive;
+		
+		// Clear selected state from transform buttons when activating lasso
+		if ( lassoActive ) {
+			translate.dom.classList.remove( 'selected' );
+			rotate.dom.classList.remove( 'selected' );
+			scale.dom.classList.remove( 'selected' );
+		}
+		
 		signals.lassoModeChanged.dispatch( { active: lassoActive } );
 		lassoBtn.dom.classList.toggle( 'selected', lassoActive );
 
