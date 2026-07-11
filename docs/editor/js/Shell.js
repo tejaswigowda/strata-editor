@@ -1018,12 +1018,15 @@ function Shell( editor ) {
 					ctx.lineWidth = 1;
 					const step = size / divisions;
 
+					ctx.beginPath();
 					for ( let i = 0; i <= divisions; i ++ ) {
-
-						ctx.beginPath(); ctx.moveTo( i * step, 0 );      ctx.lineTo( i * step, size ); ctx.stroke();
-						ctx.beginPath(); ctx.moveTo( 0,         i * step ); ctx.lineTo( size,    i * step ); ctx.stroke();
-
+						const pos = i * step;
+						ctx.moveTo( pos, 0 );
+						ctx.lineTo( pos, size );
+						ctx.moveTo( 0, pos );
+						ctx.lineTo( size, pos );
 					}
+					ctx.stroke();
 
 					const tex = new window.THREE.CanvasTexture( c );
 					tex.wrapS = tex.wrapT = window.THREE.RepeatWrapping;

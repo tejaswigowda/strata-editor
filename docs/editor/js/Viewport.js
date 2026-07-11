@@ -46,8 +46,8 @@ function Viewport( editor ) {
 
 	// helpers
 
-	const GRID_COLORS_LIGHT = [ 0x999999, 0x777777 ];
-	const GRID_COLORS_DARK = [ 0xdadada, 0xffffff ];
+	const GRID_COLORS_LIGHT = [ 0x888888, 0x555555 ];
+	const GRID_COLORS_DARK = [ 0x6f6f6f, 0x2a2a2a ];
 
 	const grid = new THREE.Group();
 
@@ -59,7 +59,7 @@ function Viewport( editor ) {
 		uniforms: {
 			uColor1: { value: new THREE.Color( GRID_COLORS_LIGHT[ 0 ] ) },
 			uColor2: { value: new THREE.Color( GRID_COLORS_LIGHT[ 1 ] ) },
-			uDistance: { value: 10 }
+			uDistance: { value: 100 }
 		},
 		vertexShader: /* glsl */`
 			varying vec3 vWorldPos;
@@ -87,13 +87,16 @@ function Viewport( editor ) {
 				float majorLine = getGrid( 10.0 );
 
 				float d = distance( cameraPosition.xz, vWorldPos.xz );
-				float minorFade = 1.0 - clamp( d / uDistance, 0.0, 1.0 );
-				float majorFade = 1.0 - clamp( d / ( uDistance * 5.0 ), 0.0, 1.0 );
+				
+				// Smoother fade with exponential decay
+				float minorFade = exp( -( d / uDistance ) * ( d / uDistance ) * 0.5 );
+				float majorFade = exp( -( d / ( uDistance * 2.0 ) ) * ( d / ( uDistance * 2.0 ) ) * 0.3 );
 
-				float alpha = max( minorLine * minorFade, majorLine * majorFade );
+				// Major lines are more prominent
+				float alpha = max( minorLine * minorFade * 0.4, majorLine * majorFade * 0.8 );
 				if ( alpha <= 0.001 ) discard;
 
-				// Major (decade) lines take the stronger colour; they coincide with minor lines.
+				// Major (decade) lines are brighter/whiter; minor lines are darker
 				vec3 color = mix( uColor1, uColor2, majorLine );
 				gl_FragColor = vec4( color, alpha );
 			}
