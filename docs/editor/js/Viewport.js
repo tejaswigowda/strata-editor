@@ -604,6 +604,7 @@ function Viewport( editor ) {
 	function finalizeLasso() {
 		lassoActive = false;
 		lassoCanvas.style.display = 'none';
+		if ( editor.controls ) editor.controls.enabled = true; // Re-enable camera controls
 
 		if ( lassoPoints.length < 3 ) {
 			lassoPoints = [];
@@ -613,7 +614,6 @@ function Viewport( editor ) {
 		// Raycast from multiple points along a grid and collect intersected objects
 		const selectedObjects = new Set();
 		const raycaster = new THREE.Raycaster();
-		const rect = container.dom.getBoundingClientRect();
 		const step = 15; // grid step in pixels for raycasting
 
 		// Determine bounding box of lasso points
@@ -621,6 +621,12 @@ function Viewport( editor ) {
 		const maxX = Math.max( ...lassoPoints.map( p => p.x ) );
 		const minY = Math.min( ...lassoPoints.map( p => p.y ) );
 		const maxY = Math.max( ...lassoPoints.map( p => p.y ) );
+
+		// Build list of all objects to raycast against (like Selector does)
+		const objects = [];
+		scene.traverseVisible( function ( child ) {
+			objects.push( child );
+		} );
 
 		// Raycast from grid points within the lasso boundary
 		for ( let x = minX; x < maxX; x += step ) {
@@ -632,12 +638,12 @@ function Viewport( editor ) {
 					const normalizedY = - ( ( y / lassoCanvas.height ) * 2 - 1 );
 					const screenPoint = new THREE.Vector2( normalizedX, normalizedY );
 					raycaster.setFromCamera( screenPoint, camera );
-					const intersects = raycaster.intersectObjects( scene.children, true );
+					const intersects = raycaster.intersectObjects( objects, false );
 
 					for ( const intersect of intersects ) {
 						const obj = intersect.object;
-						// Add the object or its parent if it's a helper/part
-						if ( obj.isMesh || obj.isLight ) {
+						// Skip the scene and helpers, only add visible meshes/lights
+						if ( obj !== scene && obj.isMesh && ! obj.name.startsWith( '__' ) ) {
 							selectedObjects.add( obj );
 						}
 					}
@@ -647,16 +653,21 @@ function Viewport( editor ) {
 
 		lassoPoints = [];
 
-		// Dispatch selection
+		// Multi-select all objects: deselect first, then add each one
 		if ( selectedObjects.size > 0 ) {
 			const objectsArray = Array.from( selectedObjects );
-			const intersects = objectsArray.map( obj => ( { object: obj } ) );
-			signals.intersectionsDetected.dispatch( intersects, false );
+			// Clear selection first
+			editor.selector.select( null, false );
+			// Add each object to selection
+			for ( const obj of objectsArray ) {
+				editor.selector.select( obj, true );
+			}
 		}
 	}
 
 	const onLassoMouseMove = ( event ) => {
 		if ( ! lassoActive ) return;
+		event.stopPropagation();
 		const rect = container.dom.getBoundingClientRect();
 		const x = event.clientX - rect.left;
 		const y = event.clientY - rect.top;
@@ -666,6 +677,7 @@ function Viewport( editor ) {
 
 	const onLassoMouseUp = ( event ) => {
 		if ( ! lassoActive ) return;
+		event.stopPropagation();
 		finalizeLasso();
 		document.removeEventListener( 'mousemove', onLassoMouseMove );
 		document.removeEventListener( 'mouseup', onLassoMouseUp );
@@ -674,9 +686,11 @@ function Viewport( editor ) {
 	function onLassoStart( event ) {
 		if ( ! lassoMode ) return;
 		if ( event.target !== renderer.domElement ) return;
+		event.stopPropagation();
 		lassoActive = true;
 		lassoPoints = [];
 		lassoCanvas.style.display = 'block';
+		if ( editor.controls ) editor.controls.enabled = false; // Disable camera controls during lasso drawing
 		const rect = container.dom.getBoundingClientRect();
 		lassoPoints.push( { x: event.clientX - rect.left, y: event.clientY - rect.top } );
 		document.addEventListener( 'mousemove', onLassoMouseMove );
