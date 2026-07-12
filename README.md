@@ -1,6 +1,6 @@
 # Strata: A CSS-like language for 3D scenes
 
-<img src='docs/demo.gif'/>
+<img width="100%" src='docs/demo.gif'/>
 
 **A deterministic, human-readable selector language for editing and versioning 3D scenes. Sovereign, browser-native, no build. Optional AI that stays within bounds.**
 
