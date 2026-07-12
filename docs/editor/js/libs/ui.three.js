@@ -323,6 +323,7 @@ class UIOutliner extends UIDiv {
 		this.options = [];
 		this.selectedIndex = - 1;
 		this.selectedValue = null;
+		this.multiSelectModifiers = null; // modifier keys captured on the last click
 
 	}
 
@@ -349,7 +350,12 @@ class UIOutliner extends UIDiv {
 
 		}
 
-		function onClick() {
+		function onClick( event ) {
+
+			scope.multiSelectModifiers = {
+				ctrl: event.ctrlKey || event.metaKey,
+				shift: event.shiftKey
+			};
 
 			scope.setValue( this.value );
 
@@ -546,6 +552,42 @@ class UIOutliner extends UIDiv {
 		}
 
 		this.selectedValue = value;
+
+		return this;
+
+	}
+
+	// Returns ( and clears ) the modifier keys captured on the last click,
+	// so the consumer can decide between replace / additive / range selection.
+
+	getModifiers() {
+
+		const modifiers = this.multiSelectModifiers;
+		this.multiSelectModifiers = null;
+		return modifiers;
+
+	}
+
+	// Highlights every option whose value is in `values` ( multi-selection ),
+	// without changing the primary selectedValue / scroll position.
+
+	setMultipleValues( values ) {
+
+		for ( let i = 0; i < this.options.length; i ++ ) {
+
+			const element = this.options[ i ];
+
+			if ( values.indexOf( element.value ) !== - 1 ) {
+
+				element.classList.add( 'active' );
+
+			} else {
+
+				element.classList.remove( 'active' );
+
+			}
+
+		}
 
 		return this;
 

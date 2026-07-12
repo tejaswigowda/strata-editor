@@ -135,7 +135,64 @@ function SidebarScene( editor ) {
 
 		ignoreObjectSelectedSignal = true;
 
-		editor.selectById( parseInt( outliner.getValue() ) );
+		const id = parseInt( outliner.getValue() );
+		const object = editor.scene.getObjectById( id );
+		const modifiers = outliner.getModifiers();
+
+		if ( object === undefined ) {
+
+			ignoreObjectSelectedSignal = false;
+			return;
+
+		}
+
+		if ( modifiers && modifiers.ctrl ) {
+
+			// Toggle the clicked object in the multi-selection
+
+			editor.selectMultiple( object, true );
+
+		} else if ( modifiers && modifiers.shift && editor.selected !== null ) {
+
+			// Range-select every visible row between the current primary and the clicked object
+
+			const values = outliner.options.map( option => option.value );
+			const start = values.indexOf( editor.selected.id );
+			const end = values.indexOf( id );
+
+			if ( start !== - 1 && end !== - 1 ) {
+
+				const from = Math.min( start, end );
+				const to = Math.max( start, end );
+
+				const rangeObjects = [];
+
+				for ( let i = from; i <= to; i ++ ) {
+
+					const rangeObject = editor.scene.getObjectById( values[ i ] );
+					if ( rangeObject !== undefined ) rangeObjects.push( rangeObject );
+
+				}
+
+				editor.select( rangeObjects[ 0 ] );
+
+				for ( let i = 1; i < rangeObjects.length; i ++ ) {
+
+					editor.selectMultiple( rangeObjects[ i ], true );
+
+				}
+
+			} else {
+
+				editor.select( object );
+
+			}
+
+		} else {
+
+			editor.select( object );
+
+		}
 
 		ignoreObjectSelectedSignal = false;
 
@@ -519,6 +576,12 @@ function SidebarScene( editor ) {
 
 			outliner.setValue( editor.selected.id );
 
+			if ( editor.selectionMultiple.length > 1 ) {
+
+				outliner.setMultipleValues( editor.selectionMultiple.map( object => object.id ) );
+
+			}
+
 		}
 
 		backgroundType.setValue( editor.backgroundType );
@@ -676,6 +739,19 @@ function SidebarScene( editor ) {
 		} else {
 
 			outliner.setValue( null );
+
+		}
+
+	} );
+
+	signals.selectionChanged.add( function ( objects ) {
+
+		// Reflect multi-selection in the outliner. Single selection is already
+		// handled by the objectSelected signal / outliner.setValue above.
+
+		if ( objects.length > 1 ) {
+
+			outliner.setMultipleValues( objects.map( object => object.id ) );
 
 		}
 

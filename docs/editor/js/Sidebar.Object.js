@@ -12,7 +12,8 @@ import { SetColorCommand } from './commands/SetColorCommand.js';
 import { SetShadowValueCommand } from './commands/SetShadowValueCommand.js';
 import { SetLabelCommand } from './commands/SetLabelCommand.js';
 import { SetClassCommand } from './commands/SetClassCommand.js';
-import { getAllClasses } from './intelligence/classDerive.js';
+import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
+import { getAllClasses, toClassSet } from './intelligence/classDerive.js';
 
 function SidebarObject( editor ) {
 
@@ -287,7 +288,7 @@ function SidebarObject( editor ) {
 		
 		// Get all classes (derived + custom) using the same method as listSelectors()
 		const allClasses = getAllClasses( object );
-		const customClasses = object && object.userData && object.userData.customClasses ? new Set( object.userData.customClasses ) : new Set();
+		const customClasses = object && object.userData ? toClassSet( object.userData.customClasses ) : new Set();
 
 		console.log( '[DEBUG] updateChips called for', object?.name || object?.uuid );
 		console.log( '[DEBUG] allClasses (derived + custom):', Array.from( allClasses ) );
@@ -316,7 +317,7 @@ function SidebarObject( editor ) {
 
 		const allClasses = getAllExistingClasses();
 		const object = editor.selected;
-		const currentClasses = new Set( object && object.userData.customClasses ? object.userData.customClasses : [] );
+		const currentClasses = toClassSet( object && object.userData ? object.userData.customClasses : [] );
 
 		// Filter: existing classes not already added + match input
 		const filtered = allClasses.filter( cls => ! currentClasses.has( cls ) && cls.toLowerCase().includes( inputValue.toLowerCase() ) );
@@ -383,7 +384,7 @@ function SidebarObject( editor ) {
 			const className = classInput.value.trim();
 			const object = editor.selected;
 
-			if ( object && ! ( object.userData.customClasses && object.userData.customClasses.has( className ) ) ) {
+			if ( object && ! toClassSet( object.userData.customClasses ).has( className ) ) {
 
 				editor.execute( new SetClassCommand( editor, object, className, true ) );
 
@@ -706,6 +707,41 @@ function SidebarObject( editor ) {
 
 	//
 
+	//
+
+	// Returns the objects the inspector should edit. When several objects are
+	// selected the change is applied to all of them; otherwise just the primary.
+	// An optional predicate filters out objects that lack the edited property.
+
+	function getSelectionTargets( predicate ) {
+
+		const selection = ( editor.selectionMultiple && editor.selectionMultiple.length > 0 )
+			? editor.selectionMultiple
+			: ( editor.selected !== null ? [ editor.selected ] : [] );
+
+		return predicate ? selection.filter( predicate ) : selection.slice();
+
+	}
+
+	// Executes one command per target. A single target runs directly, multiple
+	// targets are wrapped in a MultiCmdsCommand so the edit is a single undo step.
+
+	function executeForTargets( targets, createCommand ) {
+
+		if ( targets.length === 0 ) return;
+
+		if ( targets.length === 1 ) {
+
+			editor.execute( createCommand( targets[ 0 ] ) );
+
+		} else {
+
+			editor.execute( new MultiCmdsCommand( editor, targets.map( createCommand ) ) );
+
+		}
+
+	}
+
 	function update() {
 
 		const object = editor.selected;
@@ -715,151 +751,151 @@ function SidebarObject( editor ) {
 			const newPosition = new THREE.Vector3( objectPositionX.getValue(), objectPositionY.getValue(), objectPositionZ.getValue() );
 			if ( object.position.distanceTo( newPosition ) >= 0.01 ) {
 
-				editor.execute( new SetPositionCommand( editor, object, newPosition ) );
+				executeForTargets( getSelectionTargets(), target => new SetPositionCommand( editor, target, newPosition.clone() ) );
 
 			}
 
 			const newRotation = new THREE.Euler( objectRotationX.getValue() * THREE.MathUtils.DEG2RAD, objectRotationY.getValue() * THREE.MathUtils.DEG2RAD, objectRotationZ.getValue() * THREE.MathUtils.DEG2RAD );
 			if ( new THREE.Vector3().setFromEuler( object.rotation ).distanceTo( new THREE.Vector3().setFromEuler( newRotation ) ) >= 0.01 ) {
 
-				editor.execute( new SetRotationCommand( editor, object, newRotation ) );
+				executeForTargets( getSelectionTargets(), target => new SetRotationCommand( editor, target, newRotation.clone() ) );
 
 			}
 
 			const newScale = new THREE.Vector3( objectScaleX.getValue(), objectScaleY.getValue(), objectScaleZ.getValue() );
 			if ( object.scale.distanceTo( newScale ) >= 0.01 ) {
 
-				editor.execute( new SetScaleCommand( editor, object, newScale ) );
+				executeForTargets( getSelectionTargets(), target => new SetScaleCommand( editor, target, newScale.clone() ) );
 
 			}
 
 			if ( object.fov !== undefined && Math.abs( object.fov - objectFov.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'fov', objectFov.getValue() ) );
-				object.updateProjectionMatrix();
+				const targets = getSelectionTargets( target => target.fov !== undefined );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'fov', objectFov.getValue() ) );
+				targets.forEach( target => target.updateProjectionMatrix() );
 
 			}
 
 			if ( object.left !== undefined && Math.abs( object.left - objectLeft.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'left', objectLeft.getValue() ) );
-				object.updateProjectionMatrix();
+				const targets = getSelectionTargets( target => target.left !== undefined );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'left', objectLeft.getValue() ) );
+				targets.forEach( target => target.updateProjectionMatrix() );
 
 			}
 
 			if ( object.right !== undefined && Math.abs( object.right - objectRight.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'right', objectRight.getValue() ) );
-				object.updateProjectionMatrix();
+				const targets = getSelectionTargets( target => target.right !== undefined );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'right', objectRight.getValue() ) );
+				targets.forEach( target => target.updateProjectionMatrix() );
 
 			}
 
 			if ( object.top !== undefined && Math.abs( object.top - objectTop.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'top', objectTop.getValue() ) );
-				object.updateProjectionMatrix();
+				const targets = getSelectionTargets( target => target.top !== undefined );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'top', objectTop.getValue() ) );
+				targets.forEach( target => target.updateProjectionMatrix() );
 
 			}
 
 			if ( object.bottom !== undefined && Math.abs( object.bottom - objectBottom.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'bottom', objectBottom.getValue() ) );
-				object.updateProjectionMatrix();
+				const targets = getSelectionTargets( target => target.bottom !== undefined );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'bottom', objectBottom.getValue() ) );
+				targets.forEach( target => target.updateProjectionMatrix() );
 
 			}
 
 			if ( object.near !== undefined && Math.abs( object.near - objectNear.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'near', objectNear.getValue() ) );
-				if ( object.isOrthographicCamera ) {
-
-					object.updateProjectionMatrix();
-
-				}
+				const targets = getSelectionTargets( target => target.near !== undefined );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'near', objectNear.getValue() ) );
+				targets.forEach( target => { if ( target.isOrthographicCamera ) target.updateProjectionMatrix(); } );
 
 			}
 
 			if ( object.far !== undefined && Math.abs( object.far - objectFar.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'far', objectFar.getValue() ) );
-				if ( object.isOrthographicCamera ) {
-
-					object.updateProjectionMatrix();
-
-				}
+				const targets = getSelectionTargets( target => target.far !== undefined );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'far', objectFar.getValue() ) );
+				targets.forEach( target => { if ( target.isOrthographicCamera ) target.updateProjectionMatrix(); } );
 
 			}
 
 			if ( object.intensity !== undefined && Math.abs( object.intensity - objectIntensity.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'intensity', objectIntensity.getValue() ) );
+				executeForTargets( getSelectionTargets( target => target.intensity !== undefined ), target => new SetValueCommand( editor, target, 'intensity', objectIntensity.getValue() ) );
 
 			}
 
 			if ( object.color !== undefined && object.color.getHex() !== objectColor.getHexValue() ) {
 
-				editor.execute( new SetColorCommand( editor, object, 'color', objectColor.getHexValue() ) );
+				executeForTargets( getSelectionTargets( target => target.color !== undefined ), target => new SetColorCommand( editor, target, 'color', objectColor.getHexValue() ) );
 
 			}
 
 			if ( object.groundColor !== undefined && object.groundColor.getHex() !== objectGroundColor.getHexValue() ) {
 
-				editor.execute( new SetColorCommand( editor, object, 'groundColor', objectGroundColor.getHexValue() ) );
+				executeForTargets( getSelectionTargets( target => target.groundColor !== undefined ), target => new SetColorCommand( editor, target, 'groundColor', objectGroundColor.getHexValue() ) );
 
 			}
 
 			if ( object.distance !== undefined && Math.abs( object.distance - objectDistance.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'distance', objectDistance.getValue() ) );
+				executeForTargets( getSelectionTargets( target => target.distance !== undefined ), target => new SetValueCommand( editor, target, 'distance', objectDistance.getValue() ) );
 
 			}
 
 			if ( object.angle !== undefined && Math.abs( object.angle - objectAngle.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'angle', objectAngle.getValue() ) );
+				executeForTargets( getSelectionTargets( target => target.angle !== undefined ), target => new SetValueCommand( editor, target, 'angle', objectAngle.getValue() ) );
 
 			}
 
 			if ( object.penumbra !== undefined && Math.abs( object.penumbra - objectPenumbra.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'penumbra', objectPenumbra.getValue() ) );
+				executeForTargets( getSelectionTargets( target => target.penumbra !== undefined ), target => new SetValueCommand( editor, target, 'penumbra', objectPenumbra.getValue() ) );
 
 			}
 
 			if ( object.decay !== undefined && Math.abs( object.decay - objectDecay.getValue() ) >= 0.01 ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'decay', objectDecay.getValue() ) );
+				executeForTargets( getSelectionTargets( target => target.decay !== undefined ), target => new SetValueCommand( editor, target, 'decay', objectDecay.getValue() ) );
 
 			}
 
 			if ( object.visible !== objectVisible.getValue() ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'visible', objectVisible.getValue() ) );
+				executeForTargets( getSelectionTargets(), target => new SetValueCommand( editor, target, 'visible', objectVisible.getValue() ) );
 
 			}
 
 			if ( object.frustumCulled !== objectFrustumCulled.getValue() ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'frustumCulled', objectFrustumCulled.getValue() ) );
+				executeForTargets( getSelectionTargets(), target => new SetValueCommand( editor, target, 'frustumCulled', objectFrustumCulled.getValue() ) );
 
 			}
 
 			if ( object.renderOrder !== objectRenderOrder.getValue() ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'renderOrder', objectRenderOrder.getValue() ) );
+				executeForTargets( getSelectionTargets(), target => new SetValueCommand( editor, target, 'renderOrder', objectRenderOrder.getValue() ) );
 
 			}
 
 			if ( object.castShadow !== undefined && object.castShadow !== objectCastShadow.getValue() ) {
 
-				editor.execute( new SetValueCommand( editor, object, 'castShadow', objectCastShadow.getValue() ) );
+				executeForTargets( getSelectionTargets( target => target.castShadow !== undefined ), target => new SetValueCommand( editor, target, 'castShadow', objectCastShadow.getValue() ) );
 
 			}
 
 			if ( object.receiveShadow !== objectReceiveShadow.getValue() ) {
 
-				if ( object.material !== undefined ) object.material.needsUpdate = true;
-				editor.execute( new SetValueCommand( editor, object, 'receiveShadow', objectReceiveShadow.getValue() ) );
+				const targets = getSelectionTargets();
+				targets.forEach( target => { if ( target.material !== undefined ) target.material.needsUpdate = true; } );
+				executeForTargets( targets, target => new SetValueCommand( editor, target, 'receiveShadow', objectReceiveShadow.getValue() ) );
 
 			}
 
@@ -867,25 +903,25 @@ function SidebarObject( editor ) {
 
 				if ( object.shadow.intensity !== objectShadowIntensity.getValue() ) {
 
-					editor.execute( new SetShadowValueCommand( editor, object, 'intensity', objectShadowIntensity.getValue() ) );
+					executeForTargets( getSelectionTargets( target => target.shadow !== undefined ), target => new SetShadowValueCommand( editor, target, 'intensity', objectShadowIntensity.getValue() ) );
 
 				}
 
 				if ( object.shadow.bias !== objectShadowBias.getValue() ) {
 
-					editor.execute( new SetShadowValueCommand( editor, object, 'bias', objectShadowBias.getValue() ) );
+					executeForTargets( getSelectionTargets( target => target.shadow !== undefined ), target => new SetShadowValueCommand( editor, target, 'bias', objectShadowBias.getValue() ) );
 
 				}
 
 				if ( object.shadow.normalBias !== objectShadowNormalBias.getValue() ) {
 
-					editor.execute( new SetShadowValueCommand( editor, object, 'normalBias', objectShadowNormalBias.getValue() ) );
+					executeForTargets( getSelectionTargets( target => target.shadow !== undefined ), target => new SetShadowValueCommand( editor, target, 'normalBias', objectShadowNormalBias.getValue() ) );
 
 				}
 
 				if ( object.shadow.radius !== objectShadowRadius.getValue() ) {
 
-					editor.execute( new SetShadowValueCommand( editor, object, 'radius', objectShadowRadius.getValue() ) );
+					executeForTargets( getSelectionTargets( target => target.shadow !== undefined ), target => new SetShadowValueCommand( editor, target, 'radius', objectShadowRadius.getValue() ) );
 
 				}
 

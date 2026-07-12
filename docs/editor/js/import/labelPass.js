@@ -15,6 +15,7 @@
 
 import { decodeName } from '../scene/summarize.js';
 import { isMeaningfulName } from './diagnostics.js';
+import { addClass } from '../intelligence/classDerive.js';
 
 const MAX_NODES = 40; // context budget — never dump a 200-node table
 
@@ -280,8 +281,7 @@ export function applyHeuristicLabels( root ) {
 
 				mesh.userData.label = label;
 				// Also add as a CLASS so selectors like ".wheel" work
-				if ( ! mesh.userData.customClasses ) mesh.userData.customClasses = new Set();
-				mesh.userData.customClasses.add( label );
+				addClass( mesh, label );
 				labeled ++;
 				break;
 
@@ -322,8 +322,7 @@ export function applyHeuristicLabels( root ) {
 
 			bodyMesh.userData.label = 'body';
 			// Also add as a CLASS so selectors like ".body" work
-			if ( ! bodyMesh.userData.customClasses ) bodyMesh.userData.customClasses = new Set();
-			bodyMesh.userData.customClasses.add( 'body' );
+			addClass( bodyMesh, 'body' );
 			labeled ++;
 
 		}

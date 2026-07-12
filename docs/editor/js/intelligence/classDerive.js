@@ -30,6 +30,25 @@ export function normalizeClassName( str ) {
 
 }
 
+/**
+ * Coerce a stored class collection into a Set. Custom classes are persisted as a
+ * plain Array in userData so they survive JSON / git / glTF round-trips; but a
+ * Set that was JSON-serialized becomes `{}` and legacy scenes may hold either
+ * form. This normalizes Set | Array | iterable | plain-object | nullish into a
+ * Set so callers never hit "customClasses is not iterable".
+ * @param {*} value
+ * @returns {Set<string>}
+ */
+export function toClassSet( value ) {
+
+	if ( value instanceof Set ) return value;
+	if ( Array.isArray( value ) ) return new Set( value );
+	if ( value && typeof value[ Symbol.iterator ] === 'function' ) return new Set( value );
+	if ( value && typeof value === 'object' ) return new Set( Object.values( value ) );
+	return new Set();
+
+}
+
 // Auto-generated / meaningless node names we never turn into a class. Imported
 // glTF parts ("Object_12", "mesh_0") rely on descriptors and labels instead;
 // turning their raw names into classes would flood the vocabulary with noise. A
@@ -159,6 +178,14 @@ export function deriveAllClasses( root ) {
 
 		node.userData.classes = deriveClasses( node );
 
+		// Custom classes are user intent (not re-derivable) — normalize any loaded
+		// representation to a persistable Array so it survives the next save.
+		if ( node.userData.customClasses !== undefined ) {
+
+			node.userData.customClasses = Array.from( toClassSet( node.userData.customClasses ) );
+
+		}
+
 	} );
 
 }
@@ -172,14 +199,17 @@ export function deriveAllClasses( root ) {
 export function hasClass( node, cls ) {
 
 	if ( ! node || ! cls ) return false;
-	if ( ! node.userData.classes ) node.userData.classes = deriveClasses( node );
+	// Auto-classes are re-derivable; if absent or deserialized to a non-Set (a
+	// Set becomes `{}` through JSON), rebuild from descriptors rather than trust
+	// the stored form.
+	if ( ! ( node.userData.classes instanceof Set ) ) node.userData.classes = deriveClasses( node );
 
 	// 1) Auto-derived classes (facts: spatial, shape, color, material-name, type).
 	if ( node.userData.classes.has( cls ) ) return true;
 
 	// 2) Custom (user/verified) classes added via addClass — the selector engine
 	//    matches against hasClass, so these MUST be consulted here too.
-	if ( node.userData.customClasses && node.userData.customClasses.has( cls ) ) return true;
+	if ( node.userData.customClasses && toClassSet( node.userData.customClasses ).has( cls ) ) return true;
 
 	// 3) Semantic label from the import labeling pass (task 4) is stored in
 	//    userData.label only. A label shared by N symmetric parts (e.g. "wheel"
@@ -202,8 +232,10 @@ export function hasClass( node, cls ) {
 export function addClass( node, cls ) {
 
 	if ( ! node || ! cls ) return;
-	if ( ! node.userData.customClasses ) node.userData.customClasses = new Set();
-	node.userData.customClasses.add( cls );
+	const set = toClassSet( node.userData.customClasses );
+	set.add( cls );
+	// Persist as an Array so it survives JSON / git / glTF round-trips.
+	node.userData.customClasses = Array.from( set );
 
 }
 
@@ -215,7 +247,10 @@ export function addClass( node, cls ) {
 export function removeClass( node, cls ) {
 
 	if ( ! node || ! cls ) return;
-	if ( node.userData.customClasses ) node.userData.customClasses.delete( cls );
+	if ( node.userData.customClasses === undefined ) return;
+	const set = toClassSet( node.userData.customClasses );
+	set.delete( cls );
+	node.userData.customClasses = Array.from( set );
 
 }
 
@@ -229,7 +264,7 @@ export function getAllClasses( node ) {
 	const all = new Set( deriveClasses( node ) );
 	if ( node.userData.customClasses ) {
 
-		for ( const cls of node.userData.customClasses ) all.add( cls );
+		for ( const cls of toClassSet( node.userData.customClasses ) ) all.add( cls );
 
 	}
 	return all;

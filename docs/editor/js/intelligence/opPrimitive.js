@@ -26,7 +26,7 @@ import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { SetLabelCommand } from '../commands/SetLabelCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
-import { hasClass, normalizeClassName } from './classDerive.js';
+import { hasClass, normalizeClassName, toClassSet } from './classDerive.js';
 
 // ── The single op vocabulary definition ──────────────────────────────────────
 // Drives: model tool-list, decoding grammar, dispatcher, and human sugar.
@@ -586,8 +586,7 @@ class ChainableSet {
 	/** Get custom classes on a node (or first node if multiple matched). */
 	classes( node = this.nodes[ 0 ] ) {
 		if ( ! node ) return [];
-		const customClasses = node.userData?.customClasses || new Set();
-		return Array.from( customClasses );
+		return Array.from( toClassSet( node.userData?.customClasses ) );
 	}
 
 	/**

@@ -1,4 +1,5 @@
 import { Command } from '../Command.js';
+import { toClassSet } from '../intelligence/classDerive.js';
 
 /**
  * Add or remove a semantic CLASS on an object (userData.customClasses) — the
@@ -28,15 +29,16 @@ class SetClassCommand extends Command {
 		// Whether the object HAD the class before — so undo restores the prior state
 		// regardless of whether this op was an add or a remove (and is a no-op if
 		// the class already matched the target state).
-		this.had = !! ( object && object.userData.customClasses && object.userData.customClasses.has( this.className ) );
+		this.had = !! ( object && object.userData.customClasses && toClassSet( object.userData.customClasses ).has( this.className ) );
 
 	}
 
 	_set( present ) {
 
-		if ( ! this.object.userData.customClasses ) this.object.userData.customClasses = new Set();
-		const set = this.object.userData.customClasses;
+		const set = toClassSet( this.object.userData.customClasses );
 		if ( present ) set.add( this.className ); else set.delete( this.className );
+		// Persist as an Array so custom classes survive JSON / git / glTF round-trips.
+		this.object.userData.customClasses = Array.from( set );
 		this.editor.signals.objectChanged.dispatch( this.object );
 		this.editor.signals.sceneGraphChanged.dispatch();
 
