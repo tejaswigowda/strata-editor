@@ -50,7 +50,7 @@ This README is the landing page and the thesis. The reference material is split 
 | Guide | What's inside |
 |-------|---------------|
 | [**The language**](guides/LANGUAGE.md) | Selector grammar, name normalization, the closed op set, the `$S()` query/traversal API, class & id authoring, lasso, and host-enforced guards. |
-| [**`$S` / 3DOM library**](docs/packages/3dom/README.md) | The standalone "jQuery for 3D" extraction: selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, and its own undo. Versioned surface in [SPEC.md](docs/packages/3dom/SPEC.md). Live docs: https://tejaswigowda.com/strata-editor/packages/3dom/. |
+| [**`$S` / 3DOM library**](docs/packages/3dom/README.md) | The standalone "jQuery for 3D" extraction: selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, and its own undo. Versioned surface in [SPEC.md](docs/packages/3dom/SPEC.md). Live docs: https://tejaswigowda.com/strata-editor/packages/3dom/, [live demo](https://tejaswigowda.com/strata-editor/packages/3dom/examples/bare.html). |
 | [**Animation**](guides/ANIMATION.md) | The scene-wide universal timeline: absolute-time tracks, `.then`/`.with`/`.at` sugar, entrance/exit/attention recipes, lifecycle. |
 | [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription`. No vision model. |
 | [**JS Shell**](guides/JS_SHELL.md) | The primary editing surface: Monaco integration, core globals, object lookup, spatial helpers, modeling ops, Edit Mode, and `fetchAPI`. |

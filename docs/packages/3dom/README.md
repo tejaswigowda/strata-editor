@@ -11,7 +11,8 @@ $S.undo();
 No editor. No framework. No build step required. Just three.js (a **peer**
 dependency) and this.
 
-📖 **Docs:** https://tejaswigowda.com/strata-editor/packages/3dom/
+📖 **Docs:** https://tejaswigowda.com/strata-editor/packages/3dom/  
+🕹️ **Live demo:** https://tejaswigowda.com/strata-editor/packages/3dom/examples/bare.html
 
 - **Selectors:** query the scene graph like the DOM: `mesh`, `.red`, `#Body`,
   `.wheel:visible`, `light, camera`.
@@ -77,9 +78,9 @@ $S.undo();   // built-in, reversible
 $S.redo();
 ```
 
-Open [`examples/bare.html`](examples/bare.html) for a full, self-contained page.
-No editor, no bundler. It runs load, then `autoLabel`, then `$S('.wheel').recolor()`
-with the library's own undo.
+Try the [**live demo**](https://tejaswigowda.com/strata-editor/packages/3dom/examples/bare.html):
+orbit/pan/zoom the scene, click any selector or op, and type your own `$S(...)` in the
+live shell. Source: [`examples/bare.html`](examples/bare.html). No editor, no bundler.
 
 ---
 

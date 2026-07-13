@@ -5,7 +5,8 @@
 
 > The runtime-free core of this language is also published as a standalone library,
 > [**`$S` / 3DOM**](../docs/packages/3dom/README.md) (\"jQuery for 3D\"), with a versioned
-> [SPEC.md](../docs/packages/3dom/SPEC.md) and [live docs](https://tejaswigowda.com/strata-editor/packages/3dom/).
+> [SPEC.md](../docs/packages/3dom/SPEC.md), [live docs](https://tejaswigowda.com/strata-editor/packages/3dom/), and an
+> interactive [live demo](https://tejaswigowda.com/strata-editor/packages/3dom/examples/bare.html).
 > It runs over any three.js scene with three as a
 > peer dependency; Strata consumes it through a host adapter, so the surface below is the
 > editor-integrated view of the same grammar and op set.

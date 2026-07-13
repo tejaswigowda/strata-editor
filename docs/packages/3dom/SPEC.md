@@ -4,6 +4,7 @@ Status: **Draft, stable surface.** The v0.x line may add ops and selectors but
 will not remove or repurpose the ones below without a major-version bump.
 
 📖 Docs: https://tejaswigowda.com/strata-editor/packages/3dom/
+🕹️ Live demo: https://tejaswigowda.com/strata-editor/packages/3dom/examples/bare.html
 
 3DOM ("three-D Object Model") is a runtime-free model for **addressing** and
 **editing** a three.js scene graph. `$S` is its jQuery-style binding. The model
