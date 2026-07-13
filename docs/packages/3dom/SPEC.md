@@ -180,4 +180,4 @@ importers see the update).
 - Additions (new ops, new selector forms) land as minor versions. Removals or
   behavioural changes to the above require a major bump.
 
-MIT © Only Connect Labs.
+MIT © Tejaswi Gowda.

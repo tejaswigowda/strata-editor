@@ -4,8 +4,8 @@
   "description": "jQuery for 3D — address and edit any three.js scene with CSS-like selectors, with deterministic auto-labelling and undoable ops.",
   "type": "module",
   "license": "MIT",
-  "author": "Only Connect Labs",
-  "homepage": "https://github.com/onlyconnect/3dom",
+  "author": "Tejaswi Gowda",
+  "homepage": "https://github.com/tejaswigowda/threejs.editor.enhanced/tree/main/docs/packages/3dom",
   "keywords": [
     "threejs",
     "three",

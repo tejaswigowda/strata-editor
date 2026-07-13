@@ -138,4 +138,4 @@ Strata is a host.
 
 ## Licence
 
-MIT © Only Connect Labs. three.js is a peer dependency under its own licence.
+MIT © Tejaswi Gowda. three.js is a peer dependency under its own licence.
