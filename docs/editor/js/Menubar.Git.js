@@ -849,7 +849,26 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 
 			if ( headSha && headSha === getSyncedCommit( parsed, scenePath, branch ) ) {
 
-				_showBanner( `✓ Local scene is current with ${ parsed.owner }/${ parsed.repo }`, 2000 );
+				// The remote head still points at the commit we last synced to, so
+				// there is nothing new to pull. That alone does NOT prove parity: the
+				// user may have edited (and autosaved) the scene locally since then.
+				// Confirm the local scene still matches the baseline captured at the
+				// last sync before claiming it is current. diffContextStrings ignores
+				// selection/camera and returns null only when nothing meaningful changed.
+				const baseline    = localStorage.getItem( LS_LAST_CTX_KEY );
+				const localChanged = baseline === null
+					|| diffContextStrings( baseline, sceneContextString( editor ) ) !== null;
+
+				if ( localChanged ) {
+
+					_showBanner( `Local scene has uncommitted changes — ${ parsed.owner }/${ parsed.repo } is unchanged`, 3500 );
+
+				} else {
+
+					_showBanner( `✓ Local scene is current with ${ parsed.owner }/${ parsed.repo }`, 2000 );
+
+				}
+
 				return;
 
 			}

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>3DOM — bare three.js demo (jQuery for 3D)</title>
+	<style>
+		* { margin: 0; box-sizing: border-box; }
+		html, body { height: 100%; background: #12141a; color: #e6e8ee; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+		#app { position: fixed; inset: 0; }
+		#panel { position: fixed; top: 12px; left: 12px; width: 320px; padding: 14px; background: #1c1f27ee; border: 1px solid #2c3040; border-radius: 10px; backdrop-filter: blur(6px); }
+		#panel h1 { font-size: 14px; margin-bottom: 2px; }
+		#panel p { color: #8b93a7; margin-bottom: 10px; }
+		button { display: block; width: 100%; margin: 4px 0; padding: 7px 10px; text-align: left; background: #262b38; color: #e6e8ee; border: 1px solid #333a4d; border-radius: 7px; cursor: pointer; font: inherit; }
+		button:hover { background: #303748; }
+		code { color: #7fd1ff; }
+		#log { margin-top: 10px; padding: 8px; height: 120px; overflow: auto; background: #0e1016; border-radius: 7px; color: #9fb3c8; white-space: pre-wrap; }
+		.sep { height: 1px; background: #2c3040; margin: 8px 0; }
+	</style>
+	<!-- three is a PEER dependency: the page brings its own copy. Swap this map to
+	     a local build (../../../docs/build/three.module.js) or any CDN. -->
+	<script type="importmap">
+	{
+		"imports": {
+			"three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+		}
+	}
+	</script>
+</head>
+<body>
+	<div id="app"></div>
+	<div id="panel">
+		<h1>3DOM — jQuery for 3D</h1>
+		<p>A bare three.js scene. No editor. No framework.<br>Every button is one line of <code>$S(...)</code>.</p>
+		<button data-run="recolor">$S('.wheel').recolor('#ff3b3b')</button>
+		<button data-run="scale">$S('.body').scale(1.4)</button>
+		<button data-run="hide">$S('.roof').setVisible(false)</button>
+		<button data-run="spin">$S('mesh').rotate('y', 25)</button>
+		<button data-run="delete">$S('.wheel').delete()</button>
+		<div class="sep"></div>
+		<button data-run="undo">$S.undo()  — library's own history</button>
+		<button data-run="redo">$S.redo()</button>
+		<div id="log"></div>
+	</div>
+
+	<script type="module">
+		import * as THREE from 'three';
+		// Use the library source directly (or swap to ../dist/3dom.esm.js).
+		import { createS, autoLabel } from '../src/index.js';
+
+		const log = ( ...a ) => {
+			const el = document.getElementById( 'log' );
+			el.textContent += a.join( ' ' ) + '\n';
+			el.scrollTop = el.scrollHeight;
+		};
+
+		// ── a plain three.js scene ────────────────────────────────────────────
+		const app = document.getElementById( 'app' );
+		const renderer = new THREE.WebGLRenderer( { antialias: true } );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		renderer.setPixelRatio( devicePixelRatio );
+		app.appendChild( renderer.domElement );
+
+		const scene = new THREE.Scene();
+		scene.background = new THREE.Color( 0x12141a );
+		const camera = new THREE.PerspectiveCamera( 50, innerWidth / innerHeight, 0.1, 100 );
+		camera.position.set( 4, 3, 6 );
+		camera.lookAt( 0, 0.5, 0 );
+
+		scene.add( new THREE.HemisphereLight( 0xffffff, 0x223344, 1.2 ) );
+		const dir = new THREE.DirectionalLight( 0xffffff, 1.5 );
+		dir.position.set( 5, 8, 4 );
+		scene.add( dir );
+
+		function mesh( name, geo, color, pos ) {
+			const m = new THREE.Mesh( geo, new THREE.MeshStandardMaterial( { color } ) );
+			m.name = name;
+			m.position.set( ...pos );
+			scene.add( m );
+			return m;
+		}
+
+		// a tiny "car"
+		mesh( 'Body', new THREE.BoxGeometry( 2.4, 0.7, 1.2 ), 0x3355ff, [ 0, 0.6, 0 ] );
+		mesh( 'Roof', new THREE.BoxGeometry( 1.2, 0.6, 1.0 ), 0x99aaff, [ -0.2, 1.15, 0 ] );
+		const wheelGeo = new THREE.CylinderGeometry( 0.35, 0.35, 0.3, 20 );
+		for ( const [ i, x ] of [ -0.8, 0.8 ].entries() )
+			for ( const [ j, z ] of [ -0.65, 0.65 ].entries() ) {
+				const w = mesh( `Wheel ${i}${j}`, wheelGeo, 0x222222, [ x, 0.35, z ] );
+				w.rotation.x = Math.PI / 2;
+			}
+
+		// ── THE LIBRARY ───────────────────────────────────────────────────────
+		autoLabel( scene );                 // derive .body/.roof/.wheel/colour classes
+		const $S = createS( scene );        // bound $, with its own undo stack
+		window.$S = $S;                     // poke around in the console
+		log( 'autoLabelled', $S( 'mesh' ).count, 'meshes' );
+		log( 'classes on a wheel:', $S( '.wheel' ).first ? $S( '.wheel' ).classes().join( ' ' ) : '(none)' );
+
+		const actions = {
+			recolor: () => $S( '.wheel' ).recolor( '#ff3b3b' ),
+			scale:   () => $S( '.body' ).scale( 1.4 ),
+			hide:    () => $S( '.roof' ).setVisible( false ),
+			spin:    () => $S( 'mesh' ).rotate( 'y', 25 ),
+			delete:  () => $S( '.wheel' ).delete(),
+			undo:    () => $S.undo(),
+			redo:    () => $S.redo(),
+		};
+
+		document.querySelectorAll( '[data-run]' ).forEach( ( b ) =>
+			b.addEventListener( 'click', () => {
+				const k = b.dataset.run;
+				try { actions[ k ](); log( '›', b.textContent.trim() ); }
+				catch ( e ) { log( '! error:', e.message ); }
+			} ) );
+
+		// ── render loop ───────────────────────────────────────────────────────
+		( function loop() {
+			requestAnimationFrame( loop );
+			renderer.render( scene, camera );
+		} )();
+
+		addEventListener( 'resize', () => {
+			camera.aspect = innerWidth / innerHeight;
+			camera.updateProjectionMatrix();
+			renderer.setSize( innerWidth, innerHeight );
+		} );
+	</script>
+</body>
+</html>
