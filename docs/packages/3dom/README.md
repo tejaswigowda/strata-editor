@@ -1,4 +1,4 @@
-# @tejaswigowda/3dom
+# @strata-editor/3dom
 
 **jQuery for 3D.** Address and edit *any* three.js scene with CSS-like selectors,
 deterministic auto-labelling, and undoable ops — in one line:
@@ -31,11 +31,11 @@ the same import map. Copy this into your page's `<head>`:
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/build/three.module.js",
-  "@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
+  "@strata-editor/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
 } }
 </script>
 <script type="module">
-  import { createS, autoLabel } from '@tejaswigowda/3dom';
+  import { createS, autoLabel } from '@strata-editor/3dom';
   // autoLabel(scene); const $S = createS(scene);
 </script>
 ```
@@ -50,7 +50,7 @@ Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.en
 ```
 
 > **Strata itself consumes the library this exact way** — the editor's import map
-> in `docs/index.html` maps `@tejaswigowda/3dom` to the pinned jsDelivr URL, and
+> in `docs/index.html` maps `@strata-editor/3dom` to the pinned jsDelivr URL, and
 > `docs/editor/js/intelligence/strata3dom.js` imports it by bare specifier.
 
 ---
@@ -59,7 +59,7 @@ Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.en
 
 ```js
 import * as THREE from 'three';
-import { createS, autoLabel } from '@tejaswigowda/3dom';
+import { createS, autoLabel } from '@strata-editor/3dom';
 
 const scene = new THREE.Scene();
 // ... add your meshes ...

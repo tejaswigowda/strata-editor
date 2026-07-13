@@ -24,7 +24,7 @@
 	{
 		"imports": {
 			"three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/build/three.module.js",
-			"@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
+			"@strata-editor/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
 		}
 	}
 	</script>
@@ -49,7 +49,7 @@
 		import * as THREE from 'three';
 		// Loaded from the jsDelivr GitHub CDN via the import map above — the same
 		// script-tag path Strata uses. No npm install, no relative source import.
-		import { createS, autoLabel } from '@tejaswigowda/3dom';
+		import { createS, autoLabel } from '@strata-editor/3dom';
 
 		const log = ( ...a ) => {
 			const el = document.getElementById( 'log' );
