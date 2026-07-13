@@ -23,13 +23,9 @@ dependency) and this.
 
 ## Install
 
-```bash
-npm i @tejaswigowda/3dom three
-```
-
-Or straight from a CDN — no build, no publish step. jsDelivr serves the repo's
+Straight from a CDN — no build, no publish step. jsDelivr serves the repo's
 `dist/` directly from GitHub. `three` is a **peer**, so the page brings its own via
-the same import map:
+the same import map. Copy this into your page's `<head>`:
 
 ```html
 <script type="importmap">
@@ -38,20 +34,20 @@ the same import map:
   "@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
 } }
 </script>
+<script type="module">
+  import { createS, autoLabel } from '@tejaswigowda/3dom';
+  // autoLabel(scene); const $S = createS(scene);
+</script>
 ```
 
 Pin to a commit (as above) or a tag (`@v0.1.0`) for an immutable, long-cached URL.
-`@main` also works but is mutable and cached for up to a week. Other CDNs use the
-same path shape:
+`@main` also works but is mutable and cached for up to a week. The Statically CDN
+uses the same path shape:
 
 ```
-jsDelivr (GitHub):  https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js
+jsDelivr (GitHub):   https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js
 Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.enhanced/02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js
-jsDelivr (npm)*:    https://cdn.jsdelivr.net/npm/@tejaswigowda/3dom@0.1.0/dist/3dom.esm.min.js
-unpkg (npm)*:       https://unpkg.com/@tejaswigowda/3dom@0.1.0/dist/3dom.esm.min.js
 ```
-
-\* npm paths require `npm publish --access public` first. The GitHub paths work now.
 
 > **Strata itself consumes the library this exact way** — the editor's import map
 > in `docs/index.html` maps `@tejaswigowda/3dom` to the pinned jsDelivr URL, and
