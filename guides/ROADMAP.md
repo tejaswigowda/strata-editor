@@ -45,15 +45,22 @@ DONE
     All four code paths (WebLLM, Ollama, OpenAI, Anthropic) integrated
     26/26 tests passing: format-perfect output with mild reasoning cost
     Evaluated and working: small models emit valid op-JSON with better decomposition
+  $S / 3DOM extracted as a standalone library ("jQuery for 3D"): docs/packages/3dom/
+    Runtime-free core (selectors + autoLabel + descriptors + op-chaining + op-JSON + guards),
+    three.js as a PEER dependency, its own undo. The editor-coupling is cut by a Host abstraction:
+    ops call host command-factories, never a concrete command class. DefaultHost = library-internal
+    commands + own undo stack (standalone path); StrataHost maps factories -> real Strata commands +
+    editor.execute + signals, so Strata is now a CONSUMER (docs/editor/js/intelligence/StrataHost.js
+    + strata3dom.js). @onlyconnect/3dom, MIT; ESM + global builds (three external); node smoke tests
+    pass; bare.html browser proof; LANGUAGE standardized as versioned SPEC.md v0.1 (selector grammar,
+    op vocabulary, op-JSON contract, autoLabel rules, Host contract). Verified in the live editor:
+    autoLabel + $S('.red').recolor() flow through editor.execute with native undo/redo
 
 NEXT (the next lever)
   Host-side selector resolution: pick-don't-compose, clarify-on-ambiguity, don't-over-enumerate.
     Attack the confirmed hard task — selector-resolution caps 77% even at the Opus ceiling and
     scaffolding adds nothing on small models, so move resolution OFF the model and into the host
-  Extract $S as a standalone CDN library ("jQuery for 3D"): selectors + autoLabel + op-chaining +
-    op-JSON + guards, decoupled from the editor. Standardize the LANGUAGE as a spec, not just an
-    implementation: selector grammar, op vocabulary, op-JSON contract, autoLabel rules, and the
-    timeline sugar→absolute representation
+  Fold the timeline sugar→absolute representation into the standalone library (still editor-side)
 
 THEN
   Show/hide lifecycle: .show() / .hide() should TRIGGER entrance/exit animations (backend wiring)

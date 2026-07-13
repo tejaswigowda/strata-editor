@@ -3,6 +3,12 @@
 > Part of the [Strata documentation](../README.md#documentation). See also:
 > [JS Shell](JS_SHELL.md) · [Animation](ANIMATION.md) · [Scene intelligence](SCENE_INTELLIGENCE.md) · [AI guide](AI_GUIDE.md)
 
+> The runtime-free core of this language is also published as a standalone library,
+> [**`$S` / 3DOM**](../docs/packages/3dom/README.md) (\"jQuery for 3D\"), with a versioned
+> [SPEC.md](../docs/packages/3dom/SPEC.md). It runs over any three.js scene with three as a
+> peer dependency; Strata consumes it through a host adapter, so the surface below is the
+> editor-integrated view of the same grammar and op set.
+
 A CSS-like selector layer over the scene graph, plus a closed set of structured edit ops. This is the preferred way to edit imported parts. `$S(selector)` returns a chainable set. Its methods are 3D ops. Each compiles to `editor.execute(new Command())`. Every op is undoable, versioned, and guarded. `$S` also answers to the aliases `Pick` and `pick`. They are the same function.
 
 ```js

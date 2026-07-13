@@ -50,6 +50,7 @@ This README is the landing page and the thesis. The reference material is split 
 | Guide | What's inside |
 |-------|---------------|
 | [**The language**](guides/LANGUAGE.md) | Selector grammar, name normalization, the closed op set, the `$S()` query/traversal API, class & id authoring, lasso, and host-enforced guards. |
+| [**`$S` / 3DOM library**](docs/packages/3dom/README.md) | The standalone "jQuery for 3D" extraction: selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, and its own undo. Versioned surface in [SPEC.md](docs/packages/3dom/SPEC.md). |
 | [**Animation**](guides/ANIMATION.md) | The scene-wide universal timeline: absolute-time tracks, `.then`/`.with`/`.at` sugar, entrance/exit/attention recipes, lifecycle. |
 | [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription` — no vision model. |
 | [**JS Shell**](guides/JS_SHELL.md) | The primary editing surface: Monaco integration, core globals, object lookup, spatial helpers, modeling ops, Edit Mode, and `fetchAPI`. |
@@ -214,8 +215,8 @@ Selector-over-scene-graph exists (three-query-selector, scene.querySelectorAll, 
 
 ## Roadmap (at a glance)
 
-- **Done.** The deterministic language (selectors + ops + guards), the `$S()` read/write API, the universal timeline, git versioning, scene intelligence, constrained decoding, and the **eval matrix run** (1.5B is the validated floor).
-- **Next.** Host-side selector resolution (the confirmed hard task), and extracting `$S` as a standalone "jQuery for 3D" library + language spec.
+- **Done.** The deterministic language (selectors + ops + guards), the `$S()` read/write API, the universal timeline, git versioning, scene intelligence, constrained decoding, the **eval matrix run** (1.5B is the validated floor), and the standalone [**`$S` / 3DOM library**](docs/packages/3dom/README.md) ("jQuery for 3D" — selectors + autoLabel + ops over any three.js scene, three as peer dep, with a versioned [SPEC.md](docs/packages/3dom/SPEC.md); Strata now consumes it via a host adapter).
+- **Next.** Host-side selector resolution (the confirmed hard task).
 - **Then.** Renderer-agnostic export pipeline, capture-pipeline integration, and a sovereignty dashboard.
 
 The full list is in [ROADMAP.md](guides/ROADMAP.md).
