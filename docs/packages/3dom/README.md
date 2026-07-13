@@ -35,7 +35,7 @@ the same import map:
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  "@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@62aeea4/docs/packages/3dom/dist/3dom.esm.min.js"
+  "@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
 } }
 </script>
 ```
@@ -45,8 +45,8 @@ Pin to a commit (as above) or a tag (`@v0.1.0`) for an immutable, long-cached UR
 same path shape:
 
 ```
-jsDelivr (GitHub):  https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@62aeea4/docs/packages/3dom/dist/3dom.esm.min.js
-Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.enhanced/62aeea4/docs/packages/3dom/dist/3dom.esm.min.js
+jsDelivr (GitHub):  https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js
+Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.enhanced/02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js
 jsDelivr (npm)*:    https://cdn.jsdelivr.net/npm/@tejaswigowda/3dom@0.1.0/dist/3dom.esm.min.js
 unpkg (npm)*:       https://unpkg.com/@tejaswigowda/3dom@0.1.0/dist/3dom.esm.min.js
 ```
