@@ -19,6 +19,7 @@ $S('*')                        // Wildcard — all nodes
 
 ---
 
+
 ## **Chainable Methods**
 
 ### **Edit Operations** (immediate, command-backed, undoable)
