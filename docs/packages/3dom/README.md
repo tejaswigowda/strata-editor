@@ -31,7 +31,7 @@ the same import map. Copy this into your page's `<head>`:
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/build/three.module.js",
-  "@strata-editor/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
+  "@strata-editor/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@dd610a56ca94a803e4727910699ace6509ec9852/docs/packages/3dom/dist/3dom.esm.min.js"
 } }
 </script>
 <script type="module">
@@ -45,8 +45,8 @@ Pin to a commit (as above) or a tag (`@v0.1.0`) for an immutable, long-cached UR
 uses the same path shape:
 
 ```
-jsDelivr (GitHub):   https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js
-Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.enhanced/02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js
+jsDelivr (GitHub):   https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@dd610a56ca94a803e4727910699ace6509ec9852/docs/packages/3dom/dist/3dom.esm.min.js
+Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.enhanced/dd610a56ca94a803e4727910699ace6509ec9852/docs/packages/3dom/dist/3dom.esm.min.js
 ```
 
 > **Strata itself consumes the library this exact way** — the editor's import map
