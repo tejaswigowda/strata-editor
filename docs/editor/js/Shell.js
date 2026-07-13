@@ -1447,10 +1447,15 @@ function Shell( editor ) {
 
 				// Group/ungroup (the Edit menu twins). groupSelection() groups the current
 				// selection; pass a selector to group those instead. Both are undoable.
+				// Matches the UI (Menubar.Edit): the whole multi-selection, parented nodes
+				// only (you cannot group the scene root).
 				groupSelection: ( selector = null, name = null ) => {
 
-					const objs = selector ? selectorEngine.query( editor.scene, selector ) : ( editor.selected ? [ editor.selected ] : [] );
-					if ( objs.length === 0 ) return 'nothing to group (select something or pass a selector)';
+					const objs = ( selector
+						? selectorEngine.query( editor.scene, selector )
+						: editor.getSelectedObjects()
+					).filter( o => o && o !== editor.scene && o !== editor.camera && o.parent !== null );
+					if ( objs.length === 0 ) return 'nothing to group (select objects or pass a selector)';
 					const group = new window.THREE.Group();
 					if ( name ) group.name = name;
 					editor.execute( new GroupObjectsCommand( editor, objs, group ) );
