@@ -117,22 +117,28 @@ function SidebarSettingsShortcuts( editor ) {
 
 			case 'delete':
 
-				const object = editor.selected;
+				// Delete the whole selection, not just the primary. One undoable batch.
+				const objects = editor.getSelectedObjects().filter( o => o && o.parent !== null );
 
-				if ( object === null || object.parent === null ) return;
+				if ( objects.length === 0 ) return;
 
-				if ( object.isSpotLight || object.isDirectionalLight ) {
+				const removeCmds = [];
 
-					editor.execute( new MultiCmdsCommand( editor, [
-						new RemoveObjectCommand( editor, object ),
-						new RemoveObjectCommand( editor, object.target )
-					] ) );
+				for ( const object of objects ) {
 
-				} else {
+					removeCmds.push( new RemoveObjectCommand( editor, object ) );
 
-					editor.execute( new RemoveObjectCommand( editor, object ) );
+					if ( object.isSpotLight || object.isDirectionalLight ) {
+
+						removeCmds.push( new RemoveObjectCommand( editor, object.target ) );
+
+					}
 
 				}
+
+				editor.execute( removeCmds.length === 1
+					? removeCmds[ 0 ]
+					: new MultiCmdsCommand( editor, removeCmds ) );
 
 				break;
 
