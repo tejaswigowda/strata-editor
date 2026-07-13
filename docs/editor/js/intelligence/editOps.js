@@ -15,9 +15,12 @@
 import * as selectorEngine from './selectorEngine.js';
 import { SetMaterialColorCommand } from '../commands/SetMaterialColorCommand.js';
 import { SetMaterialCommand } from '../commands/SetMaterialCommand.js';
+import { SetMaterialValueCommand } from '../commands/SetMaterialValueCommand.js';
 import { SetPositionCommand } from '../commands/SetPositionCommand.js';
 import { SetRotationCommand } from '../commands/SetRotationCommand.js';
 import { SetScaleCommand } from '../commands/SetScaleCommand.js';
+import { SetValueCommand } from '../commands/SetValueCommand.js';
+import { SetColorCommand } from '../commands/SetColorCommand.js';
 import { AddObjectCommand } from '../commands/AddObjectCommand.js';
 import { RemoveObjectCommand } from '../commands/RemoveObjectCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
@@ -29,7 +32,7 @@ export const OP_SCHEMA = {
 	properties: {
 		op: {
 			type: 'string',
-			enum: [ 'recolor', 'scale', 'move', 'rotate', 'delete', 'duplicate', 'retexture', 'setMaterial', 'setOpacity', 'setVisible', 'wireframe', 'moveTo', 'rotateTo', 'scaleTo', 'reset', 'lookAt' ],
+			enum: [ 'recolor', 'scale', 'move', 'rotate', 'delete', 'duplicate', 'retexture', 'setMaterial', 'setOpacity', 'setVisible', 'wireframe', 'moveTo', 'rotateTo', 'scaleTo', 'reset', 'lookAt', 'castShadow', 'receiveShadow', 'frustumCulled', 'renderOrder', 'flatShading', 'metalness', 'roughness', 'emissive', 'emissiveIntensity', 'doubleSided', 'intensity', 'lightColor', 'groundColor', 'distance', 'angle', 'penumbra', 'decay', 'fov', 'near', 'far' ],
 		},
 		selector: { type: 'string' },
 		args: { type: 'object' },
@@ -1054,6 +1057,162 @@ export function lookAtOp( editor, selector, target ) {
 
 }
 
+// ── The fan-out property-set pattern (build ONCE, everything is an instance) ───
+//
+// A bulk op = for each node in the matched set → set property → value, via a
+// Command, wrapped as ONE undoable batch (not N). Clone-on-write where a change
+// would bleed across shared resources (materials). jQuery's `.css('color','red')`
+// sets it on ALL matched — `$S('*').castShadow(true)` is the same mechanic.
+//
+// `bulkApply` is THE primitive. Every op below (and $S().bulkSet) is an instance:
+// they only differ in (a) which nodes the property applies to, and (b) the
+// per-node command factory. Nothing is special-cased.
+
+/**
+ * Commit a per-node command factory over `targets` as ONE undoable batch.
+ * `factory(node)` returns a Command, an array of Commands, or null (skip).
+ * @returns {{success:boolean, count:number, message?:string}}
+ */
+export function bulkApply( editor, targets, factory ) {
+
+	const cmds = [];
+	for ( const node of targets ) {
+
+		const made = factory( node );
+		if ( ! made ) continue;
+		if ( Array.isArray( made ) ) { for ( const c of made ) if ( c ) cmds.push( c ); }
+		else cmds.push( made );
+
+	}
+
+	if ( cmds.length === 0 ) return { success: false, message: 'No applicable nodes', count: 0 };
+	editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	return { success: true, count: cmds.length };
+
+}
+
+/** Collect matched roots + descendants satisfying `pred`, de-duplicated. */
+export function collectNodes( editor, selector, pred ) {
+
+	const roots = selectorEngine.query( editor.scene, selector );
+	const out = [];
+	const seen = new Set();
+	for ( const root of roots ) {
+
+		root.traverse( n => { if ( pred( n ) && ! seen.has( n ) ) { seen.add( n ); out.push( n ); } } );
+
+	}
+
+	return out;
+
+}
+
+const isMeshNode = n => !! n.isMesh;
+const isLightNode = n => !! n.isLight;
+const isMeshOrLight = n => !! ( n.isMesh || n.isLight );
+
+/** First (or only) material of a mesh. */
+function primaryMaterial( node ) {
+
+	return Array.isArray( node.material ) ? node.material[ 0 ] : node.material;
+
+}
+
+/**
+ * Per-node clone-on-write command for a scalar/enum MATERIAL property. If the
+ * material instance is shared by other objects, clone it first (so the bulk set
+ * never bleeds), else set the value in place (command-backed, undoable).
+ */
+function materialPropCommand( editor, node, attr, value ) {
+
+	const mat = primaryMaterial( node );
+	if ( ! mat || ! ( attr in mat ) ) return null;
+
+	if ( ! Array.isArray( node.material ) && isMaterialShared( mat, editor.scene ) ) {
+
+		const clone = cloneMaterial( mat );
+		clone[ attr ] = value;
+		clone.needsUpdate = true;
+		return new SetMaterialCommand( editor, node, clone );
+
+	}
+
+	return new SetMaterialValueCommand( editor, node, attr, value );
+
+}
+
+/** Bulk-set an OBJECT property (castShadow/receiveShadow/frustumCulled/renderOrder). */
+export function setObjectPropOp( editor, selector, attr, value, pred = isMeshNode ) {
+
+	const targets = collectNodes( editor, selector, pred );
+	if ( targets.length === 0 ) return { success: false, message: `No nodes for ${ attr }`, count: 0 };
+	return bulkApply( editor, targets, n => new SetValueCommand( editor, n, attr, value ) );
+
+}
+
+/** Bulk-set a scalar/enum MATERIAL property with clone-on-write. */
+export function setMaterialPropOp( editor, selector, attr, value ) {
+
+	const targets = collectNodes( editor, selector, isMeshNode );
+	if ( targets.length === 0 ) return { success: false, message: `No meshes for ${ attr }`, count: 0 };
+	return bulkApply( editor, targets, n => materialPropCommand( editor, n, attr, value ) );
+
+}
+
+/** Bulk-set a MATERIAL color property (emissive). Clone-on-write is in the command. */
+export function setMaterialColorOp( editor, selector, attr, color ) {
+
+	let hex;
+	try { hex = new window.THREE.Color( color ).getHex(); } catch ( e ) { return { success: false, message: `bad color "${ color }"`, count: 0 }; }
+	const targets = collectNodes( editor, selector, isMeshNode );
+	if ( targets.length === 0 ) return { success: false, message: `No meshes for ${ attr }`, count: 0 };
+	return bulkApply( editor, targets, n => {
+
+		const mat = primaryMaterial( n );
+		if ( ! mat || ! mat[ attr ] || ! mat[ attr ].isColor ) return null;
+		return new SetMaterialColorCommand( editor, n, attr, hex );
+
+	} );
+
+}
+
+/** Bulk-set a scalar LIGHT property (intensity/distance/angle/penumbra/decay). */
+export function setLightPropOp( editor, selector, attr, value ) {
+
+	const targets = collectNodes( editor, selector, n => isLightNode( n ) && ( attr in n ) );
+	if ( targets.length === 0 ) return { success: false, message: `No lights support ${ attr }`, count: 0 };
+	return bulkApply( editor, targets, n => new SetValueCommand( editor, n, attr, value ) );
+
+}
+
+/** Bulk-set a LIGHT color property (color / groundColor). */
+export function setLightColorOp( editor, selector, attr, color ) {
+
+	let hex;
+	try { hex = new window.THREE.Color( color ).getHex(); } catch ( e ) { return { success: false, message: `bad color "${ color }"`, count: 0 }; }
+	const targets = collectNodes( editor, selector, n => isLightNode( n ) && n[ attr ] && n[ attr ].isColor );
+	if ( targets.length === 0 ) return { success: false, message: `No lights with ${ attr }`, count: 0 };
+	return bulkApply( editor, targets, n => new SetColorCommand( editor, n, attr, hex ) );
+
+}
+
+/** Bulk-set a CAMERA projection property (fov/near/far), then refresh projection. */
+export function setCameraPropOp( editor, selector, attr, value ) {
+
+	const targets = collectNodes( editor, selector, n => !! n.isCamera && ( attr in n ) );
+	if ( targets.length === 0 && /^#?camera$/i.test( selector ) && editor.camera && ( attr in editor.camera ) ) {
+
+		targets.push( editor.camera );
+
+	}
+
+	if ( targets.length === 0 ) return { success: false, message: `No cameras for ${ attr }`, count: 0 };
+	const result = bulkApply( editor, targets, n => new SetValueCommand( editor, n, attr, value ) );
+	for ( const n of targets ) if ( typeof n.updateProjectionMatrix === 'function' ) n.updateProjectionMatrix();
+	return result;
+
+}
+
 // ── Dispatcher ──────────────────────────────────────────────────────────────────
 
 /**
@@ -1105,6 +1264,46 @@ export function executeEditOp( editor, opData ) {
 				return resetOp( editor, selector );
 			case 'lookAt':
 				return lookAtOp( editor, selector, args.target );
+			case 'castShadow':
+				return setObjectPropOp( editor, selector, 'castShadow', Boolean( args.value ), isMeshOrLight );
+			case 'receiveShadow':
+				return setObjectPropOp( editor, selector, 'receiveShadow', Boolean( args.value ), isMeshNode );
+			case 'frustumCulled':
+				return setObjectPropOp( editor, selector, 'frustumCulled', Boolean( args.value ), isMeshNode );
+			case 'renderOrder':
+				return setObjectPropOp( editor, selector, 'renderOrder', Number( args.value ) || 0, isMeshNode );
+			case 'flatShading':
+				return setMaterialPropOp( editor, selector, 'flatShading', Boolean( args.value ) );
+			case 'metalness':
+				return setMaterialPropOp( editor, selector, 'metalness', Number( args.value ) );
+			case 'roughness':
+				return setMaterialPropOp( editor, selector, 'roughness', Number( args.value ) );
+			case 'emissiveIntensity':
+				return setMaterialPropOp( editor, selector, 'emissiveIntensity', Number( args.value ) );
+			case 'doubleSided':
+				return setMaterialPropOp( editor, selector, 'side', Boolean( args.value ) ? 2 : 0 );
+			case 'emissive':
+				return setMaterialColorOp( editor, selector, 'emissive', args.color );
+			case 'intensity':
+				return setLightPropOp( editor, selector, 'intensity', Number( args.value ) );
+			case 'distance':
+				return setLightPropOp( editor, selector, 'distance', Number( args.value ) );
+			case 'angle':
+				return setLightPropOp( editor, selector, 'angle', Number( args.value ) );
+			case 'penumbra':
+				return setLightPropOp( editor, selector, 'penumbra', Number( args.value ) );
+			case 'decay':
+				return setLightPropOp( editor, selector, 'decay', Number( args.value ) );
+			case 'lightColor':
+				return setLightColorOp( editor, selector, 'color', args.color );
+			case 'groundColor':
+				return setLightColorOp( editor, selector, 'groundColor', args.color );
+			case 'fov':
+				return setCameraPropOp( editor, selector, 'fov', Number( args.value ) );
+			case 'near':
+				return setCameraPropOp( editor, selector, 'near', Number( args.value ) );
+			case 'far':
+				return setCameraPropOp( editor, selector, 'far', Number( args.value ) );
 			default:
 				return { success: false, message: `Unknown op: ${ op }` };
 

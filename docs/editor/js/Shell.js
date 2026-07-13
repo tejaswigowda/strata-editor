@@ -7,6 +7,8 @@ import { SetScaleCommand } from './commands/SetScaleCommand.js';
 import { SetMaterialColorCommand } from './commands/SetMaterialColorCommand.js';
 import { SetMaterialCommand } from './commands/SetMaterialCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
+import { GroupObjectsCommand } from './commands/GroupObjectsCommand.js';
+import { UngroupObjectsCommand } from './commands/UngroupObjectsCommand.js';
 import { SetLabelCommand } from './commands/SetLabelCommand.js';
 import { SetClassCommand } from './commands/SetClassCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
@@ -895,7 +897,33 @@ function Shell( editor ) {
 			// Scope vars become named parameters of a new Function; direct eval()
 			// inside that function reliably sees all parameters as local variables.
 			const query = makeQuery( editor ); // shared selector-picker ($S, Pick, pick)
-			
+
+			// ── Parity helpers (shared by the UI-to-shell globals below) ──
+			// isolate/solo: one undoable batch flipping mesh.visible so only the matched
+			// subtree stays shown — the shell twin of the outliner's eye toggles.
+			const _isolateTo = ( selector ) => {
+
+				const keep = new Set();
+				for ( const r of selectorEngine.query( editor.scene, selector ) ) r.traverse( n => { if ( n.isMesh ) keep.add( n ); } );
+				const cmds = [];
+				editor.scene.traverse( n => { if ( n.isMesh && n.visible !== keep.has( n ) ) cmds.push( new SetValueCommand( editor, n, 'visible', keep.has( n ) ) ); } );
+				if ( cmds.length ) editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+				return query( selector );
+
+			};
+			// Download an exporter result (ArrayBuffer/typed-array/string) as a file.
+			const _saveBlob = ( data, filename, mime ) => {
+
+				const blob = data instanceof Blob ? data : new Blob( [ data ], { type: mime || 'application/octet-stream' } );
+				const a = document.createElement( 'a' );
+				a.href = URL.createObjectURL( blob );
+				a.download = filename;
+				a.click();
+				URL.revokeObjectURL( a.href );
+				return `exported ${ filename }`;
+
+			};
+
 			// Capture scene state before execution
 			const childrenCountBefore = editor.scene.children.length;
 			const historyCmdCountBefore = editor.history.undos.length;
@@ -1367,6 +1395,142 @@ function Shell( editor ) {
 				mirrorMesh:       ( mesh, axis )                          => mirrorMesh( editor, mesh, axis ),
 				arrayDuplicate:   ( mesh, count, ox, oy, oz )             => arrayDuplicate( editor, mesh, count, ox, oy, oz ),
 				subdivide:        ( mesh, iterations )                    => subdivide( editor, mesh, iterations ),
+
+				// ── UI-to-shell parity globals ────────────────────────────────────────
+				// Everything doable in the panels, callable from the shell. Graph mutations
+				// go through Commands (undoable); scene-env changes dispatch the SAME signals
+				// the Scene panel does, so shell + UI stay in lock-step.
+
+				// addLight('directional'|'point'|'spot'|'ambient'|'hemisphere', { color,
+				// intensity, position:[x,y,z], distance, angle, penumbra, decay, groundColor,
+				// name } ) → adds a light (AddObjectCommand) and returns a chainable $S set.
+				addLight: ( type = 'directional', opts = {} ) => {
+
+					const T = window.THREE;
+					const color = opts.color ?? 0xffffff;
+					const intensity = opts.intensity ?? 1;
+					let light;
+					switch ( String( type ).toLowerCase() ) {
+
+						case 'point':      light = new T.PointLight( color, intensity, opts.distance ?? 0, opts.decay ?? 2 ); break;
+						case 'spot':       light = new T.SpotLight( color, intensity, opts.distance ?? 0, opts.angle ?? Math.PI / 3, opts.penumbra ?? 0, opts.decay ?? 2 ); break;
+						case 'ambient':    light = new T.AmbientLight( color, intensity ); break;
+						case 'hemisphere': light = new T.HemisphereLight( color, opts.groundColor ?? 0x444444, intensity ); break;
+						default:           light = new T.DirectionalLight( color, intensity ); break;
+
+					}
+					if ( opts.name ) light.name = opts.name;
+					if ( Array.isArray( opts.position ) ) light.position.set( opts.position[ 0 ] || 0, opts.position[ 1 ] || 0, opts.position[ 2 ] || 0 );
+					else if ( ! light.isAmbientLight ) light.position.set( 5, 10, 7.5 );
+					editor.execute( new AddObjectCommand( editor, light ) );
+					return query( [ light ] );
+
+				},
+
+				// Scene environment — dispatch the same signals the Scene panel dispatches.
+				setBackground: ( color = 0x000000 ) => {
+
+					const hex = new window.THREE.Color( color ).getHex();
+					editor.signals.sceneBackgroundChanged.dispatch( 'Color', hex, null, null, undefined, undefined, undefined, undefined );
+					return `background → #${ hex.toString( 16 ).padStart( 6, '0' ) }`;
+
+				},
+				setFog: ( type = 'Fog', color = 0xcccccc, near = 1, far = 100, density = 0.0025 ) => {
+
+					const hex = new window.THREE.Color( color ).getHex();
+					editor.signals.sceneFogChanged.dispatch( type, hex, near, far, density );
+					return `fog → ${ type }`;
+
+				},
+				clearFog: () => { editor.signals.sceneFogChanged.dispatch( 'None', 0, 0, 0, 0 ); return 'fog cleared'; },
+				setEnvironment: ( mode = 'Default' ) => { editor.signals.sceneEnvironmentChanged.dispatch( mode, null ); return `environment → ${ mode }`; },
+
+				// Group/ungroup (the Edit menu twins). groupSelection() groups the current
+				// selection; pass a selector to group those instead. Both are undoable.
+				groupSelection: ( selector = null, name = null ) => {
+
+					const objs = selector ? selectorEngine.query( editor.scene, selector ) : ( editor.selected ? [ editor.selected ] : [] );
+					if ( objs.length === 0 ) return 'nothing to group (select something or pass a selector)';
+					const group = new window.THREE.Group();
+					if ( name ) group.name = name;
+					editor.execute( new GroupObjectsCommand( editor, objs, group ) );
+					editor.select( group );
+					return query( [ group ] );
+
+				},
+				ungroupSelection: ( target = null ) => {
+
+					const grp = target
+						? ( typeof target === 'string' ? selectorEngine.query( editor.scene, target )[ 0 ] : target )
+						: editor.selected;
+					if ( ! grp ) return 'no group selected (select a group or pass one)';
+					editor.execute( new UngroupObjectsCommand( editor, grp ) );
+					return `ungrouped ${ grp.name || grp.uuid }`;
+
+				},
+
+				// Isolate / solo — show only the matched subtree (undoable visibility batch).
+				isolate:  ( selector )  => _isolateTo( selector ),
+				soloClass: ( name )     => _isolateTo( '.' + String( name ).replace( /^\./, '' ) ),
+				showAll: () => {
+
+					const cmds = [];
+					editor.scene.traverse( n => { if ( n.isMesh && n.visible === false ) cmds.push( new SetValueCommand( editor, n, 'visible', true ) ); } );
+					if ( cmds.length ) editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+					return 'all meshes visible';
+
+				},
+
+				// History twins.
+				undo: () => { editor.history.undo(); return 'undo'; },
+				redo: () => { editor.history.redo(); return 'redo'; },
+				clearScene: () => { editor.clear(); return 'scene cleared'; },
+
+				// Exporters (File → Export twins). Export the selection, else the whole scene.
+				exportGLB: () => new Promise( ( resolve ) => {
+
+					import( 'three/addons/exporters/GLTFExporter.js' ).then( ( { GLTFExporter } ) => {
+
+						new GLTFExporter().parse( editor.selected || editor.scene,
+							( result ) => resolve( _saveBlob( result, 'scene.glb', 'application/octet-stream' ) ),
+							( err ) => resolve( `export failed: ${ err }` ), { binary: true } );
+
+					} );
+
+				} ),
+				exportGLTF: () => new Promise( ( resolve ) => {
+
+					import( 'three/addons/exporters/GLTFExporter.js' ).then( ( { GLTFExporter } ) => {
+
+						new GLTFExporter().parse( editor.selected || editor.scene,
+							( result ) => resolve( _saveBlob( JSON.stringify( result, null, 2 ), 'scene.gltf', 'application/json' ) ),
+							( err ) => resolve( `export failed: ${ err }` ), {} );
+
+					} );
+
+				} ),
+				exportOBJ: async () => {
+
+					const { OBJExporter } = await import( 'three/addons/exporters/OBJExporter.js' );
+					return _saveBlob( new OBJExporter().parse( editor.selected || editor.scene ), 'model.obj', 'text/plain' );
+
+				},
+				exportSTL: async () => {
+
+					const { STLExporter } = await import( 'three/addons/exporters/STLExporter.js' );
+					return _saveBlob( new STLExporter().parse( editor.selected || editor.scene ), 'model.stl', 'text/plain' );
+
+				},
+				exportPLY: () => new Promise( ( resolve ) => {
+
+					import( 'three/addons/exporters/PLYExporter.js' ).then( ( { PLYExporter } ) => {
+
+						new PLYExporter().parse( editor.selected || editor.scene,
+							( result ) => resolve( _saveBlob( result, 'model.ply', 'text/plain' ) ), {} );
+
+					} );
+
+				} ),
 
 				// Diagnostic: print the registered op schema
 				listOps: () => opsSchema(),

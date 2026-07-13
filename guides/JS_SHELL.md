@@ -118,6 +118,64 @@ mirrorMesh(mesh, axis='x')                arrayDuplicate(mesh, count, dx, dy, dz
 subdivide(mesh, iterations=1)             listOps()   // print registered op schema
 ```
 
+## Scene & UI-to-shell parity
+
+Everything doable in the panels is callable from the shell. Graph mutations go through Commands
+(undoable); scene-environment changes dispatch the **same signals** the Scene panel does, so the
+shell and the UI stay in lock-step.
+
+```js
+// ── Lights (AddObjectCommand; returns a chainable $S set) ──
+addLight('directional', { color:'#fff', intensity:1, position:[5,10,7.5] })
+addLight('point', { intensity:2, distance:20, decay:2, position:[0,3,0] })
+addLight('spot',  { angle:Math.PI/6, penumbra:0.3 })   // angle in RADIANS
+addLight('ambient', { intensity:0.4 })
+addLight('hemisphere', { color:'#bde', groundColor:'#334', intensity:0.6 })
+
+// ── Scene environment (mirrors the Scene panel) ──
+setBackground('#101014')                 // solid colour background
+setFog('Fog', '#cccccc', 1, 100)         // linear fog (near, far)
+setFog('FogExp2', '#cccccc', 0, 0, 0.02) // exponential fog (density)
+clearFog()
+setEnvironment('Default')                // 'Default' | 'Equirectangular' | 'None'
+
+// ── Group / ungroup (Edit-menu twins, undoable) ──
+groupSelection()                         // group the current selection
+groupSelection('.wheel', 'wheels')       // or group everything a selector matches
+ungroupSelection()                       // ungroup the selected group
+
+// ── Isolate / solo (undoable visibility batch) ──
+isolate('.engine')                       // show only the engine subtree
+soloClass('wheel')                       // shorthand for isolate('.wheel')
+showAll()                                // undo an isolate
+
+// ── History + exporters (File-menu twins) ──
+undo()  redo()  clearScene()
+exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection, else whole scene
+```
+
+### Parity table: UI action → shell call
+
+| UI action | Shell / `$S` | Undoable |
+|---|---|---|
+| Move / rotate / scale gizmo | `$S(sel).move/rotate/scale`, `.moveTo/.rotateTo/.scaleTo`, `.position/.rotation/.scale/.quaternion` | ✓ |
+| Inspector: material colour | `$S(sel).recolor(color)` / `.emissive(color)` | ✓ |
+| Inspector: metalness / roughness / emissive intensity / flat shading / side | `$S(sel).metalness/.roughness/.emissiveIntensity/.flatShading/.doubleSided` | ✓ |
+| Inspector: opacity / visibility / wireframe | `$S(sel).setOpacity/.setVisible/.show/.hide/.wireframe` | ✓ |
+| Inspector: cast / receive shadow, frustum culled, render order | `$S(sel).castShadow/.receiveShadow/.frustumCulled/.renderOrder` | ✓ |
+| Inspector (light): intensity / colour / distance / angle / penumbra / decay / ground colour | `$S(sel).intensity/.lightColor/.distance/.angle/.penumbra/.decay/.groundColor` | ✓ |
+| Inspector (camera): fov / near / far | `$S('camera').fov/.near/.far` | ✓ |
+| Add light | `addLight(type, opts)` | ✓ |
+| Scene: background / fog / environment | `setBackground` / `setFog` / `clearFog` / `setEnvironment` | signal (as UI) |
+| Edit: group / ungroup | `groupSelection` / `ungroupSelection` | ✓ |
+| Outliner: hide others / show | `isolate` / `soloClass` / `showAll` | ✓ |
+| Add / delete object | `AddObjectCommand` / `$S(sel).delete()` / `duplicate` | ✓ |
+| Class / id / label authoring | `$S(sel).addClass/.removeClass/.toggleClass/.editID`, `relabel` / `tagClass` | ✓ |
+| Modeling (boolean, mirror, array, subdivide) | `booleanUnion/…`, `mirrorMesh`, `arrayDuplicate`, `subdivide` | ✓ |
+| Edit Mode (extrude, inset, bevel, weld, UV) | `enterEditMode()` + `extrude/inset/bevel/weld/planarUV/boxUV` | ✓ |
+| Undo / redo / clear | `undo()` / `redo()` / `clearScene()` | — |
+| Export (GLB/GLTF/OBJ/STL/PLY) | `exportGLB/exportGLTF/exportOBJ/exportSTL/exportPLY` | n/a |
+
 ## Edit Mode ops
 
 Enter with the **Edit** toolbar button or `enterEditMode()`. `Tab` or `Esc` toggles/exits. Keys: `1/2/3` for vertex/edge/face, `A` for select all/none. With a sub-object selected, drag the transform gizmo to move it (translate/rotate/scale) — the mesh itself stays put.

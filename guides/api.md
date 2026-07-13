@@ -107,6 +107,20 @@ $S('*')                        // Wildcard — all nodes
 
 ---
 
+### **Live Transform Accessors** (read + command-backed write)
+`.position` `.rotation` `.scale` `.quaternion` are property accessors returning a live handle over the set's first node in **local** space. Reads are live; writes route through the undo/command surface and apply to every node in the set.
+
+| Accessor | Read | Write (undoable) |
+|----------|------|------------------|
+| `.position` | `$S('#box').position.x` | `$S('#box').position.x = 4` → `SetPositionCommand` |
+| `.rotation` | `$S('#box').rotation.y` (radians) | `$S('#box').rotation.y = Math.PI` → `SetRotationCommand` |
+| `.scale` | `$S('#box').scale.x` | `$S('#box').scale.set(2,2,2)` → `SetScaleCommand` |
+| `.quaternion` | `$S('#box').quaternion.w` | `$S('#box').quaternion.w = 1` → converts to Euler → `SetRotationCommand` |
+
+Handles also support `.set(...)`, `.copy(v)`, `.toArray()`, `.clone()`. Back-compat call forms remain: `.scale(factor, axis)` (relative scale) and `.position()` / `.rotation()` / `.scale()` (world-space read-only snapshot).
+
+---
+
 ## **Examples**
 
 ```javascript

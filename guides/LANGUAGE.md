@@ -31,6 +31,13 @@ The human sugar; each is also an op-JSON `type`:
 // ── Write ops (mutations) ──
 recolor(color)  scale(factor, axis?)  move(dx,dy,dz)  rotate(axis, deg)
 delete()  duplicate(dx,dy,dz)  setMaterial({})  retexture(tex)
+
+// ── Bulk property setters (jQuery `.css()` mechanic: one value → whole set, one undo) ──
+castShadow(b)  receiveShadow(b)  frustumCulled(b)  renderOrder(n)                       // object / render
+metalness(v)  roughness(v)  emissive(color)  emissiveIntensity(v)  flatShading(b)  doubleSided(b)  // material (clone-on-write)
+intensity(v)  lightColor(color)  groundColor(color)  distance(v)  angle(rad)  penumbra(v)  decay(v)  // lights
+fov(deg)  near(v)  far(v)                                                               // camera
+
 spin(axis?,turns?,dur?)  bounce()  pulse()  fade()  orbit()  shake()   // keyframe clips
 
 // ── Entrance animations (appear with style) ──
@@ -113,12 +120,32 @@ bounding-box corner falls inside the outline — including objects occluded behi
 
 ### Value getters (read-only, before write)
 ```js
-.position(node)  .rotation(node)  .scale(node)     // current world transforms
+.position(node)  .rotation(node)  .scale(node)     // current WORLD transforms (call form)
 .color(node)                                        // sampled material color (hex string)
 .material(node)                                     // current material props {type, color, metalness, roughness, opacity, ...}
 .opacity(node)                                      // current transparency (0–1)
 .visible(node)                                      // visibility state (boolean)
 ```
+
+### Live transform accessors (read + command-backed write)
+`.position` `.rotation` `.scale` `.quaternion` are property accessors that return a
+**live handle** over the set's first node in **LOCAL** space (three.js-native, mirroring
+`mesh.position`). Reading a component is live; **writing routes through the command
+surface** (undoable, refreshes viewport + inspector) and applies to *every* node in the
+set, batched into one undo step.
+```js
+$S('#box').position            // live handle (read .x/.y/.z, .toArray(), .clone())
+$S('#box').position.x          // → current local x
+$S('#box').position.x = 4      // → SetPositionCommand (undoable)
+$S('#box').scale.set(2, 2, 2)  // → SetScaleCommand (undoable)
+$S('#box').rotation.y = Math.PI // rotation is radians (native THREE.Euler)
+$S('#box').quaternion.w = 1    // writes convert to Euler → SetRotationCommand
+
+// Back-compat call forms still work:
+$S('.wheel').scale(1.5)        // relative-scale op (flagship)
+$S('#box').position()          // world-space THREE.Vector3 (read-only snapshot)
+```
+
 
 ### Traversal (graph navigation)
 ```js
@@ -142,6 +169,41 @@ bounding-box corner falls inside the outline — including objects occluded behi
 .show() / .hide()               // shortcuts for setVisible(true) / setVisible(false)
   // LIFECYCLE: show() / hide() trigger entrance/exit animations if attached
 .wireframe(bool)                // toggle wireframe render mode
+```
+
+### Bulk property setters (one value → whole set, one undo)
+
+The jQuery `.css('color','red')` mechanic: a single value fanned out over **every** matched
+node as **one undoable batch** (never N undo entries). Built on one primitive — `bulkApply` —
+so every setter below is an instance, not a special case. Method names match the three.js
+property they set (`.castShadow`, `.metalness`, `.fov`), so the name you know is the name you
+call. Material setters **clone-on-write**: a bulk change over a shared material clones per node
+first, so it never bleeds onto parts you didn't select. Each also exists as an op-JSON `type`
+(AI-emittable) and carries the same guards as the rest of the language.
+
+```js
+// ── Object / render flags (apply to meshes; castShadow also to lights) ──
+$S('*').castShadow(true).receiveShadow(true)   // whole scene casts + receives shadows
+$S('.glass').renderOrder(1)                     // fix transparency sort order
+$S('#decal').frustumCulled(false)               // never cull this one
+
+// ── Material (PBR) — clone-on-write, so shared materials don't bleed ──
+$S('.metal').metalness(1).roughness(0.2)        // chainable
+$S('.lava').emissive('#ff4400').emissiveIntensity(2)
+$S('.leaf').flatShading(true).doubleSided(true)
+
+// ── Lights ──
+$S('type(light)').intensity(2)
+$S('#sun').lightColor('#fff2cc')                // light.color (recolor targets materials)
+$S('#hemi').groundColor('#334')                 // hemisphere ground tint
+$S('#lamp').distance(20).decay(2)               // point/spot falloff
+$S('#spot').angle(Math.PI/6).penumbra(0.3)      // spot cone (angle in RADIANS)
+
+// ── Camera (the viewport camera answers to `camera` / `#camera`) ──
+$S('camera').fov(50).near(0.1).far(500)         // reprojects automatically
+
+// ── Raw primitive for power users: any Command, fanned out, one undo ──
+$S('*').bulkSet(n => new SetValueCommand(editor, n, 'renderOrder', 1), n => n.isMesh)
 ```
 
 ### Transform ops: relative vs absolute (standardized pair)

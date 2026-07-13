@@ -22,6 +22,12 @@
 npx serve docs       # local dev. Or point GitHub Pages at docs/
 ```
 
+or
+
+```bash
+node server.js
+```
+
 Requires **Chrome 113+** (WebGPU). Verify at [webgpureport.org](https://webgpureport.org).
 
 **With external AI models (Ollama, OpenAI, Claude):**
@@ -202,7 +208,7 @@ These state the thesis. The language is primary; AI is optional.
 
 ## Prior art
 
-Selector-over-scene-graph exists (three-query-selector, scene.querySelectorAll, Unity-Scene-Query). NL grounding over 3D scene graphs exists (Cypher-for-3DSG, BBQ, FreeQ-Graph). Strata's synthesis is the new part: descriptor-derived classes, user-verified labels, selectors as the editing and versioning substrate, manual-first design, and a bounded optional AI layer. This is positioned as an extension, not an invention.
+Selector-over-scene-graph exists (three-query-selector, scene.querySelectorAll, Unity-Scene-Query). NL grounding over 3D scene graphs exists (Cypher-for-3DSG, BBQ, FreeQ-Graph). Strata's synthesis is the new part: descriptor-derived classes, user-verified labels, selectors as the editing and versioning substrate, manual-first design, and a bounded optional AI layer. This is positioned as an integrated extension, not an invention.
 
 ---
 

@@ -35,6 +35,7 @@ DONE
   $S() API: query and traversal layer (READ half of the language)
     Query methods: .count() / .exists() / .isEmpty() / .names() / .ids() / .classes() / .bounds() / .size()
     Value getters: .position() / .rotation() / .scale() / .color() / .material() / .opacity() / .visible()
+    Live transform accessors: .position / .rotation / .scale / .quaternion (read component + command-backed write, local space)
     Traversal: .not() / .first() / .last() / .eq(n) / .parent() / .children() / .closest() / .add()
     Appearance: .setOpacity() / .setVisible() / .show() / .hide() / .wireframe()
     Transforms: .moveTo() / .rotateTo() / .scaleTo() / .reset() / .lookAt() (clarified relative vs absolute)

@@ -19,6 +19,8 @@
 import * as selectorEngine from './selectorEngine.js';
 import {
 	recolorOp, scaleOp, moveOp, rotateOp, deleteOp, duplicateOp, setMaterialOp,
+	bulkApply, setObjectPropOp, setMaterialPropOp, setMaterialColorOp,
+	setLightPropOp, setLightColorOp, setCameraPropOp,
 } from './editOps.js';
 import { executeRecipeOp } from './animationRecipes.js';
 import { TimelineModel } from './timeline.js';
@@ -26,6 +28,9 @@ import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { SetLabelCommand } from '../commands/SetLabelCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
+import { SetPositionCommand } from '../commands/SetPositionCommand.js';
+import { SetRotationCommand } from '../commands/SetRotationCommand.js';
+import { SetScaleCommand } from '../commands/SetScaleCommand.js';
 import { hasClass, normalizeClassName, toClassSet } from './classDerive.js';
 
 // ── The single op vocabulary definition ──────────────────────────────────────
@@ -50,6 +55,29 @@ export const OP_VOCABULARY = {
 	scaleTo:     { kind: 'edit', args: { factor: 'number' },                        summary: 'set absolute uniform scale' },
 	reset:       { kind: 'edit', args: {},                                          summary: 'restore to original transform' },
 	lookAt:      { kind: 'edit', args: { target: 'vector3|string' },               summary: 'orient toward a point or object' },
+
+	// ── Bulk property setters (fan out over the whole set; ONE undoable batch) ──
+	// Named to match three.js property names (the dense prior the model knows).
+	castShadow:       { kind: 'edit', args: { value: 'boolean' },   summary: 'per-mesh/light shadow casting on/off (bulk)' },
+	receiveShadow:    { kind: 'edit', args: { value: 'boolean' },   summary: 'per-mesh shadow receiving on/off (bulk)' },
+	frustumCulled:    { kind: 'edit', args: { value: 'boolean' },   summary: 'per-mesh frustum culling on/off (bulk)' },
+	renderOrder:      { kind: 'edit', args: { value: 'number' },    summary: 'per-mesh render order (transparency sort fixes)' },
+	flatShading:      { kind: 'edit', args: { value: 'boolean' },   summary: 'material flat vs smooth shading (bulk, clone-on-write)' },
+	metalness:        { kind: 'edit', args: { value: 'number' },    summary: 'material metalness 0–1 (bulk, clone-on-write)' },
+	roughness:        { kind: 'edit', args: { value: 'number' },    summary: 'material roughness 0–1 (bulk, clone-on-write)' },
+	emissive:         { kind: 'edit', args: { color: 'color' },     summary: 'material emissive color (bulk, clone-on-write)' },
+	emissiveIntensity:{ kind: 'edit', args: { value: 'number' },    summary: 'material emissive intensity (bulk, clone-on-write)' },
+	doubleSided:      { kind: 'edit', args: { value: 'boolean' },   summary: 'material side: double vs front (bulk, clone-on-write)' },
+	intensity:        { kind: 'edit', args: { value: 'number' },    summary: 'light intensity (bulk)' },
+	lightColor:       { kind: 'edit', args: { color: 'color' },     summary: 'light color (bulk)' },
+	groundColor:      { kind: 'edit', args: { color: 'color' },     summary: 'hemisphere-light ground color (bulk)' },
+	distance:         { kind: 'edit', args: { value: 'number' },    summary: 'point/spot light distance (bulk)' },
+	angle:            { kind: 'edit', args: { value: 'number' },    summary: 'spot-light cone angle in radians (bulk)' },
+	penumbra:         { kind: 'edit', args: { value: 'number' },    summary: 'spot-light penumbra 0–1 (bulk)' },
+	decay:            { kind: 'edit', args: { value: 'number' },    summary: 'point/spot light decay (bulk)' },
+	fov:              { kind: 'edit', args: { value: 'number' },    summary: 'perspective camera field of view in degrees' },
+	near:             { kind: 'edit', args: { value: 'number' },    summary: 'camera near clip plane' },
+	far:              { kind: 'edit', args: { value: 'number' },    summary: 'camera far clip plane' },
 
 	// ── Animation recipe ops (deterministic winding-safe keyframes) ──
 	spin:        { kind: 'anim', args: { axis: 'axis?', turns: 'number?', duration: 'number?' },        summary: 'continuous rotation (winding-safe)' },
@@ -282,6 +310,29 @@ export function op( editor, opJSON ) {
 			case 'duplicate':   return withFlag( duplicateOp( editor, selector, opJSON.dx, opJSON.dy, opJSON.dz ) );
 			case 'setMaterial': return withFlag( setMaterialOp( editor, selector, opJSON.props ) );
 			case 'retexture':   return withFlag( setMaterialOp( editor, selector, { map: opJSON.texture } ) );
+
+			// ── Bulk property setters (fan-out over the whole set, one undo batch) ──
+			case 'castShadow':        return withFlag( setObjectPropOp( editor, selector, 'castShadow', Boolean( opJSON.value ), n => n.isMesh || n.isLight ) );
+			case 'receiveShadow':     return withFlag( setObjectPropOp( editor, selector, 'receiveShadow', Boolean( opJSON.value ), n => n.isMesh ) );
+			case 'frustumCulled':     return withFlag( setObjectPropOp( editor, selector, 'frustumCulled', Boolean( opJSON.value ), n => n.isMesh ) );
+			case 'renderOrder':       return withFlag( setObjectPropOp( editor, selector, 'renderOrder', Number( opJSON.value ) || 0, n => n.isMesh ) );
+			case 'flatShading':       return withFlag( setMaterialPropOp( editor, selector, 'flatShading', Boolean( opJSON.value ) ) );
+			case 'metalness':         return withFlag( setMaterialPropOp( editor, selector, 'metalness', Number( opJSON.value ) ) );
+			case 'roughness':         return withFlag( setMaterialPropOp( editor, selector, 'roughness', Number( opJSON.value ) ) );
+			case 'emissiveIntensity': return withFlag( setMaterialPropOp( editor, selector, 'emissiveIntensity', Number( opJSON.value ) ) );
+			case 'doubleSided':       return withFlag( setMaterialPropOp( editor, selector, 'side', Boolean( opJSON.value ) ? 2 : 0 ) );
+			case 'emissive':          return withFlag( setMaterialColorOp( editor, selector, 'emissive', opJSON.color ) );
+			case 'intensity':         return withFlag( setLightPropOp( editor, selector, 'intensity', Number( opJSON.value ) ) );
+			case 'distance':          return withFlag( setLightPropOp( editor, selector, 'distance', Number( opJSON.value ) ) );
+			case 'angle':             return withFlag( setLightPropOp( editor, selector, 'angle', Number( opJSON.value ) ) );
+			case 'penumbra':          return withFlag( setLightPropOp( editor, selector, 'penumbra', Number( opJSON.value ) ) );
+			case 'decay':             return withFlag( setLightPropOp( editor, selector, 'decay', Number( opJSON.value ) ) );
+			case 'lightColor':        return withFlag( setLightColorOp( editor, selector, 'color', opJSON.color ) );
+			case 'groundColor':       return withFlag( setLightColorOp( editor, selector, 'groundColor', opJSON.color ) );
+			case 'fov':               return withFlag( setCameraPropOp( editor, selector, 'fov', Number( opJSON.value ) ) );
+			case 'near':              return withFlag( setCameraPropOp( editor, selector, 'near', Number( opJSON.value ) ) );
+			case 'far':               return withFlag( setCameraPropOp( editor, selector, 'far', Number( opJSON.value ) ) );
+
 			default:            return { success: false, message: `unhandled edit op: ${ type }` };
 
 		}
@@ -466,13 +517,60 @@ class ChainableSet {
 
 	// ── Named-method sugar (thin wrappers over .op()) ──
 	recolor( color )                    { return this.op( { type: 'recolor', color } ); }
-	scale( factor, axis )               { return this.op( { type: 'scale', factor, axis } ); }
 	move( dx = 0, dy = 0, dz = 0 )      { return this.op( { type: 'move', dx, dy, dz } ); }
 	rotate( axis = 'y', degrees = 90 )  { return this.op( { type: 'rotate', axis, degrees } ); }
 	delete()                            { return this.op( { type: 'delete' } ); }
 	duplicate( dx = 0, dy = 0, dz = 0 ) { return this.op( { type: 'duplicate', dx, dy, dz } ); }
 	retexture( texture )                { return this.op( { type: 'retexture', texture } ); }
 	setMaterial( props )                { return this.op( { type: 'setMaterial', props } ); }
+
+	// ── Bulk property setters (jQuery `.css()` mechanic) ────────────────────────
+	// One value fanned out over the whole set as ONE undoable batch. Named to
+	// match three.js property names directly (.castShadow, .metalness, .fov, …).
+	// Material sets clone-on-write. All delegate to the same .op() → editOps path.
+	castShadow( on = true )        { return this.op( { type: 'castShadow', value: !! on } ); }
+	receiveShadow( on = true )     { return this.op( { type: 'receiveShadow', value: !! on } ); }
+	frustumCulled( on = true )     { return this.op( { type: 'frustumCulled', value: !! on } ); }
+	renderOrder( n = 0 )           { return this.op( { type: 'renderOrder', value: Number( n ) || 0 } ); }
+	flatShading( on = true )       { return this.op( { type: 'flatShading', value: !! on } ); }
+	metalness( v )                 { return this.op( { type: 'metalness', value: Number( v ) } ); }
+	roughness( v )                 { return this.op( { type: 'roughness', value: Number( v ) } ); }
+	emissive( color )              { return this.op( { type: 'emissive', color } ); }
+	emissiveIntensity( v )         { return this.op( { type: 'emissiveIntensity', value: Number( v ) } ); }
+	doubleSided( on = true )       { return this.op( { type: 'doubleSided', value: !! on } ); }
+	setColor( color )              { return this.recolor( color ); }
+	intensity( v )                 { return this.op( { type: 'intensity', value: Number( v ) } ); }
+	lightColor( color )            { return this.op( { type: 'lightColor', color } ); }
+	groundColor( color )           { return this.op( { type: 'groundColor', color } ); }
+	distance( v )                  { return this.op( { type: 'distance', value: Number( v ) } ); }
+	angle( v )                     { return this.op( { type: 'angle', value: Number( v ) } ); }
+	penumbra( v )                  { return this.op( { type: 'penumbra', value: Number( v ) } ); }
+	decay( v )                     { return this.op( { type: 'decay', value: Number( v ) } ); }
+	fov( v )                       { return this.op( { type: 'fov', value: Number( v ) } ); }
+	near( v )                      { return this.op( { type: 'near', value: Number( v ) } ); }
+	far( v )                       { return this.op( { type: 'far', value: Number( v ) } ); }
+
+	/**
+	 * The raw fan-out primitive, exposed for power-users. Runs `factory(node)`
+	 * (returns a Command | Command[] | null) over every matched node (optionally
+	 * expanded to descendants via `pred`) and commits ONE undoable batch.
+	 * `$S('*').bulkSet(n => new SetValueCommand(editor, n, 'renderOrder', 1), x => x.isMesh)`
+	 */
+	bulkSet( factory, pred = null ) {
+		const targets = pred ? this._collect( pred ) : this.nodes;
+		this._last = bulkApply( this.editor, targets, factory );
+		return this;
+	}
+
+	/** Collect matched nodes + descendants satisfying `pred`, de-duplicated. */
+	_collect( pred ) {
+		const out = [];
+		const seen = new Set();
+		for ( const root of this.nodes ) {
+			root.traverse( n => { if ( pred( n ) && ! seen.has( n ) ) { seen.add( n ); out.push( n ); } } );
+		}
+		return out;
+	}
 
 	// ── Semantic class / id authoring (jQuery-style, command-backed, chainable) ──
 	// Classes (→ .foo) and ids (→ #foo) drive selector resolution AND the injected
@@ -628,28 +726,149 @@ class ChainableSet {
 	// ── VALUE GETTERS (READ-ONLY) ──────────────────────────────────────────────
 	// ────────────────────────────────────────────────────────────────────────────
 
-	/** Get world-space position of first node. */
-	position( node = this.nodes[ 0 ] ) {
-		if ( ! node ) return null;
-		node.updateWorldMatrix( true, false );
-		return node.getWorldPosition( new THREE.Vector3() );
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── TRANSFORM ACCESSORS (LIVE, READ + COMMAND-BACKED WRITE) ─────────────────
+	// ────────────────────────────────────────────────────────────────────────────
+	// `.position/.rotation/.scale/.quaternion` return a live handle over the first
+	// node's LOCAL transform (three.js-native, mirroring `mesh.position`):
+	//   read   →  $S('#box').position.x            // live component value
+	//   write  →  $S('#box').position.x = 4        // → SetPositionCommand (undoable)
+	//   vector →  $S('#box').scale.set( 2, 2, 2 )  // → SetScaleCommand (undoable)
+	// Writes route through the command surface and apply to EVERY node in the set
+	// (batched into ONE undo via MultiCmdsCommand), so the viewport + inspector
+	// refresh — honoring the "one execution surface" invariant. Rotation uses
+	// radians (native THREE.Euler). Calling the handle preserves the legacy forms:
+	//   $S('.wheel').scale( 1.5 )       // relative-scale op (flagship)
+	//   $S('#box').position()           // world-space THREE.Vector3 (read-only)
+
+	/** Live LOCAL position handle of the set (read component / command-backed write). */
+	get position() { return this._transformHandle( 'position' ); }
+
+	/** Live LOCAL rotation handle (Euler, radians) of the set. */
+	get rotation() { return this._transformHandle( 'rotation' ); }
+
+	/** Live LOCAL scale handle of the set. Callable: `.scale(factor, axis)` relative-scales. */
+	get scale() { return this._transformHandle( 'scale' ); }
+
+	/** Live LOCAL quaternion handle of the set (writes convert to Euler → SetRotationCommand). */
+	get quaternion() { return this._transformHandle( 'quaternion' ); }
+
+	/** Build a live transform handle (Proxy) over the first node's local `kind` value. */
+	_transformHandle( kind ) {
+		const chain = this;
+		const COMPONENTS = kind === 'quaternion' ? [ 'x', 'y', 'z', 'w' ] : [ 'x', 'y', 'z' ];
+		const liveLocal = () => { const n = chain.nodes[ 0 ]; return n ? n[ kind ] : null; };
+
+		// Callable target preserves the legacy method forms (back-compat).
+		const callable = function ( arg, arg2 ) {
+			if ( kind === 'scale' && typeof arg === 'number' ) {
+				return chain.op( { type: 'scale', factor: arg, axis: arg2 } );
+			}
+			const node = ( arg && arg.isObject3D ) ? arg : chain.nodes[ 0 ];
+			return chain._readWorld( kind, node );
+		};
+
+		return new Proxy( callable, {
+			get( target, prop ) {
+				const v = liveLocal();
+				if ( prop === 'x' || prop === 'y' || prop === 'z' || prop === 'w' ) {
+					return v ? v[ prop ] : undefined;
+				}
+				if ( prop === 'set' ) {
+					return ( ...vals ) => {
+						const patch = {};
+						COMPONENTS.forEach( ( c, i ) => { if ( vals[ i ] !== undefined ) patch[ c ] = vals[ i ]; } );
+						return chain._writeTransform( kind, patch );
+					};
+				}
+				if ( prop === 'copy' ) {
+					return ( src ) => {
+						const patch = {};
+						COMPONENTS.forEach( c => { if ( src && src[ c ] !== undefined ) patch[ c ] = src[ c ]; } );
+						return chain._writeTransform( kind, patch );
+					};
+				}
+				if ( prop === 'toArray' ) return () => v ? v.toArray() : [];
+				if ( prop === 'clone' ) return () => v ? v.clone() : null;
+				if ( prop === 'toString' || prop === Symbol.toPrimitive ) {
+					return () => v ? `${ kind }(${ COMPONENTS.map( c => v[ c ] ).join( ', ' ) })` : `${ kind }(empty)`;
+				}
+				// Reflect any other live property/method (e.g. euler.order, isVector3).
+				if ( v && prop in v ) {
+					const val = v[ prop ];
+					return ( typeof val === 'function' ) ? val.bind( v ) : val;
+				}
+				return undefined;
+			},
+			set( target, prop, value ) {
+				if ( prop === 'x' || prop === 'y' || prop === 'z' || prop === 'w' ) {
+					chain._writeTransform( kind, { [ prop ]: value } );
+				}
+				return true;
+			}
+		} );
 	}
 
-	/** Get world-space rotation (Euler) of first node. */
-	rotation( node = this.nodes[ 0 ] ) {
+	/** Read the WORLD-space `kind` value of a node (legacy read form, non-mutating). */
+	_readWorld( kind, node ) {
 		if ( ! node ) return null;
 		node.updateWorldMatrix( true, false );
-		const euler = new THREE.Euler();
-		euler.setFromQuaternion( node.getWorldQuaternion( new THREE.Quaternion() ) );
-		return euler;
+		if ( kind === 'position' ) return node.getWorldPosition( new THREE.Vector3() );
+		if ( kind === 'scale' ) return node.getWorldScale( new THREE.Vector3() );
+		if ( kind === 'quaternion' ) return node.getWorldQuaternion( new THREE.Quaternion() );
+		if ( kind === 'rotation' ) {
+			const euler = new THREE.Euler();
+			euler.setFromQuaternion( node.getWorldQuaternion( new THREE.Quaternion() ) );
+			return euler;
+		}
+		return null;
 	}
 
-	/** Get world-space scale of first node. */
-	scale( node = this.nodes[ 0 ] ) {
-		if ( ! node ) return null;
-		const scale = new THREE.Vector3();
-		node.getWorldScale( scale );
-		return scale;
+	/**
+	 * Apply a partial LOCAL transform change (per-component patch) to EVERY node in
+	 * the set through the command surface, batched into one undo step. Each node's
+	 * current transform is read fresh so sequential writes compose correctly.
+	 */
+	_writeTransform( kind, patch ) {
+		if ( this.nodes.length === 0 || ! patch || Object.keys( patch ).length === 0 ) return this;
+		const editor = this.editor;
+		const cmds = [];
+		for ( const node of this.nodes ) {
+			let cmd = null;
+			if ( kind === 'position' ) {
+				const v = node.position.clone();
+				if ( patch.x !== undefined ) v.x = patch.x;
+				if ( patch.y !== undefined ) v.y = patch.y;
+				if ( patch.z !== undefined ) v.z = patch.z;
+				cmd = new SetPositionCommand( editor, node, v );
+			} else if ( kind === 'scale' ) {
+				const v = node.scale.clone();
+				if ( patch.x !== undefined ) v.x = patch.x;
+				if ( patch.y !== undefined ) v.y = patch.y;
+				if ( patch.z !== undefined ) v.z = patch.z;
+				cmd = new SetScaleCommand( editor, node, v );
+			} else if ( kind === 'rotation' ) {
+				const e = node.rotation.clone();
+				if ( patch.x !== undefined ) e.x = patch.x;
+				if ( patch.y !== undefined ) e.y = patch.y;
+				if ( patch.z !== undefined ) e.z = patch.z;
+				cmd = new SetRotationCommand( editor, node, e );
+			} else if ( kind === 'quaternion' ) {
+				const q = node.quaternion.clone();
+				if ( patch.x !== undefined ) q.x = patch.x;
+				if ( patch.y !== undefined ) q.y = patch.y;
+				if ( patch.z !== undefined ) q.z = patch.z;
+				if ( patch.w !== undefined ) q.w = patch.w;
+				q.normalize();
+				const e = new THREE.Euler().setFromQuaternion( q, node.rotation.order );
+				cmd = new SetRotationCommand( editor, node, e );
+			}
+			if ( cmd ) cmds.push( cmd );
+		}
+		if ( cmds.length ) {
+			editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+		}
+		return this;
 	}
 
 	/** Get material color of first node (if it's a Mesh). */
