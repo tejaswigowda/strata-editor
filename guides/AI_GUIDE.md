@@ -3,11 +3,11 @@
 > Part of the [Strata documentation](../README.md#documentation). See also:
 > [The language](LANGUAGE.md) · [JS Shell](JS_SHELL.md) · [Dev mode API](DEV_MODE_API.md) · [The eval matrix (thesis evidence)](../README.md#the-eval-matrix-the-editing-gate)
 
-**The shell and language work perfectly well without AI.** This document covers the optional natural-language layer: the agentic loop, the scene context the model sees, how to configure models, and how the generation fallback is evaluated. The [eval matrix](../README.md#the-eval-matrix-the-editing-gate) — the evidence for the zero-training claim — lives in the README because it is the project thesis.
+**The shell and language work perfectly well without AI.** This document covers the optional natural-language layer: the agentic loop, the scene context the model sees, how to configure models, and how the generation fallback is evaluated. The [eval matrix](../README.md#the-eval-matrix-the-editing-gate) (the evidence for the zero-training claim) lives in the README because it is the project thesis.
 
 ## The agentic loop
 
-When you use AI (opt-in), every request runs a bounded, self-correcting loop. All on-device, no extra models. The language is the contract—the AI stays within bounds and emits selector-op JSON.
+When you use AI (opt-in), every request runs a bounded, self-correcting loop. All on-device, no extra models. The language is the contract. The AI stays within bounds and emits selector-op JSON.
 
 ```
 generate -> validate -> execute -> observe -> fix   (max 3 retries, every action on the undo stack)
@@ -40,7 +40,7 @@ Select a model from the shell header and click **Load AI**. Weights download onc
 
 ### Browser-based models (WebLLM)
 
-#### Production Mode (default) — Validated models only
+#### Production Mode (default): Validated models only
 
 In production mode (standard `node server.js`), a curated list of **validated, production-ready** models is displayed:
 
@@ -48,11 +48,11 @@ In production mode (standard `node server.js`), a curated list of **validated, p
 |-------|----------|------|-------|
 | **Viable floor (recommended)** | `Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC` | ~1.9 GB | The validated zero-training floor: 73% scaffolded overall, ties the Opus ceiling on arg-extraction. Best for edit work |
 | **Powerful code generation** | `Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC` | ~5.1 GB | Best at decomposition. Needs 8 GB+ VRAM |
-| **Fast general-purpose** | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | ~1.1 GB | General-purpose / labeling. Below the edit floor — offered for general use, not the editing gate |
+| **Fast general-purpose** | `Llama-3.2-1B-Instruct-q4f32_1-MLC` | ~1.1 GB | General-purpose / labeling. Below the edit floor, offered for general use, not the editing gate |
 
 The Qwen coder models at **1.5B and up** passed the edit eval matrix (the 1.5B is the validated floor; see [the eval matrix](../README.md#the-eval-matrix-the-editing-gate)). The **0.5B is deliberately excluded** as under-capacity. The Llama-1B is offered for general-purpose and labeling use, not as an editing model. To customize the vetted models list, edit the `vettedModels` array in `docs/editor/js/Shell.js`.
 
-#### Development Mode (DEV=1) — Full model access for research
+#### Development Mode (DEV=1): Full model access for research
 
 In development mode (`DEV=1 node server.js`), **all** available WebLLM models are shown with their full technical details (model ID, VRAM requirement, quantization info). This allows testing and experimentation with a broader range of models during development.
 
@@ -101,7 +101,7 @@ Saved providers appear under a `─── Client APIs (browser) ───` separ
 
 ## The generation eval (legacy axis): `evalAI()`
 
-`evalAI()` is the older generation-scaffolding eval. It runs a standing prompt set through the agentic loop and prints a 4-axis pass/fail table (struct, spatial, semantic, distinct). It tests the generation task, which is now scaffolding, not the headline. It still tells a useful story about the generation fallback and the model-independent validation layer. It is not the editing eval — for that, see [the eval matrix](../README.md#the-eval-matrix-the-editing-gate).
+`evalAI()` is the older generation-scaffolding eval. It runs a standing prompt set through the agentic loop and prints a 4-axis pass/fail table (struct, spatial, semantic, distinct). It tests the generation task, which is now scaffolding, not the headline. It still tells a useful story about the generation fallback and the model-independent validation layer. It is not the editing eval. For that, see [the eval matrix](../README.md#the-eval-matrix-the-editing-gate).
 
 **Monaco editor in eval output:** When code is generated during `evalAI()`, it also appears in Monaco editors with the same Run/dispose behavior, ensuring consistent evaluation workflow across all shell execution paths.
 

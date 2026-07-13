@@ -8,13 +8,13 @@
 ```javascript
 const $S = makeQuery(editor);  // Initialize with editor
 
-$S('.wheel.front')             // Compound selector (AND) — has .wheel AND .front
+$S('.wheel.front')             // Compound selector (AND): has .wheel AND .front
 $S('#dump-bed')                // ID selector (by label or name)
 $S('.object')                  // Single class
 $S('mesh')                     // Type selector (mesh, group, light, camera, etc.)
 $S('.a .b')                    // Descendant combinator
 $S('.a > .b')                  // Child combinator
-$S('*')                        // Wildcard — all nodes
+$S('*')                        // Wildcard: all nodes
 ```
 
 ---

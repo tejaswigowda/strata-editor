@@ -23,7 +23,7 @@ listCandidates('the two wheels at the back')          // ranked candidates
 resolvePartAI('the flat panel on top')                // async: rule match + LLM disambiguation
 ```
 
-Descriptors also feed the **auto-class** vocabulary the [selector language](LANGUAGE.md#selector-grammar) matches against — facts like `.front .left .red .elongated .pair-left` become addressable classes with no labeling step.
+Descriptors also feed the **auto-class** vocabulary the [selector language](LANGUAGE.md#selector-grammar) matches against. Facts like `.front .left .red .elongated .pair-left` become addressable classes with no labeling step.
 
 ---
 

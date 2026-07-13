@@ -48,9 +48,9 @@ When dev mode is enabled, the console shows:
 ```
 Serving docs/ at http://127.0.0.1:5500
 ✓ Dev mode enabled
-  /api/models  — List available models (WebLLM + Ollama + OpenAI)
-  /api/chat    — Proxy chat requests to local/remote APIs
-  /api/health  — Check health of external services
+  /api/models  : List available models (WebLLM + Ollama + OpenAI)
+  /api/chat    : Proxy chat requests to local/remote APIs
+  /api/health  : Check health of external services
   • Ollama:    http://127.0.0.1:11434 (optional)
   • OpenAI:    OPENAI_API_KEY env var (optional)
 ```

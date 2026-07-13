@@ -1,7 +1,9 @@
-# 3DOM / `$S` Specification — v0.1
+# 3DOM / `$S` Specification (v0.1)
 
 Status: **Draft, stable surface.** The v0.x line may add ops and selectors but
 will not remove or repurpose the ones below without a major-version bump.
+
+📖 Docs: https://tejaswigowda.com/strata-editor/packages/3dom/
 
 3DOM ("three-D Object Model") is a runtime-free model for **addressing** and
 **editing** a three.js scene graph. `$S` is its jQuery-style binding. The model
@@ -13,7 +15,7 @@ knows nothing about any editor: every mutation is routed through a **Host**.
 
 - **Deterministic.** Selectors and auto-labelling are pure functions of the
   scene graph at call time. No heuristics that vary between runs.
-- **three.js is the only hard dependency**, and it is a *peer* — the host page
+- **three.js is the only hard dependency**, and it is a *peer*. The host page
   supplies it. Everything else is internal abstractions.
 - **Facts, not guesses.** Auto-labelling emits classes only for things it can
   measure (type, colour, region, shape, symmetry, size rank, material name,
@@ -28,8 +30,8 @@ knows nothing about any editor: every mutation is routed through a **Host**.
 const $S = createS( sceneOrHost, opts );
 ```
 
-- `sceneOrHost` — a `THREE.Object3D` root, or a **Host** (§6).
-- `opts` — when a bare scene is given: `{ onChange?, historyLimit? }` for the
+- `sceneOrHost`: a `THREE.Object3D` root, or a **Host** (§6).
+- `opts`: when a bare scene is given, `{ onChange?, historyLimit? }` for the
   built-in `DefaultHost`.
 - Returns a callable `$S(selector) → ChainableSet`, with attached helpers:
   `.host` `.scene` `.autoLabel(opts?)` `.op(json)` `.ops(list)` `.undo()`
@@ -48,7 +50,7 @@ A CSS subset, matched against the scene graph:
 | `type`      | object type via `is*` flags: `mesh` `group` `light` `camera` `sprite` `line` `points` `bone` `object3d`. An unknown bare token matches **nothing** (not everything). |
 | `.class`    | node has this class (author-set on `userData.classes`, or auto-labelled). |
 | `#id`       | `userData.label === id`, falling back to `node.name === id`.       |
-| `.a.b`      | compound — has class `a` AND class `b`.                            |
+| `.a.b`      | compound: has class `a` AND class `b`.                             |
 | `A B`       | descendant combinator.                                            |
 | `A > B`     | child combinator.                                                 |
 | `*`         | every node in scope.                                              |
@@ -64,10 +66,10 @@ Class names are normalised: lower-cased, spaces → `-`, non-`[a-z0-9-]` strippe
 
 Two phases, both idempotent:
 
-1. `indexSubtree(root, force)` — compute per-node **descriptors** into
-   `userData.descriptors` (+ a geometry hash for symmetry pairing). Skips nodes
+1. `indexSubtree(root, force)`: compute per-node **descriptors** into
+   `userData.descriptors` (plus a geometry hash for symmetry pairing). Skips nodes
    already indexed for the same geometry unless `opts.force === true`.
-2. `deriveAllClasses(root)` — write `userData.classes` from type + descriptors +
+2. `deriveAllClasses(root)`: write `userData.classes` from type, descriptors, and
    name stem.
 
 Class sources (all deterministic):
@@ -92,8 +94,8 @@ Class sources (all deterministic):
 ## 5. Op set
 
 Ops are the closed set of undoable mutations. Chain methods and op-JSON both
-route here; every op resolves its selector, builds Host commands, and executes
-them as one undoable step (a `multi` when more than one command results).
+route here. Every op resolves its selector, builds Host commands, and executes
+them as one undoable step. When more than one command results, it becomes a `multi`.
 
 | Op            | Chain method                    | Guard / clamp                                   |
 | ------------- | ------------------------------- | ----------------------------------------------- |
@@ -105,8 +107,8 @@ them as one undoable step (a `multi` when more than one command results).
 | `duplicate`   | `.duplicate(x?, y?, z?)`        | bakes world transform, applies offset.          |
 | `setMaterial` | `.setMaterial(props)`           | builds a `MeshStandardMaterial` from props.     |
 | `setOpacity`  | `.setOpacity(v)`                | sets `transparent` as needed.                    |
-| `setVisible`  | `.setVisible(v)`                | —                                               |
-| `wireframe`   | `.wireframe(on?)`               | —                                               |
+| `setVisible`  | `.setVisible(v)`                | none                                            |
+| `wireframe`   | `.wireframe(on?)`               | none                                            |
 | `castShadow`  | `.castShadow(v?)`               | object prop.                                     |
 | `receiveShadow`| `.receiveShadow(v?)`           | object prop.                                     |
 | `metalness`   | `.metalness(v)`                 | material prop.                                   |
@@ -120,12 +122,12 @@ them as one undoable step (a `multi` when more than one command results).
 { "op": "recolor", "selector": ".wheel", "args": { "color": "#111" } }
 ```
 
-- `op` — required, one of `OP_SET`.
-- `selector` — required; a selector string **or** an array of nodes.
-- `args` — op-specific. Common aliases are accepted (`factor`/`value`,
+- `op`: required, one of `OP_SET`.
+- `selector`: required. A selector string **or** an array of nodes.
+- `args`: op-specific. Common aliases are accepted (`factor`/`value`,
   `x`/`dx`, `degrees`/`value`, `on`/`value`). See `OP_SCHEMA`.
 
-`dispatchOp(host, json)` runs one; `dispatchOps(host, list)` runs many in order
+`dispatchOp(host, json)` runs one. `dispatchOps(host, list)` runs many in order
 and returns per-op results `{ success, message? }`.
 
 ---
@@ -133,7 +135,7 @@ and returns per-op results `{ success, message? }`.
 ## 6. Host contract
 
 The Host is the **only** injection seam between the model and a runtime. The ops
-layer never imports a concrete command class — it calls Host **factories**.
+layer never imports a concrete command class. It calls Host **factories**.
 
 A Host is any object providing:
 
@@ -145,19 +147,19 @@ interface Host {
   redo(): void;
   multi( commands[] ): command;  // group into one undoable step
   notify( kind: string, payload? ): void;
-  // command factories — each returns { name, execute(), undo() }
+  // command factories, each returns { name, execute(), undo() }
   setPosition, setRotation, setScale, setValue,
   setColor, setMaterialColor, setMaterialValue, setMaterial,
   addObject, removeObject
 }
 ```
 
-- **`DefaultHost`** (built-in) implements all of this over plain `Object3D`s with
-  its own bounded undo/redo stack and an `onChange` callback. This is what you
-  get when you pass a bare scene.
-- A **host app** (e.g. Strata) passes its own object mapping the factories to its
-  real commands and `execute`/`undo`/`redo`/`notify` onto its command bus and
-  signals, so 3DOM edits participate in the app's history and UI updates.
+- **`DefaultHost`** (built-in) implements all of this over plain `Object3D`s. It
+  keeps its own bounded undo/redo stack and an `onChange` callback. This is what
+  you get when you pass a bare scene.
+- A **host app** (e.g. Strata) passes its own object. It maps the factories to
+  real commands, and wires `execute`/`undo`/`redo`/`notify` onto its command bus
+  and signals. So 3DOM edits participate in the app's history and UI updates.
 
 `resolveHost(x, opts)` returns `x` unchanged if it already looks like a Host
 (has `.execute` and `.scene`), else wraps it in a `DefaultHost`.
@@ -175,7 +177,7 @@ importers see the update).
 
 ## 8. Versioning
 
-- **v0.1** — this document. Selector grammar (§3), auto-label sources (§4), op
+- **v0.1**: this document. Selector grammar (§3), auto-label sources (§4), op
   set (§5), op-JSON contract (§5), and Host contract (§6) are the stable surface.
 - Additions (new ops, new selector forms) land as minor versions. Removals or
   behavioural changes to the above require a major bump.

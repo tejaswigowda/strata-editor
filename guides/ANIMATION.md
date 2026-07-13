@@ -3,16 +3,16 @@
 > Part of the [Strata documentation](../README.md#documentation). See also:
 > [The language](LANGUAGE.md) · [JS Shell](JS_SHELL.md) · [AI guide](AI_GUIDE.md)
 
-The **Animations** tab is the **scene-wide universal Timeline** — one absolute clock (`editor.timeline`) for the whole scene, not a bag of per-object clips. It is the single source of truth for authoring, retiming, and playback. (The legacy per-clip editor is superseded and no longer mounted.)
+The **Animations** tab is the **scene-wide universal Timeline**: one absolute clock (`editor.timeline`) for the whole scene, not a bag of per-object clips. It is the single source of truth for authoring, retiming, and playback. (The legacy per-clip editor is superseded and no longer mounted.)
 
-- **One clock, many tracks.** Each track targets a scene entity **by selector string** (objects, and addressables that live outside the graph like the **camera**). Every animation is an **absolute-time event** `{ at, op, args, dur }` — `at` is absolute time on the scene clock, not relative to the previous event.
+- **One clock, many tracks.** Each track targets a scene entity **by selector string** (objects, and addressables that live outside the graph like the **camera**). Every animation is an **absolute-time event** `{ at, op, args, dur }`. `at` is absolute time on the scene clock, not relative to the previous event.
 - **The timeline UI** shows one row per track, event **blocks** at their absolute `at` (block width = `dur`), and a single **playhead** across all tracks. Play / pause / scrub drive the one clock; drag a block to retime, drag its right edge to resize. A code panel shows the compiled `$S().then()` sugar so sugar and absolute timeline stay in sync.
 - **Versioned and exportable.** The timeline is the representation that gets **versioned** (in the scene JSON, git-diffable) and **exported** to glTF keyframes. Compilation to a `THREE.AnimationClip` (which drives both playback and export) is a separate, injectable step, so the representation stays portable and node-testable.
 - Every edit goes through `SetTimelineCommand` (undoable); the one scene-wide clip recompiles live.
 
 ## AI-authored animation
 
-The AI authors animation from natural language: "make the box bounce", "spin the wheel 360 over 2 seconds", "fade it out". The **primary path is deterministic recipes** (`spin`, `bounce`, `pulse`, `fade`, `orbit`, `shake`). The host expands them into winding-safe tracks on the universal timeline, command-backed. The model never writes keyframe math — it emits ops, and each anim op becomes an absolute-time event (the "op-JSON of time"). Ops are recorded by **selector string** (resolved at compile time), so scene-wide addressables like the camera still record even when the live set is empty.
+The AI authors animation from natural language: "make the box bounce", "spin the wheel 360 over 2 seconds", "fade it out". The **primary path is deterministic recipes** (`spin`, `bounce`, `pulse`, `fade`, `orbit`, `shake`). The host expands them into winding-safe tracks on the universal timeline, command-backed. The model never writes keyframe math. It emits ops, and each anim op becomes an absolute-time event (the "op-JSON of time"). Ops are recorded by **selector string** (resolved at compile time), so scene-wide addressables like the camera still record even when the live set is empty.
 
 **Entrance animations** (objects appear with style):
 
@@ -73,7 +73,7 @@ $S('.box').fadeIn(1).spin('y', 1, 2)    // chain entrance + spin
 $S('.wheel').slideInUp(1, 0.8).bounce(1)  // enter then pulse
 ```
 
-**Sequential authoring sugar (`.then` / `.with` / `.at`)** compiles to the absolute `at` values on the scene clock — the same sugar→representation relationship `$S()` has with op-JSON. A bare following op stays **parallel** (same start time) until `.then()` advances the cursor:
+**Sequential authoring sugar (`.then` / `.with` / `.at`)** compiles to the absolute `at` values on the scene clock, the same sugar→representation relationship `$S()` has with op-JSON. A bare following op stays **parallel** (same start time) until `.then()` advances the cursor:
 
 ```js
 $S('.door').slideInLeft(1, 1).then().rotateTo(0, 90, 0)  // slide, THEN rotate (sequential)
@@ -81,7 +81,7 @@ $S('.wheel').spin('y', 1, 2).with().pulse(1.2, 2)        // spin AND pulse toget
 $S('.ball').at(3).bounce(1)                              // place the event at t=3s absolute
 ```
 
-Because events carry absolute times on one clock, the whole scene — objects and camera — animates on a single axis you can version and export.
+Because events carry absolute times on one clock, the whole scene (objects and camera) animates on a single axis you can version and export.
 
 The agent authors timeline events only. Runtime `requestAnimationFrame` loops remain out of scope. Skeletal motion (BVH) and captured performance are on the roadmap as imported data, not generation.
 

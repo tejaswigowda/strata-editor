@@ -17,10 +17,10 @@ The shell is the **SHELL tab** in the right sidebar (toggle with **View, JS Shel
 
 AI-generated code is displayed in **Monaco Editor** code blocks with live syntax highlighting and auto-height (max 40vh). Each code block includes:
 
-- **Monaco Editor** — auto-height based on content, word-wrapped, no line numbers, full JavaScript syntax highlighting
-- **Run button** (top-right) — executes only the edited code in the Monaco editor
-- **Auto-disposal** — editor is disposed immediately after execution, removing it from the output
-- **Edit capability** — modify the generated code before running
+- **Monaco Editor**: auto-height based on content, word-wrapped, no line numbers, full JavaScript syntax highlighting
+- **Run button** (top-right): executes only the edited code in the Monaco editor
+- **Auto-disposal**: editor is disposed immediately after execution, removing it from the output
+- **Edit capability**: modify the generated code before running
 
 **Execution flow:** AI generates code → code block with Monaco editor appears → edit if needed → click Run → code executes with full access to shell scope → editor is disposed
 
@@ -75,7 +75,7 @@ op({type:'scale', selector:'.cab', factor:1.5})
 relabel('wheel')  tagClass('wheel')  untagClass(node,'rims')  verifyImport()
 ```
 
-The full selector reference — grammar, the `$S()` query/traversal API, class & id authoring, lasso, and guards — lives in [LANGUAGE.md](LANGUAGE.md).
+The full selector reference (grammar, the `$S()` query/traversal API, class & id authoring, lasso, and guards) lives in [LANGUAGE.md](LANGUAGE.md).
 
 ## Object lookup
 
@@ -173,12 +173,12 @@ exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection,
 | Class / id / label authoring | `$S(sel).addClass/.removeClass/.toggleClass/.editID`, `relabel` / `tagClass` | ✓ |
 | Modeling (boolean, mirror, array, subdivide) | `booleanUnion/…`, `mirrorMesh`, `arrayDuplicate`, `subdivide` | ✓ |
 | Edit Mode (extrude, inset, bevel, weld, UV) | `enterEditMode()` + `extrude/inset/bevel/weld/planarUV/boxUV` | ✓ |
-| Undo / redo / clear | `undo()` / `redo()` / `clearScene()` | — |
+| Undo / redo / clear | `undo()` / `redo()` / `clearScene()` | none |
 | Export (GLB/GLTF/OBJ/STL/PLY) | `exportGLB/exportGLTF/exportOBJ/exportSTL/exportPLY` | n/a |
 
 ## Edit Mode ops
 
-Enter with the **Edit** toolbar button or `enterEditMode()`. `Tab` or `Esc` toggles/exits. Keys: `1/2/3` for vertex/edge/face, `A` for select all/none. With a sub-object selected, drag the transform gizmo to move it (translate/rotate/scale) — the mesh itself stays put.
+Enter with the **Edit** toolbar button or `enterEditMode()`. `Tab` or `Esc` toggles/exits. Keys: `1/2/3` for vertex/edge/face, `A` for select all/none. With a sub-object selected, drag the transform gizmo to move it (translate/rotate/scale). The mesh itself stays put.
 
 ```js
 enterEditMode()  exitEditMode()
@@ -235,7 +235,7 @@ A topology-aware half-edge mesh editor is layered on top of `BufferGeometry`.
 
 - **Enter.** Select a Mesh, then the **Edit** toolbar button (or `enterEditMode()`). The mesh is converted to a half-edge `EditableMesh`. A colored overlay shows vertices, edges, and selected faces.
 - **Select.** Click in the viewport in vertex, edge, or face mode (`1`/`2`/`3`). Face picks a triangle. Vertex picks the nearest corner. Edge picks the nearest edge.
-- **Move.** With a selection, drag the transform gizmo (translate/rotate/scale) to move those vertices — parked at the selection centroid. The mesh transform is untouched, so only the sub-object moves; the drop bakes one undoable `SetGeometryCommand`.
+- **Move.** With a selection, drag the transform gizmo (translate/rotate/scale) to move those vertices, parked at the selection centroid. The mesh transform is untouched, so only the sub-object moves; the drop bakes one undoable `SetGeometryCommand`.
 - **Operate.** `extrude`, `inset`, `bevel`, `deleteFaces`, `weld`, `planarUV`, `boxUV`. Each op emits a `SetGeometryCommand` (undoable).
 - **Exit.** `Tab` or `Esc` bakes the half-edge structure back to `BufferGeometry`. The round-trip is lossless for supported geometry.
 

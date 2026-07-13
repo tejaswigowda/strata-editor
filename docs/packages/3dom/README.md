@@ -1,7 +1,7 @@
 # @strata-editor/3dom
 
 **jQuery for 3D.** Address and edit *any* three.js scene with CSS-like selectors,
-deterministic auto-labelling, and undoable ops — in one line:
+deterministic auto-labelling, and undoable ops. All in one line:
 
 ```js
 $S('.wheel').recolor('#111').scale(1.2);
@@ -11,19 +11,21 @@ $S.undo();
 No editor. No framework. No build step required. Just three.js (a **peer**
 dependency) and this.
 
-- **Selectors** — query the scene graph like the DOM: `mesh`, `.red`, `#Body`,
+📖 **Docs:** https://tejaswigowda.com/strata-editor/packages/3dom/
+
+- **Selectors:** query the scene graph like the DOM: `mesh`, `.red`, `#Body`,
   `.wheel:visible`, `light, camera`.
-- **Auto-labelling** — derive stable classes from geometry, colour, material and
-  name so `.red`, `.box`, `.wheel` *just work* on scenes you didn't author.
-- **Undoable ops** — every mutation goes through a **Host**. Out of the box you
-  get a built-in undo/redo stack; drop in your app's command system to reuse it.
-- **Tiny** — ~24 kB minified, three stays external.
+- **Auto-labelling:** derive stable classes from geometry, colour, material and
+  name. So `.red`, `.box`, `.wheel` *just work* on scenes you didn't author.
+- **Undoable ops:** every mutation goes through a **Host**. Out of the box you
+  get a built-in undo/redo stack. Drop in your app's command system to reuse it.
+- **Tiny:** ~24 kB minified. three stays external.
 
 ---
 
 ## Install
 
-Straight from a CDN — no build, no publish step. jsDelivr serves the repo's
+Straight from a CDN. No build, no publish step. jsDelivr serves the repo's
 `dist/` directly from GitHub. `three` is a **peer**, so the page brings its own via
 the same import map. Copy this into your page's `<head>`:
 
@@ -49,8 +51,8 @@ jsDelivr (GitHub):   https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enh
 Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.enhanced/dd610a56ca94a803e4727910699ace6509ec9852/docs/packages/3dom/dist/3dom.esm.min.js
 ```
 
-> **Strata itself consumes the library this exact way** — the editor's import map
-> in `docs/index.html` maps `@strata-editor/3dom` to the pinned jsDelivr URL, and
+> **Strata itself consumes the library this exact way.** The editor's import map
+> in `docs/index.html` maps `@strata-editor/3dom` to the pinned jsDelivr URL. Then
 > `docs/editor/js/intelligence/strata3dom.js` imports it by bare specifier.
 
 ---
@@ -75,8 +77,8 @@ $S.undo();   // built-in, reversible
 $S.redo();
 ```
 
-Open [`examples/bare.html`](examples/bare.html) for a full, self-contained page
-(no editor, no bundler) that does load → `autoLabel` → `$S('.wheel').recolor()`
+Open [`examples/bare.html`](examples/bare.html) for a full, self-contained page.
+No editor, no bundler. It runs load, then `autoLabel`, then `$S('.wheel').recolor()`
 with the library's own undo.
 
 ---
@@ -87,7 +89,7 @@ with the library's own undo.
 | ----------------- | ------------------------------------------------ |
 | `mesh` `light` …  | by object type (`mesh` `group` `light` `camera` `sprite` `line` `points` `bone` `object3d`) |
 | `.red` `.wheel`   | by class (author-set or auto-labelled)           |
-| `#Body`           | by id — `userData.label`, falling back to `.name`|
+| `#Body`           | by id: `userData.label`, falling back to `.name` |
 | `.a.b`            | compound (AND)                                   |
 | `A B`             | descendant combinator                            |
 | `A > B`           | child combinator                                 |
@@ -114,9 +116,9 @@ JSON ops: `.op(json)` `.ops([...])`
 
 ## Bring your own undo (host apps)
 
-The ops layer never imports a command class — it calls **Host** factories. Pass a
+The ops layer never imports a command class. It calls **Host** factories. Pass a
 scene and you get `DefaultHost` (built-in undo). Pass a Host and your app owns
-history, notifications and execution:
+history, notifications, and execution:
 
 ```js
 const $S = createS({

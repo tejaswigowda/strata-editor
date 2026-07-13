@@ -50,9 +50,9 @@ This README is the landing page and the thesis. The reference material is split 
 | Guide | What's inside |
 |-------|---------------|
 | [**The language**](guides/LANGUAGE.md) | Selector grammar, name normalization, the closed op set, the `$S()` query/traversal API, class & id authoring, lasso, and host-enforced guards. |
-| [**`$S` / 3DOM library**](docs/packages/3dom/README.md) | The standalone "jQuery for 3D" extraction: selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, and its own undo. Versioned surface in [SPEC.md](docs/packages/3dom/SPEC.md). |
+| [**`$S` / 3DOM library**](docs/packages/3dom/README.md) | The standalone "jQuery for 3D" extraction: selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, and its own undo. Versioned surface in [SPEC.md](docs/packages/3dom/SPEC.md). Live docs: https://tejaswigowda.com/strata-editor/packages/3dom/. |
 | [**Animation**](guides/ANIMATION.md) | The scene-wide universal timeline: absolute-time tracks, `.then`/`.with`/`.at` sugar, entrance/exit/attention recipes, lifecycle. |
-| [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription` — no vision model. |
+| [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription`. No vision model. |
 | [**JS Shell**](guides/JS_SHELL.md) | The primary editing surface: Monaco integration, core globals, object lookup, spatial helpers, modeling ops, Edit Mode, and `fetchAPI`. |
 | [**Optional AI acceleration**](guides/AI_GUIDE.md) | The agentic loop, AI scene context, model configuration (WebLLM / external / client-side), cost tracking, and the generation eval. |
 | [**Architecture**](guides/ARCHITECTURE.md) | Two-form scene representation (git-diffable round-trip) and the full module map. |
@@ -67,7 +67,7 @@ This README is the landing page and the thesis. The reference material is split 
 
 3D editing splits into a deterministic shell (the language) and optional fuzzy layers (AI). The shell is host code: selector matching, command execution, undo, versioning, normalization, guards. **The language is sufficient for manual editing and is the primary interface.** The full reference is in [LANGUAGE.md](guides/LANGUAGE.md).
 
-**Optional AI layer (fuzzy tasks).** When using AI, it handles **5 bounded tasks**: op-type selection, selector resolution, argument extraction, labeling, and multi-op decomposition. These tasks are **optional**—you can edit entirely by hand. When AI is used, it stays within bounds: it emits a selector plus an op. The host enforces correctness. See [the AI guide](guides/AI_GUIDE.md).
+**Optional AI layer (fuzzy tasks).** When using AI, it handles **5 bounded tasks**: op-type selection, selector resolution, argument extraction, labeling, and multi-op decomposition. These tasks are **optional**. You can edit entirely by hand. When AI is used, it stays within bounds: it emits a selector plus an op. The host enforces correctness. See [the AI guide](guides/AI_GUIDE.md).
 
 **Manual editing:** Select and edit by hand. Chain commands. Version with git. Undo any change.
 
@@ -166,22 +166,22 @@ await evalEditMatrix('scaffolded')   // then 'bare'. Load each model size, add H
 
 **What the matrix found:**
 
-1. **The thesis holds — scaffolding helps at every scale, dramatically at the frontier.** Overall scaffolding delta is Haiku **+52**, Opus **+45**; small models **+7 to +13**. The honest framing: scaffolding *unlocks* capable models (they are convention-limited bare, and the selector-injection + constrained decoding lifts them into the language), and helps small models *modestly* (they are capacity-limited). This is **not** "tiny models match big ones" — it is "scaffolding unlocks capable models; it helps small ones modestly."
+1. **The thesis holds: scaffolding helps at every scale, dramatically at the frontier.** Overall scaffolding delta is Haiku **+52**, Opus **+45**; small models **+7 to +13**. The honest framing: scaffolding *unlocks* capable models (they are convention-limited bare, and the selector-injection + constrained decoding lifts them into the language), and helps small models *modestly* (they are capacity-limited). This is **not** "tiny models match big ones". It is "scaffolding unlocks capable models; it helps small ones modestly."
 
 2. **1.5B is the viable floor.** Scaffolded overall **73%**, op-selection **77%**, arg-extraction **92%** (ties the Opus ceiling), multi-op **75%**, selector-resolution **54%**. A stock 1.5B with **zero training** drives the language well enough to ship. This sets the production model size.
 
-3. **0.5B is under-capacity.** op-selection 8%, selector-resolution 8%, multi-op 0%. It reverts to writing full three.js boilerplate instead of narrow ops — a capability floor, not a steering bug. It is below the floor for editing. (It may still suffice for labeling-only: 33% scaffolded — a separate, narrower task.)
+3. **0.5B is under-capacity.** op-selection 8%, selector-resolution 8%, multi-op 0%. It reverts to writing full three.js boilerplate instead of narrow ops, a capability floor, not a steering bug. It is below the floor for editing. (It may still suffice for labeling-only: 33% scaffolded, a separate, narrower task.)
 
-4. **Selector-resolution is the confirmed hard task.** Even Opus caps at **77%**, and scaffolding adds **nothing** on small models (+0 for 0.5B / 1.5B / 3B). It is capability-bound, not convention-bound. This is the architectural target for **host-side resolution** (pick-don't-compose, clarify-on-ambiguity, don't-over-enumerate) — [the next lever](guides/ROADMAP.md).
+4. **Selector-resolution is the confirmed hard task.** Even Opus caps at **77%**, and scaffolding adds **nothing** on small models (+0 for 0.5B / 1.5B / 3B). It is capability-bound, not convention-bound. This is the architectural target for **host-side resolution** (pick-don't-compose, clarify-on-ambiguity, don't-over-enumerate). See [the next lever](guides/ROADMAP.md).
 
-5. **Arg-extraction caps ~92%** at both ceilings — the achievable target. The scorer is a strict canonical-key match, so ~92% is "as good as it gets," which also confirms the scorer is calibrated.
+5. **Arg-extraction caps ~92%** at both ceilings, the achievable target. The scorer is a strict canonical-key match, so ~92% is "as good as it gets," which also confirms the scorer is calibrated.
 
 **Honest footnotes (the never-silently-wrong discipline applies to our own numbers too):**
 
-- **A 1.5B ≥ 3B inversion persists** on multi-op (75 vs 25) and op-selection (77 vs 69). Reported, not hidden: partly a small multi-op sample (n=4 this run), and partly that `Qwen2.5-Coder-1.5B` is unusually well-optimized in the WebLLM stack. Not over-claimed — the 1.5B floor claim rests on its *overall* profile, not this inversion.
+- **A 1.5B ≥ 3B inversion persists** on multi-op (75 vs 25) and op-selection (77 vs 69). Reported, not hidden: partly a small multi-op sample (n=4 this run), and partly that `Qwen2.5-Coder-1.5B` is unusually well-optimized in the WebLLM stack. Not over-claimed. The 1.5B floor claim rests on its *overall* profile, not this inversion.
 - **Scorer fixes made the numbers trustworthy.** Synonym-tolerant multi-op scoring, resolved-correct-node selector scoring (not string match), and parser recovery of non-canonical-but-valid edits. The harness caught its own bugs; every number above is post-fix.
 
-**The ship decision it drives.** Production ships **1.5B and up** (the [vetted list](guides/AI_GUIDE.md#browser-based-models-webllm)); **0.5B is excluded** as under-capacity. This is exactly the "validated models only" gate the top of this README describes — the production dropdown shows only what the matrix passed.
+**The ship decision it drives.** Production ships **1.5B and up** (the [vetted list](guides/AI_GUIDE.md#browser-based-models-webllm)); **0.5B is excluded** as under-capacity. This is exactly the "validated models only" gate the top of this README describes. The production dropdown shows only what the matrix passed.
 
 **Live spot-checks (illustrative, not the matrix).** Manual runs of "make the leaves red" on a labeled tree GLB match the matrix story end to end: both Claude Haiku 4.5 (cloud) and the **1.5B on-device model** emit the op surface (`$S('.leaves').recolor('#ff0000')`) with the correct narrow selector, not raw three.js and not the whole asset. The 1.5B occasionally wraps the op in a function it forgets to invoke (a format slip our few-shots' IIFE style invites), which the observe-and-retry loop catches.
 
@@ -194,7 +194,7 @@ The older generation-scaffolding eval (`evalAI()`) is documented in [the AI guid
 These state the thesis. The language is primary; AI is optional.
 
 - **Language is the workhorse.** The shell is the primary interface: selector matching, command execution, undo, versioning, normalization, guards. It is fully functional without AI. Manual editing is first-class.
-- **AI stays in bounds (optional fuzzy core).** When AI is used, it handles 5 bounded tasks: op-type selection, selector resolution, argument extraction, labeling, multi-op decomposition. The AI emits a selector plus an op—the contract is explicit. Everything else is deterministic. If a feature seems to need more model reasoning, decompose it.
+- **AI stays in bounds (optional fuzzy core).** When AI is used, it handles 5 bounded tasks: op-type selection, selector resolution, argument extraction, labeling, multi-op decomposition. The AI emits a selector plus an op. The contract is explicit. Everything else is deterministic. If a feature seems to need more model reasoning, decompose it.
 - **Model expresses intent. Host enforces correctness.** The model emits a selector plus an op. Guards (clone-on-write, texture-tint, merged-mesh, ground/clamp, subset-sanity) and arg-normalization ("black" to `#111`) are host-side. The model never has to remember them.
 - **Resolution is deterministic.** Selectors match over verified labels and auto-classes. The model only translates fuzzy language to a selector. Once labeled, resolution needs no model.
 - **One execution surface.** Manual and AI code run through the same `execute()` binding.
@@ -215,7 +215,7 @@ Selector-over-scene-graph exists (three-query-selector, scene.querySelectorAll, 
 
 ## Roadmap (at a glance)
 
-- **Done.** The deterministic language (selectors + ops + guards), the `$S()` read/write API, the universal timeline, git versioning, scene intelligence, constrained decoding, the **eval matrix run** (1.5B is the validated floor), and the standalone [**`$S` / 3DOM library**](docs/packages/3dom/README.md) ("jQuery for 3D" — selectors + autoLabel + ops over any three.js scene, three as peer dep, with a versioned [SPEC.md](docs/packages/3dom/SPEC.md); Strata now consumes it via a host adapter).
+- **Done.** The deterministic language (selectors + ops + guards), the `$S()` read/write API, the universal timeline, git versioning, scene intelligence, constrained decoding, the **eval matrix run** (1.5B is the validated floor), and the standalone [**`$S` / 3DOM library**](docs/packages/3dom/README.md) ("jQuery for 3D": selectors + autoLabel + ops over any three.js scene, three as peer dep, with a versioned [SPEC.md](docs/packages/3dom/SPEC.md); Strata now consumes it via a host adapter).
 - **Next.** Host-side selector resolution (the confirmed hard task).
 - **Then.** Renderer-agnostic export pipeline, capture-pipeline integration, and a sovereignty dashboard.
 

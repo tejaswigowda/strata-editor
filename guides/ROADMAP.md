@@ -58,7 +58,7 @@ DONE
 
 NEXT (the next lever)
   Host-side selector resolution: pick-don't-compose, clarify-on-ambiguity, don't-over-enumerate.
-    Attack the confirmed hard task — selector-resolution caps 77% even at the Opus ceiling and
+    Attack the confirmed hard task: selector-resolution caps 77% even at the Opus ceiling and
     scaffolding adds nothing on small models, so move resolution OFF the model and into the host
   Fold the timeline sugar→absolute representation into the standalone library (still editor-side)
 

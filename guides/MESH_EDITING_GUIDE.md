@@ -80,13 +80,13 @@ enterEditMode(mesh);
 ```
 
 Then use:
-- `extrude(distance=1)` — Extrude selected faces along their normal
-- `inset(amount=0.2)` — Inset faces toward their center
-- `bevel(amount=0.1)` — Chamfer face edges
-- `deleteFaces()` — Delete selected faces
-- `weld(threshold=0.01)` — Merge nearby vertices
-- `planarUV(axis='y')` — Project UVs onto a plane
-- `boxUV()` — Box/cubic UV projection
+- `extrude(distance=1)`: Extrude selected faces along their normal
+- `inset(amount=0.2)`: Inset faces toward their center
+- `bevel(amount=0.1)`: Chamfer face edges
+- `deleteFaces()`: Delete selected faces
+- `weld(threshold=0.01)`: Merge nearby vertices
+- `planarUV(axis='y')`: Project UVs onto a plane
+- `boxUV()`: Box/cubic UV projection
 
 Exit edit mode:
 ```javascript
@@ -112,13 +112,13 @@ exitEditMode();  // Done!
 ```
 
 ### M6: Selection Criteria (AI-Driven)
-- `selectTopFaces(count=1)` — Select N faces with highest Y coordinate
-- `selectFacingUp(threshold=0.1)` — Select faces whose normal points mostly upward
-- `selectBoundaryEdges()` — Select edges on the mesh boundary (open edges)
-- `selectFaces(...ids)` — Select specific face IDs
-- `selectVertices(...ids)` — Select specific vertex IDs
-- `selectEdges(...ids)` — Select specific edge IDs
-- `clearSelection()` — Clear all selections
+- `selectTopFaces(count=1)`: Select N faces with highest Y coordinate
+- `selectFacingUp(threshold=0.1)`: Select faces whose normal points mostly upward
+- `selectBoundaryEdges()`: Select edges on the mesh boundary (open edges)
+- `selectFaces(...ids)`: Select specific face IDs
+- `selectVertices(...ids)`: Select specific vertex IDs
+- `selectEdges(...ids)`: Select specific edge IDs
+- `clearSelection()`: Clear all selections
 
 ## Keyboard Shortcuts (in Edit Mode)
 
@@ -244,7 +244,7 @@ Example error recovery:
 ```
 > bevel(-0.5)  ← Invalid (negative amount)
 Error: bevel: amount must be >= 0
-⟳ error — retrying…
+⟳ error: retrying…
 > bevel(0.15)  ← AI corrects to positive value
 ✓ Faces beveled
 ```

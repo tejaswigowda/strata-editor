@@ -5,7 +5,8 @@
 
 > The runtime-free core of this language is also published as a standalone library,
 > [**`$S` / 3DOM**](../docs/packages/3dom/README.md) (\"jQuery for 3D\"), with a versioned
-> [SPEC.md](../docs/packages/3dom/SPEC.md). It runs over any three.js scene with three as a
+> [SPEC.md](../docs/packages/3dom/SPEC.md) and [live docs](https://tejaswigowda.com/strata-editor/packages/3dom/).
+> It runs over any three.js scene with three as a
 > peer dependency; Strata consumes it through a host adapter, so the surface below is the
 > editor-integrated view of the same grammar and op set.
 
@@ -25,7 +26,7 @@ ops([ {}, {} ])                     // several ops in one undoable batch (multi-
 
 Deterministic match, no model at match time: `#id` (semantic label), `.class`, `type` (`mesh`/`group`/`light`), `.a.b` (compound AND), `A B` (descendant), `A > B` (child), `*`, plus the live-selection pseudo-selectors `:selected` / `:lasso`. Classes auto-derive on import from descriptors. Facts like `.front .left .red .elongated .pair-left`, plus material names (`Rims` to `.rims`). The optional labeling pass adds semantic `#labels` and `.classes` (`wheel`, `dump-bed`).
 
-**Name normalization.** Class and id names are **normalized** on both sides of every match — lowercased, spaces→hyphens, non-alphanumerics stripped — by a single `normalizeClassName`. So a stored label `Front Wheel`, an auto-derived class `.front-wheel`, and a hand-typed `#front-wheel` all reconcile to the same token; authoring (`addClass`, `editID`) and matching never disagree.
+**Name normalization.** Class and id names are **normalized** on both sides of every match: lowercased, spaces→hyphens, non-alphanumerics stripped, by a single `normalizeClassName`. So a stored label `Front Wheel`, an auto-derived class `.front-wheel`, and a hand-typed `#front-wheel` all reconcile to the same token; authoring (`addClass`, `editID`) and matching never disagree.
 
 **Names become classes too.** A meaningful object name yields a stem class, so "Chair 1", "Chair 2", and "Chair 3" all get `.chair`. Plural requests then resolve cleanly (`$S('.chair').scale(0.5)`). The trailing index also stays addressable by id (`#chair-2`). Auto-generated names like `Object_12` are skipped so the vocabulary stays clean.
 
@@ -104,12 +105,12 @@ $S('.wheel').isClass('front')          // jQuery-style: true if ANY matched node
 
 The **Lasso** toolbar tool (freehand-drag a region in the viewport) and the shell are the
 same selection surface. What you draw by hand is addressable in code, and code can perform a
-lasso itself — one screen-space algorithm behind both. `:lasso` and `:selected` are **first-class
+lasso itself: one screen-space algorithm behind both. `:lasso` and `:selected` are **first-class
 pseudo-selectors** resolved through the *entire* op pipeline (not just the `$S()` constructor),
-so every op works on them — `.scale`, `.move`, `.addClass`, `.delete` — not only `.recolor`.
+so every op works on them (`.scale`, `.move`, `.addClass`, `.delete`), not only `.recolor`.
 
 ```js
-$S(':lasso')                    // the CURRENT viewport selection — i.e. whatever the
+$S(':lasso')                    // the CURRENT viewport selection, i.e. whatever the
                                 //   mouse lasso (or click-select) last produced.
 $S(':selected')                 // alias of the above (both bare `lasso`/`selected` work too)
 $S(':lasso').recolor('#f00')    // recolor exactly what you lassoed on screen
@@ -120,7 +121,7 @@ lasso([[20,20],[400,20],[400,300],[20,300]]).scale(1.2).recolor('#0af')
 ```
 
 The lasso is **resolution-independent** and selects *every* mesh whose projected centre or
-bounding-box corner falls inside the outline — including objects occluded behind others
+bounding-box corner falls inside the outline, including objects occluded behind others
 (unlike ray-casting). An indeterminate progress bar shows while you drag. See
 [LASSO_TOOL_GUIDE.md](LASSO_TOOL_GUIDE.md) for the full interactive-tool walkthrough.
 
@@ -180,7 +181,7 @@ $S('#box').position()          // world-space THREE.Vector3 (read-only snapshot)
 ### Bulk property setters (one value → whole set, one undo)
 
 The jQuery `.css('color','red')` mechanic: a single value fanned out over **every** matched
-node as **one undoable batch** (never N undo entries). Built on one primitive — `bulkApply` —
+node as **one undoable batch** (never N undo entries). Built on one primitive, `bulkApply`,
 so every setter below is an instance, not a special case. Method names match the three.js
 property they set (`.castShadow`, `.metalness`, `.fov`), so the name you know is the name you
 call. Material setters **clone-on-write**: a bulk change over a shared material clones per node
@@ -193,7 +194,7 @@ $S('*').castShadow(true).receiveShadow(true)   // whole scene casts + receives s
 $S('.glass').renderOrder(1)                     // fix transparency sort order
 $S('#decal').frustumCulled(false)               // never cull this one
 
-// ── Material (PBR) — clone-on-write, so shared materials don't bleed ──
+// ── Material (PBR): clone-on-write, so shared materials don't bleed ──
 $S('.metal').metalness(1).roughness(0.2)        // chainable
 $S('.lava').emissive('#ff4400').emissiveIntensity(2)
 $S('.leaf').flatShading(true).doubleSided(true)
@@ -248,7 +249,7 @@ untagClass(node, 'rims')   // remove a class
 verifyImport()             // open the Import + Verify panel (also opens automatically after import)
 ```
 
-The same edits are available **set-wide** on the fluent `$S` surface — one undoable batch across
+The same edits are available **set-wide** on the fluent `$S` surface: one undoable batch across
 every matched node: `$S(sel).addClass('wheel')`, `.removeClass('rims')`, `.toggleClass('spare')`,
 and `.editID('wheel')` (the id/`#label` writer). Read them back with `.id()` and `.isClass()`.
 

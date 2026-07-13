@@ -224,8 +224,8 @@ registerOp('extrude', {
 ```
 GLOBALS:
   editor: THREE.js Editor
-  extrude(distance: number = 1) — Extrude selected faces along their normal
-  inset(amount: number = 0.2) — Inset selected faces toward their center
+  extrude(distance: number = 1): Extrude selected faces along their normal
+  inset(amount: number = 0.2): Inset selected faces toward their center
   ...
 ```
 
@@ -430,7 +430,7 @@ console.log({
 ### Inspect Operation Registry
 
 ```javascript
-editor.ops.listOps().forEach(op => console.log(op.name, '—', op.description));
+editor.ops.listOps().forEach(op => console.log(op.name, '-', op.description));
 ```
 
 ### Inspect Selection

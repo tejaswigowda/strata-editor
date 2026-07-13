@@ -21,7 +21,7 @@ Content is fetched with the GitHub raw media type. It handles files over 1 MB an
 
 > **Token storage and scope.** The access token lives in `localStorage` (`git-settings`). Same-origin scripts can read it, so treat it like a password. Prefer a fine-grained, repo-specific PAT (Settings, Developer settings, Fine-grained tokens) scoped to the one repo with **Contents: Read and write** only. A classic `repo`-scope token grants write access to every repository in your account. Avoid it here.
 
-Scenes are diffable JSON — see [scene representation](ARCHITECTURE.md#scene-representation) for the round-trip guarantees that make git diffs meaningful.
+Scenes are diffable JSON. See [scene representation](ARCHITECTURE.md#scene-representation) for the round-trip guarantees that make git diffs meaningful.
 
 ---
 
