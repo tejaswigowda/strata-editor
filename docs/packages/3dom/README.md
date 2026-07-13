@@ -30,7 +30,7 @@ the same import map. Copy this into your page's `<head>`:
 ```html
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/build/three.module.js",
   "@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
 } }
 </script>

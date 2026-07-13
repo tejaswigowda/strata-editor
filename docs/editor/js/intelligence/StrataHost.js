@@ -7,7 +7,8 @@
 // in Strata's own undo/redo history and fire its signals, behaving IDENTICALLY to
 // hand-written editOps.
 //
-//   import createS from '/packages/3dom/src/index.js';
+//   import createS from '@tejaswigowda/3dom';   // bare specifier → jsDelivr CDN
+//                                                 // (mapped in docs/index.html importmap)
 //   import { StrataHost } from './intelligence/StrataHost.js';
 //   const $S = createS( new StrataHost( editor ) );
 //   $S('.wheel').recolor('#111');   // → SetMaterialColorCommand via editor.execute

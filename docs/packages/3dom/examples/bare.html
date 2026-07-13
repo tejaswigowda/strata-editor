@@ -17,12 +17,14 @@
 		#log { margin-top: 10px; padding: 8px; height: 120px; overflow: auto; background: #0e1016; border-radius: 7px; color: #9fb3c8; white-space: pre-wrap; }
 		.sep { height: 1px; background: #2c3040; margin: 8px 0; }
 	</style>
-	<!-- three is a PEER dependency: the page brings its own copy. Swap this map to
-	     a local build (../../../docs/build/three.module.js) or any CDN. -->
+	<!-- The library is imported ONLY via this import map + a <script type="module">
+	     below — no npm, no bundler. three is a PEER dependency; both are served from
+	     GitHub through jsDelivr. Pin a commit/tag for an immutable, cached URL. -->
 	<script type="importmap">
 	{
 		"imports": {
-			"three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+			"three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/build/three.module.js",
+			"@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@02e7854aee6a391ec455004317eeb4de108e6aed/docs/packages/3dom/dist/3dom.esm.min.js"
 		}
 	}
 	</script>
@@ -45,8 +47,9 @@
 
 	<script type="module">
 		import * as THREE from 'three';
-		// Use the library source directly (or swap to ../dist/3dom.esm.js).
-		import { createS, autoLabel } from '../src/index.js';
+		// Loaded from the jsDelivr GitHub CDN via the import map above — the same
+		// script-tag path Strata uses. No npm install, no relative source import.
+		import { createS, autoLabel } from '@tejaswigowda/3dom';
 
 		const log = ( ...a ) => {
 			const el = document.getElementById( 'log' );
