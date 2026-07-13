@@ -1,5 +1,5 @@
 // Smoke test: prove the library works over a BARE three.js scene with its own undo.
-// No editor, no Strata — just three + @onlyconnect/3dom.
+// No editor, no Strata — just three + @tejaswigowda/3dom.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';

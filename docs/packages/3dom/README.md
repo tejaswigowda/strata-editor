@@ -1,4 +1,4 @@
-# @onlyconnect/3dom
+# @tejaswigowda/3dom
 
 **jQuery for 3D.** Address and edit *any* three.js scene with CSS-like selectors,
 deterministic auto-labelling, and undoable ops — in one line:
@@ -24,19 +24,38 @@ dependency) and this.
 ## Install
 
 ```bash
-npm i @onlyconnect/3dom three
+npm i @tejaswigowda/3dom three
 ```
 
-or from a CDN with an import map (three is peer, bring your own):
+Or straight from a CDN — no build, no publish step. jsDelivr serves the repo's
+`dist/` directly from GitHub. `three` is a **peer**, so the page brings its own via
+the same import map:
 
 ```html
 <script type="importmap">
 { "imports": {
-  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-  "@onlyconnect/3dom": "https://unpkg.com/@onlyconnect/3dom/dist/3dom.esm.min.js"
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "@tejaswigowda/3dom": "https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@62aeea4/docs/packages/3dom/dist/3dom.esm.min.js"
 } }
 </script>
 ```
+
+Pin to a commit (as above) or a tag (`@v0.1.0`) for an immutable, long-cached URL.
+`@main` also works but is mutable and cached for up to a week. Other CDNs use the
+same path shape:
+
+```
+jsDelivr (GitHub):  https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@62aeea4/docs/packages/3dom/dist/3dom.esm.min.js
+Statically (GitHub): https://cdn.statically.io/gh/tejaswigowda/threejs.editor.enhanced/62aeea4/docs/packages/3dom/dist/3dom.esm.min.js
+jsDelivr (npm)*:    https://cdn.jsdelivr.net/npm/@tejaswigowda/3dom@0.1.0/dist/3dom.esm.min.js
+unpkg (npm)*:       https://unpkg.com/@tejaswigowda/3dom@0.1.0/dist/3dom.esm.min.js
+```
+
+\* npm paths require `npm publish --access public` first. The GitHub paths work now.
+
+> **Strata itself consumes the library this exact way** — the editor's import map
+> in `docs/index.html` maps `@tejaswigowda/3dom` to the pinned jsDelivr URL, and
+> `docs/editor/js/intelligence/strata3dom.js` imports it by bare specifier.
 
 ---
 
@@ -44,7 +63,7 @@ or from a CDN with an import map (three is peer, bring your own):
 
 ```js
 import * as THREE from 'three';
-import { createS, autoLabel } from '@onlyconnect/3dom';
+import { createS, autoLabel } from '@tejaswigowda/3dom';
 
 const scene = new THREE.Scene();
 // ... add your meshes ...

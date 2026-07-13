@@ -51,7 +51,7 @@ DONE
     ops call host command-factories, never a concrete command class. DefaultHost = library-internal
     commands + own undo stack (standalone path); StrataHost maps factories -> real Strata commands +
     editor.execute + signals, so Strata is now a CONSUMER (docs/editor/js/intelligence/StrataHost.js
-    + strata3dom.js). @onlyconnect/3dom, MIT; ESM + global builds (three external); node smoke tests
+    + strata3dom.js). @tejaswigowda/3dom, MIT; ESM + global builds (three external); node smoke tests
     pass; bare.html browser proof; LANGUAGE standardized as versioned SPEC.md v0.1 (selector grammar,
     op vocabulary, op-JSON contract, autoLabel rules, Host contract). Verified in the live editor:
     autoLabel + $S('.red').recolor() flow through editor.execute with native undo/redo

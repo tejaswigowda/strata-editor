@@ -1,10 +1,10 @@
-// ── @onlyconnect/3dom — jQuery for 3D ─────────────────────────────────────────
+// ── @tejaswigowda/3dom — jQuery for 3D ─────────────────────────────────────────
 //
 // Address and edit ANY three.js scene with CSS-like selectors. Zero editor, zero
 // framework — just three.js (a peer dependency) and this.
 //
 //   import * as THREE from 'three';
-//   import { createS, autoLabel } from '@onlyconnect/3dom';
+//   import { createS, autoLabel } from '@tejaswigowda/3dom';
 //
 //   const $S = createS( scene );     // bind to a scene (its own undo)
 //   autoLabel( scene );              // derive classes from geometry/colour/…

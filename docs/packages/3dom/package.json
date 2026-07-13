@@ -1,5 +1,5 @@
 {
-  "name": "@onlyconnect/3dom",
+  "name": "@tejaswigowda/3dom",
   "version": "0.1.0",
   "description": "jQuery for 3D — address and edit any three.js scene with CSS-like selectors, with deterministic auto-labelling and undoable ops.",
   "type": "module",

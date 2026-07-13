@@ -1,4 +1,4 @@
-// ── StrataHost.js — Strata as a CONSUMER of @onlyconnect/3dom ──────────────────
+// ── StrataHost.js — Strata as a CONSUMER of @tejaswigowda/3dom ──────────────────
 //
 // The 3DOM library (docs/packages/3dom) is runtime-free: its ops never import a
 // command class or an editor. They call **Host factories**. This adapter is the
