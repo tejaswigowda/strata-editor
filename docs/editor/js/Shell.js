@@ -419,6 +419,557 @@ function Shell( editor ) {
 	inputRow.appendChild( input );
 	container.dom.appendChild( inputRow );
 
+	// ── Autocomplete ──────────────────────────────────────────────────────────
+
+	const acDropdown = document.createElement( 'div' );
+	acDropdown.className = 'shell-autocomplete';
+	inputRow.appendChild( acDropdown );
+
+	// Static word list: 3DOM shell globals + common JS built-ins
+	const AC_WORDS = [
+		// ── Core globals ──
+		{ w: 'editor', k: 'var' }, { w: 'THREE', k: 'var' }, { w: 'scene', k: 'var' },
+		{ w: 'camera', k: 'var' }, { w: 'renderer', k: 'var' },
+
+		// ── Commands ──
+		{ w: 'AddObjectCommand', k: 'class' }, { w: 'RemoveObjectCommand', k: 'class' },
+		{ w: 'SetPositionCommand', k: 'class' }, { w: 'SetRotationCommand', k: 'class' },
+		{ w: 'SetScaleCommand', k: 'class' }, { w: 'SetMaterialColorCommand', k: 'class' },
+		{ w: 'SetMaterialCommand', k: 'class' }, { w: 'SetValueCommand', k: 'class' },
+
+		// ── Geometry ──
+		{ w: 'BoxGeometry', k: 'class' }, { w: 'SphereGeometry', k: 'class' },
+		{ w: 'CylinderGeometry', k: 'class' }, { w: 'ConeGeometry', k: 'class' },
+		{ w: 'PlaneGeometry', k: 'class' }, { w: 'TorusGeometry', k: 'class' },
+		{ w: 'TorusKnotGeometry', k: 'class' }, { w: 'CircleGeometry', k: 'class' },
+		{ w: 'CapsuleGeometry', k: 'class' }, { w: 'LatheGeometry', k: 'class' },
+		{ w: 'TubeGeometry', k: 'class' }, { w: 'ExtrudeGeometry', k: 'class' },
+		{ w: 'ShapeGeometry', k: 'class' }, { w: 'Shape', k: 'class' },
+		{ w: 'Path', k: 'class' }, { w: 'CatmullRomCurve3', k: 'class' },
+		{ w: 'QuadraticBezierCurve3', k: 'class' }, { w: 'CubicBezierCurve3', k: 'class' },
+
+		// ── Materials ──
+		{ w: 'MeshStandardMaterial', k: 'class' }, { w: 'MeshBasicMaterial', k: 'class' },
+		{ w: 'MeshPhongMaterial', k: 'class' }, { w: 'MeshLambertMaterial', k: 'class' },
+		{ w: 'MeshPhysicalMaterial', k: 'class' }, { w: 'LineBasicMaterial', k: 'class' },
+
+		// ── Objects ──
+		{ w: 'Mesh', k: 'class' }, { w: 'Group', k: 'class' }, { w: 'Line', k: 'class' },
+		{ w: 'Points', k: 'class' },
+
+		// ── Lights ──
+		{ w: 'DirectionalLight', k: 'class' }, { w: 'PointLight', k: 'class' },
+		{ w: 'AmbientLight', k: 'class' }, { w: 'SpotLight', k: 'class' },
+
+		// ── Math ──
+		{ w: 'Color', k: 'class' }, { w: 'Vector3', k: 'class' },
+		{ w: 'Vector2', k: 'class' }, { w: 'Euler', k: 'class' },
+		{ w: 'Quaternion', k: 'class' },
+
+		// ── Animation ──
+		{ w: 'AnimationClip', k: 'class' }, { w: 'VectorKeyframeTrack', k: 'class' },
+		{ w: 'QuaternionKeyframeTrack', k: 'class' }, { w: 'NumberKeyframeTrack', k: 'class' },
+		{ w: 'ColorKeyframeTrack', k: 'class' }, { w: 'BooleanKeyframeTrack', k: 'class' },
+
+		// ── Texture helpers ──
+		{ w: 'makeTexture', k: 'fn' }, { w: 'makeCheckerTex', k: 'fn' }, { w: 'makeGridTex', k: 'fn' },
+
+		// ── Codegen ──
+		{ w: 'showJS', k: 'fn' }, { w: 'objectToJS', k: 'fn' }, { w: 'sceneToJS', k: 'fn' },
+		{ w: 'sceneEqual', k: 'fn' }, { w: 'summarize', k: 'fn' },
+
+		// ── Object lookup ──
+		{ w: 'findObject', k: 'fn' }, { w: 'findAll', k: 'fn' },
+		{ w: 'findOfType', k: 'fn' }, { w: 'findNear', k: 'fn' },
+
+		// ── Scene intelligence ──
+		{ w: 'findByDescription', k: 'fn' }, { w: 'describeObject', k: 'fn' },
+		{ w: 'listCandidates', k: 'fn' }, { w: 'resolvePartAI', k: 'fn' },
+		{ w: 'findParts', k: 'fn' }, { w: 'diagnoseImport', k: 'fn' },
+		{ w: 'relabelAsset', k: 'fn' }, { w: 'verifyImport', k: 'fn' },
+
+		// ── Labels / classes ──
+		{ w: 'relabel', k: 'fn' }, { w: 'tagClass', k: 'fn' }, { w: 'untagClass', k: 'fn' },
+
+		// ── Selectors ──
+		{ w: '$S', k: 'fn' }, { w: 'Pick', k: 'fn' }, { w: 'pick', k: 'fn' },
+		{ w: 'query', k: 'fn' }, { w: 'queryOne', k: 'fn' },
+		{ w: 'isValidSelector', k: 'fn' }, { w: 'listSelectors', k: 'fn' },
+
+		// ── Ops ──
+		{ w: 'op', k: 'fn' }, { w: 'ops', k: 'fn' }, { w: 'listOps', k: 'fn' },
+		{ w: 'OP_VOCABULARY', k: 'var' },
+
+		// ── Agentic tools ──
+		{ w: 'findAPI', k: 'fn' }, { w: 'whatsVisible', k: 'fn' },
+		{ w: 'whatsAt', k: 'fn' }, { w: 'lasso', k: 'fn' },
+
+		// ── Modeling ──
+		{ w: 'booleanUnion', k: 'fn' }, { w: 'booleanSubtract', k: 'fn' },
+		{ w: 'booleanIntersect', k: 'fn' }, { w: 'mirrorMesh', k: 'fn' },
+		{ w: 'arrayDuplicate', k: 'fn' }, { w: 'subdivide', k: 'fn' },
+
+		// ── Scene / UI parity ──
+		{ w: 'addLight', k: 'fn' }, { w: 'setBackground', k: 'fn' },
+		{ w: 'setFog', k: 'fn' }, { w: 'clearFog', k: 'fn' },
+		{ w: 'setEnvironment', k: 'fn' }, { w: 'groupSelection', k: 'fn' },
+		{ w: 'ungroupSelection', k: 'fn' }, { w: 'isolate', k: 'fn' },
+		{ w: 'soloClass', k: 'fn' }, { w: 'showAll', k: 'fn' },
+		{ w: 'undo', k: 'fn' }, { w: 'redo', k: 'fn' }, { w: 'clearScene', k: 'fn' },
+
+		// ── Exporters ──
+		{ w: 'exportGLB', k: 'fn' }, { w: 'exportGLTF', k: 'fn' },
+		{ w: 'exportOBJ', k: 'fn' }, { w: 'exportSTL', k: 'fn' },
+		{ w: 'exportPLY', k: 'fn' },
+
+		// ── Spatial helpers ──
+		{ w: 'getSize', k: 'fn' }, { w: 'getTopY', k: 'fn' },
+		{ w: 'getCenter', k: 'fn' }, { w: 'placeOnTop', k: 'fn' },
+		{ w: 'lineFromPoints', k: 'fn' },
+
+		// ── Animation helpers ──
+		{ w: 'addClip', k: 'fn' }, { w: 'addSpinClip', k: 'fn' },
+
+		// ── Furniture builders ──
+		{ w: 'makeTable', k: 'fn' }, { w: 'makeChair', k: 'fn' },
+
+		// ── Edit mode ──
+		{ w: 'enterEditMode', k: 'fn' }, { w: 'exitEditMode', k: 'fn' },
+		{ w: 'extrude', k: 'fn' }, { w: 'inset', k: 'fn' }, { w: 'bevel', k: 'fn' },
+		{ w: 'deleteFaces', k: 'fn' }, { w: 'weld', k: 'fn' },
+		{ w: 'planarUV', k: 'fn' }, { w: 'boxUV', k: 'fn' },
+		{ w: 'selectFaces', k: 'fn' }, { w: 'selectVertices', k: 'fn' },
+		{ w: 'selectEdges', k: 'fn' }, { w: 'clearSelection', k: 'fn' },
+		{ w: 'selectTopFaces', k: 'fn' }, { w: 'selectFacingUp', k: 'fn' },
+		{ w: 'selectBoundaryEdges', k: 'fn' },
+
+		// ── Misc ──
+		{ w: 'fetchAPI', k: 'fn' }, { w: 'askScene', k: 'fn' },
+		{ w: 'evalAI', k: 'fn' }, { w: 'evalEditMatrix', k: 'fn' },
+		{ w: 'saveEvalRows', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
+		{ w: 'askExternal', k: 'fn' }, { w: 'checkApiHealth', k: 'fn' },
+
+		// ── JS built-ins ──
+		{ w: 'Math', k: 'obj' }, { w: 'console', k: 'obj' }, { w: 'JSON', k: 'obj' },
+		{ w: 'Array', k: 'obj' }, { w: 'Object', k: 'obj' }, { w: 'String', k: 'obj' },
+		{ w: 'Number', k: 'obj' }, { w: 'Boolean', k: 'obj' }, { w: 'Date', k: 'obj' },
+		{ w: 'RegExp', k: 'obj' }, { w: 'Map', k: 'obj' }, { w: 'Set', k: 'obj' },
+		{ w: 'Promise', k: 'obj' }, { w: 'parseInt', k: 'fn' }, { w: 'parseFloat', k: 'fn' },
+		{ w: 'isNaN', k: 'fn' }, { w: 'isFinite', k: 'fn' }, { w: 'setTimeout', k: 'fn' },
+		{ w: 'setInterval', k: 'fn' }, { w: 'clearTimeout', k: 'fn' },
+		{ w: 'clearInterval', k: 'fn' }, { w: 'requestAnimationFrame', k: 'fn' },
+
+		// ── JS keywords ──
+		{ w: 'const', k: 'kw' }, { w: 'let', k: 'kw' }, { w: 'var', k: 'kw' },
+		{ w: 'function', k: 'kw' }, { w: 'return', k: 'kw' }, { w: 'if', k: 'kw' },
+		{ w: 'else', k: 'kw' }, { w: 'for', k: 'kw' }, { w: 'while', k: 'kw' },
+		{ w: 'switch', k: 'kw' }, { w: 'case', k: 'kw' }, { w: 'break', k: 'kw' },
+		{ w: 'continue', k: 'kw' }, { w: 'new', k: 'kw' }, { w: 'this', k: 'kw' },
+		{ w: 'typeof', k: 'kw' }, { w: 'instanceof', k: 'kw' }, { w: 'delete', k: 'kw' },
+		{ w: 'void', k: 'kw' }, { w: 'throw', k: 'kw' }, { w: 'try', k: 'kw' },
+		{ w: 'catch', k: 'kw' }, { w: 'finally', k: 'kw' }, { w: 'async', k: 'kw' },
+		{ w: 'await', k: 'kw' }, { w: 'true', k: 'kw' }, { w: 'false', k: 'kw' },
+		{ w: 'null', k: 'kw' }, { w: 'undefined', k: 'kw' },
+	];
+
+	// ── $S() chainable method completions ─────────────────────────────────────
+	const AC_CHAIN_METHODS = [
+		// Edit ops
+		{ w: 'recolor', k: 'method', h: "(color)" },
+		{ w: 'move', k: 'method', h: "(dx, dy, dz)" },
+		{ w: 'rotate', k: 'method', h: "(axis, degrees)" },
+		{ w: 'scale', k: 'method', h: "(factor, axis?)" },
+		{ w: 'delete', k: 'method', h: "()" },
+		{ w: 'duplicate', k: 'method', h: "(dx, dy, dz)" },
+		{ w: 'retexture', k: 'method', h: "(texture)" },
+		{ w: 'setMaterial', k: 'method', h: "(props)" },
+		{ w: 'setOpacity', k: 'method', h: "(0–1)" },
+		{ w: 'setVisible', k: 'method', h: "(bool)" },
+		{ w: 'show', k: 'method', h: "()" },
+		{ w: 'hide', k: 'method', h: "()" },
+		{ w: 'wireframe', k: 'method', h: "(bool)" },
+		{ w: 'moveTo', k: 'method', h: "(x, y, z)" },
+		{ w: 'rotateTo', k: 'method', h: "(x, y, z)" },
+		{ w: 'scaleTo', k: 'method', h: "(factor)" },
+		{ w: 'reset', k: 'method', h: "()" },
+		{ w: 'lookAt', k: 'method', h: "(target)" },
+		// Material props
+		{ w: 'metalness', k: 'prop', h: "(0–1)" },
+		{ w: 'roughness', k: 'prop', h: "(0–1)" },
+		{ w: 'emissive', k: 'prop', h: "(color)" },
+		{ w: 'emissiveIntensity', k: 'prop', h: "(value)" },
+		{ w: 'flatShading', k: 'prop', h: "(bool)" },
+		{ w: 'doubleSided', k: 'prop', h: "(bool)" },
+		{ w: 'setColor', k: 'method', h: "(color)" },
+		// Shadow / render
+		{ w: 'castShadow', k: 'prop', h: "(bool)" },
+		{ w: 'receiveShadow', k: 'prop', h: "(bool)" },
+		{ w: 'frustumCulled', k: 'prop', h: "(bool)" },
+		{ w: 'renderOrder', k: 'prop', h: "(n)" },
+		// Light props
+		{ w: 'intensity', k: 'prop', h: "(value)" },
+		{ w: 'lightColor', k: 'prop', h: "(color)" },
+		{ w: 'groundColor', k: 'prop', h: "(color)" },
+		{ w: 'distance', k: 'prop', h: "(value)" },
+		{ w: 'angle', k: 'prop', h: "(radians)" },
+		{ w: 'penumbra', k: 'prop', h: "(0–1)" },
+		{ w: 'decay', k: 'prop', h: "(value)" },
+		// Camera props
+		{ w: 'fov', k: 'prop', h: "(degrees)" },
+		{ w: 'near', k: 'prop', h: "(value)" },
+		{ w: 'far', k: 'prop', h: "(value)" },
+		// Animation recipes
+		{ w: 'bounce', k: 'anim', h: "(height, duration)" },
+		{ w: 'pulse', k: 'anim', h: "(scale, duration)" },
+		{ w: 'fade', k: 'anim', h: "(from, to, duration)" },
+		{ w: 'orbit', k: 'anim', h: "(center, radius, duration)" },
+		{ w: 'shake', k: 'anim', h: "(intensity, duration)" },
+		{ w: 'flyTo', k: 'anim', h: "(x, y, z, duration)" },
+		{ w: 'turnTo', k: 'anim', h: "(x, y, z, duration)" },
+		{ w: 'spin', k: 'anim', h: "(axis, speed)" },
+		{ w: 'fadeIn', k: 'anim', h: "(duration)" },
+		{ w: 'fadeOut', k: 'anim', h: "(duration)" },
+		{ w: 'zoomIn', k: 'anim', h: "(scale, duration)" },
+		{ w: 'zoomOut', k: 'anim', h: "(scale, duration)" },
+		{ w: 'slideInUp', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideInDown', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideInLeft', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideInRight', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideInForward', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideInBack', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideOutUp', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideOutDown', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideOutLeft', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideOutRight', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideOutForward', k: 'anim', h: "(distance, duration)" },
+		{ w: 'slideOutBack', k: 'anim', h: "(distance, duration)" },
+		{ w: 'bounceIn', k: 'anim', h: "(duration)" },
+		{ w: 'bounceOut', k: 'anim', h: "(duration)" },
+		{ w: 'flipInX', k: 'anim', h: "(duration)" },
+		{ w: 'flipInY', k: 'anim', h: "(duration)" },
+		{ w: 'flipInZ', k: 'anim', h: "(duration)" },
+		{ w: 'flipOutX', k: 'anim', h: "(duration)" },
+		{ w: 'flipOutY', k: 'anim', h: "(duration)" },
+		{ w: 'flipOutZ', k: 'anim', h: "(duration)" },
+		{ w: 'rotateIn', k: 'anim', h: "(angle, duration)" },
+		{ w: 'rotateOut', k: 'anim', h: "(angle, duration)" },
+		{ w: 'flash', k: 'anim', h: "(times, duration)" },
+		{ w: 'rubberBand', k: 'anim', h: "(scale, duration)" },
+		{ w: 'jello', k: 'anim', h: "(intensity, duration)" },
+		{ w: 'heartBeat', k: 'anim', h: "(scale, duration)" },
+		{ w: 'tada', k: 'anim', h: "(rotations, scale, duration)" },
+		{ w: 'wobble', k: 'anim', h: "(angle, duration)" },
+		{ w: 'raw', k: 'anim', h: "(code)" },
+		// Timeline
+		{ w: 'then', k: 'method', h: "(gap)" },
+		{ w: 'with', k: 'method', h: "()" },
+		{ w: 'at', k: 'method', h: "(time)" },
+		// Class/ID authoring
+		{ w: 'addClass', k: 'method', h: "(cls)" },
+		{ w: 'removeClass', k: 'method', h: "(cls)" },
+		{ w: 'toggleClass', k: 'method', h: "(cls, force?)" },
+		{ w: 'editID', k: 'method', h: "(newId)" },
+		// Query / read
+		{ w: 'count', k: 'query', h: "() → number" },
+		{ w: 'exists', k: 'query', h: "() → bool" },
+		{ w: 'isEmpty', k: 'query', h: "() → bool" },
+		{ w: 'names', k: 'query', h: "() → string[]" },
+		{ w: 'ids', k: 'query', h: "() → string[]" },
+		{ w: 'classes', k: 'query', h: "() → string[]" },
+		{ w: 'isClass', k: 'query', h: "(cls) → bool" },
+		{ w: 'id', k: 'query', h: "() → string" },
+		{ w: 'bounds', k: 'query', h: "() → {min,max,size}" },
+		{ w: 'size', k: 'query', h: "() → Vector3" },
+		{ w: 'color', k: 'query', h: "() → hex" },
+		{ w: 'material', k: 'query', h: "() → {type,color,…}" },
+		{ w: 'opacity', k: 'query', h: "() → number" },
+		{ w: 'visible', k: 'query', h: "() → bool" },
+		// Transform accessors
+		{ w: 'position', k: 'prop', h: ".x .y .z" },
+		{ w: 'rotation', k: 'prop', h: ".x .y .z" },
+		{ w: 'quaternion', k: 'prop', h: ".x .y .z .w" },
+		// Traversal
+		{ w: 'not', k: 'method', h: "(selector)" },
+		{ w: 'first', k: 'method', h: "()" },
+		{ w: 'last', k: 'method', h: "()" },
+		{ w: 'eq', k: 'method', h: "(index)" },
+		{ w: 'parent', k: 'method', h: "()" },
+		{ w: 'children', k: 'method', h: "()" },
+		{ w: 'closest', k: 'method', h: "(selector)" },
+		{ w: 'add', k: 'method', h: "(selector)" },
+		{ w: 'filter', k: 'method', h: "(selector)" },
+		{ w: 'each', k: 'method', h: "(fn)" },
+		{ w: 'result', k: 'method', h: "()" },
+		{ w: 'op', k: 'method', h: "(opJSON)" },
+		{ w: 'bulkSet', k: 'method', h: "(factory, pred?)" },
+	];
+
+	// ── Selector type literals (for use inside selector string arguments) ─────
+	const AC_SELECTOR_TYPES = [
+		{ w: 'mesh', k: 'type' }, { w: 'group', k: 'type' },
+		{ w: 'light', k: 'type' }, { w: 'camera', k: 'type' },
+		{ w: 'sprite', k: 'type' }, { w: 'line', k: 'type' },
+		{ w: 'points', k: 'type' }, { w: 'bone', k: 'type' },
+		{ w: 'object3d', k: 'type' },
+		{ w: '*', k: 'type' }, { w: ':selected', k: 'pseudo' }, { w: ':lasso', k: 'pseudo' },
+	];
+
+	// Functions whose first string arg is a selector
+	const SELECTOR_FUNCS = /\b(\$S|Pick|pick|query|queryOne|isolate|soloClass|groupSelection|isValidSelector)\s*\(\s*['"]/;
+
+	let acItems = [];     // current filtered list
+	let acIndex = - 1;    // highlighted index (- 1 = none)
+	let acPrefix = '';    // the token being completed
+	let acStart = - 1;    // cursor position where the token starts
+	let acMode = 'general'; // 'general' | 'selector' | 'chain'
+
+	// ── Context detection ─────────────────────────────────────────────────────
+
+	function acDetectContext () {
+
+		const pos = input.selectionStart;
+		const before = input.value.slice( 0, pos );
+
+		// 1) Inside a selector string? e.g. $S('  or Pick("
+		// Find the last unmatched opening quote preceded by a selector function
+		const selectorMatch = before.match( /\b(\$S|Pick|pick|query|queryOne|isolate|soloClass|groupSelection|isValidSelector)\s*\(\s*(['"])([^'"]*?)$/ );
+		if ( selectorMatch ) {
+
+			const selectorText = selectorMatch[ 3 ];
+			// Determine the current token inside the selector (after last space or combinator)
+			const parts = selectorText.split( /(\s+|>)/ );
+			const lastPart = parts[ parts.length - 1 ] || '';
+			return { mode: 'selector', prefix: lastPart, start: pos - lastPart.length };
+
+		}
+
+		// 2) After a dot on a chainable expression? e.g. $S('.x').  or ).method().
+		// Look for a chain context: )<whitespace?>. or .<identifier>
+		const chainMatch = before.match( /\)\s*\.(\w*)$/ );
+		if ( chainMatch ) {
+
+			return { mode: 'chain', prefix: chainMatch[ 1 ], start: pos - chainMatch[ 1 ].length };
+
+		}
+
+		// Also match chaining after a method with args: .recolor('#f00').
+		const chainMatch2 = before.match( /\.(\w+)\([^)]*\)\s*\.(\w*)$/ );
+		if ( chainMatch2 ) {
+
+			return { mode: 'chain', prefix: chainMatch2[ 2 ], start: pos - chainMatch2[ 2 ].length };
+
+		}
+
+		// 3) General mode — the default identifier completion
+		let i = before.length - 1;
+		while ( i >= 0 && /[\w$]/.test( before[ i ] ) ) i --;
+		const start = i + 1;
+		return { mode: 'general', prefix: before.slice( start ), start };
+
+	}
+
+	// ── Live scene selectors ──────────────────────────────────────────────────
+
+	function acGetSceneSelectors () {
+
+		try {
+
+			const counts = selectorCounts( editor.scene );
+			return counts.map( ( { selector, count } ) => ( {
+				w: selector,
+				k: count > 1 ? 'selector' : 'selector',
+				h: count > 1 ? '×' + count : '',
+			} ) );
+
+		} catch ( e ) {
+
+			return [];
+
+		}
+
+	}
+
+	// ── Filtering ─────────────────────────────────────────────────────────────
+
+	function acFilter ( prefix, wordList ) {
+
+		const lc = prefix.toLowerCase();
+
+		if ( ! prefix ) {
+
+			// No prefix: show all items (capped)
+			return wordList.slice( 0, 24 ).map( item => ( { ...item, score: 0 } ) );
+
+		}
+
+		return wordList
+			.map( item => {
+
+				const w = item.w;
+				if ( w.startsWith( prefix ) ) return { ...item, score: 3 };
+				if ( w.toLowerCase().startsWith( lc ) ) return { ...item, score: 2 };
+				if ( w.toLowerCase().includes( lc ) ) return { ...item, score: 1 };
+				return null;
+
+			} )
+			.filter( Boolean )
+			.sort( ( a, b ) => b.score - a.score || a.w.localeCompare( b.w ) )
+			.slice( 0, 24 );
+
+	}
+
+	// ── Rendering ─────────────────────────────────────────────────────────────
+
+	function acRender () {
+
+		acDropdown.innerHTML = '';
+
+		if ( acItems.length === 0 ) {
+
+			acDropdown.classList.remove( 'visible' );
+			return;
+
+		}
+
+		const kindLabels = {
+			fn: 'function', class: 'class', var: 'variable', obj: 'object', kw: 'keyword',
+			method: 'method', prop: 'property', anim: 'animation', query: 'query',
+			selector: 'selector', type: 'type', pseudo: 'pseudo',
+		};
+
+		for ( let i = 0; i < acItems.length; i ++ ) {
+
+			const div = document.createElement( 'div' );
+			div.className = 'shell-ac-item' + ( i === acIndex ? ' active' : '' );
+
+			const nameSpan = document.createElement( 'span' );
+			nameSpan.textContent = acItems[ i ].w;
+			div.appendChild( nameSpan );
+
+			// Show hint (signature) for chain methods
+			if ( acItems[ i ].h ) {
+
+				const hintSpan = document.createElement( 'span' );
+				hintSpan.className = 'shell-ac-hint';
+				hintSpan.textContent = acItems[ i ].h;
+				div.appendChild( hintSpan );
+
+			}
+
+			const kindSpan = document.createElement( 'span' );
+			kindSpan.className = 'shell-ac-kind';
+			kindSpan.textContent = kindLabels[ acItems[ i ].k ] || acItems[ i ].k;
+			div.appendChild( kindSpan );
+
+			div.addEventListener( 'mousedown', ( e ) => {
+
+				e.preventDefault();
+				acAccept( i );
+
+			} );
+			acDropdown.appendChild( div );
+
+		}
+
+		acDropdown.classList.add( 'visible' );
+
+		const active = acDropdown.querySelector( '.active' );
+		if ( active ) active.scrollIntoView( { block: 'nearest' } );
+
+	}
+
+	// ── Accept completion ─────────────────────────────────────────────────────
+
+	function acAccept ( idx ) {
+
+		const item = acItems[ idx !== undefined ? idx : acIndex ];
+		if ( ! item ) return;
+
+		const before = input.value.slice( 0, acStart );
+		const after  = input.value.slice( input.selectionStart );
+		input.value  = before + item.w + after;
+
+		const newPos = acStart + item.w.length;
+		input.selectionStart = input.selectionEnd = newPos;
+
+		acHide();
+
+		// After accepting in selector mode, re-trigger to allow continued typing
+		if ( acMode === 'selector' ) {
+
+			setTimeout( acUpdate, 0 );
+
+		}
+
+	}
+
+	function acHide () {
+
+		acItems = [];
+		acIndex = - 1;
+		acPrefix = '';
+		acStart = - 1;
+		acDropdown.classList.remove( 'visible' );
+		acDropdown.innerHTML = '';
+
+	}
+
+	// ── Update (main entry point) ─────────────────────────────────────────────
+
+	function acUpdate () {
+
+		const ctx = acDetectContext();
+		acMode = ctx.mode;
+		acPrefix = ctx.prefix;
+		acStart = ctx.start;
+
+		let wordList;
+
+		if ( ctx.mode === 'selector' ) {
+
+			// Merge live scene selectors + static type selectors
+			wordList = [ ...acGetSceneSelectors(), ...AC_SELECTOR_TYPES ];
+
+		} else if ( ctx.mode === 'chain' ) {
+
+			wordList = AC_CHAIN_METHODS;
+
+		} else {
+
+			wordList = AC_WORDS;
+
+		}
+
+		acItems = acFilter( ctx.prefix, wordList );
+
+		// In general mode, if prefix is empty and input is empty, show all
+		// If prefix is empty but there's other text, only show when at start of a new token
+		if ( ctx.mode === 'general' && ! ctx.prefix ) {
+
+			const before = input.value.slice( 0, input.selectionStart );
+			// Show if empty or after whitespace/open-paren/semicolon/comma/equals
+			if ( before.length === 0 || /[\s(;,={\[+\-*/%|&!~<>?:]$/.test( before ) ) {
+
+				acItems = acFilter( '', wordList );
+
+			} else {
+
+				acItems = [];
+
+			}
+
+		}
+
+		acIndex = acItems.length > 0 ? 0 : - 1;
+		acRender();
+
+	}
+
+	input.addEventListener( 'input', acUpdate );
+	input.addEventListener( 'blur', () => setTimeout( acHide, 150 ) );
+	input.addEventListener( 'click', acUpdate );
+	input.addEventListener( 'focus', () => setTimeout( acUpdate, 0 ) );
+
 	// ── State ─────────────────────────────────────────────────────────────────
 
 	const history = [];
@@ -2912,9 +3463,69 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 
 		event.stopPropagation(); // prevent global shortcut handler from eating Backspace/Delete
 
+		// ── Autocomplete keyboard handling ────────────────────────────────────
+		if ( acDropdown.classList.contains( 'visible' ) ) {
+
+			if ( event.key === 'Tab' || ( event.key === 'Enter' && ! event.shiftKey && acIndex >= 0 ) ) {
+
+				event.preventDefault();
+				acAccept();
+				return;
+
+			}
+
+			if ( event.key === 'Escape' ) {
+
+				event.preventDefault();
+				acHide();
+				return;
+
+			}
+
+			if ( event.key === 'ArrowDown' ) {
+
+				event.preventDefault();
+				acIndex = Math.min( acIndex + 1, acItems.length - 1 );
+				acRender();
+				return;
+
+			}
+
+			if ( event.key === 'ArrowUp' ) {
+
+				event.preventDefault();
+				acIndex = Math.max( acIndex - 1, 0 );
+				acRender();
+				return;
+
+			}
+
+		}
+
+		// Tab without dropdown: ignore (allow default)
+		if ( event.key === 'Tab' ) {
+
+			event.preventDefault();
+			// Insert a tab character
+			const start = input.selectionStart;
+			const end = input.selectionEnd;
+			input.value = input.value.slice( 0, start ) + '\t' + input.value.slice( end );
+			input.selectionStart = input.selectionEnd = start + 1;
+			return;
+
+		}
+
+		if ( event.key === 'Escape' ) {
+
+			acHide();
+			return;
+
+		}
+
 		if ( event.key === 'Enter' && ! event.shiftKey ) {
 
 			event.preventDefault();
+			acHide();
 			execute( input.value );
 			input.value = '';
 			input.style.height = 'auto';

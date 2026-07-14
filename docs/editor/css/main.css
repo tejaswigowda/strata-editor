@@ -937,6 +937,63 @@ body.sidebar-bottom #sidebar #shell {
 	color: #555;
 }
 
+/* ── Shell autocomplete dropdown ─────────────────────────────────────── */
+
+#shell-input-row {
+	position: relative;
+}
+
+.shell-autocomplete {
+	position: absolute;
+	bottom: 100%;
+	left: 30px;
+	right: 12px;
+	max-height: 180px;
+	overflow-y: auto;
+	background: #1e1e1e;
+	border: 1px solid #444;
+	border-radius: 4px;
+	box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.5);
+	z-index: 100;
+	display: none;
+	font-family: Consolas, 'Courier New', monospace;
+	font-size: 13px;
+}
+
+.shell-autocomplete.visible {
+	display: block;
+}
+
+.shell-ac-item {
+	padding: 3px 10px;
+	color: #ccc;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.shell-ac-item.active {
+	background: #094771;
+	color: #fff;
+}
+
+.shell-ac-item:hover {
+	background: #2a2d2e;
+}
+
+.shell-ac-item .shell-ac-kind {
+	color: #888;
+	font-size: 11px;
+	margin-left: 8px;
+}
+
+.shell-ac-item .shell-ac-hint {
+	color: #6a9955;
+	font-size: 11px;
+	margin-left: 4px;
+}
+
 .shell-line {
     display: block;
     padding: 0;

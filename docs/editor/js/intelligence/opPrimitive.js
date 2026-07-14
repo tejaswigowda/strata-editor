@@ -17,6 +17,7 @@
 //   - Everything returns the set (chainable, jQuery PATTERN — not the lib).
 
 import * as selectorEngine from './selectorEngine.js';
+import { selectorCounts } from './vocabInjection.js';
 import {
 	recolorOp, scaleOp, moveOp, rotateOp, deleteOp, duplicateOp, setMaterialOp,
 	bulkApply, setObjectPropOp, setMaterialPropOp, setMaterialColorOp,
@@ -1069,7 +1070,14 @@ export function makeQuery( editor ) {
 			: ( editor.selected ? [ editor.selected ] : [] )
 	);
 
-	return ( selectorOrNodes ) => new ChainableSet( editor, selectorOrNodes );
+	const $S = ( selectorOrNodes ) => new ChainableSet( editor, selectorOrNodes );
+
+	// ── $S.listSelectors() — the addressable parts in the current scene ──────
+	// Attached as a static method so library consumers can call $S.listSelectors()
+	// without importing vocabInjection directly.
+	$S.listSelectors = () => selectorCounts( editor.scene );
+
+	return $S;
 
 }
 
