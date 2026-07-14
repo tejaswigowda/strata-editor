@@ -45,13 +45,13 @@ DONE
     All four code paths (WebLLM, Ollama, OpenAI, Anthropic) integrated
     26/26 tests passing: format-perfect output with mild reasoning cost
     Evaluated and working: small models emit valid op-JSON with better decomposition
-  $S / 3DOM extracted as a standalone library ("jQuery for 3D"): docs/packages/3dom/
+  $S / 3DOM extracted as a standalone library ("jQuery for 3D"): github.com/tejaswigowda/3dom
     Runtime-free core (selectors + autoLabel + descriptors + op-chaining + op-JSON + guards),
     three.js as a PEER dependency, its own undo. The editor-coupling is cut by a Host abstraction:
     ops call host command-factories, never a concrete command class. DefaultHost = library-internal
     commands + own undo stack (standalone path); StrataHost maps factories -> real Strata commands +
     editor.execute + signals, so Strata is now a CONSUMER (docs/editor/js/intelligence/StrataHost.js
-    + strata3dom.js). @strata-editor/3dom, MIT; ESM + global builds (three external); node smoke tests
+    + strata3dom.js). @tejaswigowda/3dom, MIT; ESM + global builds (three external); node smoke tests
     pass; bare.html browser proof; LANGUAGE standardized as versioned SPEC.md v0.1 (selector grammar,
     op vocabulary, op-JSON contract, autoLabel rules, Host contract). Verified in the live editor:
     autoLabel + $S('.red').recolor() flow through editor.execute with native undo/redo

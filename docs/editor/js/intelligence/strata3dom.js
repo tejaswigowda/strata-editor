@@ -1,6 +1,6 @@
 // ── strata3dom.js — the consumer bridge ───────────────────────────────────────
 //
-// Wires the standalone @strata-editor/3dom library into Strata: it builds a $S that
+// Wires the standalone @tejaswigowda/3dom library into Strata: it builds a $S that
 // resolves selectors over the editor's scene and routes every edit through a
 // StrataHost, so mutations land in Strata's undo/redo history and refresh its UI.
 //
@@ -10,14 +10,14 @@
 // resolves the bare `three` specifier the library imports).
 //
 // The library itself is loaded from a pinned jsDelivr CDN build, mapped to the
-// bare specifier `@strata-editor/3dom` in the editor's importmap (docs/index.html):
-//   https://cdn.jsdelivr.net/gh/tejaswigowda/threejs.editor.enhanced@<commit>/docs/packages/3dom/dist/3dom.esm.min.js
+// bare specifier `@tejaswigowda/3dom` in the editor's importmap (docs/index.html):
+//   https://cdn.jsdelivr.net/gh/tejaswigowda/3dom@838d7d73e55707eb0fc0eb680a28ceba44022c52/dist/3dom.esm.min.js
 //
 //   import { createStrataS } from './intelligence/strata3dom.js';
 //   const $S = createStrataS( editor );
 //   $S('.wheel').recolor('#111').scale(1.2);   // real, undoable Strata edits
 
-import createS from '@strata-editor/3dom';
+import createS from '@tejaswigowda/3dom';
 import { StrataHost } from './StrataHost.js';
 
 /**

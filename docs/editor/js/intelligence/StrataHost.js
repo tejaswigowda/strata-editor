@@ -1,13 +1,13 @@
-// ── StrataHost.js — Strata as a CONSUMER of @strata-editor/3dom ─────────────────
+// ── StrataHost.js — Strata as a CONSUMER of @tejaswigowda/3dom ─────────────────
 //
-// The 3DOM library (docs/packages/3dom) is runtime-free: its ops never import a
+// The 3DOM library (github.com/tejaswigowda/3dom) is runtime-free: its ops never import a
 // command class or an editor. They call **Host factories**. This adapter is the
 // Strata implementation of that Host contract — it maps every factory onto a real
 // Strata command and routes execution through editor.execute() so 3DOM edits land
 // in Strata's own undo/redo history and fire its signals, behaving IDENTICALLY to
 // hand-written editOps.
 //
-//   import createS from '@strata-editor/3dom';   // bare specifier → jsDelivr CDN
+//   import createS from '@tejaswigowda/3dom';   // bare specifier → jsDelivr CDN
 //                                                 // (mapped in docs/index.html importmap)
 //   import { StrataHost } from './intelligence/StrataHost.js';
 //   const $S = createS( new StrataHost( editor ) );
