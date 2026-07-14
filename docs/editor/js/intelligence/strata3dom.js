@@ -11,7 +11,7 @@
 //
 // The library itself is loaded from a pinned jsDelivr CDN build, mapped to the
 // bare specifier `@tejaswigowda/3dom` in the editor's importmap (docs/index.html):
-//   https://cdn.jsdelivr.net/gh/tejaswigowda/3dom@838d7d73e55707eb0fc0eb680a28ceba44022c52/dist/3dom.esm.min.js
+//   https://cdn.jsdelivr.net/gh/tejaswigowda/3dom@602ee8bb081df171cb3bc7cb6a621babc3a84faf/dist/3dom.esm.min.js
 //
 //   import { createStrataS } from './intelligence/strata3dom.js';
 //   const $S = createStrataS( editor );
