@@ -102,6 +102,53 @@ export function buildReasonConstrainedOpsSchema() {
 
 }
 
+// ── Candidate-constrained schema (host-side selector resolution) ──────────────
+// PICK-DON'T-COMPOSE. Instead of a free `selector` string (which lets a small model
+// hallucinate a part that isn't in the scene), the host ranks the real candidates
+// and passes their ids here as an ENUM. Constrained decoding then makes an invalid
+// selector literally unemittable — the model can only CHOOSE among the parts the
+// host offered (plus the escape id, which routes to clarify, never to a free-form
+// guess). `reason` adds the same reason-then-constrain leading field so the model
+// plans which candidate before committing. Build this PER-REQUEST (candidate ids
+// depend on the prompt); resolveEmittedSelector maps the chosen id back to nodes.
+
+export function buildCandidateConstrainedOpsSchema( candidateIds, opts = {} ) {
+
+	const ids = Array.isArray( candidateIds ) ? candidateIds.filter( id => typeof id === 'string' && id ) : [];
+	const selectorSchema = ids.length
+		? { type: 'string', enum: ids }
+		: { type: 'string' }; // no candidates → free string (recovered host-side)
+
+	const opItem = {
+		type: 'object',
+		properties: {
+			op: { type: 'string', enum: [ ...OP_SCHEMA.properties.op.enum, 'raw' ] },
+			selector: selectorSchema,
+			args: { type: 'object' },
+		},
+		required: [ 'op' ],
+	};
+
+	const opsSchema = { type: 'array', minItems: 1, items: opItem };
+
+	if ( opts.reason ) {
+
+		return {
+			type: 'object',
+			properties: { reasoning: { type: 'string' }, ops: opsSchema },
+			required: [ 'reasoning', 'ops' ],
+		};
+
+	}
+
+	return {
+		type: 'object',
+		properties: { ops: opsSchema },
+		required: [ 'ops' ],
+	};
+
+}
+
 // ── Validation ──────────────────────────────────────────────────────────────────
 
 /**

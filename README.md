@@ -19,7 +19,7 @@
 ## Quick start
 
 ```bash
-npx serve docs       # local dev. Or point GitHub Pages at docs/
+npx serve docs       # local dev. Or go to: https://tejaswigowda.com/strata-editor/
 ```
 
 or

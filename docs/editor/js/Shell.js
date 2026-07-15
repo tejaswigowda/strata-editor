@@ -35,7 +35,8 @@ import { SceneIntelligence, findByDescription, describeObject, listCandidates, r
 import { findParts } from './intelligence/sceneIndex.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
-import { buildConstrainedOpsSchema, buildReasonConstrainedOpsSchema } from './intelligence/editOps.js';
+import { buildConstrainedOpsSchema, buildReasonConstrainedOpsSchema, buildCandidateConstrainedOpsSchema } from './intelligence/editOps.js';
+import { rankSelectorCandidates, buildCandidateInjection, candidateIds, resolveEmittedSelector, tryHostResolve, ESCAPE_ID, makeDisambiguationMemory, buildSelectorIndex } from './intelligence/selectorIndex.js';
 import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
 import { colorBase as editColorBase } from './ai/editEval.js';
 import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog } from './ai/clientAPI.js';
@@ -774,10 +775,13 @@ function Shell( editor ) {
 
 		try {
 
-			const counts = selectorCounts( editor.scene );
-			return counts.map( ( { selector, count } ) => ( {
+			// Same SELECTOR INDEX the AI candidate injection reads (Part 0) — one
+			// ranked+capped source so the dropdown and the model never disagree about
+			// what's addressable. Each entry already carries its resolved node count.
+			const index = buildSelectorIndex( editor.scene );
+			return index.map( ( { selector, count } ) => ( {
 				w: selector,
-				k: count > 1 ? 'selector' : 'selector',
+				k: 'selector',
 				h: count > 1 ? '×' + count : '',
 			} ) );
 
@@ -2526,12 +2530,15 @@ function Shell( editor ) {
 				// loop and print a 3-axis (structure/spatial/semantic) pass/fail table.
 				evalAI: function ( prompts ) { return evalAI( prompts ); },
 
-				// evalEditMatrix('bare'|'scaffolded'|'constrained'|'reason-constrained')
+				// evalEditMatrix('bare'|'scaffolded'|'constrained'|'reason-constrained'|'host-resolved')
 				// — run the 5 fuzzy editing tasks on the current model; accumulates the
 				// model×condition matrix and prints it. Load each model / flip condition
 				// / add Haiku for the ceiling. 'constrained' = scaffolded + JSON-schema
 				// constrained decode; 'reason-constrained' = constrained + a free-text
-				// reasoning field before the ops (reason freely, constrain the output).
+				// reasoning field before the ops (reason freely, constrain the output);
+				// 'host-resolved' = host ranks the real parts + injects a numbered
+				// candidate list, the model PICKS an id (pick-don't-compose) and an
+				// unambiguous top candidate is resolved host-side with no model call.
 				evalEditMatrix: function ( condition ) { return evalEditMatrix( condition ); },
 				// saveEvalRows() — download the accumulated per-case rows as JSONL.
 				saveEvalRows: function () { return saveEvalRows(); },
@@ -2923,6 +2930,13 @@ function Shell( editor ) {
 	// load Haiku (dev mode) and run again for the ceiling column.
 	const _editMatrix = newMatrix();
 	let _matrixRunning = false;
+	// Session-scoped disambiguation memory (Part 4): when the host asks the user
+	// which part they meant ("by 'the wheels' I mean the front ones"), the answer is
+	// remembered for THIS conversation only — keyed by the normalized request, never a
+	// global model change. Consulted before ranking so a settled ambiguity resolves
+	// silently next time; cleared when the scene is replaced.
+	const aiDisambig = makeDisambiguationMemory();
+	editor.signals.editorCleared.add( () => aiDisambig.clear() );
 	// Per-(model,condition,task,id) rows accumulated across runs → the re-run
 	// JSONL artifact. saveEvalRows() (JS surface) downloads it.
 	const _matrixRows = [];
@@ -2951,6 +2965,19 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 - "op" is one of the edit ops above; "selector" targets the part(s); "args" holds op-specific values (e.g. recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).
 - One array entry per DISTINCT operation. Do NOT split a single set edit ("all four wheels") into one op per node — one op, one selector.`;
 
+	// Output contract for the 'host-resolved' condition (pick-don't-compose). The
+	// host has ALREADY ranked the real parts and injected a numbered candidate list;
+	// the model does NOT invent a selector, it CHOOSES an id from that list (the
+	// decoder's enum makes anything else unemittable). "__none__" routes to clarify.
+	const HOST_RESOLVED_JSON_INSTRUCTION = `
+
+HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code fences:
+{"ops":[{"op":"<op>","selector":"<candidate-id>","args":{ … }}]}
+- "selector" MUST be one of the candidate ids listed in ADDRESSABLE PARTS above (e.g. "c1", "c2"). Do NOT write a CSS selector — pick the id whose node count matches the request.
+- If none of the candidates fit, use "${ ESCAPE_ID }" (the host will ask the user which part).
+- "op" is one of the edit ops above; "args" holds op-specific values (recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).
+- One array entry per DISTINCT operation; do NOT split a single set edit into one op per node.`;
+
 	async function evalEditMatrix( condition = 'scaffolded', opts = {} ) {
 
 		if ( ! aiEngine.ready ) { appendOutput( 'AI not loaded — click "Load AI" first.', 'error' ); return; }
@@ -2959,17 +2986,25 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 		const debug = opts.debug === true;
 		const model = aiEngine.modelId || 'unknown';
 		// Conditions: 'bare' (no scaffolding), 'scaffolded' (parts injection),
-		// 'constrained' (scaffolded + JSON-schema constrained decoding), and
+		// 'constrained' (scaffolded + JSON-schema constrained decoding),
 		// 'reason-constrained' (scaffolded + constrained decode with a free-text
-		// reasoning field BEFORE the ops array — reason freely, constrain the output).
-		// All but 'bare' inject parts; the two constrained conditions force schema-
-		// valid op JSON, and 'reason-constrained' additionally gives the model a
-		// think-first slot to recover the op-selection cost of premature commitment.
+		// reasoning field BEFORE the ops array — reason freely, constrain the output),
+		// and 'host-resolved' (the host ranks the real parts and injects a NUMBERED
+		// candidate list; the model PICKS an id from an enum instead of composing a
+		// selector — pick-don't-compose, so an invalid selector is unemittable and an
+		// unambiguous top candidate is resolved host-side with no model call for the
+		// selector slot). All but 'bare' inject scaffolding.
 		const injectParts = condition !== 'bare';
 		const reasonConstrain = condition === 'reason-constrained';
+		const hostResolve = condition === 'host-resolved';
 		const constrainDecode = condition === 'constrained' || reasonConstrain;
 		const opsResponseSchema = ! constrainDecode ? null
 			: reasonConstrain ? buildReasonConstrainedOpsSchema() : buildConstrainedOpsSchema();
+		// Host-resolved bookkeeping — how often the host resolved the selector with NO
+		// model decision (cheap-first skip) and how often it had to ask (ambiguous /
+		// escape). Reported honestly alongside the matrix (see the work order's "report
+		// ask-rate and host-only-resolve rate").
+		let _hostSkip = 0, _hostAsk = 0, _hostTotal = 0;
 		appendOutput( `Eval matrix: ${ model } / ${ condition } — measuring the 5 tasks (single-shot, quiet)…`, 'info' );
 
 		// runOnce — ONE quiet generation (no agentic loop, no retries, NO execution).
@@ -2994,8 +3029,37 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 			// free-text `reasoning` field before the ops.
 			if ( reasonConstrain ) systemPrompt += REASON_CONSTRAINED_JSON_INSTRUCTION;
 			else if ( constrainDecode ) systemPrompt += CONSTRAINED_JSON_INSTRUCTION;
-			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts } );
-			const response = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: opsResponseSchema } );
+
+			// ── Host-resolved path (pick-don't-compose) ──────────────────────────
+			// Rank the REAL parts for THIS prompt host-side, inject the numbered
+			// candidate list (replacing the bulk vocab block), and constrain the
+			// selector field to that candidate enum. Cheap-first: if the top candidate
+			// is unambiguous, collapse the enum to it → the selector is host-decided
+			// (no model choice). Otherwise the model picks; "__none__" = ask.
+			let perPromptSchema = opsResponseSchema;
+			let hostCandidates = null;
+			if ( hostResolve ) {
+
+				_hostTotal ++;
+				const rank = rankSelectorCandidates( editor, prompt );
+				hostCandidates = rank.candidates;
+				// A settled ambiguity for this request (from an earlier clarify) resolves
+				// silently: if the remembered selector is one of the offered candidates,
+				// treat it as the cheap-first winner.
+				const remembered = aiDisambig.get( prompt );
+				const rememberedCand = remembered ? hostCandidates.find( c => c.selector === remembered ) : null;
+				const cheap = rememberedCand ? { resolved: rememberedCand } : tryHostResolve( rank );
+				if ( ! hostCandidates.length || rank.ambiguous ) _hostAsk ++;
+				let ids;
+				if ( cheap.resolved ) { _hostSkip ++; ids = [ cheap.resolved.id ]; } // host-only resolve
+				else ids = candidateIds( hostCandidates );
+				perPromptSchema = buildCandidateConstrainedOpsSchema( ids );
+				systemPrompt += '\n\n' + buildCandidateInjection( hostCandidates ) + HOST_RESOLVED_JSON_INSTRUCTION;
+
+			}
+
+			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts: hostResolve ? false : injectParts } );
+			const response = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: perPromptSchema } );
 
 			// Extract text from response (handle both string and {text, usage} formats)
 			const raw = typeof response === 'string' ? response : response?.text || '';
@@ -3006,9 +3070,35 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 				aiEngine._trackUsage( usage.prompt_tokens || 0, usage.completion_tokens || 0 );
 			}
 
+			// Host-resolved: the model emitted candidate IDS ("c2") — map each back to
+			// the concrete selector string the candidate resolves to, so the downstream
+			// parser + real selectorEngine score it exactly like every other condition.
+			if ( hostResolve ) return { code: remapHostSelectors( raw, hostCandidates ) };
+
 			// Constrained output is raw JSON (no code fence) — parseEmittedOps reads it
 			// directly; the JS-code conditions still go through the fenced-code extractor.
 			return { code: constrainDecode ? raw : extractCode( raw ) };
+
+		}
+
+		// Rewrite a host-resolved model reply: candidate id → resolved selector string.
+		// resolveEmittedSelector maps an id/free-form/escape to nodes; we emit the
+		// selector it resolved to (null when it escaped or nothing matched, so the case
+		// scores as an honest miss). Returns an { ops:[…] } JSON string for the parser.
+		function remapHostSelectors( raw, candidates ) {
+
+			let obj = null;
+			try { obj = JSON.parse( raw ); }
+			catch { const m = raw && raw.match( /\{[\s\S]*\}/ ); if ( m ) { try { obj = JSON.parse( m[ 0 ] ); } catch { /* unparseable */ } } }
+			if ( ! obj ) return raw;
+			const ops = Array.isArray( obj.ops ) ? obj.ops : ( obj.op ? [ obj ] : [] );
+			for ( const o of ops ) {
+
+				const r = resolveEmittedSelector( o.selector, candidates, editor );
+				o.selector = r.selector; // concrete selector string or null
+
+			}
+			return JSON.stringify( { ops } );
 
 		}
 
@@ -3084,6 +3174,13 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 		recordRun( _editMatrix, { model, condition, taskScores } );
 		const line = Object.entries( taskScores ).map( ( [ t, s ] ) => `${ t } ${ s.passed }/${ s.total }` ).join( '   ' );
 		appendOutput( `${ model } / ${ condition }:   ${ line }`, 'result' );
+		if ( hostResolve && _hostTotal ) {
+
+			const skipPct = Math.round( 100 * _hostSkip / _hostTotal );
+			const askPct = Math.round( 100 * _hostAsk / _hostTotal );
+			appendOutput( `host-resolved: ${ _hostSkip }/${ _hostTotal } selectors resolved host-side with no model call (${ skipPct }%); ${ _hostAsk }/${ _hostTotal } ambiguous → ask (${ askPct }%).`, 'info' );
+
+		}
 		appendOutput( formatMatrix( _editMatrix ), 'result' );
 		appendOutput( `${ _matrixRows.length } row(s) logged — saveEvalRows() to download JSONL.`, 'info' );
 		return taskScores;
