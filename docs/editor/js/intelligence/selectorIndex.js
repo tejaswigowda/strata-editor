@@ -198,6 +198,82 @@ function setEq( a, b ) {
 
 }
 
+function isSubsetOf( a, b ) {
+
+	if ( a.size > b.size ) return false;
+	for ( const x of a ) if ( ! b.has( x ) ) return false;
+	return true;
+
+}
+
+// Content-based, order-independent, type-safe node-set equality. Normalizes either
+// input (a Set, an Array, or a { nodes } wrapper of node objects OR name strings)
+// to a SORTED identity key — node.uuid when given node objects, else the string
+// itself — and compares the keys. Reference identity and element order never matter,
+// so two freshly-computed sets of the same nodes compare equal.
+function nodeSetKey( s ) {
+
+	const src = s && ! ( s instanceof Set ) && ! Array.isArray( s ) && s.nodes != null ? s.nodes : s;
+	const list = src instanceof Set ? [ ...src ] : ( Array.isArray( src ) ? src : [] );
+	return list.map( x => ( x && typeof x === 'object' && x.uuid ) ? x.uuid : String( x ) ).sort().join( '\u0001' );
+
+}
+
+function nodeSetEquals( a, b ) {
+
+	return nodeSetKey( a ) === nodeSetKey( b );
+
+}
+export { nodeSetEquals };
+
+// How many simple-selector atoms a selector carries: `.grille` → 1, `.grille.black`
+// → 2, `.wheel .front` (descendant) → 2, `mesh.foo` → 2, `#id` → 1. Combinators and
+// whitespace split compound pieces; within a piece each `#`/`.` and any leading
+// type/`*` counts as one atom.
+export function selectorTokenCount( selector ) {
+
+	const s = String( selector == null ? '' : selector ).trim();
+	if ( ! s ) return 0;
+	let n = 0;
+	for ( const piece of s.split( /\s*[>+~]\s*|\s+/ ) ) {
+
+		if ( ! piece ) continue;
+		let atoms = ( piece.match( /[#.]/g ) || [] ).length;
+		if ( /^[A-Za-z*]/.test( piece ) ) atoms += 1; // leading type or universal
+		n += Math.max( atoms, 1 );
+
+	}
+	return n;
+
+}
+
+// Occam for selectors that resolve to the SAME node set: prefer the SIMPLEST
+// (fewest atoms — this is the Bug-1 fix: `.grille` beats `.grille.black`). Among
+// EQUALLY simple selectors, prefer the more addressable KIND (id > class > type,
+// matching the known-good ranking), then the shorter string, then a DETERMINISTIC
+// code-point order (never `localeCompare`, whose ordering is locale-dependent).
+// Compound-specificity is never a tie-break for an identical set — a more specific
+// selector wins only when it resolves to a strictly SMALLER (correct) set, which is
+// narrowing and handled by the caller.
+function selectorKindRank( s ) {
+
+	if ( s[ 0 ] === '#' ) return 3;   // id
+	if ( s[ 0 ] === '.' ) return 2;   // class / compound
+	return 1;                          // bare type
+
+}
+
+export function simplerSelector( a, b ) {
+
+	const ta = selectorTokenCount( a ), tb = selectorTokenCount( b );
+	if ( ta !== tb ) return ta < tb;
+	const ka = selectorKindRank( a ), kb = selectorKindRank( b );
+	if ( ka !== kb ) return ka > kb;
+	if ( a.length !== b.length ) return a.length < b.length;
+	return a < b;
+
+}
+
 // A selector whose only tokens are modifiers (".red", ".front", ".paired.left")
 // names NO part — usable only as a compound refinement, never a standalone choice.
 function isModifierOnly( selector ) {
@@ -250,18 +326,21 @@ function compoundCandidates( root, index ) {
 
 }
 
-// The most specific selector that resolves to EXACTLY the given node-name set, drawn
-// from the live pool (index + compounds). Falls back to deriving an #id/.class for a
-// singleton. Returns null when the set can't be expressed as one selector (so we
-// offer nothing rather than a bleeding approximation).
+// The SIMPLEST selector that resolves to EXACTLY the given node-name set, drawn
+// from the live pool (index + compounds). When several pool entries resolve to the
+// identical set, Occam wins (fewest atoms, then shortest) — `.grille` beats
+// `.grille.black`; specificity only narrows to a strictly smaller set (the caller's
+// region refinement), never breaks a same-set tie. Falls back to deriving an
+// #id/.class for a singleton. Returns null when the set can't be expressed as one
+// selector (so we offer nothing rather than a bleeding approximation).
 function selectorForNodeSet( root, pool, nameSet, nodes ) {
 
 	let best = null;
 	for ( const e of pool ) {
 
-		if ( setEq( new Set( e.nodes ), nameSet ) ) {
+		if ( nodeSetEquals( e.nodes, nameSet ) ) {
 
-			if ( ! best || ( KIND_RANK[ e.kind ] || 0 ) > ( KIND_RANK[ best.kind ] || 0 ) ) best = e;
+			if ( ! best || simplerSelector( e.selector, best.selector ) ) best = e;
 
 		}
 
@@ -278,7 +357,7 @@ function selectorForNodeSet( root, pool, nameSet, nodes ) {
 			if ( sel ) {
 
 				const names = selectorEngine.query( root, sel ).map( n => n.name ).filter( Boolean );
-				if ( setEq( new Set( names ), nameSet ) ) {
+				if ( nodeSetEquals( names, nameSet ) ) {
 
 					return { selector: sel, count: names.length, kind: sel[ 0 ] === '#' ? 'id' : 'class', source: 'derived', nodes: names };
 
@@ -287,6 +366,17 @@ function selectorForNodeSet( root, pool, nameSet, nodes ) {
 			}
 
 		}
+
+	}
+
+	// Dev guard: returning nothing for a NON-empty matcher set that DOES have an
+	// obvious single-class selector in the pool is the signature of a broken
+	// node-set-equality (the regression this function has hit before). Opt-in via a
+	// global so it never fires in production or node.
+	if ( nameSet.size && typeof globalThis !== 'undefined' && globalThis.__STRATA_DEBUG ) {
+
+		const known = pool.find( e => e.kind === 'class' && selectorTokenCount( e.selector ) === 1 && nodeSetEquals( e.nodes, nameSet ) );
+		if ( known ) console.warn( '[selectorForNodeSet] empty result for a non-empty set that a single-class selector expresses — possible node-set-equality regression:', known.selector );
 
 	}
 	return null;
@@ -558,6 +648,48 @@ export function segmentRequest( text, editor ) {
 
 }
 
+// dedupeResolvedOps — collapse co-referring segments AFTER each is resolved to a
+// node set. Co-reference is detected by WHAT THE WORDS POINT AT (the resolved node
+// set), not the words: "the wheels and rims" name the same four nodes, so the two
+// same-op segments are one op. Rules, applied per op:
+//   - identical node set + same op → keep the FIRST, drop later duplicates.
+//   - one set is a strict SUBSET of another (same op) → the subset is redundant
+//     (the superset covers it) and is dropped.
+//   - a DIFFERENT op on the same set is always kept ("lift the cab and paint it").
+// Unresolved entries (empty node set) are never deduped. Order is preserved.
+// entries: [{ op, selector, args, nodes:Set<string> }] → same shape, deduped.
+export function dedupeResolvedOps( entries ) {
+
+	const list = Array.isArray( entries ) ? entries : [];
+	const out = [];
+	for ( let i = 0; i < list.length; i ++ ) {
+
+		const a = list[ i ];
+		const an = a && a.nodes instanceof Set ? a.nodes : null;
+		if ( ! an || an.size === 0 ) { out.push( a ); continue; } // unresolved → keep
+
+		let redundant = false;
+		for ( let j = 0; j < list.length; j ++ ) {
+
+			if ( i === j ) continue;
+			const b = list[ j ];
+			const bn = b && b.nodes instanceof Set ? b.nodes : null;
+			if ( ! bn || bn.size === 0 || a.op !== b.op ) continue;
+			if ( isSubsetOf( an, bn ) ) {
+
+				if ( an.size < bn.size ) { redundant = true; break; } // strict subset → drop a
+				if ( j < i ) { redundant = true; break; }             // identical set → first wins
+
+			}
+
+		}
+		if ( ! redundant ) out.push( a );
+
+	}
+	return out;
+
+}
+
 // Every non-camera node carrying descriptors — mirrors sceneIndex.indexedNodes
 // (not exported there) so ranking can consult the tuned matcher.
 function listNodes( editor ) {
@@ -671,13 +803,31 @@ export function resolveEmittedSelector( emitted, candidates, editor ) {
 	// to clarify so "correctly refused" never masquerades as a resolved edit.
 	if ( list.length === 0 ) return { selector: null, nodes: new Set(), method: 'escape' };
 
+	// Canonical selector for a resolved node set: the SIMPLEST candidate (the same
+	// Occam tie-break selectorForNodeSet uses) whose node set equals `names`. Routing
+	// EVERY resolution through this makes the final selector a pure function of the
+	// node set — identical no matter which equivalent candidate/id the model emitted,
+	// so host resolution is model-/engine-independent by construction (the parity
+	// invariant). Falls back to the given selector when no candidate expresses the set.
+	const canonicalFor = ( names, fallback ) => {
+
+		let best = null;
+		for ( const c of list ) {
+
+			if ( c.nodes && setEq( new Set( c.nodes ), names ) && ( best === null || simplerSelector( c.selector, best ) ) ) best = c.selector;
+
+		}
+		return best || fallback;
+
+	};
+
 	// 1) Exact candidate id.
 	const byId = list.find( c => c.id === raw );
-	if ( byId ) return { selector: byId.selector, nodes: new Set( byId.nodes ), method: 'candidate', candidate: byId };
+	if ( byId ) { const n = new Set( byId.nodes ); return { selector: canonicalFor( n, byId.selector ), nodes: n, method: 'candidate', candidate: byId }; }
 
 	// 2) Exact candidate selector string.
 	const bySel = list.find( c => c.selector === raw );
-	if ( bySel ) return { selector: bySel.selector, nodes: new Set( bySel.nodes ), method: 'candidate', candidate: bySel };
+	if ( bySel ) { const n = new Set( bySel.nodes ); return { selector: canonicalFor( n, bySel.selector ), nodes: n, method: 'candidate', candidate: bySel }; }
 
 	// The tightest offered candidate whose node set is a PROPER SUBSET of `names` —
 	// i.e. the model's free-form selector BLED past the host's intended set (".rims"
@@ -722,15 +872,15 @@ export function resolveEmittedSelector( emitted, candidates, editor ) {
 			// Set-equivalent to a candidate → treat as that candidate (a different spelling
 			// of the same intent).
 			const equiv = list.find( c => setEq( c.nodes, names ) );
-			if ( equiv ) return { selector: equiv.selector, nodes: names, method: 'set-equiv', candidate: equiv };
+			if ( equiv ) return { selector: canonicalFor( names, equiv.selector ), nodes: names, method: 'set-equiv', candidate: equiv };
 
 			// Bled past an offered set → snap to the host's tightest intended candidate.
 			const snapped = snapBleed( names );
-			if ( snapped ) return { selector: snapped.selector, nodes: new Set( snapped.nodes ), method: 'snap', candidate: snapped };
+			if ( snapped ) { const n = new Set( snapped.nodes ); return { selector: canonicalFor( n, snapped.selector ), nodes: n, method: 'snap', candidate: snapped }; }
 
 			// Accept but flag: it resolves, but it wasn't an offered candidate. A
 			// subset-guard upstream still catches "named a part but hit everything".
-			return { selector: raw, nodes: names, method: 'freeform', flagged: true };
+			return { selector: canonicalFor( names, raw ), nodes: names, method: 'freeform', flagged: true };
 
 		}
 
@@ -748,8 +898,8 @@ export function resolveEmittedSelector( emitted, candidates, editor ) {
 
 				const equiv = list.find( c => setEq( c.nodes, names ) );
 				return equiv
-					? { selector: equiv.selector, nodes: names, method: 'set-equiv', candidate: equiv }
-					: { selector: sel, nodes: names, method: 'normalized', flagged: true };
+					? { selector: canonicalFor( names, equiv.selector ), nodes: names, method: 'set-equiv', candidate: equiv }
+					: { selector: canonicalFor( names, sel ), nodes: names, method: 'normalized', flagged: true };
 
 			}
 

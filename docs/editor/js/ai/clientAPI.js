@@ -254,6 +254,10 @@ async function openaiChat( config, messages, opts, signal ) {
 		max_tokens: Math.max( opts.maxTokens ?? 0, 4096 ),
 		stream: wantStream,
 	};
+	// Constrained decoding (host-resolved / constrained conditions): the same
+	// json_schema structured-output the server proxy applies, so the browser→provider
+	// path is constrained identically and never free-emits selectors.
+	if ( opts.schema ) body.response_format = { type: 'json_schema', json_schema: { name: 'ops', schema: opts.schema, strict: false } };
 
 	let res;
 	try {
@@ -331,6 +335,20 @@ async function anthropicChat( config, messages, opts, signal ) {
 	};
 	if ( system ) body.system = system;
 
+	// Constrained decoding (host-resolved / constrained conditions): Claude has no
+	// response_format, so force a single tool call whose input_schema IS the ops
+	// schema — the model must emit schema-valid JSON as the tool input. Wired for the
+	// non-streaming path (host resolution + the eval both call without onToken);
+	// streaming + tools would need input_json_delta assembly, so it's skipped there.
+	// Without this the browser→provider path free-emits and host resolution is lost —
+	// the same constraint the server proxy applies must apply here.
+	if ( opts.schema && ! wantStream ) {
+
+		body.tools = [ { name: 'emit_ops', description: 'Emit the edit operation(s) as structured JSON.', input_schema: opts.schema } ];
+		body.tool_choice = { type: 'tool', name: 'emit_ops' };
+
+	}
+
 	let res;
 	try {
 
@@ -367,7 +385,16 @@ async function anthropicChat( config, messages, opts, signal ) {
 	}
 
 	const data = await res.json().catch( () => ( {} ) );
-	const answer = Array.isArray( data.content ) ? data.content.map( c => c.text || '' ).join( '' ) : '';
+	// Constrained runs return a tool_use block (schema-valid JSON as its input)
+	// instead of text — surface that input as the answer so host resolution parses
+	// it exactly like the WebLLM/server paths; otherwise join the text blocks.
+	let answer = '';
+	if ( Array.isArray( data.content ) ) {
+
+		const tool = data.content.find( b => b && b.type === 'tool_use' );
+		answer = tool ? JSON.stringify( tool.input ) : data.content.map( c => c.text || '' ).join( '' );
+
+	}
 	if ( opts.onToken ) opts.onToken( '', answer );
 	// Return usage data for token tracking (Anthropic uses input_tokens/output_tokens)
 	return {

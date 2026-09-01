@@ -36,7 +36,7 @@ import { findParts } from './intelligence/sceneIndex.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
 import { buildConstrainedOpsSchema, buildReasonConstrainedOpsSchema, buildCandidateConstrainedOpsSchema } from './intelligence/editOps.js';
-import { rankSelectorCandidates, buildCandidateInjection, candidateIds, resolveEmittedSelector, tryHostResolve, ESCAPE_ID, makeDisambiguationMemory, buildSelectorIndex, segmentRequest } from './intelligence/selectorIndex.js';
+import { rankSelectorCandidates, buildCandidateInjection, candidateIds, resolveEmittedSelector, tryHostResolve, ESCAPE_ID, makeDisambiguationMemory, buildSelectorIndex, segmentRequest, dedupeResolvedOps } from './intelligence/selectorIndex.js';
 import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
 import { colorBase as editColorBase } from './ai/editEval.js';
 import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog } from './ai/clientAPI.js';
@@ -3014,6 +3014,18 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 		let _hostSkip = 0, _hostAsk = 0, _hostTotal = 0;
 		appendOutput( `Eval matrix: ${ model } / ${ condition } — measuring the 5 tasks (single-shot, quiet)…`, 'info' );
 
+		// Per-engine drift guard: host resolution is model-independent, so a host-
+		// resolved op should snap to a host CANDIDATE, never a free-emitted selector.
+		// A 'freeform'/'normalized'/'reject' method means the engine bypassed the
+		// candidate constraint (the API-path bug). Opt-in via globalThis.__STRATA_DEBUG.
+		const hostDriftWarn = ( r ) => {
+
+			if ( ! r || ! globalThis.__STRATA_DEBUG ) return;
+			if ( r.method === 'freeform' || r.method === 'normalized' || r.method === 'reject' )
+				console.warn( `[host-resolve] engine free-emitted (method=${ r.method }, selector=${ r.selector }) — candidate constraint not enforced for this engine.` );
+
+		};
+
 		// runOnce — ONE quiet generation (no agentic loop, no retries, NO execution).
 		// We only need the model's first-shot CODE to parse the op it emitted; the
 		// selector resolves deterministically against the setup scene afterward.
@@ -3049,8 +3061,7 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 				const seg = segmentRequest( prompt, editor );
 				if ( seg.confident && seg.segments.length > 1 ) {
 
-					const ops = [];
-					const seen = new Set();
+					const entries = [];
 					for ( const s of seg.segments ) {
 
 						_hostTotal ++;
@@ -3079,15 +3090,15 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 
 						const first = segOps[ 0 ];
 						const r = resolveEmittedSelector( first.selector, cands, editor );
-						// Co-reference collapse: the SAME op over the SAME node set is one op
-						// ("the wheels and rims" → both recolor {4} → collapse to one). A
-						// DIFFERENT op on the same set is kept ("lift the cab and paint it").
-						const key = `${ first.op }|${ [ ...r.nodes ].sort().join( ',' ) }`;
-						if ( r.selector && r.nodes.size && seen.has( key ) ) continue;
-						if ( r.nodes.size ) seen.add( key );
-						ops.push( { op: first.op, selector: r.selector, args: first.args || {} } );
+						hostDriftWarn( r );
+						entries.push( { op: first.op, selector: r.selector, args: first.args || {}, nodes: r.nodes instanceof Set ? r.nodes : new Set() } );
 
 					}
+					// Co-reference collapse (host-side): same op over the same/subset node
+					// set is one op ("the wheels and rims" → both {4 wheels} recolor →
+					// one). A DIFFERENT op on the same set is kept ("lift the cab and
+					// paint it"). Compares resolved node sets, not the words.
+					const ops = dedupeResolvedOps( entries ).map( e => ( { op: e.op, selector: e.selector, args: e.args } ) );
 					return { code: JSON.stringify( { ops } ) };
 
 				}
@@ -3159,6 +3170,7 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 			for ( const o of ops ) {
 
 				const r = resolveEmittedSelector( o.selector, candidates, editor );
+				hostDriftWarn( r );
 				o.selector = r.selector; // concrete selector string or null
 
 			}
