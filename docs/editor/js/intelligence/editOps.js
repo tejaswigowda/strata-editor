@@ -111,23 +111,39 @@ export function buildReasonConstrainedOpsSchema() {
 // guess). `reason` adds the same reason-then-constrain leading field so the model
 // plans which candidate before committing. Build this PER-REQUEST (candidate ids
 // depend on the prompt); resolveEmittedSelector maps the chosen id back to nodes.
+// `opts.noSelector`: the host already resolved the target from request TEXT alone
+// (cheap-first) — drop the `selector` property entirely so the model is structurally
+// unable to emit or influence a target; it is asked only for op-type + args.
+// `opts.noOp`: the host already resolved the op-type from the request's VERB (the
+// same deterministic closed-set mapping as selectors — "make it red" is always
+// `recolor`, never a fuzzy choice) — drop the `op` property entirely so the model
+// supplies only args (and selector, if that isn't ALSO host-resolved).
 
 export function buildCandidateConstrainedOpsSchema( candidateIds, opts = {} ) {
 
 	const ids = Array.isArray( candidateIds ) ? candidateIds.filter( id => typeof id === 'string' && id ) : [];
-	const selectorSchema = ids.length
-		? { type: 'string', enum: ids }
-		: { type: 'string' }; // no candidates → free string (recovered host-side)
 
-	const opItem = {
-		type: 'object',
-		properties: {
-			op: { type: 'string', enum: [ ...OP_SCHEMA.properties.op.enum, 'raw' ] },
-			selector: selectorSchema,
-			args: { type: 'object' },
-		},
-		required: [ 'op' ],
-	};
+	// Ordered-field decoders (WebLLM/XGrammar, Ollama) fill schema properties in
+	// declaration order — op then selector then args, so the model reasons about
+	// WHAT before WHERE before HOW, matching the un-narrowed schema's order below.
+	const opItem = { type: 'object', properties: {}, required: [] };
+
+	if ( ! opts.noOp ) {
+
+		opItem.properties.op = { type: 'string', enum: [ ...OP_SCHEMA.properties.op.enum, 'raw' ] };
+		opItem.required.push( 'op' );
+
+	}
+
+	if ( ! opts.noSelector ) {
+
+		opItem.properties.selector = ids.length
+			? { type: 'string', enum: ids }
+			: { type: 'string' }; // no candidates → free string (recovered host-side)
+
+	}
+
+	opItem.properties.args = { type: 'object' };
 
 	const opsSchema = { type: 'array', minItems: 1, items: opItem };
 

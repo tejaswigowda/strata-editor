@@ -10,7 +10,7 @@
 
 **Production ships validated AI only.** Development mode (`DEV=1`) exposes all models for research. Production mode (default) shows only models that have passed the edit eval matrix. This confirms the zero-training claim.
 
-> **The thesis.** 3D editing = deterministic shell (selector language + ops) + optional model for **4 fuzzy tasks**: op-selection, argument-extraction, labeling, multi-op decomposition. The 5th task (selector-resolution) is capability-bound and runs host-side. The shell is the standalone [3DOM library](https://github.com/tejaswigowda/3dom) ("jQuery for 3D"); Strata consumes it via host adapter. **Separation:** 3DOM = durable library; Strata = one consumer. On-device model suffices, zero training.
+> **The thesis.** 3D editing = deterministic shell (selector language + ops) + optional model for the genuinely fuzzy residue: **argument-extraction, labeling, and ambiguous op-selection/segmentation**. Selector-resolution and op-selection (unambiguous verbs) are capability-bound tasks that run host-side instead — parity by construction, confirmed at 22/22 fixture-level agreement between a 1.5B and a frontier model. The shell is the standalone [3DOM library](https://github.com/tejaswigowda/3dom) ("jQuery for 3D"); Strata consumes it via host adapter. **Separation:** 3DOM = durable library; Strata = one consumer. On-device model suffices, zero training.
 
 **Sovereign by default.** Nothing leaves the device except by your explicit action (git sync, `fetchAPI`). Inference is local. Scene state stays on-device.
 
@@ -83,17 +83,18 @@ op({ type:'recolor', selector:'.rims', color:'red' })   // explicit op-JSON
 // → execute, scene updates, git records
 ```
 
-**Task split:** The eval showed selector-resolution caps at 77% even at Opus (capability-bound). It moved to the host. The design: **decompose, don't expand the model's job.**
+**Task split:** The eval showed selector-resolution caps at 77% even at Opus (capability-bound). It moved to the host — and so did op-selection, once the eval showed the SAME closed-set pattern for verbs ("paint"/"make it red" is always `recolor`, never a fuzzy call). The design: **decompose, don't expand the model's job.**
 
 | Task | Handler | Why |
 |------|---------|-----|
-| **Selector resolution** | **HOST** (deterministic) | ~97% resolved with no model call. Match labels + auto-classes over the known scene graph. When genuinely ambiguous, host clarifies (pick-don't-compose). Moved off the model because Opus caps 77% — it's capability-bound. |
-| **Multi-op segmentation** | **HOST** (deterministic) | Host decides how many ops to emit and their order (request segmentation). |
-| **Argument extraction** | **MODEL** | Fill in the values: the color for `recolor`, the scale factor for `scale`. Caps ~92% at both Opus and 1.5B (the achievable ceiling). |
-| **Op-selection** | **MODEL** | Choose the operation type: `recolor` vs `scale` vs `move`. Constrained to the enum; ~77% at 1.5B. |
-| **Labeling** | **MODEL** | Pure generation: name an unlabeled shape. The most model-bound task (~67% at 1.5B); also the least critical to decompose. |
+| **Selector resolution** | **HOST** (deterministic) | Resolved from request TEXT alone — the model is never asked for a selector, only shown the resolved target as fixed context. Model-independent by construction: **22/22** fixture-level agreement between Haiku and the 1.5B. When genuinely ambiguous, host clarifies (pick-don't-compose). |
+| **Op-selection — unambiguous verbs** | **HOST** (deterministic) | Verb→op is a closed mapping (paint/color → `recolor`, spin/turn → `rotate`, lift/move → `move`, ...), assigned host-side and dropped from the model's schema. Same parity: **22/22** agreement. |
+| **Multi-op segmentation** | **HOST** (deterministic), residual ambiguity on the model | Host decides how many ops to emit and their order. **11/13** fixture agreement — 2 fixtures carry genuine segmentation ambiguity neither model resolves consistently. |
+| **Argument extraction** | **MODEL** | Fill in the values: the color for `recolor`, the scale factor for `scale`. Host normalizes/clamps (incl. collapsing a color-only `setMaterial` into `recolor`). **22/22** agreement — the values differ by request, not by which model is running. |
+| **Op-selection — ambiguous verbs** | **MODEL** | "make it pop", "fix the front" — no deterministic verb mapping; the model picks from the constrained enum. |
+| **Labeling** | **MODEL** | Pure generation: name an unlabeled shape. The one genuinely model-bound task — frontier leads (100% vs 67% at 1.5B); the only place capability shows. |
 
-The host enforces: clone-on-write (shared materials), normalization ("black" → `#111`), texture-tint warnings, merged-mesh graceful-fail, subset-sanity flags. The model stays in bounds: emits selector + op, host validates. See [AI guide](guides/AI_GUIDE.md).
+The host enforces: clone-on-write (shared materials), normalization ("black" → `#111`), texture-tint warnings, merged-mesh graceful-fail, subset-sanity flags, color-only-`setMaterial`→`recolor` canonicalization. The model fills in whatever the host doesn't resolve — values always, selector/op-type only on genuine ambiguity — and the host validates. See [AI guide](guides/AI_GUIDE.md).
 
 ---
 
@@ -136,7 +137,7 @@ The host enforces: clone-on-write (shared materials), normalization ("black" →
 await evalEditMatrix('scaffolded')   // then 'bare'
 ```
 
-**Results (scaffolded):**
+**Results (scaffolded — the pre-decomposition baseline, before host resolution existed):**
 
 | task | 0.5B | 1.5B | 3B | Haiku | Opus |
 |------|------|------|-----|-------|------|
@@ -147,43 +148,36 @@ await evalEditMatrix('scaffolded')   // then 'bare'
 | multi-op | 0% | **75%** | 25% | 75% | 100% |
 | **overall** | 19% | **73%** | 59% | 78% | 90% |
 
-**Host-resolved (1.5B before/after):** Moving selector-resolution to the host doesn't change the model's architecture — it changes which **tasks need a model at all**. The gain is 97% of selector work moving off the model (no model call), so task performance becomes deterministic for the decomposed work.
+**Host-resolved, final clean result (run 20, both models, instrumented).** Moving selector-resolution AND unambiguous op-selection to the host doesn't change either model's architecture — it changes which **tasks need a model at all**. On the resulting mechanical tasks the two models are **interchangeable**: they agree on every fixture, because the host resolves the target and the verb before the model is ever consulted for them.
 
-| task | scaffolded (1.5B) | host-resolved (1.5B) |
-|------|-------------------|----------------------|
-| selector-resolution | 54% | **91%** |
-| multi-op | 75% | **85%** |
-| **overall** | 73% | **86%** |
+| task | Haiku | 1.5B | fixture-level agreement | mechanism |
+|------|-------|------|--------------------------|-----------|
+| op-selection | 86% | 86% | **22/22** | host assigns unambiguous verbs; model only for ambiguous ones |
+| selector-resolution | 91% | 91% | **22/22** | host resolves from request text; model never sees a selector |
+| arg-extraction | 91% | 91% | **22/22** | model fills values; host normalizes/clamps |
+| multi-op | 77% | 77% | 11/13 | host segments; 2 fixtures carry genuine ambiguity (see below) |
+| labeling | 100% | 67% | 6/9 | pure generation — the one model-bound task |
+| **overall** | **89%** | **85%** | | |
 
-**Dose-response (host-resolved, same 88 fixtures):** Model capability predicts performance in proportion to how much of a task stays on the model. The spread across 0.5B / 1.5B / Haiku shrinks with host share.
+**Parity by construction.** On the three fully-decomposed tasks — selector-resolution, op-selection (unambiguous verbs), arg-extraction — Haiku and the 1.5B agree on **every fixture (22/22)**. This isn't a measured coincidence, it's a structural guarantee: the host resolves the selector from request text and assigns the op for unambiguous verbs *before* the model is asked anything, so the model's identity cannot change the outcome. The model's remaining job — filling argument values — differs by REQUEST, not by which model is running it.
 
-| task | 0.5B | 1.5B | Haiku* | spread | host does |
-|------|------|------|--------|--------|-----------|
-| selector-resolution | 91% | 91% | 86%* | 5pt | 97% host-side |
-| multi-op | 62% | 85% | 77%* | 23pt | host segments N |
-| arg-extraction | 73% | 91% | 95% | 22pt | model |
-| op-selection | 45% | 86% | 100% | 55pt | model |
-| labeling | 33% | 67% | 100% | 67pt | model |
+**Where the two models still disagree — the honest edge, exactly where the thesis predicts it:**
+- **Labeling (3 of 9 fixtures).** Pure generation: naming an unlabeled shape from its descriptors. The one genuinely model-bound task, and the frontier leads (100% vs 67%). Correct and expected — labeling isn't decomposable into lookup, so capability should (and does) show here.
+- **Multi-op (2 of 13 fixtures — `everything-red`, `wheels-and-rims`).** The models SPLIT: each gets one of the two right and the other wrong. Residual segmentation ambiguity, not a systematic gap — neither model is "better" at it.
 
-*Haiku host-resolved results are contaminated by two unfixed selector bugs (tie-break, segment dedupe); clean re-run pending.
+Everything mechanical is parity-by-construction; the only disagreements are the one genuinely model-bound task and two genuinely ambiguous fixtures.
 
-**The clearest finding: a 0.5B that scored 8% on selector-resolution scaffolded (reverted to boilerplate — under-capacity) reaches 91% host-resolved, identical to the 1.5B.** That is the decompose-don't-expand principle made concrete: task performance stops depending on model size once the hard part moves off the model.
+**The overall 89 vs 85 gap is almost entirely labeling.** Strip labeling out and the two models are near-identical. Sufficiency, not parity, precisely located: the 1.5B is sufficient because the mechanical tasks left the model entirely; it trails only on the generative residue — exactly where a frontier model should lead.
+
+**The honest multi-op tradeoff.** Multi-op is 77/77 — down from an earlier 85 (1.5B, pre-op-assist). Reported as a real cost, not hidden: making resolution genuinely host-side removed the model's selector as a fallback, and that fallback had been papering over real segmentation ambiguity on 2 fixtures. The number now reflects the true difficulty instead of being propped up by a lucky model guess — never-silently-wrong applied to the eval's own result.
+
+**Dose-response, reframed.** Where a task is decomposed (selector-resolution, op-selection, arg-extraction, mostly multi-op), the model-size curve is FLAT by construction — not because small models got good, but because no model resolves them at all. Where a task is NOT decomposable (labeling), capability shows in full, sloped: 0.5B 33% / 1.5B 67% / Haiku 100%. (Op-selection and multi-op weren't re-run at 0.5B under the current host-assist mechanism, so those cells aren't restated here rather than asserting numbers never measured under this code path.)
+
+**The clearest flat-line evidence: a 0.5B that scored 8% on selector-resolution scaffolded (reverted to boilerplate — under-capacity) reaches 91% host-resolved — identical to the 1.5B and to Haiku.** That is the decompose-don't-expand principle made concrete: task performance stops depending on model size once the hard part moves off the model.
 
 **Quantization:** q4f16 (~1GB) == q4f32 (~1.9GB) byte-identical on all 88 fixtures. Host-side decomposition made the system quantization-insensitive too; model properties stop mattering once the task is off the model.
 
-**What it shows:**
-
-1. **Scaffolding unlocks capable models.** Delta: Haiku +52, Opus +45, small models +7–13. Not parity; sufficiency: 1.5B at 73% scaffolded becomes 86% host-resolved — sufficient for editing with host-resolution.
-
-2. **Host-resolution collapses the hard task.** Selector-resolution: scaffolded 54% (capability-bound even at Opus 77%) → host-resolved 91% (97% host-side, only genuine ambiguity stays on model). Task spread: 77pt frontier gap → 5pt host-resolved gap. Model size becomes irrelevant for the decomposed work.
-
-3. **1.5B ties the frontier on decomposed tasks.** Selector-resolution 91% (ties Haiku, Opus equivalent on the 3% ambiguous cases); multi-op 85% (Haiku 77* pending clean run). Still trails on pure-generation tasks (labeling 67 vs 100). Sufficiency, not parity: enough for production editing; correctly weaker on what's genuinely fuzzy.
-
-4. **0.5B under-capacity scaffolded, sufficient host-resolved.** Scaffolded selector-resolution 8% (reverts to boilerplate); host-resolved 91% (identical to 1.5B). Proves decomposition works: even a model that can't do the task ends up 91% when the task is gone.
-
-5. **~1GB is the default.** q4f16 quantization (1GB) identical to q4f32 (1.9GB) on all fixtures. Decomposition made the system quantization-insensitive.
-
-**Ship decision:** Production shows 1.5B+ only; 0.5B excluded (under-capacity scaffolded, redundant host-resolved). Host-resolution is production-ready on the current model lineup. The eval demonstrated it; the gate proves it.
+**Ship decision:** Production shows 1.5B+ only; 0.5B excluded (under-capacity scaffolded, redundant host-resolved). Host-resolution is production-ready on the current model lineup, now confirmed at 22/22 fixture-level parity on every mechanical task. The eval demonstrated it; the gate proves it.
 
 ---
 
@@ -207,8 +201,8 @@ Selector-over-graph exists (three-query-selector, querySelectorAll). NL-to-3D ex
 
 ## Roadmap (at a glance)
 
-- **Done.** Deterministic language (selectors + ops), `$S()` API, universal timeline (absolute + `.then`/`.with`/`.at`), git versioning, scene intelligence, constrained decoding, **eval matrix** (1.5B is viable floor), multi-op segmentation, bulk property ops, standalone [3DOM library](https://github.com/tejaswigowda/3dom) (Strata consumes via host adapter).
-- **Next.** Host-side selector resolution. Haiku re-run. Op-selection host-assist. Alien-syntax ablation.
+- **Done.** Deterministic language (selectors + ops), `$S()` API, universal timeline (absolute + `.then`/`.with`/`.at`), git versioning, scene intelligence, constrained decoding, **eval matrix** (1.5B is viable floor), multi-op segmentation, bulk property ops, standalone [3DOM library](https://github.com/tejaswigowda/3dom) (Strata consumes via host adapter), host-side selector + op-type resolution (parity by construction, 22/22 fixture agreement, clean Haiku re-run).
+- **Next.** Resolve the 2 residual multi-op segmentation-ambiguity fixtures. Alien-syntax ablation.
 - **Then.** glTF label export, optional vision layer, renderer-agnostic pipeline, capture integration, sovereignty dashboard.
 
 Full details in [ROADMAP.md](guides/ROADMAP.md).

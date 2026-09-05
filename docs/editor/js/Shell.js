@@ -37,6 +37,8 @@ import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
 import { buildConstrainedOpsSchema, buildReasonConstrainedOpsSchema, buildCandidateConstrainedOpsSchema } from './intelligence/editOps.js';
 import { rankSelectorCandidates, buildCandidateInjection, candidateIds, resolveEmittedSelector, tryHostResolve, ESCAPE_ID, makeDisambiguationMemory, buildSelectorIndex, segmentRequest, dedupeResolvedOps } from './intelligence/selectorIndex.js';
+import { classifyOpVerb } from './intelligence/opResolve.js';
+import { canonicalizeColorOnlySetMaterial } from './intelligence/argNormalize.js';
 import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
 import { colorBase as editColorBase } from './ai/editEval.js';
 import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog } from './ai/clientAPI.js';
@@ -2972,18 +2974,49 @@ REASON-THEN-CONSTRAIN OUTPUT MODE — respond with ONLY a JSON object, no prose,
 - "op" is one of the edit ops above; "selector" targets the part(s); "args" holds op-specific values (e.g. recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).
 - One array entry per DISTINCT operation. Do NOT split a single set edit ("all four wheels") into one op per node — one op, one selector.`;
 
-	// Output contract for the 'host-resolved' condition (pick-don't-compose). The
-	// host has ALREADY ranked the real parts and injected a numbered candidate list;
-	// the model does NOT invent a selector, it CHOOSES an id from that list (the
-	// decoder's enum makes anything else unemittable). "__none__" routes to clarify.
-	const HOST_RESOLVED_JSON_INSTRUCTION = `
+	// Output contract for the 'host-resolved' condition (pick-don't-compose), for
+	// BOTH selector and op-type. Either/both may be HOST-ASSIGNED (verb→op is the
+	// same deterministic closed-set mapping as selector resolution — "make it red"
+	// is always `recolor`, never a fuzzy choice). A host-assigned field is dropped
+	// from the schema (the model cannot emit or influence it — parity-by-
+	// construction), but is shown as FIXED CONTEXT in the prompt: stripping it
+	// entirely (rather than just making it unemittable) cratered multi-op /
+	// op-selection, because the model's remaining reasoning lost its anchor.
+	// @param {{ selectorFixed:object|null, opFixed:string|null, candidates:Array }} p
+	function buildHostResolvedInstruction( { selectorFixed, opFixed, candidates } ) {
 
+		const contextLines = [];
+		if ( selectorFixed ) contextLines.push( `  TARGET (fixed — you cannot change it): ${ selectorFixed.selector }  (${ selectorFixed.count } node${ selectorFixed.count === 1 ? '' : 's' })` );
+		if ( opFixed ) contextLines.push( `  OPERATION (fixed — you cannot change it): ${ opFixed }` );
+		const context = contextLines.length
+			? `\nHOST-RESOLVED CONTEXT (already decided — shown so you know what you're editing):\n${ contextLines.join( '\n' ) }\n`
+			: '';
+
+		const fields = [];
+		if ( ! opFixed ) fields.push( '"op":"<op>"' );
+		if ( ! selectorFixed ) fields.push( candidates && candidates.length ? '"selector":"<candidate-id>"' : '"selector":"<css-selector>"' );
+		fields.push( '"args":{ … }' );
+
+		const notes = [];
+		if ( ! opFixed ) notes.push( '- "op" is one of the edit ops above.' );
+		if ( ! selectorFixed ) notes.push( candidates && candidates.length
+			? `- "selector" MUST be one of the candidate ids listed in ADDRESSABLE PARTS above (e.g. "c1", "c2"). Do NOT write a CSS selector — pick the id whose node count matches the request. If none fit, use "${ ESCAPE_ID }".`
+			: '- "selector" targets the part(s).' );
+		notes.push( '- "args" holds op-specific values (recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).' );
+		if ( opFixed || selectorFixed ) {
+
+			const skip = [ opFixed && '"op"', selectorFixed && '"selector"' ].filter( Boolean ).join( ' or ' );
+			notes.push( `- Do NOT include ${ skip } — ${ opFixed && selectorFixed ? 'both are' : 'it is' } fixed by the host.` );
+
+		}
+
+		return `${ context }
 HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code fences:
-{"ops":[{"op":"<op>","selector":"<candidate-id>","args":{ … }}]}
-- "selector" MUST be one of the candidate ids listed in ADDRESSABLE PARTS above (e.g. "c1", "c2"). Do NOT write a CSS selector — pick the id whose node count matches the request.
-- If none of the candidates fit, use "${ ESCAPE_ID }" (the host will ask the user which part).
-- "op" is one of the edit ops above; "args" holds op-specific values (recolor→{"color":"#000000"}, scale→{"factor":2}, move→{"dy":0.3}).
+{"ops":[{${ fields.join( ',' ) }}]}
+${ notes.join( '\n' ) }
 - One array entry per DISTINCT operation; do NOT split a single set edit into one op per node.`;
+
+	}
 
 	async function evalEditMatrix( condition = 'scaffolded', opts = {} ) {
 
@@ -3010,8 +3043,10 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 		// Host-resolved bookkeeping — how often the host resolved the selector with NO
 		// model decision (cheap-first skip) and how often it had to ask (ambiguous /
 		// escape). Reported honestly alongside the matrix (see the work order's "report
-		// ask-rate and host-only-resolve rate").
+		// ask-rate and host-only-resolve rate"). _opTotal/_opHostSkip mirror this for
+		// op-type (verb→op host resolution) — the same provenance story, one level up.
 		let _hostSkip = 0, _hostAsk = 0, _hostTotal = 0;
+		let _opHostSkip = 0, _opTotal = 0;
 		appendOutput( `Eval matrix: ${ model } / ${ condition } — measuring the 5 tasks (single-shot, quiet)…`, 'info' );
 
 		// Per-engine drift guard: host resolution is model-independent, so a host-
@@ -3051,11 +3086,14 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 
 			// ── Host-resolved multi-op decomposition (segment → N single-target) ──
 			// Take op-COUNTING off the model: the host splits the request into N
-			// target-scoped clauses (segmentRequest), then resolves each selector
-			// INDEPENDENTLY through the same cheap-first path used for single ops. The
-			// model's per-segment job shrinks to op-type + args; the selector is
-			// host-supplied. N is the host's answer, never the model's. N=1 or an
-			// uncertain split falls through to the single-target path below.
+			// target-scoped clauses (segmentRequest), then resolves each selector AND
+			// each op-type INDEPENDENTLY through the same cheap-first path used for
+			// single ops (verb→op is the same deterministic closed-set mapping as
+			// selector resolution — "paint it red" is always `recolor`). Whichever of
+			// the two the host resolves is dropped from the model's schema and shown
+			// as fixed context; the model's per-segment job shrinks to whatever's
+			// left (never below args). N is the host's answer, never the model's.
+			// N=1 or an uncertain split falls through to the single-target path below.
 			if ( hostResolve ) {
 
 				const seg = segmentRequest( prompt, editor );
@@ -3069,12 +3107,16 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 						const cands = rank.candidates;
 						const cheap = tryHostResolve( rank );
 						if ( ! cands.length || rank.ambiguous ) _hostAsk ++;
-						let ids;
-						if ( cheap.resolved ) { _hostSkip ++; ids = [ cheap.resolved.id ]; } // host-only resolve
-						else ids = candidateIds( cands );
-						const segSchema = buildCandidateConstrainedOpsSchema( ids );
+						const opClass = classifyOpVerb( s.opPhrase );
+						const selectorFixed = cheap.resolved || null;
+						const opFixed = opClass.confident ? opClass.op : null;
+						_opTotal ++;
+						if ( selectorFixed ) _hostSkip ++; // host-assigned: no selector offered to the model
+						if ( opFixed ) _opHostSkip ++; // host-assigned: no op-type offered to the model
+
+						const segSchema = buildCandidateConstrainedOpsSchema( selectorFixed ? [] : candidateIds( cands ), { noSelector: !! selectorFixed, noOp: !! opFixed } );
 						let segSys = partsPreview ? getCachedSystemPrompt( editor ) : SYSTEM_PROMPT;
-						segSys += '\n\n' + buildCandidateInjection( cands ) + HOST_RESOLVED_JSON_INSTRUCTION;
+						segSys += ( selectorFixed ? '' : '\n\n' + buildCandidateInjection( cands ) ) + buildHostResolvedInstruction( { selectorFixed, opFixed, candidates: cands } );
 						const segMsgs = buildMessages( segSys, editor, s.opPhrase, retrieveForPrompt( s.opPhrase ), { injectParts: false } );
 						const segResp = await aiEngine.stream( segMsgs, { maxTokens: aiTokenBudget(), temperature: 0, schema: segSchema } );
 						const segRaw = typeof segResp === 'string' ? segResp : segResp?.text || '';
@@ -3089,16 +3131,36 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 						if ( ! segOps.length ) continue; // this segment failed independently — the other N-1 still apply
 
 						const first = segOps[ 0 ];
-						const r = resolveEmittedSelector( first.selector, cands, editor );
-						hostDriftWarn( r );
-						entries.push( { op: first.op, selector: r.selector, args: first.args || {}, nodes: r.nodes instanceof Set ? r.nodes : new Set() } );
+						let selector, nodes, resolvedBy;
+						if ( selectorFixed ) {
+
+							// Host-assigned: the model never saw a selector field, so there
+							// is nothing of the model's to resolve — assign directly.
+							selector = selectorFixed.selector;
+							nodes = new Set( selectorFixed.nodes );
+							resolvedBy = 'host';
+
+						} else {
+
+							const r = resolveEmittedSelector( first.selector, cands, editor );
+							hostDriftWarn( r );
+							selector = r.selector;
+							nodes = r.nodes instanceof Set ? r.nodes : new Set();
+							resolvedBy = 'model';
+
+						}
+						const opResolvedBy = opFixed ? 'host' : 'model';
+						// Part-1 guard: color-only setMaterial → recolor. A no-op when the
+						// op was host-assigned (opFixed is never 'setMaterial').
+						const canon = canonicalizeColorOnlySetMaterial( { op: opFixed || first.op, args: first.args || {} } );
+						entries.push( { op: canon.op, selector, args: canon.args, nodes, resolvedBy, opResolvedBy } );
 
 					}
 					// Co-reference collapse (host-side): same op over the same/subset node
 					// set is one op ("the wheels and rims" → both {4 wheels} recolor →
 					// one). A DIFFERENT op on the same set is kept ("lift the cab and
 					// paint it"). Compares resolved node sets, not the words.
-					const ops = dedupeResolvedOps( entries ).map( e => ( { op: e.op, selector: e.selector, args: e.args } ) );
+					const ops = dedupeResolvedOps( entries ).map( e => ( { op: e.op, selector: e.selector, args: e.args, resolvedBy: e.resolvedBy, opResolvedBy: e.opResolvedBy } ) );
 					return { code: JSON.stringify( { ops } ) };
 
 				}
@@ -3106,16 +3168,22 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 			}
 
 			// ── Host-resolved path (pick-don't-compose) ──────────────────────────
-			// Rank the REAL parts for THIS prompt host-side, inject the numbered
-			// candidate list (replacing the bulk vocab block), and constrain the
-			// selector field to that candidate enum. Cheap-first: if the top candidate
-			// is unambiguous, collapse the enum to it → the selector is host-decided
-			// (no model choice). Otherwise the model picks; "__none__" = ask.
+			// Rank the REAL parts for THIS prompt host-side, and classify the request's
+			// verb host-side too (verb→op is the same deterministic closed-set mapping
+			// as selector resolution — "make it red" is always `recolor`, never a fuzzy
+			// choice). Either/both may be HOST-ASSIGNED from text alone — dropped from
+			// the schema entirely so the model cannot emit or influence them (parity-
+			// by-construction), but still shown as fixed context. Whatever isn't
+			// host-assigned is offered to the model to choose (constrained); "__none__"
+			// = ask.
 			let perPromptSchema = opsResponseSchema;
 			let hostCandidates = null;
+			let _hostAssignedSelector = null; // non-null ⇒ host resolved the selector from text alone
+			let _hostAssignedOp = null; // non-null ⇒ host resolved the op-type from the verb
 			if ( hostResolve ) {
 
 				_hostTotal ++;
+				_opTotal ++;
 				const rank = rankSelectorCandidates( editor, prompt );
 				hostCandidates = rank.candidates;
 				// A settled ambiguity for this request (from an earlier clarify) resolves
@@ -3125,11 +3193,13 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 				const rememberedCand = remembered ? hostCandidates.find( c => c.selector === remembered ) : null;
 				const cheap = rememberedCand ? { resolved: rememberedCand } : tryHostResolve( rank );
 				if ( ! hostCandidates.length || rank.ambiguous ) _hostAsk ++;
-				let ids;
-				if ( cheap.resolved ) { _hostSkip ++; ids = [ cheap.resolved.id ]; } // host-only resolve
-				else ids = candidateIds( hostCandidates );
-				perPromptSchema = buildCandidateConstrainedOpsSchema( ids );
-				systemPrompt += '\n\n' + buildCandidateInjection( hostCandidates ) + HOST_RESOLVED_JSON_INSTRUCTION;
+				const opClass = classifyOpVerb( prompt );
+				if ( cheap.resolved ) { _hostSkip ++; _hostAssignedSelector = cheap.resolved.selector; }
+				if ( opClass.confident ) { _opHostSkip ++; _hostAssignedOp = opClass.op; }
+
+				perPromptSchema = buildCandidateConstrainedOpsSchema( cheap.resolved ? [] : candidateIds( hostCandidates ), { noSelector: !! cheap.resolved, noOp: !! _hostAssignedOp } );
+				systemPrompt += ( cheap.resolved ? '' : '\n\n' + buildCandidateInjection( hostCandidates ) )
+					+ buildHostResolvedInstruction( { selectorFixed: cheap.resolved || null, opFixed: _hostAssignedOp, candidates: hostCandidates } );
 
 			}
 
@@ -3145,10 +3215,10 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 				aiEngine._trackUsage( usage.prompt_tokens || 0, usage.completion_tokens || 0 );
 			}
 
-			// Host-resolved: the model emitted candidate IDS ("c2") — map each back to
-			// the concrete selector string the candidate resolves to, so the downstream
-			// parser + real selectorEngine score it exactly like every other condition.
-			if ( hostResolve ) return { code: remapHostSelectors( raw, hostCandidates ) };
+			// Host-resolved: selector and/or op-type may be host-assigned directly (no
+			// model choice), or the model emitted them and they still need mapping back
+			// to nodes / canonicalizing — remapHostSelectors handles both per op.
+			if ( hostResolve ) return { code: remapHostSelectors( raw, hostCandidates, _hostAssignedSelector, _hostAssignedOp ) };
 
 			// Constrained output is raw JSON (no code fence) — parseEmittedOps reads it
 			// directly; the JS-code conditions still go through the fenced-code extractor.
@@ -3156,11 +3226,14 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 
 		}
 
-		// Rewrite a host-resolved model reply: candidate id → resolved selector string.
-		// resolveEmittedSelector maps an id/free-form/escape to nodes; we emit the
-		// selector it resolved to (null when it escaped or nothing matched, so the case
-		// scores as an honest miss). Returns an { ops:[…] } JSON string for the parser.
-		function remapHostSelectors( raw, candidates ) {
+		// Rewrite a host-resolved model reply. Selector and op-type are each EITHER
+		// host-assigned directly (hostAssignedSelector/hostAssignedOp set — the
+		// model's schema had no such field, nothing of the model's to recover) OR
+		// model-chosen (resolveEmittedSelector maps a candidate id/free-form emission
+		// to nodes as before; the op-type is canonicalized — Part-1 guard — in case
+		// the model picked the general `setMaterial` for what is really a color-only
+		// `recolor`). Returns an { ops:[…] } JSON string for the parser.
+		function remapHostSelectors( raw, candidates, hostAssignedSelector, hostAssignedOp ) {
 
 			let obj = null;
 			try { obj = JSON.parse( raw ); }
@@ -3169,9 +3242,34 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 			const ops = Array.isArray( obj.ops ) ? obj.ops : ( obj.op ? [ obj ] : [] );
 			for ( const o of ops ) {
 
-				const r = resolveEmittedSelector( o.selector, candidates, editor );
-				hostDriftWarn( r );
-				o.selector = r.selector; // concrete selector string or null
+				if ( hostAssignedSelector != null ) {
+
+					o.selector = hostAssignedSelector;
+					o.resolvedBy = 'host';
+
+				} else {
+
+					const r = resolveEmittedSelector( o.selector, candidates, editor );
+					hostDriftWarn( r );
+					o.selector = r.selector; // concrete selector string or null
+					o.resolvedBy = 'model';
+
+				}
+
+				if ( hostAssignedOp != null ) {
+
+					o.op = hostAssignedOp;
+					o.opResolvedBy = 'host';
+
+				} else {
+
+					o.opResolvedBy = 'model';
+
+				}
+
+				const canon = canonicalizeColorOnlySetMaterial( o ); // Part-1 guard, no-op if op !== 'setMaterial'
+				o.op = canon.op;
+				o.args = canon.args;
 
 			}
 			return JSON.stringify( { ops } );
@@ -3223,7 +3321,7 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 				normalizeColor: ( c ) => { try { return new window.THREE.Color( c ).getHex(); } catch { return null; } },
 				labelOnce,
 				onProgress: ( msg ) => { aiStatus.textContent = msg; },
-				onRow: ( r ) => { _matrixRows.push( { model, condition, task: r.task, id: r.id, score: r.score, raw: r.raw, parsed: r.parsed } ); },
+				onRow: ( r ) => { _matrixRows.push( { model, condition, task: r.task, id: r.id, score: r.score, raw: r.raw, parsed: r.parsed, resolvedNodeSet: r.resolvedNodeSet, expectedNodeSet: r.expectedNodeSet, scoreNodeSet: r.scoreNodeSet } ); },
 				onCase: debug ? ( d ) => {
 
 					const flags = `op:${ d.pass.op ? '✓' : '✗' } sel:${ d.pass.sel ? '✓' : '✗' } arg:${ d.pass.arg ? '✓' : '✗' } multi:${ d.pass.multi ? '✓' : '✗' }`;
@@ -3254,7 +3352,8 @@ HOST-RESOLVED OUTPUT MODE — respond with ONLY a JSON object, no prose, no code
 
 			const skipPct = Math.round( 100 * _hostSkip / _hostTotal );
 			const askPct = Math.round( 100 * _hostAsk / _hostTotal );
-			appendOutput( `host-resolved: ${ _hostSkip }/${ _hostTotal } selectors resolved host-side with no model call (${ skipPct }%); ${ _hostAsk }/${ _hostTotal } ambiguous → ask (${ askPct }%).`, 'info' );
+			const opSkipPct = _opTotal ? Math.round( 100 * _opHostSkip / _opTotal ) : 0;
+			appendOutput( `host-resolved: ${ _hostSkip }/${ _hostTotal } selectors resolved host-side with no model call (${ skipPct }%); ${ _hostAsk }/${ _hostTotal } ambiguous → ask (${ askPct }%); ${ _opHostSkip }/${ _opTotal } op-types resolved host-side from the verb (${ opSkipPct }%).`, 'info' );
 
 		}
 		appendOutput( formatMatrix( _editMatrix ), 'result' );

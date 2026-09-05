@@ -485,6 +485,9 @@ function _parseJsonOps( code ) {
 			op: type,
 			selector: typeof obj.selector === 'string' ? obj.selector : null,
 			args: obj.args && typeof obj.args === 'object' ? obj.args : {},
+			// Provenance stamped by the host-resolved runner ('host' = no model choice).
+			...( obj.resolvedBy ? { resolvedBy: obj.resolvedBy } : {} ),
+			...( obj.opResolvedBy ? { opResolvedBy: obj.opResolvedBy } : {} ),
 		} );
 
 	};
@@ -618,6 +621,82 @@ export function scoreSelectorResolution( resolvedSets, expect ) {
 
 	}
 	return { pass, reasons: pass ? [ 'right nodes, nothing extra' ] : reasons };
+
+}
+
+// Task 2 (UNION scorer) — node-set score, segmentation-independent. The positional
+// scorer above fails an EQUIVALENT decomposition (two ops of #tail-light-left +
+// #tail-light-right vs one .tail-light op — same nodes, different splitting). This
+// scorer compares the UNION of all resolved nodes against the union of all expected
+// nodes: right nodes changed overall, none extra, however the ops were segmented.
+// Reported ALONGSIDE the positional score; where they differ, the mismatch is an
+// equivalent-expression artifact, not a wrong resolution.
+export function scoreNodeSetUnion( resolvedSets, expect ) {
+
+	if ( expect.mergedFail ) {
+
+		const hitSomething = ( resolvedSets || [] ).some( s => s && s.size > 0 );
+		return { pass: ! hitSomething, reasons: hitSomething ? [ 'selector resolved into a merged mesh' ] : [ 'correctly resolved nothing' ] };
+
+	}
+
+	const want = new Set();
+	if ( expect.ops ) for ( const e of expect.ops ) for ( const n of ( e.targetNodes || [] ) ) want.add( n );
+	else for ( const n of ( expect.targetNodes || [] ) ) want.add( n );
+
+	const got = new Set();
+	for ( const s of ( resolvedSets || [] ) ) for ( const n of ( s || [] ) ) got.add( n );
+
+	const missing = [ ...want ].filter( n => ! got.has( n ) );
+	const extra = [ ...got ].filter( n => ! want.has( n ) );
+	const pass = missing.length === 0 && extra.length === 0;
+	const reasons = [];
+	if ( missing.length ) reasons.push( `missed ${ missing.join( ',' ) }` );
+	if ( extra.length ) reasons.push( `also changed ${ extra.join( ',' ) } (bleed)` );
+	return { pass, reasons: pass ? [ 'union: right nodes, nothing extra' ] : reasons };
+
+}
+
+// Classify a cross-model mismatch by RESOLVED NODE SETS (sorted name arrays):
+//   'equivalent'         — both models resolved the SAME nodes (different strings /
+//                          segmentation); any score gap is a scorer artifact.
+//   'genuine-difference' — different node sets, exactly one matches expected.
+//   'both-wrong'         — different node sets, neither matches expected.
+export function classifyMismatch( nodeSetA, nodeSetB, expectedNodes ) {
+
+	const key = ( a ) => [ ...( a || [] ) ].sort().join( ',' );
+	const a = key( nodeSetA ), b = key( nodeSetB ), want = key( expectedNodes );
+	if ( a === b ) return 'equivalent';
+	if ( a === want || b === want ) return 'genuine-difference';
+	return 'both-wrong';
+
+}
+
+// Offline cross-model comparison over two saved row sets (the new-format JSONL
+// rows carrying resolvedNodeSet/expectedNodeSet). Joins selector-resolution rows
+// by fixture id and classifies every disagreement — the STEP-3 table: fixture |
+// A selectors → A nodeset | B selectors → B nodeset | expected | class.
+export function compareRuns( rowsA, rowsB, task = 'selector-resolution' ) {
+
+	const pick = ( rows ) => new Map( ( rows || [] ).filter( r => r.task === task ).map( r => [ r.id, r ] ) );
+	const A = pick( rowsA ), B = pick( rowsB );
+	const out = [];
+	for ( const [ id, a ] of A ) {
+
+		const b = B.get( id );
+		if ( ! b ) continue;
+		const sel = ( r ) => ( r.parsed || [] ).map( o => o.selector ).join( ' + ' ) || '(none)';
+		const ops = ( r ) => ( r.parsed || [] ).map( o => o.op ).join( ' + ' ) || '(none)';
+		out.push( {
+			id,
+			a: { selectors: sel( a ), ops: ops( a ), nodeSet: a.resolvedNodeSet || [], resolvedBy: ( a.parsed || [] ).map( o => o.resolvedBy ).filter( Boolean ), opResolvedBy: ( a.parsed || [] ).map( o => o.opResolvedBy ).filter( Boolean ) },
+			b: { selectors: sel( b ), ops: ops( b ), nodeSet: b.resolvedNodeSet || [], resolvedBy: ( b.parsed || [] ).map( o => o.resolvedBy ).filter( Boolean ), opResolvedBy: ( b.parsed || [] ).map( o => o.opResolvedBy ).filter( Boolean ) },
+			expected: a.expectedNodeSet || b.expectedNodeSet || [],
+			class: classifyMismatch( a.resolvedNodeSet, b.resolvedNodeSet, a.expectedNodeSet || b.expectedNodeSet ),
+		} );
+
+	}
+	return out;
 
 }
 
@@ -805,6 +884,7 @@ export function scoreMatrixCase( emitted, resolvedSets, expect, deps = {} ) {
 	return {
 		opType: scoreOpType( emitted, expect ),
 		selectorResolution: scoreSelectorResolution( resolvedSets, expect ),
+		nodeSet: scoreNodeSetUnion( resolvedSets, expect ),
 		argExtraction: scoreArgExtraction( emitted, expect, deps ),
 		multiOp: scoreMultiOp( emitted, expect, resolvedSets ),
 	};
@@ -917,14 +997,28 @@ export async function runEditMatrix( deps ) {
 
 		// Per-(task,case) JSONL row for the re-run artifact: the caller tags each row
 		// with model+condition and appends {task,id,score,raw,parsed} to the log so a
-		// run can be re-scored offline without re-invoking the model.
+		// run can be re-scored offline without re-invoking the model. Each parsed op
+		// also carries WHAT it resolved to (resolvedNodes, sorted names) and WHO
+		// resolved the selector (resolvedBy) and the op-type (opResolvedBy: host
+		// verb-mapping vs model free-choice), plus a row-level resolvedNodeSet (union)
+		// and scoreNodeSet — so cross-model mismatches classify offline as
+		// equivalent-expression vs genuine difference.
 		if ( deps.onRow ) {
 
-			const parsed = emitted.map( o => ( { op: o.op, selector: o.selector, args: o.args } ) );
-			deps.onRow( { task: 'op-selection', id: c.id, score: s.opType.pass, raw: code, parsed } );
-			deps.onRow( { task: 'selector-resolution', id: c.id, score: s.selectorResolution.pass, raw: code, parsed } );
-			deps.onRow( { task: 'arg-extraction', id: c.id, score: s.argExtraction.pass, raw: code, parsed } );
-			if ( c.expect.multiOp ) deps.onRow( { task: 'multi-op', id: c.id, score: s.multiOp.pass, raw: code, parsed } );
+			const parsed = emitted.map( ( o, k ) => ( {
+				op: o.op, selector: o.selector, args: o.args,
+				resolvedNodes: [ ...( resolvedSets[ k ] || [] ) ].sort(),
+				resolvedBy: o.resolvedBy || ( deps.resolvedBy ? deps.resolvedBy( o ) : undefined ),
+				opResolvedBy: o.opResolvedBy,
+			} ) );
+			const resolvedNodeSet = [ ...new Set( resolvedSets.flatMap( s => [ ...( s || [] ) ] ) ) ].sort();
+			const expectedNodeSet = c.expect.mergedFail ? []
+				: [ ...new Set( ( c.expect.ops ? c.expect.ops.flatMap( e => e.targetNodes || [] ) : ( c.expect.targetNodes || [] ) ) ) ].sort();
+			const common = { raw: code, parsed, resolvedNodeSet, expectedNodeSet, scoreNodeSet: s.nodeSet.pass };
+			deps.onRow( { task: 'op-selection', id: c.id, score: s.opType.pass, ...common } );
+			deps.onRow( { task: 'selector-resolution', id: c.id, score: s.selectorResolution.pass, ...common } );
+			deps.onRow( { task: 'arg-extraction', id: c.id, score: s.argExtraction.pass, ...common } );
+			if ( c.expect.multiOp ) deps.onRow( { task: 'multi-op', id: c.id, score: s.multiOp.pass, ...common } );
 
 		}
 

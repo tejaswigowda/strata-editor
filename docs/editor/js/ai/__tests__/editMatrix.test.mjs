@@ -459,5 +459,91 @@ test( 'scoreLabel is lenient substring either direction', () => {
 
 } );
 
+// ── Node-set (union) scorer + mismatch classifier ────────────────────────────────
+
+const { scoreNodeSetUnion, classifyMismatch } = M;
+
+test( 'scoreNodeSetUnion: equivalent segmentation passes (2 ops == 1 op, same union)', () => {
+
+	const expect = { targetNodes: [ 'Object_12', 'Object_13' ] };
+	// Haiku-style: one selector covering both lights.
+	assert.ok( scoreNodeSetUnion( [ setOf( 'Object_12', 'Object_13' ) ], expect ).pass );
+	// 1.5B-style: two singleton ops — SAME union, different segmentation. The
+	// positional scorer can fail this; the union scorer must not.
+	assert.ok( scoreNodeSetUnion( [ setOf( 'Object_12' ), setOf( 'Object_13' ) ], expect ).pass );
+
+} );
+
+test( 'scoreNodeSetUnion: missing and bleed still fail', () => {
+
+	const expect = { targetNodes: [ 'Object_12', 'Object_13' ] };
+	assert.ok( ! scoreNodeSetUnion( [ setOf( 'Object_12' ) ], expect ).pass, 'missing must fail' );
+	assert.ok( ! scoreNodeSetUnion( [ setOf( 'Object_12', 'Object_13', 'Object_03' ) ], expect ).pass, 'bleed must fail' );
+
+} );
+
+test( 'scoreNodeSetUnion: multi-op expect unions ops[] targets; mergedFail honored', () => {
+
+	const expect = { ops: [ { targetNodes: [ 'A' ] }, { targetNodes: [ 'B' ] } ] };
+	assert.ok( scoreNodeSetUnion( [ setOf( 'A', 'B' ) ], expect ).pass, 'union across expected ops' );
+	assert.ok( scoreNodeSetUnion( [ setOf() ], { mergedFail: true } ).pass );
+	assert.ok( ! scoreNodeSetUnion( [ setOf( 'GothicBed' ) ], { mergedFail: true } ).pass );
+
+} );
+
+test( 'classifyMismatch: equivalent / genuine-difference / both-wrong', () => {
+
+	const expected = [ 'Object_03' ];
+	// (A) same nodes, different strings → equivalent (both-lights case).
+	assert.strictEqual( classifyMismatch( [ 'Object_12', 'Object_13' ], [ 'Object_13', 'Object_12' ], [ 'Object_12', 'Object_13' ] ), 'equivalent' );
+	// (B) different sets, one matches expected → genuine difference (grille case).
+	assert.strictEqual( classifyMismatch( [ 'Object_07' ], [ 'Object_03' ], expected ), 'genuine-difference' );
+	// (C) different sets, neither matches → both-wrong.
+	assert.strictEqual( classifyMismatch( [ 'Object_07' ], [ 'Object_20' ], expected ), 'both-wrong' );
+
+} );
+
+test( 'parseEmittedOps carries resolvedBy provenance through JSON ops', () => {
+
+	const out = '{"ops":[{"op":"recolor","selector":".wheel","args":{"color":"black"},"resolvedBy":"host"}]}';
+	const ops = parseEmittedOps( out );
+	assert.strictEqual( ops.length, 1 );
+	assert.strictEqual( ops[ 0 ].resolvedBy, 'host' );
+	// Absent → undefined, not fabricated.
+	const plain = parseEmittedOps( '{"ops":[{"op":"recolor","selector":".wheel","args":{}}]}' );
+	assert.strictEqual( plain[ 0 ].resolvedBy, undefined );
+
+} );
+
+test( 'scoreMatrixCase reports nodeSet alongside the positional selector score', () => {
+
+	const expect = { opType: 'recolor', targetNodes: [ 'Object_12', 'Object_13' ] };
+	const emitted = [ { op: 'recolor', selector: '#l', args: {} }, { op: 'recolor', selector: '#r', args: {} } ];
+	const resolved = [ setOf( 'Object_12' ), setOf( 'Object_13' ) ];
+	const s = scoreMatrixCase( emitted, resolved, expect, deps );
+	assert.ok( s.nodeSet.pass, 'union scorer must pass the equivalent segmentation' );
+
+} );
+
+test( 'compareRuns joins two row sets and classifies per fixture', () => {
+
+	const { compareRuns } = M;
+	const rowA = { task: 'selector-resolution', id: 'grille', parsed: [ { op: 'recolor', selector: '.grille.black', resolvedBy: 'model' } ], resolvedNodeSet: [ 'Object_07' ], expectedNodeSet: [ 'Object_03' ] };
+	const rowB = { task: 'selector-resolution', id: 'grille', parsed: [ { op: 'recolor', selector: '#cab', resolvedBy: 'host' } ], resolvedNodeSet: [ 'Object_03' ], expectedNodeSet: [ 'Object_03' ] };
+	const rowsEq = [
+		{ task: 'selector-resolution', id: 'both-lights', parsed: [ { selector: '.tail-light.red' } ], resolvedNodeSet: [ 'Object_12', 'Object_13' ], expectedNodeSet: [ 'Object_12', 'Object_13' ] },
+	];
+	const rowsEqB = [
+		{ task: 'selector-resolution', id: 'both-lights', parsed: [ { selector: '#tail-light-left' }, { selector: '#tail-light-right' } ], resolvedNodeSet: [ 'Object_12', 'Object_13' ], expectedNodeSet: [ 'Object_12', 'Object_13' ] },
+	];
+	const genuine = compareRuns( [ rowA ], [ rowB ] );
+	assert.strictEqual( genuine.length, 1 );
+	assert.strictEqual( genuine[ 0 ].class, 'genuine-difference' );
+	assert.deepStrictEqual( genuine[ 0 ].b.resolvedBy, [ 'host' ] );
+	const equiv = compareRuns( rowsEq, rowsEqB );
+	assert.strictEqual( equiv[ 0 ].class, 'equivalent' );
+
+} );
+
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );
