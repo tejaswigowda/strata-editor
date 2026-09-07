@@ -7,6 +7,7 @@ import { SidebarSettings } from './Sidebar.Settings.js';
 import { SidebarGit } from './Sidebar.Git.js';
 import { SidebarExport } from './Sidebar.Export.js';
 import { SidebarStencils } from './Sidebar.Stencils.js';
+import { SidebarRender } from './Sidebar.Render.js';
 import { Timeline } from './Timeline.js';
 import { Shell } from './Shell.js';
 
@@ -25,6 +26,7 @@ const TAB_ICONS = {
 	'export':     tabSvg( '<path d="M8 2v8M5 5l3-3 3 3"/><path d="M3 11v1.5A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5V11"/>' ),
 	'stencils':   tabSvg( '<rect x="3" y="6" width="10" height="7" rx="1"/><rect x="5" y="3.5" width="6" height="2.5" rx="1"/><rect x="7" y="1.5" width="2" height="2" rx="0.5"/>' ),
 	'animations': tabSvg( '<circle cx="8" cy="8" r="6"/><path d="M6.5 5.5l5 2.5-5 2.5z"/>' ),
+	'render':     tabSvg( '<rect x="1.5" y="4" width="8.5" height="8" rx="1"/><path d="M10 7.5l4.5-2.5v6L10 8.5z"/>' ),
 	'shelltab':   tabSvg( '<polyline points="3,5 7,8 3,11"/><line x1="9" y1="11" x2="13" y2="11"/>' ),
 };
 
@@ -71,6 +73,7 @@ function Sidebar( editor ) {
 	// truth for authoring/retiming/playback. (The legacy per-clip editor in
 	// Animation.js is superseded by it and no longer mounted.)
 	const animations = new Timeline( editor );
+	const render = new SidebarRender( editor );
 	const shell = new Shell( editor );
 
 	// Helper: addTab then inject icon+label into the tab's innerHTML. Returns the tab.
@@ -172,6 +175,7 @@ function Sidebar( editor ) {
 	attachAiStatusDot( addIconTab( 'shelltab', 'Shell', shell ) );
 	// Tab id avoids 'animation' so the wrapper panel doesn't pick up the old #animation CSS.
 	addIconTab( 'animations', strings.getKey( 'sidebar/animations' ), animations );
+	addIconTab( 'render', 'Render', render );
 	addIconTab( 'stencils', 'Stencils', stencils );
 	addIconTab( 'export', strings.getKey( 'menubar/file/export' ), exporter );
 	// Merged Settings + Project into one tab.
