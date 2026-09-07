@@ -51,7 +51,7 @@ This README is the landing page and the thesis. The reference material is split 
 |-------|---------------|
 | [**The language**](guides/LANGUAGE.md) | Selector grammar, name normalization, the closed op set, the `$S()` query/traversal API, class & id authoring, lasso, and host-enforced guards. |
 | [**`$S` / 3DOM library**](https://github.com/tejaswigowda/3dom) | The standalone "jQuery for 3D" extraction: selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, and its own undo. Versioned surface in [SPEC.md](https://github.com/tejaswigowda/3dom/blob/main/SPEC.md). Now its own package/repo: `@tejaswigowda/3dom` (https://github.com/tejaswigowda/3dom), consumed here from a pinned CDN build. Docs: http://tejaswigowda.com/3dom/, [live demo](http://tejaswigowda.com/3dom/examples/bare.html). |
-| [**Animation**](guides/ANIMATION.md) | The scene-wide universal timeline: absolute-time tracks, `.then`/`.with`/`.at` sugar, entrance/exit/attention recipes, lifecycle. |
+| [**Animation**](guides/ANIMATION.md) | The scene-wide universal timeline: absolute-time tracks, `.then`/`.with`/`.at` sugar, entrance/exit/attention recipes, lifecycle. The Render tab exports the timeline as video through a single camera or a multi-shot camera sequence with cut/fade transitions. |
 | [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription`. No vision model. |
 | [**JS Shell**](guides/JS_SHELL.md) | The primary editing surface: Monaco integration, core globals, object lookup, spatial helpers, modeling ops, Edit Mode, and `fetchAPI`. |
 | [**Optional AI acceleration**](guides/AI_GUIDE.md) | The agentic loop, AI scene context, model configuration (WebLLM / external / client-side), cost tracking, and the generation eval. |
@@ -107,6 +107,7 @@ The host enforces: clone-on-write (shared materials), normalization ("black" →
 | **JS Shell** | REPL: type queries, edit manually, or ask AI. Every command undoable and versioned. See [JS_SHELL.md](guides/JS_SHELL.md). |
 | **Sovereign by default** | On-device inference (WebGPU/WebLLM). Nothing leaves the device except by your explicit action (git, `fetchAPI`). |
 | **Universal timeline** | Scene-wide absolute clock. Tracks addressed by selector (objects + camera). Events versioned in JSON and glTF. AI authors via deterministic recipes. See [ANIMATION.md](guides/ANIMATION.md). |
+| **Video render** | Render tab: export the universal timeline as video (mp4/webm, up to 1080p, 24/30/60 fps) through any camera — or a **camera sequence**: draggable shot blocks with cut/crossfade transitions, versioned with the scene. Progress bar, live preview, one-click download. |
 | **Scene intelligence** | Geometry/color/symmetry descriptors → auto-classes (no vision model). Resolve descriptive references on imported GLBs. See [SCENE_INTELLIGENCE.md](guides/SCENE_INTELLIGENCE.md). |
 | **Optional AI** | Natural language → selector + op. Model-agnostic (WebLLM, Ollama, OpenAI, Claude). Bounded 5-task decomposition. Self-correcting loop. Production ships validated models. See [AI_GUIDE.md](guides/AI_GUIDE.md). |
 | **Modeling ops** | Boolean CSG, mirror, array, subdivide. Undoable, command-backed. |
@@ -125,7 +126,7 @@ The host enforces: clone-on-write (shared materials), normalization ("black" →
 
 **Why the boundary matters:** No runtime, no interaction, no render-wait-during-iteration. Once a task needs one of those, it belongs downstream.
 
-**Export status (honest):** glTF with animations works today. Label strings ride along on `userData → extras`. Auto-classes don't yet serialize; end-to-end handoff is partial/roadmap.
+**Export status (honest):** glTF with animations works today, and the Render tab exports the timeline as video (mp4/webm) directly in-editor — including multi-camera shot sequences with transitions. Label strings ride along on `userData → extras`. Auto-classes don't yet serialize; end-to-end handoff is partial/roadmap.
 
 ---
 
