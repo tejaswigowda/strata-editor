@@ -6,6 +6,7 @@ import { UIPanel } from './libs/ui.js';
 import { PropertyBinding, AnimationClip } from 'three';
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
+import { includeCameraForBinding } from './intelligence/timelineController.js';
 
 // Per-format icons for the export buttons (same box-button style as Stencils).
 function svg( inner ) {
@@ -454,17 +455,10 @@ function SidebarExport( editor ) {
 	// the exported scene graph. When a combined clip references the camera, parent
 	// it under the scene for the duration of the export so GLTFExporter can bind
 	// its channel and emit a camera node. Returns a restore() to undo it after.
+	// (Shared with Timeline.js playback — same underlying gap, same fix.)
 	function includeCameraForExport( scene, animations ) {
 
-		const cam = editor.camera;
-		if ( ! cam ) return function () {};
-
-		const referenced = animations.some( clip => clip.tracks.some( t => t.name.indexOf( cam.uuid ) === 0 ) );
-		if ( ! referenced || cam.parent === scene ) return function () {};
-
-		const prevParent = cam.parent;
-		scene.add( cam );
-		return function () { if ( prevParent ) prevParent.add( cam ); else scene.remove( cam ); };
+		return includeCameraForBinding( editor, animations );
 
 	}
 

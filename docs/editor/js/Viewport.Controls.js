@@ -21,6 +21,14 @@ function ViewportControls( editor ) {
 
 	signals.cameraAdded.add( update );
 	signals.cameraRemoved.add( update );
+	// The dropdown's selected VALUE, not just its option list — e.g. fromJSON()
+	// resolves the restored viewport camera asynchronously, after this panel's
+	// own initial update() already ran with the default camera.
+	signals.viewportCameraChanged.add( function () {
+
+		cameraSelect.setValue( editor.viewportCamera.uuid );
+
+	} );
 	signals.objectChanged.add( function ( object ) {
 
 		if ( object.isCamera ) {

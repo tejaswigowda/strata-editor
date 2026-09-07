@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { UIPanel, UIText, UIButton, UISelect } from './libs/ui.js';
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
 import { TimelineModel, TIMELINE_CLIP_NAME } from './intelligence/timeline.js';
+import { holdTimelineAt, getTimelineTargetActions } from './intelligence/timelineController.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import * as recipes from './intelligence/animationRecipes.js';
 
@@ -22,7 +23,7 @@ function Timeline( editor ) {
 	const MIN_VIEW = 4; // seconds — always show at least this span
 
 	let playing = false;
-	let currentAction = null;
+	let currentActions = []; // the per-target actions driving active PLAY (empty while held/stopped)
 	let playhead = 0;               // seconds (the shared clock)
 	let selectedEventId = null;
 	let showCode = false;
@@ -371,14 +372,7 @@ function Timeline( editor ) {
 
 		const clip = getClip();
 		if ( ! clip || ! ( clip.duration > 0 ) ) return;
-		const a = editor.mixer.clipAction( clip, editor.scene );
-		a.reset();
-		a.enabled = true;
-		a.play();
-		a.time = Math.min( time, clip.duration );
-		editor.mixer.update( 0 );
-		a.stop(); // deactivate — objects hold the pose, stay editable
-		currentAction = a;
+		holdTimelineAt( editor, time ); // paused, never stopped — no restoreOriginalState() snap-back
 		signals.sceneGraphChanged.dispatch();
 
 	}
@@ -387,25 +381,29 @@ function Timeline( editor ) {
 
 		const clip = getClip();
 		if ( ! clip || ! ( clip.duration > 0 ) ) return;
-		editor.mixer.stopAllAction();
-		const a = editor.mixer.clipAction( clip, editor.scene );
-		a.reset();
-		a.enabled = true;
-		a.paused = false;
-		a.time = playhead % clip.duration;
-		a.play();
-		currentAction = a;
+		const actions = getTimelineTargetActions( editor );
+		if ( actions.length === 0 ) return;
+		for ( const a of actions ) {
+
+			a.reset();
+			a.enabled = true;
+			a.paused = false;
+			a.time = playhead % clip.duration;
+			a.play();
+
+		}
+		currentActions = actions;
 		playing = true;
 
 	}
 
 	function pause() {
 
-		if ( playing && currentAction ) {
+		if ( playing && currentActions.length ) {
 
-			playhead = currentAction.time;
+			playhead = currentActions[ 0 ].time;
 			playing = false;
-			sampleAt( playhead );
+			holdTimelineAt( editor, playhead ); // hold, don't stop — pose stays put
 			updatePlayheadUI();
 
 		}
@@ -415,9 +413,8 @@ function Timeline( editor ) {
 	function stop() {
 
 		playing = false;
-		editor.mixer.stopAllAction();
 		playhead = 0;
-		sampleAt( 0 );
+		sampleAt( 0 ); // "Stop (rewind to 0)" — an explicit, user-initiated return to the base frame
 		updatePlayheadUI();
 
 	}
@@ -517,9 +514,9 @@ function Timeline( editor ) {
 	function tick() {
 
 		const clip = getClip();
-		if ( playing && currentAction && clip && clip.duration > 0 ) {
+		if ( playing && currentActions.length && clip && clip.duration > 0 ) {
 
-			playhead = currentAction.time % clip.duration;
+			playhead = currentActions[ 0 ].time % clip.duration;
 			updatePlayheadUI();
 
 		}

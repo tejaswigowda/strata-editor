@@ -22,6 +22,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ViewportPathtracer } from './Viewport.Pathtracer.js';
 import { createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { lassoSelect } from './intelligence/lassoSelect.js';
+import { releaseTimelineObject } from './intelligence/timelineController.js';
 
 function Viewport( editor ) {
 
@@ -290,6 +291,13 @@ function Viewport( editor ) {
 	transformControls.addEventListener( 'mouseDown', function () {
 
 		const object = transformControls.object;
+
+		// Scoped release: if the timeline is holding a sampled pose (paused/
+		// scrubbed frame), gizmo-editing THIS object must not fight its held
+		// binding. Every OTHER held target is unaffected — a no-op when `object`
+		// isn't a timeline target at all (e.g. play() is running, or nothing's
+		// authored on it).
+		releaseTimelineObject( editor, object );
 
 		if ( editModeActive() && object === editProxy ) {
 

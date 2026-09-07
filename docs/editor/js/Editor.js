@@ -721,15 +721,21 @@ Editor.prototype = {
 		var loader = new THREE.ObjectLoader();
 		var camera = await loader.parseAsync( json.camera );
 
-		const existingUuid = this.camera.uuid;
-		const incomingUuid = camera.uuid;
-
-		// copy all properties, including uuid
+		// `json.camera` is whichever camera the VIEWPORT was looking through at
+		// save time (`viewportCamera.toJSON()` in toJSON()) — that may be a genuine
+		// SCENE camera, not `this.camera` (the editor's own free/default camera).
+		// Only copy its TRANSFORM onto `this.camera` (so the last free-camera view
+		// comes back); `this.camera`'s uuid must stay STABLE and never collide with
+		// a scene camera's uuid — reassigning it here used to overwrite the default
+		// camera's identity with a scene camera's uuid, so once setScene() below
+		// re-registered that scene camera into `this.cameras`, it silently replaced
+		// the default camera's entry and the "no scene camera" option vanished from
+		// the viewport camera dropdown. Which camera to actually VIEW through is
+		// re-resolved after the scene (and its cameras) exist again, below.
+		const savedViewportCameraUuid = camera.uuid;
+		const defaultCameraName = this.camera.name; // .copy() also copies .name; keep the default camera's own
 		this.camera.copy( camera );
-		this.camera.uuid = incomingUuid;
-
-		delete this.cameras[ existingUuid ]; // remove old entry [existingUuid, this.camera]
-		this.cameras[ incomingUuid ] = this.camera; // add new entry [incomingUuid, this.camera]
+		this.camera.name = defaultCameraName;
 
 		if ( json.controls !== undefined ) {
 
@@ -771,6 +777,12 @@ Editor.prototype = {
 		this.environmentType = json.environmentType || 'Default';
 
 		this.setScene( scene );
+
+		// Re-select whichever camera the viewport was looking through: a genuine
+		// scene camera if setScene() just re-registered one with that uuid (see the
+		// note above), otherwise setViewportCamera()'s own fallback picks the
+		// default free camera.
+		this.setViewportCamera( savedViewportCameraUuid );
 
 		// setScene() copies the scene's children but not its own animations array.
 		if ( Array.isArray( scene.animations ) && scene.animations.length > 0 ) {
