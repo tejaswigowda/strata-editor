@@ -725,7 +725,6 @@ function Shell( editor ) {
 	let acPrefix = '';    // the token being completed
 	let acStart = - 1;    // cursor position where the token starts
 	let acMode = 'general'; // 'general' | 'selector' | 'chain'
-	let acUserInitiated = false; // only show suggestions after user presses up/down arrow
 
 	// ── Context detection ─────────────────────────────────────────────────────
 
@@ -878,12 +877,7 @@ function Shell( editor ) {
 
 		}
 
-		// Only show dropdown if user has initiated with up/down arrow
-		if ( acUserInitiated ) {
-
-			acDropdown.classList.add( 'visible' );
-
-		}
+		acDropdown.classList.add( 'visible' );
 
 		const active = acDropdown.querySelector( '.active' );
 		if ( active ) active.scrollIntoView( { block: 'nearest' } );
@@ -921,7 +915,6 @@ function Shell( editor ) {
 		acIndex = - 1;
 		acPrefix = '';
 		acStart = - 1;
-		acUserInitiated = false; // reset when hiding
 		acDropdown.classList.remove( 'visible' );
 		acDropdown.innerHTML = '';
 
@@ -3814,17 +3807,6 @@ ${ notes.join( '\n' ) }
 
 		if ( event.key === 'ArrowUp' ) {
 
-			// If suggestions available but not yet shown, initiate with first up press
-			if ( acItems.length > 0 && ! acDropdown.classList.contains( 'visible' ) ) {
-
-				event.preventDefault();
-				acUserInitiated = true;
-				acIndex = Math.max( acIndex - 1, 0 );
-				acRender();
-				return;
-
-			}
-
 			if ( input.value.indexOf( '\n' ) === - 1 ) {
 
 				event.preventDefault();
@@ -3841,17 +3823,6 @@ ${ notes.join( '\n' ) }
 		}
 
 		if ( event.key === 'ArrowDown' ) {
-
-			// If suggestions available but not yet shown, initiate with first down press
-			if ( acItems.length > 0 && ! acDropdown.classList.contains( 'visible' ) ) {
-
-				event.preventDefault();
-				acUserInitiated = true;
-				acIndex = Math.min( acIndex + 1, acItems.length - 1 );
-				acRender();
-				return;
-
-			}
 
 			if ( input.value.indexOf( '\n' ) === - 1 ) {
 
