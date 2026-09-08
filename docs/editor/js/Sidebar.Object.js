@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { UIPanel, UIRow, UIInput, UIButton, UIColor, UICheckbox, UIInteger, UITextArea, UIText, UINumber } from './libs/ui.js';
+import { UIPanel, UIRow, UIInput, UIButton, UIColor, UICheckbox, UIInteger, UITextArea, UIText, UINumber, UISelect } from './libs/ui.js';
 import { UIBoolean } from './libs/ui.three.js';
 
 import { SetUuidCommand } from './commands/SetUuidCommand.js';
@@ -120,6 +120,122 @@ function SidebarObject( editor ) {
 	objectRotationRow.add( objectRotationX, objectRotationY, objectRotationZ );
 
 	container.add( objectRotationRow );
+
+	// look-at: DEFER the rotation to a target — pick an object from the dropdown
+	// and the host bakes the aim to a rotation (undoable). While enabled, moving
+	// this object OR the target re-aims automatically; the rotation fields lock.
+
+	const objectLookAtRow = new UIRow();
+	const objectLookAtEnabled = new UICheckbox( false ).onChange( applyLookAtFromUI );
+	const objectLookAtTarget = new UISelect().setWidth( '116px' ).onChange( applyLookAtFromUI );
+	objectLookAtTarget.dom.style.marginLeft = '10px';
+
+	objectLookAtRow.add( new UIText( 'Look At' ).setClass( 'Label' ) );
+	objectLookAtRow.add( objectLookAtEnabled );
+	objectLookAtRow.add( objectLookAtTarget );
+
+	container.add( objectLookAtRow );
+
+	function updateLookAtOptions( object ) {
+
+		const options = {};
+		editor.scene.traverse( child => {
+
+			if ( child === editor.scene || child === object ) return;
+			if ( child.isMesh || child.isGroup || child.isCamera || child.isLight ) {
+
+				options[ child.uuid ] = child.name || child.type;
+
+			}
+
+		} );
+		const prev = objectLookAtTarget.getValue();
+		objectLookAtTarget.setOptions( options );
+		if ( options[ prev ] !== undefined ) objectLookAtTarget.setValue( prev );
+
+	}
+
+	function setRotationFieldsLocked( locked ) {
+
+		for ( const field of [ objectRotationX, objectRotationY, objectRotationZ ] ) {
+
+			field.dom.style.pointerEvents = locked ? 'none' : '';
+			field.dom.style.opacity = locked ? '0.4' : '';
+
+		}
+
+	}
+
+	/** Rotation that aims `object` at `target` (three's own lookAt: cameras/lights aim -Z). */
+	function lookAtRotationFor( object, target ) {
+
+		const targetPos = target.getWorldPosition( new THREE.Vector3() );
+		const prevQ = object.quaternion.clone();
+		object.lookAt( targetPos );
+		const rotation = object.rotation.clone();
+		object.quaternion.copy( prevQ );
+		return rotation;
+
+	}
+
+	function applyLookAtFromUI() {
+
+		const object = editor.selected;
+		if ( object === null ) return;
+
+		object.userData = object.userData || {};
+
+		if ( objectLookAtEnabled.getValue() ) {
+
+			const target = editor.scene.getObjectByProperty( 'uuid', objectLookAtTarget.getValue() );
+			if ( ! target || target === object ) return;
+			object.userData.lookAt = target.uuid;
+			editor.execute( new SetRotationCommand( editor, object, lookAtRotationFor( object, target ) ) );
+
+		} else {
+
+			delete object.userData.lookAt;
+
+		}
+
+		setRotationFieldsLocked( !! object.userData.lookAt );
+
+	}
+
+	// Live constraint: while userData.lookAt is set, moving the object OR its
+	// target re-aims the rotation (direct write, no undo spam during drags).
+	let reAiming = false;
+	signals.objectChanged.add( function ( changed ) {
+
+		if ( reAiming || ! changed ) return;
+		reAiming = true;
+		try {
+
+			const affected = [];
+			const consider = o => {
+
+				if ( o.userData && o.userData.lookAt && ( o === changed || o.userData.lookAt === changed.uuid ) ) affected.push( o );
+
+			};
+			editor.scene.traverse( consider );
+			if ( editor.camera ) consider( editor.camera );
+
+			for ( const o of affected ) {
+
+				const target = editor.scene.getObjectByProperty( 'uuid', o.userData.lookAt );
+				if ( ! target || target === o ) continue;
+				o.lookAt( target.getWorldPosition( new THREE.Vector3() ) );
+				signals.objectChanged.dispatch( o );
+
+			}
+
+		} finally {
+
+			reAiming = false;
+
+		}
+
+	} );
 
 	// scale
 
@@ -1009,11 +1125,13 @@ function SidebarObject( editor ) {
 		if ( object.isLight ) {
 
 			objectRotationRow.setDisplay( 'none' );
+			objectLookAtRow.setDisplay( 'none' );
 			objectScaleRow.setDisplay( 'none' );
 
 		} else {
 
 			objectRotationRow.setDisplay( '' );
+			objectLookAtRow.setDisplay( '' );
 			objectScaleRow.setDisplay( '' );
 
 		}
@@ -1077,6 +1195,12 @@ function SidebarObject( editor ) {
 		objectRotationX.setValue( object.rotation.x * THREE.MathUtils.RAD2DEG );
 		objectRotationY.setValue( object.rotation.y * THREE.MathUtils.RAD2DEG );
 		objectRotationZ.setValue( object.rotation.z * THREE.MathUtils.RAD2DEG );
+
+		updateLookAtOptions( object );
+		const lookAtUuid = object.userData && object.userData.lookAt;
+		objectLookAtEnabled.setValue( !! lookAtUuid );
+		if ( lookAtUuid ) objectLookAtTarget.setValue( lookAtUuid );
+		setRotationFieldsLocked( !! lookAtUuid );
 
 		objectScaleX.setValue( object.scale.x );
 		objectScaleY.setValue( object.scale.y );
