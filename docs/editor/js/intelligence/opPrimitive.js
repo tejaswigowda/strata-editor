@@ -81,6 +81,7 @@ export const OP_VOCABULARY = {
 	far:              { kind: 'edit', args: { value: 'number' },    summary: 'camera far clip plane' },
 
 	// ── Animation recipe ops (deterministic winding-safe keyframes) ──
+	animate:     { kind: 'anim', args: { props: 'object', duration: 'number?', easing: 'string?' }, summary: 'jQuery-style tween over CSS 3D transforms: animate({rotateY:360, translateZ:5, scale:2, fov:30, lookAt:"#target", transformOrigin:[x,y,z], to:{position:[x,y,z]}}, seconds, "ease-in-out"|cubic-bezier(...)) — THE animation grammar' },
 	spin:        { kind: 'anim', args: { axis: 'axis?', turns: 'number?', duration: 'number?' },        summary: 'continuous rotation (winding-safe)' },
 	bounce:      { kind: 'anim', args: { height: 'number?', duration: 'number?' },                      summary: 'oscillate up/down' },
 	pulse:       { kind: 'anim', args: { scale: 'number?', duration: 'number?' },                       summary: 'scale up/down' },
@@ -436,13 +437,13 @@ class ChainableSet {
 
 	}
 
-	// ── Timeline authoring cursor (.then / .with / .at compile to absolute) ──────
+	// ── Timeline authoring cursor (jQuery queue + .at compile to absolute) ────────
 
 	_ensureChain() {
 
 		if ( ! this._chain ) {
 
-			this._chain = { cursor: 0, prevAt: 0, prevDur: 0, parallelNext: false, started: false };
+			this._chain = { cursor: 0, prevAt: 0, prevDur: 0, started: false };
 
 		}
 
@@ -461,13 +462,17 @@ class ChainableSet {
 
 	/**
 	 * Record an anim op as an absolute-time timeline event, command-backed so the
-	 * edit is undoable and the scene-wide clip recompiles live.
+	 * edit is undoable and the scene-wide clip recompiles live. jQuery QUEUE
+	 * semantics: chained anim ops run one after another; `_parallel` ({queue:false})
+	 * shares the previous op's start time without advancing the queue.
 	 */
 	_recordAnim( partialOpJSON ) {
 
 		const c = this._ensureChain();
+		const parallel = partialOpJSON._parallel === true;
+		delete partialOpJSON._parallel;
 		const dur = this._animDuration( partialOpJSON );
-		const at = ( c.parallelNext && c.started ) ? c.prevAt : c.cursor;
+		const at = ( parallel && c.started ) ? c.prevAt : c.cursor;
 
 		const { type, ...rest } = partialOpJSON;
 		delete rest.selector;
@@ -476,31 +481,76 @@ class ChainableSet {
 		model.addEvent( this.selector, { at, op: type, args: rest, dur } );
 		this.editor.execute( new SetTimelineCommand( this.editor, model.toJSON(), `Timeline: ${ type } ${ this.selector }` ) );
 
-		// Advance cursor state: a bare following op stays parallel until .then().
+		// jQuery queue: the cursor advances past this op's end (sequential default).
 		c.prevAt = at;
 		c.prevDur = dur;
-		c.cursor = at;
-		c.parallelNext = false;
+		if ( ! ( parallel && c.started ) ) c.cursor = at + dur;
 		c.started = true;
 		this._last = { success: true, at, dur, op: type };
 		return this;
 
 	}
 
-	/** Next op starts when the previous ENDS (+ optional gap seconds). Chainable. */
-	then( gap = 0 ) {
+	/**
+	 * THE animation grammar — jQuery .animate(props, duration, easing) over CSS 3D
+	 * transform values. Chained calls SEQUENCE via the jQuery queue; parallel via
+	 * multi-prop in one call or the {queue:false} idiom; absolute placement via
+	 * .at(t).
+	 *
+	 *   $S('.cube').animate({ rotateY: 360, translateZ: 5 }, 2000, 'ease-in-out')
+	 *   $S('camera').animate({ fov: 30 }, 1500).animate({ lookAt: '#cubes' }, 2000)
+	 *   $S('.a').animate({rotateY:360},2000).animate({scale:2},2000,{queue:false})
+	 *
+	 * props: translateX/Y/Z, translate3d, rotateX/Y/Z (degrees), rotate3d,
+	 *        scale/scaleX/Y/Z/scale3d (multipliers), transformOrigin:[x,y,z],
+	 *        lookAt: selector|[x,y,z], fov (camera, absolute),
+	 *        to:{position,rotation,scale} (absolute targets).
+	 * duration: MILLISECONDS (jQuery convention; stored as seconds on the clock).
+	 * easing: 'linear'|'ease'|'ease-in'|'ease-out'|'ease-in-out'|'cubic-bezier(…)'.
+	 */
+	animate( props = {}, duration = 400, easingOrOptions = 'linear' ) {
 
-		const c = this._ensureChain();
-		c.cursor = c.prevAt + c.prevDur + ( Number( gap ) || 0 );
-		c.parallelNext = false;
+		let easing = 'linear';
+		let parallel = false;
+
+		// jQuery options-object form: .animate(props, {duration, easing, queue})
+		if ( duration && typeof duration === 'object' ) {
+
+			const o = duration;
+			if ( o.queue === false ) parallel = true;
+			if ( typeof o.easing === 'string' ) easing = o.easing;
+			duration = o.duration ?? 400;
+
+		}
+
+		if ( typeof easingOrOptions === 'string' ) {
+
+			easing = easingOrOptions;
+
+		} else if ( easingOrOptions && typeof easingOrOptions === 'object' ) {
+
+			if ( typeof easingOrOptions.easing === 'string' ) easing = easingOrOptions.easing;
+			if ( easingOrOptions.queue === false ) parallel = true;
+
+		}
+
+		const seconds = Math.max( 0, Number( duration ) || 0 ) / 1000;
+		return this._recordAnim( { type: 'animate', props, easing, duration: seconds, _parallel: parallel } );
+
+	}
+
+	/** REMOVED — chained .animate() calls queue sequentially (jQuery semantics). */
+	then() {
+
+		console.warn( '$S .then() was removed: chained .animate() calls already run sequentially (jQuery queue). This call is a no-op.' );
 		return this;
 
 	}
 
-	/** Next op starts at the SAME absolute time as the previous (parallel). */
+	/** REMOVED — use multi-prop .animate() or .animate(props, ms, {queue:false}). */
 	with() {
 
-		this._ensureChain().parallelNext = true;
+		console.warn( '$S .with() was removed: put both props in ONE .animate() call, or use .animate(props, ms, {queue:false}). This call is a no-op.' );
 		return this;
 
 	}
@@ -943,8 +993,8 @@ class ChainableSet {
 
 		const c = this._ensureChain();
 		c.cursor = Math.max( 0, Number( value ) || 0 );
-		c.parallelNext = false;
-		c.started = true;
+		// NOT c.started: parallel ({queue:false}) only applies after a real placed
+		// op — a head-of-chain .at(t) must anchor the first op (queued or not) at t.
 		return this;
 
 	}

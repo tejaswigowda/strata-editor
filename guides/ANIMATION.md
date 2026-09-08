@@ -6,13 +6,61 @@
 The **Animations** tab is the **scene-wide universal Timeline**: one absolute clock (`editor.timeline`) for the whole scene, not a bag of per-object clips. It is the single source of truth for authoring, retiming, and playback. (The legacy per-clip editor is superseded and no longer mounted.)
 
 - **One clock, many tracks.** Each track targets a scene entity **by selector string** (objects, and addressables that live outside the graph like the **camera**). Every animation is an **absolute-time event** `{ at, op, args, dur }`. `at` is absolute time on the scene clock, not relative to the previous event.
-- **The timeline UI** shows one row per track, event **blocks** at their absolute `at` (block width = `dur`), and a single **playhead** across all tracks. Play / pause / scrub drive the one clock; drag a block to retime, drag its right edge to resize. A code panel shows the compiled `$S().then()` sugar so sugar and absolute timeline stay in sync.
+- **The timeline UI** shows one row per track, event **blocks** at their absolute `at` (block width = `dur`), and a single **playhead** across all tracks. Play / pause / scrub drive the one clock; drag a block to retime, drag its right edge to resize. A code panel shows the compiled `$S().animate()` sugar so sugar and absolute timeline stay in sync.
 - **Versioned and exportable.** The timeline is the representation that gets **versioned** (in the scene JSON, git-diffable) and **exported** to glTF keyframes. Compilation to a `THREE.AnimationClip` (which drives both playback and export) is a separate, injectable step, so the representation stays portable and node-testable.
 - Every edit goes through `SetTimelineCommand` (undoable); the one scene-wide clip recompiles live.
 
+## `.animate()` — the ONE animation grammar
+
+Animation is authored with **jQuery `.animate()` semantics over CSS 3D transform values** — the same dense-prior bet that made `$S` work, applied to time. Both are grammars the web already speaks, so humans and models author them fluently without invented syntax.
+
+```js
+$S('.cube').animate({ rotateY: 360, translateZ: 5 }, 2000, 'ease-in-out')
+$S('camera').animate({ fov: 30 }, 1500, 'ease-out')
+```
+
+- **props** are CSS 3D transforms (relative deltas, per CSS convention): `translateX/Y/Z`, `translate3d:[x,y,z]`, `rotateX/Y/Z` (**degrees**, CSS convention), `rotate3d:[x,y,z,deg]`, `scale`/`scaleX/Y/Z`/`scale3d` (multipliers), `transformOrigin:[x,y,z]` (world pivot — rotation/scale orbit this point). For **absolute** targets use `to`: `animate({ to: { position:[x,y,z], rotation:[degX,degY,degZ], scale:2 } }, ms)`.
+- **duration** is **milliseconds** (jQuery convention); it's stored as seconds on the clock.
+- **easing** is a **CSS timing function**: `'linear' | 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out'` or `'cubic-bezier(0.4, 0, 0.2, 1)'`. The curve bakes into sampled keyframes at compile time, so easing survives to glTF (renderer-agnostic round-trip), not just Strata playback.
+
+**SEQUENCE via the jQuery queue** — chained `.animate()` calls run one after another:
+
+```js
+$S('camera').animate({ translateX: 4 }, 2000).animate({ fov: 30 }, 3000)  // second after first
+```
+
+**PARALLEL via multi-prop in one call, or the `{queue:false}` idiom:**
+
+```js
+$S('.cube').animate({ rotateY: 360, scale: 2 }, 2000)                          // both together
+$S('.cube').animate({rotateY:360}, 2000).animate({scale:2}, 2000, {queue:false}) // parallel
+```
+
+**ABSOLUTE placement via `.at(t)`** — the one timeline-specific extension over the jQuery prior (jQuery's queue is relative; a scene-wide timeline needs absolute placement):
+
+```js
+$S('.ball').at(3).animate({ translateY: 2 }, 1000)   // event begins at t=3s absolute
+```
+
+**Look-at** — the second and final extension: a rotation-AUTHORING affordance for aiming. The host resolves the target (a selector or a `[x,y,z]` point) to a world position at bake time and **bakes the aim to rotation keyframes** — the quaternion never surfaces in the authored code, the stored representation, or the export:
+
+```js
+$S('camera').animate({ lookAt: '#cubes' }, 2000)                    // aim at a target
+$S('camera').animate({ rotateY: 360, transformOrigin: [0,0,0],
+                       lookAt: '#cubes' }, 4000, 'ease-in-out')     // ORBIT: circle the pivot, subject stays framed
+```
+
+**The camera is not a seam.** It is an ordinary addressable element — `$S('camera').animate(...)` is the *same* grammar as any object; it merely has extra properties (`fov`, an aim). No camera-specific animation subsystem.
+
+> **glTF note:** transform channels (translation/rotation/scale) export to glTF keyframes, with the authored easing baked into the sampled keyframe values. `fov` animates in Strata playback and in Render-tab video, but does NOT ride to glTF — core glTF animation cannot target `camera.yfov` (GLTFExporter drops the track with a console warning).
+
+Each `.animate()` call compiles to absolute-time keyframe event(s) `{at, op:'animate', args, dur}` on the universal timeline — the sugar computes the `at` values; the stored, versioned, glTF-exported representation is unchanged.
+
+> **Migration note:** `.then()`/`.with()` are removed. Chained `.animate()` calls already sequence (jQuery queue); parallel is multi-prop or `{queue:false}`. The old methods warn and no-op.
+
 ## AI-authored animation
 
-The AI authors animation from natural language: "make the box bounce", "spin the wheel 360 over 2 seconds", "fade it out". The **primary path is deterministic recipes** (`spin`, `bounce`, `pulse`, `fade`, `orbit`, `shake`). The host expands them into winding-safe tracks on the universal timeline, command-backed. The model never writes keyframe math. It emits ops, and each anim op becomes an absolute-time event (the "op-JSON of time"). Ops are recorded by **selector string** (resolved at compile time), so scene-wide addressables like the camera still record even when the live set is empty.
+The AI authors animation from natural language: "make the box bounce", "spin the wheel 360 over 2 seconds", "fade it out". The emit target is `.animate()` over CSS transforms (the dense prior), plus **named convenience recipes** (`spin`, `bounce`, `pulse`, `fade`, `orbit`, `shake`, and the entrance/exit/attention set below) that compile to the same absolute-time events. The host expands everything into winding-safe tracks on the universal timeline, command-backed. The model never writes keyframe math. Ops are recorded by **selector string** (resolved at compile time), so scene-wide addressables like the camera still record even when the live set is empty.
 
 **Entrance animations** (objects appear with style):
 
@@ -66,19 +114,11 @@ $S('.planet').orbit({center:[0,0,0]}, 3, 4)  // orbit around a point
 $S('.object').shake(0.2, 1)             // jittery motion (intensity, duration)
 ```
 
-All animations are **winding-safe** (rotations sub-divide to prevent antipodal flips), **command-backed** (undoable), and support **chaining** with other ops:
+All animations are **winding-safe** (rotations sub-divide to prevent antipodal flips), **command-backed** (undoable), and **chain on the jQuery queue** — each call runs after the previous one ends:
 
 ```js
-$S('.box').fadeIn(1).spin('y', 1, 2)    // chain entrance + spin
-$S('.wheel').slideInUp(1, 0.8).bounce(1)  // enter then pulse
-```
-
-**Sequential authoring sugar (`.then` / `.with` / `.at`)** compiles to the absolute `at` values on the scene clock, the same sugar→representation relationship `$S()` has with op-JSON. A bare following op stays **parallel** (same start time) until `.then()` advances the cursor:
-
-```js
-$S('.door').slideInLeft(1, 1).then().rotateTo(0, 90, 0)  // slide, THEN rotate (sequential)
-$S('.wheel').spin('y', 1, 2).with().pulse(1.2, 2)        // spin AND pulse together (parallel)
-$S('.ball').at(3).bounce(1)                              // place the event at t=3s absolute
+$S('.box').fadeIn(1).spin('y', 1, 2)       // fade in, THEN spin (queued)
+$S('.ball').at(3).bounce(1)                // absolute placement at t=3s
 ```
 
 Because events carry absolute times on one clock, the whole scene (objects and camera) animates on a single axis you can version and export.

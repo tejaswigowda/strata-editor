@@ -21,6 +21,7 @@ export const RECIPE_SCHEMA = {
 		recipe: {
 			type: 'string',
 			enum: [
+				'animate',
 				'spin', 'bounce', 'pulse', 'fade', 'orbit', 'scale', 'shake', 'spinWheels',
 				'flyTo', 'turnTo',
 				'fadeIn', 'zoomIn', 'slideInUp', 'slideInDown', 'slideInLeft', 'slideInRight',
@@ -122,6 +123,283 @@ function colorTrack( nodeName, property, times, values ) {
 	}
 
 	return new THREE.ColorKeyframeTrack( `${ nodeName }.${ property }`, times, floatValues );
+
+}
+
+// ── CSS timing functions (the easing vocabulary) ─────────────────────────────
+// Named CSS easings + cubic-bezier(...) — the recognized web vocabulary, not a
+// bespoke curve system. Baked into sampled keyframes at compile time so the
+// authored curve survives to glTF (renderer-agnostic round-trip).
+
+const CSS_NAMED_EASINGS = {
+	'ease':        [ 0.25, 0.1, 0.25, 1 ],
+	'ease-in':     [ 0.42, 0, 1, 1 ],
+	'ease-out':    [ 0, 0, 0.58, 1 ],
+	'ease-in-out': [ 0.42, 0, 0.58, 1 ],
+};
+
+function cubicBezier( p1x, p1y, p2x, p2y ) {
+
+	const cx = 3 * p1x, bx = 3 * ( p2x - p1x ) - cx, ax = 1 - cx - bx;
+	const cy = 3 * p1y, by = 3 * ( p2y - p1y ) - cy, ay = 1 - cy - by;
+	const sampleX = t => ( ( ax * t + bx ) * t + cx ) * t;
+	const sampleY = t => ( ( ay * t + by ) * t + cy ) * t;
+	const sampleDX = t => ( 3 * ax * t + 2 * bx ) * t + cx;
+
+	return function ( x ) {
+
+		if ( x <= 0 ) return 0;
+		if ( x >= 1 ) return 1;
+
+		// Newton-Raphson, bisection fallback (the standard CSS bezier solver)
+		let t = x;
+		for ( let i = 0; i < 8; i ++ ) {
+
+			const err = sampleX( t ) - x;
+			if ( Math.abs( err ) < 1e-6 ) return sampleY( t );
+			const d = sampleDX( t );
+			if ( Math.abs( d ) < 1e-6 ) break;
+			t -= err / d;
+
+		}
+
+		let lo = 0, hi = 1;
+		while ( hi - lo > 1e-6 ) {
+
+			t = ( lo + hi ) / 2;
+			if ( sampleX( t ) < x ) lo = t; else hi = t;
+
+		}
+
+		return sampleY( t );
+
+	};
+
+}
+
+/** Resolve a CSS timing-function string to f(t)→0..1. Unknown → linear. */
+export function cssEasingFunction( easing ) {
+
+	if ( ! easing || easing === 'linear' ) return t => t;
+	let pts = CSS_NAMED_EASINGS[ String( easing ).trim() ];
+	if ( ! pts ) {
+
+		const m = /^cubic-bezier\(\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)\s*,\s*([\d.eE+-]+)\s*\)$/.exec( String( easing ).trim() );
+		if ( m ) pts = [ + m[ 1 ], + m[ 2 ], + m[ 3 ], + m[ 4 ] ];
+
+	}
+
+	if ( ! pts ) return t => t;
+	return cubicBezier( pts[ 0 ], pts[ 1 ], pts[ 2 ], pts[ 3 ] );
+
+}
+
+// ── The .animate() recipe (jQuery grammar over CSS 3D transforms) ─────────────
+
+/**
+ * The ONE animation grammar: jQuery .animate(props, duration, easing) over CSS
+ * 3D transform values. Compiles to sampled absolute keyframes (position /
+ * quaternion / scale / fov tracks) — the stored, exported representation is
+ * unchanged.
+ *
+ * props (CSS 3D transforms — RELATIVE deltas, per CSS convention):
+ *   translateX/Y/Z: n         — move by n on that axis
+ *   translate3d: [x,y,z]      — move by the vector
+ *   rotateX/Y/Z: deg          — rotate by degrees (CSS: degrees, not radians)
+ *   rotate3d: [x,y,z,deg]     — rotate by deg around the (local) axis
+ *   scale: n | scaleX/Y/Z: n | scale3d: [x,y,z]  — multiply current scale
+ *   transformOrigin: [x,y,z]  — WORLD pivot: rotation/scale orbit this point
+ *   lookAt: selector|[x,y,z]  — aim -Z at target (resolved host-side; BAKES to
+ *                               rotation keyframes; overrides rotate* props)
+ *   fov: deg                  — camera only; animates TO the value (absolute)
+ *   to: { position:[x,y,z], rotation:[degX,degY,degZ], scale:n|[x,y,z] }
+ *                             — explicit ABSOLUTE targets
+ *
+ * params: { props, easing: CSS timing function, duration: SECONDS (the sugar
+ * converts jQuery ms), lookAtWorld: [x,y,z] (injected by compileTimeline) }
+ */
+export function animateRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	const duration = Math.max( 0.001, params.duration ?? 0.4 );
+	const props = params.props && typeof params.props === 'object' ? params.props : {};
+	const ease = cssEasingFunction( params.easing );
+	const isLinear = ! params.easing || params.easing === 'linear';
+
+	const num = v => ( Number.isFinite( Number( v ) ) ? Number( v ) : 0 );
+	const deg2rad = THREE.MathUtils.degToRad;
+
+	// ── translation delta ──
+	const delta = new THREE.Vector3( 0, 0, 0 );
+	if ( Array.isArray( props.translate3d ) ) delta.set( num( props.translate3d[ 0 ] ), num( props.translate3d[ 1 ] ), num( props.translate3d[ 2 ] ) );
+	delta.x += num( props.translateX );
+	delta.y += num( props.translateY );
+	delta.z += num( props.translateZ );
+
+	// ── rotation delta (degrees, CSS convention) ──
+	let rotAxis = null, rotAngle = 0; // rotate3d form
+	const eulerDelta = new THREE.Vector3( num( props.rotateX ), num( props.rotateY ), num( props.rotateZ ) ); // degrees
+	if ( Array.isArray( props.rotate3d ) && props.rotate3d.length === 4 ) {
+
+		rotAxis = new THREE.Vector3( num( props.rotate3d[ 0 ] ), num( props.rotate3d[ 1 ] ), num( props.rotate3d[ 2 ] ) ).normalize();
+		rotAngle = num( props.rotate3d[ 3 ] );
+
+	}
+
+	const hasRotDelta = rotAngle !== 0 || eulerDelta.x !== 0 || eulerDelta.y !== 0 || eulerDelta.z !== 0;
+
+	// ── scale multipliers ──
+	const mult = new THREE.Vector3( 1, 1, 1 );
+	if ( typeof props.scale === 'number' ) mult.set( props.scale, props.scale, props.scale );
+	if ( Array.isArray( props.scale3d ) ) mult.set( num( props.scale3d[ 0 ] ) || 1, num( props.scale3d[ 1 ] ) || 1, num( props.scale3d[ 2 ] ) || 1 );
+	if ( props.scaleX !== undefined ) mult.x = num( props.scaleX ) || 1;
+	if ( props.scaleY !== undefined ) mult.y = num( props.scaleY ) || 1;
+	if ( props.scaleZ !== undefined ) mult.z = num( props.scaleZ ) || 1;
+	const hasScale = mult.x !== 1 || mult.y !== 1 || mult.z !== 1;
+
+	// ── absolute targets ──
+	const to = props.to && typeof props.to === 'object' ? props.to : null;
+	const toPos = to && Array.isArray( to.position ) ? new THREE.Vector3( num( to.position[ 0 ] ), num( to.position[ 1 ] ), num( to.position[ 2 ] ) ) : null;
+	const toRotQ = to && Array.isArray( to.rotation )
+		? new THREE.Quaternion().setFromEuler( new THREE.Euler( deg2rad( num( to.rotation[ 0 ] ) ), deg2rad( num( to.rotation[ 1 ] ) ), deg2rad( num( to.rotation[ 2 ] ) ) ) )
+		: null;
+	let toScale = null;
+	if ( to && to.scale !== undefined ) {
+
+		toScale = Array.isArray( to.scale )
+			? new THREE.Vector3( num( to.scale[ 0 ] ) || 1, num( to.scale[ 1 ] ) || 1, num( to.scale[ 2 ] ) || 1 )
+			: new THREE.Vector3( num( to.scale ) || 1, num( to.scale ) || 1, num( to.scale ) || 1 );
+
+	}
+
+	// ── camera fov (absolute target — jQuery property-animation semantics) ──
+	let fovTarget = null;
+	if ( typeof props.fov === 'number' ) fovTarget = props.fov;
+	else if ( to && typeof to.fov === 'number' ) fovTarget = to.fov;
+
+	// ── pivot + look-at ──
+	const origin = Array.isArray( props.transformOrigin )
+		? new THREE.Vector3( num( props.transformOrigin[ 0 ] ), num( props.transformOrigin[ 1 ] ), num( props.transformOrigin[ 2 ] ) )
+		: null;
+	const lookTarget = Array.isArray( params.lookAtWorld )
+		? new THREE.Vector3( num( params.lookAtWorld[ 0 ] ), num( params.lookAtWorld[ 1 ] ), num( params.lookAtWorld[ 2 ] ) )
+		: null;
+
+	// ── base pose ──
+	const P0 = node.position.clone();
+	const Q0 = node.quaternion.clone();
+	const S0 = node.scale.clone();
+	const fov0 = typeof node.fov === 'number' ? node.fov : 50;
+
+	const needPos = delta.lengthSq() > 0 || toPos !== null || ( origin !== null && ( hasRotDelta || hasScale ) );
+	const needRot = hasRotDelta || toRotQ !== null || lookTarget !== null;
+	const needScale = hasScale || toScale !== null;
+	const needFov = fovTarget !== null;
+
+	// Sampling density: rotations / eased curves / pivots / look-at need
+	// sub-division (winding safety + curve fidelity); a linear straight move
+	// needs only its two endpoints.
+	const totalDeg = rotAxis ? Math.abs( rotAngle ) : Math.abs( eulerDelta.x ) + Math.abs( eulerDelta.y ) + Math.abs( eulerDelta.z );
+	const curved = ! isLinear || needRot || origin !== null;
+	const N = curved
+		? Math.min( 120, Math.max( 8, Math.ceil( totalDeg / 45 ) + Math.ceil( duration * 12 ) ) )
+		: 1;
+
+	const times = [];
+	const posValues = [];
+	const rotValues = [];
+	const scaleValues = [];
+	const fovValues = [];
+
+	const tmpQ = new THREE.Quaternion();
+	const tmpV = new THREE.Vector3();
+	const tmpM = new THREE.Matrix4();
+	const up = new THREE.Vector3( 0, 1, 0 );
+	const cameraLike = !! ( node.isCamera || node.isLight );
+
+	for ( let i = 0; i <= N; i ++ ) {
+
+		const t = i / N;
+		const k = ease( t );
+		times.push( t * duration );
+
+		// rotation delta at k
+		if ( rotAxis ) tmpQ.setFromAxisAngle( rotAxis, deg2rad( rotAngle * k ) );
+		else tmpQ.setFromEuler( new THREE.Euler( deg2rad( eulerDelta.x * k ), deg2rad( eulerDelta.y * k ), deg2rad( eulerDelta.z * k ) ) );
+
+		// position at k
+		if ( toPos ) tmpV.copy( P0 ).lerp( toPos, k );
+		else tmpV.copy( P0 ).addScaledVector( delta, k );
+
+		if ( origin ) {
+
+			// pivot: rotate the position about the WORLD point (orbit semantics),
+			// and scale its distance from the pivot
+			tmpV.sub( origin );
+			if ( hasScale ) tmpV.multiply( new THREE.Vector3( 1 + ( mult.x - 1 ) * k, 1 + ( mult.y - 1 ) * k, 1 + ( mult.z - 1 ) * k ) );
+			tmpV.applyQuaternion( tmpQ );
+			tmpV.add( origin );
+
+		}
+
+		if ( needPos ) posValues.push( tmpV.x, tmpV.y, tmpV.z );
+
+		// rotation channel: look-at wins > absolute target > delta
+		if ( needRot ) {
+
+			const q = new THREE.Quaternion();
+			if ( lookTarget ) {
+
+				// Object3D.lookAt convention: cameras/lights aim -Z at the target
+				if ( cameraLike ) tmpM.lookAt( tmpV, lookTarget, up );
+				else tmpM.lookAt( lookTarget, tmpV, up );
+				q.setFromRotationMatrix( tmpM );
+
+			} else if ( toRotQ ) {
+
+				q.copy( Q0 ).slerp( toRotQ, k );
+
+			} else if ( origin ) {
+
+				// world-space pivot rotation also turns the node itself
+				q.copy( tmpQ ).multiply( Q0 );
+
+			} else {
+
+				// local-space delta (same convention as spinRecipe)
+				q.copy( tmpQ ).premultiply( Q0 );
+
+			}
+
+			rotValues.push( q.x, q.y, q.z, q.w );
+
+		}
+
+		if ( needScale ) {
+
+			if ( toScale ) scaleValues.push(
+				S0.x + ( toScale.x - S0.x ) * k,
+				S0.y + ( toScale.y - S0.y ) * k,
+				S0.z + ( toScale.z - S0.z ) * k );
+			else scaleValues.push(
+				S0.x * ( 1 + ( mult.x - 1 ) * k ),
+				S0.y * ( 1 + ( mult.y - 1 ) * k ),
+				S0.z * ( 1 + ( mult.z - 1 ) * k ) );
+
+		}
+
+		if ( needFov ) fovValues.push( fov0 + ( fovTarget - fov0 ) * k );
+
+	}
+
+	const tracks = [];
+	if ( needPos ) tracks.push( vectorTrack( node.uuid, 'position', times.slice(), posValues ) );
+	if ( needRot ) tracks.push( quaternionTrack( node.uuid, times.slice(), rotValues ) );
+	if ( needScale ) tracks.push( vectorTrack( node.uuid, 'scale', times.slice(), scaleValues ) );
+	if ( needFov ) tracks.push( numberTrack( node.uuid, 'fov', times.slice(), fovValues ) );
+
+	if ( tracks.length === 0 ) throw new Error( 'animate: no animatable props (use translate/rotate/scale/fov/lookAt/to)' );
+	return new THREE.AnimationClip( 'Animate', - 1, tracks );
 
 }
 

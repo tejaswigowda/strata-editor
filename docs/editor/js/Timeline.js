@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { UIPanel, UIText, UIButton, UISelect } from './libs/ui.js';
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
 import { TimelineModel, TIMELINE_CLIP_NAME } from './intelligence/timeline.js';
-import { holdTimelineAt, getTimelineTargetActions } from './intelligence/timelineController.js';
+import { holdTimelineAt, getTimelineTargetActions, refreshCameraProjections } from './intelligence/timelineController.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import * as recipes from './intelligence/animationRecipes.js';
 
@@ -131,7 +131,7 @@ function Timeline( editor ) {
 	const emptyHint = document.createElement( 'div' );
 	emptyHint.style.cssText = 'padding:18px 14px;color:#888;font-size:11px;line-height:1.6;';
 	emptyHint.innerHTML = 'No timed events yet. Author with the sugar, e.g.<br>' +
-		'<code>$S(\'.a-cube\').fadeIn(1).then().spin(\'y\',1,2)</code><br>' +
+		'<code>$S(\'.a-cube\').animate({ rotateY: 360 }, 2000, \'ease-in-out\')</code><br>' +
 		'or select an object and add an event at the playhead.';
 	rows.appendChild( emptyHint );
 
@@ -460,16 +460,34 @@ function Timeline( editor ) {
 
 	}
 
-	// ── Compiled-sugar codegen (shows the $S/.then() the timeline compiles from) ─
+	// ── Compiled-sugar codegen (shows the $S .animate()/.at() the timeline compiles from) ─
 	function fmtVal( v ) {
 
 		if ( typeof v === 'string' ) return `'${ v }'`;
-		if ( Array.isArray( v ) ) return `[${ v.join( ', ' ) }]`;
+		if ( Array.isArray( v ) ) return `[${ v.map( fmtVal ).join( ', ' ) }]`;
+		if ( v && typeof v === 'object' ) return fmtProps( v );
 		return String( v );
 
 	}
 
+	// object literal without quoted keys (reads like authored code)
+	function fmtProps( obj ) {
+
+		const inner = Object.keys( obj ).map( k => `${ k }: ${ fmtVal( obj[ k ] ) }` ).join( ', ' );
+		return `{ ${ inner } }`;
+
+	}
+
 	function argList( op, args, dur ) {
+
+		// The one grammar: .animate(props, ms, easing) — jQuery ms at the surface
+		if ( op === 'animate' ) {
+
+			const ms = Math.round( ( dur ?? args.duration ?? 0 ) * 1000 );
+			const easing = args.easing && args.easing !== 'linear' ? `, '${ args.easing }'` : '';
+			return `${ fmtProps( args.props || {} ) }, ${ ms }${ easing }`;
+
+		}
 
 		const spec = OP_VOCABULARY[ op ] && OP_VOCABULARY[ op ].args ? OP_VOCABULARY[ op ].args : {};
 		const parts = [];
@@ -518,6 +536,9 @@ function Timeline( editor ) {
 
 			playhead = currentActions[ 0 ].time % clip.duration;
 			updatePlayheadUI();
+
+			// fov tracks write camera.fov but never the projection matrix
+			refreshCameraProjections( editor );
 
 		}
 

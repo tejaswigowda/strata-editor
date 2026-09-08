@@ -69,33 +69,24 @@ test( 'toJSON / fromJSON round-trip (versionable)', () => {
 
 } );
 
-// ── Part 2: sugar cursor (.then / .with / .at compile to absolute) ────────────
+// ── Part 2: sugar cursor (jQuery queue / {queue:false} / .at compile to absolute) ─
 
-test( 'then() advances cursor by previous duration', () => {
+test( 'chained place() queues sequentially (jQuery queue)', () => {
 
 	const c = new TimeCursor();
-	assert.strictEqual( c.place( 1 ), 0, 'fadeIn at t=0' );
-	c.then();
-	assert.strictEqual( c.place( 2 ), 1, 'spin at t=1 (after fadeIn ends)' );
+	assert.strictEqual( c.place( 1 ), 0, 'first animate at t=0' );
+	assert.strictEqual( c.place( 2 ), 1, 'second animate at t=1 (after first ends)' );
+	assert.strictEqual( c.place( 1 ), 3, 'third animate at t=3 (after second ends)' );
 
 } );
 
-test( 'then(gap) adds a gap after previous ends', () => {
+test( 'place(dur, true) runs parallel with the previous ({queue:false})', () => {
 
 	const c = new TimeCursor();
-	c.place( 1 );
-	c.then( 0.5 );
-	assert.strictEqual( c.place( 1 ), 1.5, 'starts 0.5s after previous end' );
-
-} );
-
-test( 'with() places the next op in parallel (same at)', () => {
-
-	const c = new TimeCursor();
-	const a = c.place( 1 );      // slab slides in at 0
-	c.with();
-	const b = c.place( 1 );      // camera moves WHILE slab slides — same t
-	assert.strictEqual( a, b );
+	const a = c.place( 1 );          // queued op at 0
+	const b = c.place( 2, true );    // {queue:false} — runs WITH the previous
+	assert.strictEqual( a, b, 'parallel op shares the previous start' );
+	assert.strictEqual( c.place( 1 ), 1, 'queue cursor unaffected by the parallel op' );
 
 } );
 

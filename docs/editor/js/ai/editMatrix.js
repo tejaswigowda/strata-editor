@@ -195,7 +195,7 @@ export const LABELING_CASES = [
 // that correctly fails the op/selector/arg tasks (it didn't do the task the way
 // the architecture requires). Tolerant of $S chains, op({...}), and ops([...]).
 
-const ANIM_METHODS = new Set( [ 'spin', 'bounce', 'pulse', 'fade', 'orbit', 'shake' ] );
+const ANIM_METHODS = new Set( [ 'animate', 'spin', 'bounce', 'pulse', 'fade', 'orbit', 'shake' ] );
 
 export function parseEmittedOps( code ) {
 

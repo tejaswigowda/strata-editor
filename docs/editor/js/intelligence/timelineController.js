@@ -184,7 +184,25 @@ export function holdTimelineAt( editor, t ) {
 
 	}
 	editor.mixer.update( 0 );
+	refreshCameraProjections( editor ); // fov tracks write camera.fov but never the projection matrix
 	return true;
+
+}
+
+/**
+ * Animated `fov` (the camera's extra .animate() property) is written by the
+ * mixer onto camera.fov, but PropertyBinding never calls
+ * updateProjectionMatrix() — refresh every perspective camera after sampling.
+ */
+export function refreshCameraProjections( editor ) {
+
+	if ( editor.camera && editor.camera.isPerspectiveCamera ) editor.camera.updateProjectionMatrix();
+	for ( const uuid in editor.cameras || {} ) {
+
+		const cam = editor.cameras[ uuid ];
+		if ( cam && cam.isPerspectiveCamera ) cam.updateProjectionMatrix();
+
+	}
 
 }
 

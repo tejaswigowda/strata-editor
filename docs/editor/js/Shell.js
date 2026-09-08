@@ -662,10 +662,9 @@ function Shell( editor ) {
 		{ w: 'heartBeat', k: 'anim', h: "(scale, duration)" },
 		{ w: 'tada', k: 'anim', h: "(rotations, scale, duration)" },
 		{ w: 'wobble', k: 'anim', h: "(angle, duration)" },
+		{ w: 'animate', k: 'anim', h: "(props, ms, easing)" },
 		{ w: 'raw', k: 'anim', h: "(code)" },
 		// Timeline
-		{ w: 'then', k: 'method', h: "(gap)" },
-		{ w: 'with', k: 'method', h: "()" },
 		{ w: 'at', k: 'method', h: "(time)" },
 		// Class/ID authoring
 		{ w: 'addClass', k: 'method', h: "(cls)" },

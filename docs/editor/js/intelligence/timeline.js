@@ -5,9 +5,9 @@
 //   that target scene entities (objects / camera / later emitters), each holding
 //   absolute-time events { at, op, args, dur }. This is what is VERSIONED (in the
 //   scene JSON, git-diffable) and EXPORTED (to glTF keyframes).
-// SUGAR (opPrimitive.js $S .then/.with/.at):  sequential authoring that COMPILES
-//   to the absolute `at` values on this clock — the same sugar→representation
-//   relationship $S() has with op-JSON.
+// SUGAR (opPrimitive.js $S .animate()/.at()):  jQuery-queue authoring that
+//   COMPILES to the absolute `at` values on this clock — the same
+//   sugar→representation relationship $S() has with op-JSON.
 //
 // `at`  = ABSOLUTE time on the scene clock (NOT relative to the previous event).
 // `dur` = how long the event's animation runs from `at`.
@@ -213,16 +213,18 @@ export class TimelineModel {
 }
 
 // ── Sugar → absolute compilation (authoring cursor) ───────────────────────────
-// The $S .then()/.with()/.at() chain uses this cursor logic to assign absolute
-// `at` values as ops are chained. Kept here (pure) so the same rules are testable
+// The $S .animate()/.at() chain uses this cursor logic to assign absolute `at`
+// values as ops are chained. Kept here (pure) so the same rules are testable
 // independently of the ChainableSet host.
 
 /**
- * A time cursor that turns sequential authoring into absolute `at` values.
- *   .place(dur)  → returns the absolute `at` for the next op (then advances state)
- *   .then(gap)   → cursor = prevAt + prevDur + gap   (start when previous ENDS)
- *   .at(t)       → cursor = t                        (explicit absolute placement)
- *   .with()      → next op shares the previous op's `at` (parallel, not sequential)
+ * A time cursor that turns jQuery-queue authoring into absolute `at` values.
+ *   .place(dur)        → absolute `at` for the op; cursor advances past its end
+ *                        (jQuery QUEUE: chained .animate() calls are SEQUENTIAL)
+ *   .place(dur, true)  → op runs PARALLEL with the previous ({queue:false});
+ *                        the queue cursor is not advanced
+ *   .at(t)             → cursor = t (explicit absolute placement — the one
+ *                        timeline-specific extension over the jQuery prior)
  */
 export class TimeCursor {
 
@@ -231,38 +233,19 @@ export class TimeCursor {
 		this.cursor = 0;
 		this.prevAt = 0;
 		this.prevDur = 0;
-		this.parallelNext = false;
 		this.started = false;
 
 	}
 
 	/** Compute + commit the absolute `at` for an op of length `dur`. */
-	place( dur ) {
+	place( dur, parallel = false ) {
 
-		const at = this.parallelNext && this.started ? this.prevAt : this.cursor;
+		const at = parallel && this.started ? this.prevAt : this.cursor;
 		this.prevAt = at;
 		this.prevDur = Math.max( 0, Number( dur ) || 0 );
-		this.cursor = at; // a bare following op stays parallel until .then() advances
-		this.parallelNext = false;
+		if ( ! ( parallel && this.started ) ) this.cursor = at + this.prevDur; // queue advances
 		this.started = true;
 		return at;
-
-	}
-
-	/** Next op starts when the previous ENDS (+ optional gap seconds). */
-	then( gap = 0 ) {
-
-		this.cursor = this.prevAt + this.prevDur + ( Number( gap ) || 0 );
-		this.parallelNext = false;
-		return this;
-
-	}
-
-	/** Next op starts at the SAME absolute time as the previous (parallel). */
-	with() {
-
-		this.parallelNext = true;
-		return this;
 
 	}
 
@@ -270,7 +253,6 @@ export class TimeCursor {
 	at( t ) {
 
 		this.cursor = Math.max( 0, Number( t ) || 0 );
-		this.parallelNext = false;
 		return this;
 
 	}
@@ -404,6 +386,49 @@ export function compileTimeline( model, ctx ) {
 			if ( typeof recipeFn !== 'function' ) continue;
 
 			const params = { ...event.args, duration: event.dur || event.args.duration };
+
+			// Look-at (animate op): resolve the target selector/point to a WORLD
+			// position HOST-SIDE at bake time (deterministic), so the recipe stays
+			// pure. The aim bakes to rotation keyframes — the quaternion is a
+			// transient computation detail, never authored/stored/exported.
+			if ( event.op === 'animate' && params.props && params.props.lookAt != null ) {
+
+				const la = params.props.lookAt;
+				if ( Array.isArray( la ) ) {
+
+					params.lookAtWorld = la.map( Number );
+
+				} else if ( typeof la === 'string' ) {
+
+					let targets = [];
+					try { targets = selectorEngine.query( editor.scene, la ); } catch ( e ) {}
+					if ( targets.length === 0 && /(^|[.#\s])camera\b/i.test( la ) && editor.camera ) targets = [ editor.camera ];
+					if ( targets.length > 0 ) {
+
+						const p = [ 0, 0, 0 ];
+						let n = 0;
+						for ( const tgt of targets ) {
+
+							if ( typeof tgt.getWorldPosition === 'function' && THREE && THREE.Vector3 ) {
+
+								const v = tgt.getWorldPosition( new THREE.Vector3() );
+								p[ 0 ] += v.x; p[ 1 ] += v.y; p[ 2 ] += v.z; n ++;
+
+							} else if ( tgt.position ) {
+
+								p[ 0 ] += tgt.position.x || 0; p[ 1 ] += tgt.position.y || 0; p[ 2 ] += tgt.position.z || 0; n ++;
+
+							}
+
+						}
+
+						if ( n > 0 ) params.lookAtWorld = [ p[ 0 ] / n, p[ 1 ] / n, p[ 2 ] / n ];
+
+					}
+
+				}
+
+			}
 
 			for ( const node of nodes ) {
 
