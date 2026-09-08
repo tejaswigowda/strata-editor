@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { UIPanel, UIText, UIButton, UISelect } from './libs/ui.js';
+import { UIPanel, UIText, UIButton, UISelect, UINumber } from './libs/ui.js';
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
 import { TimelineModel, TIMELINE_CLIP_NAME } from './intelligence/timeline.js';
 import { holdTimelineAt, getTimelineTargetActions, refreshCameraProjections } from './intelligence/timelineController.js';
@@ -142,6 +142,263 @@ function Timeline( editor ) {
 	codePanel.style.cssText = 'display:none;width:100%;box-sizing:border-box;height:120px;border:none;border-top:1px solid #ccc;font-family:monospace;font-size:11px;padding:8px;resize:vertical;background:#1e1e1e;color:#d4d4d4;';
 	container.dom.appendChild( codePanel );
 
+	// ── Keyframe P/S/R editor (authors `animate` events on the ONE clock) ─────
+	// Object mode: fields stage the target pose for the SELECTED OBJECT; "+ Key"
+	// adds an `animate` event tweening from the previous key (or t=0) to the
+	// staged pose, ARRIVING at the playhead. Key mode: an `animate` block is
+	// selected — the fields edit THAT event (undoable via SetTimelineCommand).
+	// Rotation defers to Look At (checkbox + target dropdown): the aim bakes to
+	// rotation keyframes at compile time; the quaternion never surfaces.
+	const keyPanel = document.createElement( 'div' );
+	keyPanel.style.cssText = 'padding:6px 10px;border-top:1px solid #ccc;display:none;flex-direction:column;gap:4px;font-size:11px;flex-shrink:0;';
+	container.dom.insertBefore( keyPanel, codePanel );
+
+	const keyHeader = document.createElement( 'div' );
+	keyHeader.style.cssText = 'display:flex;align-items:center;gap:8px;';
+	keyPanel.appendChild( keyHeader );
+
+	const keyTitle = document.createElement( 'span' );
+	keyTitle.style.cssText = 'font-weight:bold;';
+	keyHeader.appendChild( keyTitle );
+
+	const keyButton = new UIButton( '+ Key @ playhead' );
+	keyButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+	keyButton.dom.title = 'Add an animate event tweening from the previous key to this pose, arriving at the playhead';
+	keyButton.onClick( addKeyAtPlayhead );
+	keyHeader.appendChild( keyButton.dom );
+
+	const keyGrid = document.createElement( 'div' );
+	keyGrid.style.cssText = 'display:grid;grid-template-columns:60px auto;gap:3px 6px;align-items:center;';
+	keyPanel.appendChild( keyGrid );
+
+	function keyLabel( text ) {
+
+		const s = document.createElement( 'span' );
+		s.style.cssText = 'color:#666;';
+		s.textContent = text;
+		keyGrid.appendChild( s );
+		return s;
+
+	}
+
+	function keyFieldRow( fields ) {
+
+		const wrap = document.createElement( 'div' );
+		wrap.style.cssText = 'display:flex;gap:4px;align-items:center;';
+		for ( const f of fields ) wrap.appendChild( f.dom );
+		keyGrid.appendChild( wrap );
+		return wrap;
+
+	}
+
+	function keyNum( unit ) {
+
+		const n = new UINumber( 0 ).setPrecision( 3 ).setWidth( '48px' );
+		if ( unit ) n.setUnit( unit );
+		n.onChange( onKeyFieldChange );
+		return n;
+
+	}
+
+	keyLabel( 'Position' );
+	const kpX = keyNum(), kpY = keyNum(), kpZ = keyNum();
+	keyFieldRow( [ kpX, kpY, kpZ ] );
+
+	keyLabel( 'Rotation' );
+	const krX = keyNum( '°' ), krY = keyNum( '°' ), krZ = keyNum( '°' );
+	keyFieldRow( [ krX, krY, krZ ] );
+
+	keyLabel( 'Look At' );
+	const kLookAt = document.createElement( 'input' );
+	kLookAt.type = 'checkbox';
+	kLookAt.title = 'Defer the rotation to a target — the aim bakes to rotation keyframes';
+	kLookAt.addEventListener( 'change', function () { syncLookAtLock(); onKeyFieldChange(); } );
+	const kLookAtTarget = new UISelect().setWidth( '116px' );
+	kLookAtTarget.onChange( onKeyFieldChange );
+	const lookAtWrap = document.createElement( 'div' );
+	lookAtWrap.style.cssText = 'display:flex;gap:6px;align-items:center;';
+	lookAtWrap.appendChild( kLookAt );
+	lookAtWrap.appendChild( kLookAtTarget.dom );
+	keyGrid.appendChild( lookAtWrap );
+
+	keyLabel( 'Scale' );
+	const ksX = keyNum(), ksY = keyNum(), ksZ = keyNum();
+	keyFieldRow( [ ksX, ksY, ksZ ] );
+
+	function syncLookAtLock() {
+
+		const locked = kLookAt.checked;
+		for ( const f of [ krX, krY, krZ ] ) {
+
+			f.dom.style.pointerEvents = locked ? 'none' : '';
+			f.dom.style.opacity = locked ? '0.4' : '';
+
+		}
+
+	}
+
+	function updateLookAtOptions( excludeObject ) {
+
+		const options = {};
+		editor.scene.traverse( child => {
+
+			if ( child === editor.scene || child === excludeObject ) return;
+			if ( child.isMesh || child.isGroup || child.isCamera || child.isLight ) options[ child.uuid ] = child.name || child.type;
+
+		} );
+		const prev = kLookAtTarget.getValue();
+		kLookAtTarget.setOptions( options );
+		if ( options[ prev ] !== undefined ) kLookAtTarget.setValue( prev );
+
+	}
+
+	function selectedAnimateEvent() {
+
+		if ( ! selectedEventId || ! editor.timeline ) return null;
+		const found = editor.timeline.findEvent( selectedEventId );
+		return found && found.event.op === 'animate' ? found : null;
+
+	}
+
+	/** props for an animate event from the staged fields (full-pose key). */
+	function buildPropsFromFields() {
+
+		const props = { to: {
+			position: [ kpX.getValue(), kpY.getValue(), kpZ.getValue() ],
+			scale: [ ksX.getValue(), ksY.getValue(), ksZ.getValue() ],
+		} };
+
+		if ( kLookAt.checked ) {
+
+			const target = editor.scene.getObjectByProperty( 'uuid', kLookAtTarget.getValue() );
+			if ( target ) props.lookAt = bestSelectorFor( target );
+
+		} else {
+
+			props.to.rotation = [ krX.getValue(), krY.getValue(), krZ.getValue() ];
+
+		}
+
+		return props;
+
+	}
+
+	function fillFieldsFromProps( props ) {
+
+		const to = ( props && props.to ) || {};
+		if ( Array.isArray( to.position ) ) { kpX.setValue( to.position[ 0 ] ); kpY.setValue( to.position[ 1 ] ); kpZ.setValue( to.position[ 2 ] ); }
+		if ( Array.isArray( to.scale ) ) { ksX.setValue( to.scale[ 0 ] ); ksY.setValue( to.scale[ 1 ] ); ksZ.setValue( to.scale[ 2 ] ); }
+		if ( Array.isArray( to.rotation ) ) { krX.setValue( to.rotation[ 0 ] ); krY.setValue( to.rotation[ 1 ] ); krZ.setValue( to.rotation[ 2 ] ); }
+
+		kLookAt.checked = !! ( props && props.lookAt );
+		if ( props && typeof props.lookAt === 'string' ) {
+
+			// resolve the stored selector ('#Name' or raw uuid) back to a dropdown value
+			const name = props.lookAt.replace( /^#/, '' );
+			let uuid = null;
+			editor.scene.traverse( child => {
+
+				if ( uuid ) return;
+				if ( child.uuid === props.lookAt || child.name === name || ( child.userData && child.userData.label === name ) ) uuid = child.uuid;
+
+			} );
+			if ( uuid ) kLookAtTarget.setValue( uuid );
+
+		}
+
+		syncLookAtLock();
+
+	}
+
+	function fillFieldsFromObject( object ) {
+
+		kpX.setValue( object.position.x ); kpY.setValue( object.position.y ); kpZ.setValue( object.position.z );
+		krX.setValue( object.rotation.x * THREE.MathUtils.RAD2DEG );
+		krY.setValue( object.rotation.y * THREE.MathUtils.RAD2DEG );
+		krZ.setValue( object.rotation.z * THREE.MathUtils.RAD2DEG );
+		ksX.setValue( object.scale.x ); ksY.setValue( object.scale.y ); ksZ.setValue( object.scale.z );
+		syncLookAtLock();
+
+	}
+
+	/** Key mode: writing a field edits the SELECTED animate event (undoable). */
+	function onKeyFieldChange() {
+
+		const found = selectedAnimateEvent();
+		if ( ! found ) return; // object mode: fields are just staged for + Key
+
+		const id = found.event.id;
+		const props = buildPropsFromFields();
+		commitMutation( m => {
+
+			const f = m.findEvent( id );
+			if ( f ) f.event.args = { ...f.event.args, props };
+
+		}, 'Edit key' );
+		sampleAt( playhead ); // reflect the edit at the current playhead pose
+
+	}
+
+	function addKeyAtPlayhead() {
+
+		const object = editor.selected;
+		if ( ! object || object === editor.scene ) {
+
+			keyTitle.textContent = 'Select an object first';
+			return;
+
+		}
+
+		const target = bestSelectorFor( object );
+		const props = buildPropsFromFields();
+
+		// tween from the previous key on this track (or 0) so the pose ARRIVES
+		// at the playhead — classic keyframing over the animate grammar
+		let prevEnd = 0;
+		const track = editor.timeline ? editor.timeline.track( target ) : null;
+		if ( track ) for ( const e of track.events ) {
+
+			const end = e.at + e.dur;
+			if ( end <= playhead + 1e-6 ) prevEnd = Math.max( prevEnd, end );
+
+		}
+
+		const at = Math.round( Math.min( prevEnd, playhead ) * 1000 ) / 1000;
+		const dur = Math.round( Math.max( 0.001, playhead - at ) * 1000 ) / 1000;
+		commitMutation( m => m.addEvent( target, { at, op: 'animate', args: { props, easing: 'linear', duration: dur }, dur } ), 'Add key' );
+		sampleAt( playhead );
+
+	}
+
+	function refreshKeyPanel() {
+
+		const found = selectedAnimateEvent();
+		const object = editor.selected;
+
+		if ( found ) {
+
+			keyPanel.style.display = 'flex';
+			keyButton.dom.style.display = 'none';
+			keyTitle.textContent = `Key: ${ found.track.target } @ ${ found.event.at.toFixed( 2 ) }s — edits apply to this event`;
+			updateLookAtOptions( null );
+			fillFieldsFromProps( found.event.args && found.event.args.props );
+
+		} else if ( object && object !== editor.scene ) {
+
+			keyPanel.style.display = 'flex';
+			keyButton.dom.style.display = '';
+			keyTitle.textContent = `Keyframe: ${ object.name || object.type }`;
+			updateLookAtOptions( object );
+			fillFieldsFromObject( object );
+
+		} else {
+
+			keyPanel.style.display = 'none';
+
+		}
+
+	}
+
 	// ── Time <-> pixel mapping ────────────────────────────────────────────────
 	function viewDuration() {
 
@@ -191,6 +448,7 @@ function Timeline( editor ) {
 
 			rows.appendChild( emptyHint );
 			updatePlayheadUI();
+			refreshKeyPanel();
 			return;
 
 		}
@@ -202,6 +460,7 @@ function Timeline( editor ) {
 		}
 
 		updatePlayheadUI();
+		refreshKeyPanel();
 
 	}
 
@@ -569,8 +828,13 @@ function Timeline( editor ) {
 
 	// ── Signals ───────────────────────────────────────────────────────────────
 	signals.timelineChanged.add( function () { render(); if ( showCode ) refreshCode(); } );
-	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );
-	window.addEventListener( 'resize', render );
+	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );	signals.objectSelected.add( function () { selectedEventId = null; refreshKeyPanel(); } );
+	signals.objectChanged.add( function ( object ) {
+
+		// object mode only: keep the staged pose in sync with gizmo edits
+		if ( object === editor.selected && ! selectedAnimateEvent() ) refreshKeyPanel();
+
+	} );	window.addEventListener( 'resize', render );
 
 	render();
 

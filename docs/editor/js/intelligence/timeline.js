@@ -403,6 +403,13 @@ export function compileTimeline( model, ctx ) {
 					let targets = [];
 					try { targets = selectorEngine.query( editor.scene, la ); } catch ( e ) {}
 					if ( targets.length === 0 && /(^|[.#\s])camera\b/i.test( la ) && editor.camera ) targets = [ editor.camera ];
+					if ( targets.length === 0 && editor.scene.getObjectByProperty ) {
+
+						const byUuid = editor.scene.getObjectByProperty( 'uuid', la );
+						if ( byUuid ) targets = [ byUuid ];
+
+					}
+
 					if ( targets.length > 0 ) {
 
 						const p = [ 0, 0, 0 ];
