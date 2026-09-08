@@ -836,6 +836,16 @@ function Timeline( editor ) {
 
 	} );	window.addEventListener( 'resize', render );
 
+	// The panel renders with laneWidth()=0 while its tab is hidden (ruler ticks
+	// and event blocks collapse to zero width), and nothing re-renders on tab
+	// switch. ResizeObserver fires when the panel gains size (display:none →
+	// visible), so the first open of the Animations tab lays out correctly.
+	new ResizeObserver( function () {
+
+		if ( container.dom.offsetParent !== null ) render();
+
+	} ).observe( area );
+
 	render();
 
 	return container;
