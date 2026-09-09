@@ -249,9 +249,18 @@ function matchSequence( root, sequence ) {
 	// Parse as: selector combinator selector combinator selector ...
 	// For now, simple left-to-right evaluation (not fully CSS; no specificity).
 
-	let candidates = [ root ];
+	// Apply the FIRST selector to root (e.g., #3x3-square in "#3x3-square *")
+	let candidates = [];
+	const firstMatchers = sequence[ 0 ].matchers;
+	root.traverse( node => {
 
-	for ( let i = 0; i < sequence.length; i ++ ) {
+		if ( node === root ) return;
+		if ( nodeMatches( node, firstMatchers ) ) candidates.push( node );
+
+	} );
+
+	// Then process combinators starting from index 1
+	for ( let i = 1; i < sequence.length; i ++ ) {
 
 		const item = sequence[ i ];
 
