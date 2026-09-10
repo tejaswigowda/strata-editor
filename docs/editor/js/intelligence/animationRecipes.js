@@ -625,6 +625,7 @@ export function shakeRecipe( node, params = {} ) {
  * FadeIn recipe: appear from transparent.
  * Params: {duration:1}
  * Note: Skips nodes without materials (Groups, etc.).
+ * Always animates from 0 to 1 (full opacity).
  */
 export function fadeInRecipe( node, params = {} ) {
 
@@ -638,14 +639,10 @@ export function fadeInRecipe( node, params = {} ) {
 
 	const duration = params.duration ?? 1;
 	node.material.transparent = true;
-	
-	// Ensure opacity is initialized to 1 so animation has a valid target
-	if ( node.material.opacity === undefined ) {
-		node.material.opacity = 1;
-	}
 
+	// FadeIn always: 0 (transparent) → 1 (opaque)
 	const times = [ 0, duration ];
-	const values = [ 0, node.material.opacity ];
+	const values = [ 0, 1 ];
 
 	const track = numberTrack( node.uuid, 'material.opacity', times, values );
 	return new THREE.AnimationClip( 'FadeIn', -1, [ track ] );
@@ -1853,14 +1850,6 @@ export function executeRecipeOp( editor, recipeData ) {
 			if ( ! node.visible ) {
 
 				node.visible = true;
-
-			}
-
-			// For fadeIn, also reset opacity to 1 so the animation has a proper target.
-			// If opacity is already 0 from a previous fadeOut, fadeIn would animate 0→0 (no-op).
-			if ( recipe === 'fadeIn' && node.material ) {
-
-				node.material.opacity = 1;
 
 			}
 
