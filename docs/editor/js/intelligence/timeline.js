@@ -437,7 +437,32 @@ export function compileTimeline( model, ctx ) {
 
 			}
 
-			for ( const node of nodes ) {
+			// Opacity-based recipes (fade, fadeIn, fadeOut, flash) need meshes, not Groups
+			// Expand Groups to their descendant meshes so compilation always succeeds
+			const OPACITY_RECIPES = new Set( [ 'fade', 'fadeIn', 'fadeOut', 'flash' ] );
+			let nodesToAnimate = nodes;
+			if ( OPACITY_RECIPES.has( event.op ) ) {
+
+				nodesToAnimate = [];
+				const visited = new Set();
+				function traverse( node ) {
+
+					if ( visited.has( node ) ) return;
+					visited.add( node );
+					if ( node.isMesh ) nodesToAnimate.push( node );
+					else if ( node.isGroup ) {
+
+						for ( const child of node.children ) traverse( child );
+
+					}
+
+				}
+
+				for ( const n of nodes ) traverse( n );
+
+			}
+
+			for ( const node of nodesToAnimate ) {
 
 				let clip;
 				try {
