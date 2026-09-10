@@ -135,12 +135,87 @@ function Timeline( editor ) {
 		'or select an object and add an event at the playhead.';
 	rows.appendChild( emptyHint );
 
-	// ── Code panel (compiled sugar) ───────────────────────────────────────────
+	// ── Code panel (compiled sugar, now editable) ──────────────────────────────
 	const codePanel = document.createElement( 'textarea' );
-	codePanel.readOnly = true;
 	codePanel.spellcheck = false;
 	codePanel.style.cssText = 'display:none;width:100%;box-sizing:border-box;height:120px;border:none;border-top:1px solid #ccc;font-family:monospace;font-size:11px;padding:8px;resize:vertical;background:#1e1e1e;color:#d4d4d4;';
 	container.dom.appendChild( codePanel );
+
+	// Parse edited code and update timeline model
+	function parseAndApplyCode( codeText ) {
+
+		if ( ! codeText.trim() || ! editor.timeline ) return;
+
+		try {
+
+			const model = TimelineModel.fromJSON( editor.timeline.toJSON() );
+			model.tracks = []; // clear all events, rebuild from code
+
+			// Parse $S('selector').at(time).op(args).at(time).op(args); blocks
+			const blocks = codeText.split( /\$S\(/ );
+			for ( const block of blocks ) {
+
+				if ( ! block.trim() ) continue;
+
+				// Extract selector
+				const selectorMatch = block.match( /^(['"`])(.+?)\1\)/ );
+				if ( ! selectorMatch ) continue;
+				const selector = selectorMatch[ 2 ];
+
+				// Extract .at(time).op(args) chains
+				const chainMatches = block.matchAll( /\.at\(([^)]+)\)\.(\w+)\(([^)]*)\)/g );
+				for ( const m of chainMatches ) {
+
+					const at = parseFloat( m[ 1 ] );
+					const op = m[ 2 ];
+					const argsStr = m[ 3 ];
+
+					if ( isNaN( at ) || ! op ) continue;
+
+					// Try to parse args as JSON or simple values
+					let args = {};
+					if ( argsStr.trim() ) {
+
+						try {
+
+							// Wrap in {} if it looks like an object literal for safer parsing
+							const argObj = Function( `"use strict"; return ({${ argsStr }})` )();
+							args = argObj;
+
+						} catch ( e ) {
+
+							// Fallback: just capture as empty args if parsing fails
+							args = {};
+
+						}
+
+					}
+
+					model.addEvent( selector, { at, op, args, dur: 1 } );
+
+				}
+
+			}
+
+			// Update timeline and save
+			commitMutation( () => model, 'Edit code' );
+
+		} catch ( e ) {
+
+			console.warn( 'Code parse error:', e.message );
+
+		}
+
+	}
+
+	// Debounce code changes to avoid rapid re-compiles
+	let codeTimeout;
+	codePanel.addEventListener( 'change', function () {
+
+		clearTimeout( codeTimeout );
+		codeTimeout = setTimeout( () => parseAndApplyCode( codePanel.value ), 500 );
+
+	} );
 
 	// ── Keyframe P/S/R editor (authors `animate` events on the ONE clock) ─────
 	// Object mode: fields stage the target pose for the SELECTED OBJECT; "+ Key"
