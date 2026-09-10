@@ -638,10 +638,35 @@ function Timeline( editor ) {
 
 	function play() {
 
-		const clip = getClip();
-		if ( ! clip || ! ( clip.duration > 0 ) ) return;
-		const actions = getTimelineTargetActions( editor );
-		if ( actions.length === 0 ) return;
+		let actions = getTimelineTargetActions( editor );
+		let clip = getClip();
+		
+		// Fallback: if no timeline clip found, play individual clips from scene.animations
+		// This allows recipe animations (fade, fadeIn, etc.) to play even if not in timeline model
+		if ( actions.length === 0 && ( editor.scene.animations || [] ).length > 0 ) {
+
+			actions = [];
+			const maxDuration = Math.max( 
+				...(editor.scene.animations || []).map( c => c.duration || 0 )
+			);
+			
+			for ( const c of ( editor.scene.animations || [] ) ) {
+
+				if ( c && c.duration > 0 ) {
+
+					const action = editor.mixer.clipAction( c, editor.scene );
+					actions.push( action );
+
+				}
+
+			}
+			
+			clip = { duration: Math.max( 1, maxDuration ) };
+
+		}
+
+		if ( ! clip || ! ( clip.duration > 0 ) || actions.length === 0 ) return;
+		
 		for ( const a of actions ) {
 
 			a.reset();
