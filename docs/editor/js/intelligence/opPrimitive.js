@@ -20,6 +20,7 @@ import * as selectorEngine from './selectorEngine.js';
 import { selectorCounts } from './vocabInjection.js';
 import {
 	recolorOp, scaleOp, moveOp, rotateOp, deleteOp, duplicateOp, setMaterialOp,
+	setOpacityOp, setVisibleOp, wireframeOp,
 	bulkApply, setObjectPropOp, setMaterialPropOp, setMaterialColorOp,
 	setLightPropOp, setLightColorOp, setCameraPropOp,
 } from './editOps.js';
@@ -312,6 +313,9 @@ export function op( editor, opJSON ) {
 			case 'duplicate':   return withFlag( duplicateOp( editor, selector, opJSON.dx, opJSON.dy, opJSON.dz ) );
 			case 'setMaterial': return withFlag( setMaterialOp( editor, selector, opJSON.props ) );
 			case 'retexture':   return withFlag( setMaterialOp( editor, selector, { map: opJSON.texture } ) );
+			case 'setOpacity':  return withFlag( setOpacityOp( editor, selector, opJSON.value ) );
+			case 'setVisible':  return withFlag( setVisibleOp( editor, selector, opJSON.visible ) );
+			case 'wireframe':   return withFlag( wireframeOp( editor, selector, opJSON.wireframe ) );
 
 			// ── Bulk property setters (fan-out over the whole set, one undo batch) ──
 			case 'castShadow':        return withFlag( setObjectPropOp( editor, selector, 'castShadow', Boolean( opJSON.value ), n => n.isMesh || n.isLight ) );
