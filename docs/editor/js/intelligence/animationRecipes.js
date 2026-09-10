@@ -1742,6 +1742,34 @@ export function executeRecipe( node, recipeData ) {
  * @param {object} recipeData  {recipe, selector, params}
  * @returns {object}  {success, clip?, message?, count}
  */
+/**
+ * Expand Groups to their descendant meshes (used for opacity animations).
+ * Returns a flat list of all meshes in the hierarchies.
+ */
+function expandGroupsToMeshes( nodes ) {
+
+	const result = [];
+	const visited = new Set();
+
+	function traverse( node ) {
+
+		if ( visited.has( node ) ) return;
+		visited.add( node );
+
+		if ( node.isMesh ) result.push( node );
+		else if ( node.isGroup ) {
+
+			for ( const child of node.children ) traverse( child );
+
+		}
+
+	}
+
+	for ( const node of nodes ) traverse( node );
+	return result;
+
+}
+
 export function executeRecipeOp( editor, recipeData ) {
 
 	if ( ! editor || ! editor.scene ) return { success: false, message: 'No editor' };
@@ -1750,7 +1778,7 @@ export function executeRecipeOp( editor, recipeData ) {
 	if ( err ) return { success: false, message: `Invalid recipe: ${ err }` };
 
 	const { recipe, selector, params } = recipeData;
-	const nodes = selectorEngine.query( editor.scene, selector );
+	let nodes = selectorEngine.query( editor.scene, selector );
 
 	if ( nodes.length === 0 ) {
 
@@ -1781,6 +1809,21 @@ export function executeRecipeOp( editor, recipeData ) {
 		'flipOutX', 'flipOutY',
 		'rotateOutX', 'rotateOutY', 'rotateOutZ',
 	] );
+
+	// ── Opacity-based animations need meshes (Groups can't have opacity) ───
+	// For fade/flash recipes, expand Groups to their descendant meshes so
+	// we always have nodes that can receive opacity tracks.
+	const OPACITY_RECIPES = new Set( [ 'fade', 'fadeIn', 'fadeOut', 'flash' ] );
+	if ( OPACITY_RECIPES.has( recipe ) ) {
+
+		nodes = expandGroupsToMeshes( nodes );
+		if ( nodes.length === 0 ) {
+
+			return { success: false, message: 'No meshes found (Groups have no materials)', count: 0 };
+
+		}
+
+	}
 
 	// Auto-show before entrance animations
 	if ( ENTRANCE_RECIPES.has( recipe ) ) {
