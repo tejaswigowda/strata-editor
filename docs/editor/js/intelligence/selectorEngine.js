@@ -487,8 +487,6 @@ export function hasNamedMatcher( selector ) {
 
 }
 
-}
-
 /**
  * Validate a selector without matching.
  * Comma-separated selectors are valid if ALL parts are valid.
