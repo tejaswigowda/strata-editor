@@ -639,6 +639,9 @@ export function fadeInRecipe( node, params = {} ) {
 
 	const duration = params.duration ?? 1;
 	node.material.transparent = true;
+	
+	// Explicitly set opacity to 0 before animating, ensuring fade-in starts from invisible
+	node.material.opacity = 0;
 
 	// FadeIn always: 0 (transparent) → 1 (opaque)
 	const times = [ 0, duration ];
