@@ -521,6 +521,11 @@ export function fadeRecipe( node, params = {} ) {
 	const duration = params.duration ?? 1;
 
 	node.material.transparent = true;
+	
+	// Ensure opacity is initialized so animation has valid target
+	if ( node.material.opacity === undefined ) {
+		node.material.opacity = 1;
+	}
 
 	const times = [ 0, duration ];
 	const values = [ from, to ];
@@ -633,9 +638,14 @@ export function fadeInRecipe( node, params = {} ) {
 
 	const duration = params.duration ?? 1;
 	node.material.transparent = true;
+	
+	// Ensure opacity is initialized to 1 so animation has a valid target
+	if ( node.material.opacity === undefined ) {
+		node.material.opacity = 1;
+	}
 
 	const times = [ 0, duration ];
-	const values = [ 0, node.material.opacity ?? 1 ];
+	const values = [ 0, node.material.opacity ];
 
 	const track = numberTrack( node.uuid, 'material.opacity', times, values );
 	return new THREE.AnimationClip( 'FadeIn', -1, [ track ] );
@@ -1026,9 +1036,14 @@ export function fadeOutRecipe( node, params = {} ) {
 
 	const duration = params.duration ?? 1;
 	node.material.transparent = true;
+	
+	// Ensure opacity is initialized so animation has valid starting point
+	if ( node.material.opacity === undefined ) {
+		node.material.opacity = 1;
+	}
 
 	const times = [ 0, duration ];
-	const initialOpacity = node.material.opacity ?? 1;
+	const initialOpacity = node.material.opacity;
 	const values = [ initialOpacity, 0 ];
 
 	const track = numberTrack( node.uuid, 'material.opacity', times, values );
@@ -1330,8 +1345,13 @@ export function flashRecipe( node, params = {} ) {
 	const duration = params.duration ?? 1;
 	const times = params.times ?? 3;
 	node.material.transparent = true;
+	
+	// Ensure opacity is initialized so animation has valid reference
+	if ( node.material.opacity === undefined ) {
+		node.material.opacity = 1;
+	}
 
-	const initialOpacity = node.material.opacity ?? 1;
+	const initialOpacity = node.material.opacity;
 	const steps = times * 2 + 1;
 	const keyTimes = [];
 	const values = [];
