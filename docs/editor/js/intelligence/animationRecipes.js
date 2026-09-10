@@ -1720,6 +1720,44 @@ export function executeRecipeOp( editor, recipeData ) {
 
 	}
 
+	// ── Auto-show on entrance animations (fadeIn, zoomIn, slideIn*, etc.) ───
+	// When an animation shows an object, ensure it's visible first so the
+	// animation is actually rendered (not hidden by node.visible = false).
+	const ENTRANCE_RECIPES = new Set( [
+		'fadeIn', 'zoomIn',
+		'slideInUp', 'slideInDown', 'slideInLeft', 'slideInRight',
+		'bounceIn',
+		'flipInX', 'flipInY',
+		'rotateInX', 'rotateInY', 'rotateInZ',
+	] );
+
+	// ── Auto-hide on exit animations (fadeOut, zoomOut, slideOut*, etc.) ───
+	// Note: We don't auto-hide after the animation completes, because the
+	// animation system doesn't have an easy way to hook into completion.
+	// Users should chain .hide() after .fadeOut() if they want that behavior.
+	const EXIT_RECIPES = new Set( [
+		'fadeOut', 'zoomOut',
+		'slideOutUp', 'slideOutDown', 'slideOutLeft', 'slideOutRight',
+		'bounceOut',
+		'flipOutX', 'flipOutY',
+		'rotateOutX', 'rotateOutY', 'rotateOutZ',
+	] );
+
+	// Auto-show before entrance animations
+	if ( ENTRANCE_RECIPES.has( recipe ) ) {
+
+		for ( const node of nodes ) {
+
+			if ( ! node.visible ) {
+
+				node.visible = true;
+
+			}
+
+		}
+
+	}
+
 	try {
 
 		let clips = [];
