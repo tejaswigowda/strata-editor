@@ -789,6 +789,7 @@ export function setOpacityOp( editor, selector, value ) {
 
 	}
 
+	if ( count > 0 ) editor.signals.sceneGraphChanged.dispatch();
 	return { success: count > 0, count };
 
 }
@@ -824,6 +825,7 @@ export function setVisibleOp( editor, selector, visible ) {
 
 	}
 
+	if ( cmds.length > 0 ) editor.signals.sceneGraphChanged.dispatch();
 	return { success: cmds.length > 0, count: cmds.length };
 
 }
@@ -880,6 +882,7 @@ export function wireframeOp( editor, selector, wireframeMode ) {
 
 	}
 
+	if ( count > 0 ) editor.signals.sceneGraphChanged.dispatch();
 	return { success: count > 0, count };
 
 }

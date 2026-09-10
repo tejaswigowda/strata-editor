@@ -374,6 +374,7 @@ export function isSelectionPseudo( selector ) {
 
 /**
  * Convenience: parse and match in one call.
+ * Supports comma-separated selectors (grouping) as a union.
  * @param {THREE.Object3D} root
  * @param {string} selector
  * @returns {Array<THREE.Object3D>}
@@ -384,6 +385,43 @@ export function query( root, selector ) {
 	if ( isSelectionPseudo( selector ) ) {
 
 		return _selectionProvider ? ( _selectionProvider() || [] ) : [];
+
+	}
+
+	// Handle comma-separated selectors (grouping) — union the results
+	if ( selector.includes( ',' ) ) {
+
+		const parts = selector.split( ',' );
+		const seen = new Set();
+		const results = [];
+
+		for ( const part of parts ) {
+
+			try {
+
+				const ast = parse( part.trim() );
+				const matches = match( root, ast );
+				for ( const node of matches ) {
+
+					// Deduplicate by identity (same node object)
+					if ( ! seen.has( node ) ) {
+
+						seen.add( node );
+						results.push( node );
+
+					}
+
+				}
+
+			} catch ( e ) {
+
+				console.warn( `Selector error in "${ part.trim() }":`, e.message );
+
+			}
+
+		}
+
+		return results;
 
 	}
 
@@ -405,10 +443,26 @@ export function query( root, selector ) {
  * True if the selector names a specific SUBSET (contains an id or class matcher),
  * as opposed to a deliberately-broad selector ("*" or a bare type like "mesh").
  * Used by the op dispatcher's "subset named but all changed" guard.
+ * Comma-separated selectors are considered "named" if ANY part is named.
  * @param {string} selector
  * @returns {boolean}
  */
 export function hasNamedMatcher( selector ) {
+
+	if ( ! selector || typeof selector !== 'string' ) return false;
+
+	// Comma-separated: check each part
+	if ( selector.includes( ',' ) ) {
+
+		const parts = selector.split( ',' );
+		for ( const part of parts ) {
+
+			if ( hasNamedMatcher( part.trim() ) ) return true;
+
+		}
+		return false;
+
+	}
 
 	try {
 
@@ -433,14 +487,30 @@ export function hasNamedMatcher( selector ) {
 
 }
 
+}
+
 /**
  * Validate a selector without matching.
+ * Comma-separated selectors are valid if ALL parts are valid.
  * @param {string} selector
  * @returns {boolean}
  */
 export function isValid( selector ) {
 
 	if ( isSelectionPseudo( selector ) ) return true;
+
+	// Comma-separated: all parts must be valid
+	if ( selector.includes( ',' ) ) {
+
+		const parts = selector.split( ',' );
+		for ( const part of parts ) {
+
+			if ( ! isValid( part.trim() ) ) return false;
+
+		}
+		return true;
+
+	}
 
 	try {
 
