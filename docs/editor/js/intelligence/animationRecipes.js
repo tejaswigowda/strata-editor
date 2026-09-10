@@ -502,13 +502,25 @@ export function pulseRecipe( node, params = {} ) {
 /**
  * Fade recipe: opacity transition (requires transparent material).
  * Params: {from:1, to:0, duration:1}
+ * Note: Skips nodes without materials (Groups, etc.).
  */
 export function fadeRecipe( node, params = {} ) {
 
 	const THREE = window.THREE;
+
+	// Skip nodes without materials
+	if ( ! node.material ) {
+
+		console.warn( `Fade: skipping ${ node.name } (no material)` );
+		return null;
+
+	}
+
 	const from = params.from ?? 1;
 	const to = params.to ?? 0;
 	const duration = params.duration ?? 1;
+
+	node.material.transparent = true;
 
 	const times = [ 0, duration ];
 	const values = [ from, to ];
@@ -607,14 +619,23 @@ export function shakeRecipe( node, params = {} ) {
 /**
  * FadeIn recipe: appear from transparent.
  * Params: {duration:1}
+ * Note: Skips nodes without materials (Groups, etc.).
  */
 export function fadeInRecipe( node, params = {} ) {
 
+	// Skip nodes without materials
+	if ( ! node.material ) {
+
+		console.warn( `FadeIn: skipping ${ node.name } (no material)` );
+		return null;
+
+	}
+
 	const duration = params.duration ?? 1;
-	if ( node.material ) node.material.transparent = true;
+	node.material.transparent = true;
 
 	const times = [ 0, duration ];
-	const values = [ 0, node.material?.opacity ?? 1 ];
+	const values = [ 0, node.material.opacity ?? 1 ];
 
 	const track = numberTrack( node.uuid, 'material.opacity', times, values );
 	return new THREE.AnimationClip( 'FadeIn', -1, [ track ] );
@@ -991,14 +1012,23 @@ export function rotateInRecipe( node, params = {} ) {
 /**
  * FadeOut recipe: fade to transparent.
  * Params: {duration:1}
+ * Note: Skips nodes without materials (Groups, etc.).
  */
 export function fadeOutRecipe( node, params = {} ) {
 
+	// Skip nodes without materials
+	if ( ! node.material ) {
+
+		console.warn( `FadeOut: skipping ${ node.name } (no material)` );
+		return null;
+
+	}
+
 	const duration = params.duration ?? 1;
-	if ( node.material ) node.material.transparent = true;
+	node.material.transparent = true;
 
 	const times = [ 0, duration ];
-	const initialOpacity = node.material?.opacity ?? 1;
+	const initialOpacity = node.material.opacity ?? 1;
 	const values = [ initialOpacity, 0 ];
 
 	const track = numberTrack( node.uuid, 'material.opacity', times, values );
@@ -1285,14 +1315,23 @@ export function rotateOutRecipe( node, params = {} ) {
 /**
  * Flash recipe: rapidly toggle opacity.
  * Params: {times:3, duration:1}
+ * Note: Skips nodes without materials (Groups, etc.).
  */
 export function flashRecipe( node, params = {} ) {
 
+	// Skip nodes without materials
+	if ( ! node.material ) {
+
+		console.warn( `Flash: skipping ${ node.name } (no material)` );
+		return null;
+
+	}
+
 	const duration = params.duration ?? 1;
 	const times = params.times ?? 3;
-	if ( node.material ) node.material.transparent = true;
+	node.material.transparent = true;
 
-	const initialOpacity = node.material?.opacity ?? 1;
+	const initialOpacity = node.material.opacity ?? 1;
 	const steps = times * 2 + 1;
 	const keyTimes = [];
 	const values = [];
