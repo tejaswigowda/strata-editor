@@ -1856,6 +1856,14 @@ export function executeRecipeOp( editor, recipeData ) {
 
 			}
 
+			// For fadeIn, also reset opacity to 1 so the animation has a proper target.
+			// If opacity is already 0 from a previous fadeOut, fadeIn would animate 0→0 (no-op).
+			if ( recipe === 'fadeIn' && node.material ) {
+
+				node.material.opacity = 1;
+
+			}
+
 		}
 
 	}
