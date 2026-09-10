@@ -172,26 +172,42 @@ function Timeline( editor ) {
 
 					if ( isNaN( at ) || ! op ) continue;
 
-					// Try to parse args as JSON or simple values
+					// Parse args — for recipes with a single duration param (fade*, zoom*, slide*, etc),
+					// extract it as a number. Otherwise try JSON object syntax.
 					let args = {};
+					let dur = 1;
 					if ( argsStr.trim() ) {
 
 						try {
 
-							// Wrap in {} if it looks like an object literal for safer parsing
-							const argObj = Function( `"use strict"; return ({${ argsStr }})` )();
-							args = argObj;
+							// First try: single numeric parameter (common for fade/zoom/slide recipes)
+							const numVal = parseFloat( argsStr );
+							if ( ! isNaN( numVal ) && argsStr.trim() === String( numVal ) ) {
+
+								dur = numVal;
+
+							} else {
+
+								// Fall back to JSON object parsing
+								const argObj = Function( `"use strict"; return ({${ argsStr }})` )();
+								args = argObj;
+								// Check if duration was in the object
+								if ( argObj.duration !== undefined ) {
+									dur = argObj.duration;
+									delete args.duration; // Remove from args since it goes in dur field
+								}
+
+							}
 
 						} catch ( e ) {
 
-							// Fallback: just capture as empty args if parsing fails
-							args = {};
+							// If parsing fails, keep defaults (args={}, dur=1)
 
 						}
 
 					}
 
-					model.addEvent( selector, { at, op, args, dur: 1 } );
+					model.addEvent( selector, { at, op, args, dur } );
 
 				}
 
