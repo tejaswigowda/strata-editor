@@ -227,6 +227,12 @@ function Timeline( editor ) {
 	}
 
 }
+
+// Debounce code changes to avoid rapid re-compiles
+let codeTimeout;
+codePanel.addEventListener( 'input', function () {
+
+		clearTimeout( codeTimeout );
 		codeTimeout = setTimeout( () => parseAndApplyCode( codePanel.value ), 500 );
 
 	} );
