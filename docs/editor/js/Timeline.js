@@ -263,13 +263,14 @@ function Timeline( editor ) {
 									const objStr = argsStr.substring( 0, commaIdx ).trim();
 									const durStr = argsStr.substring( commaIdx + 1 ).trim();
 									const propsObj = Function( `"use strict"; return ({${ objStr }})` )();
-									args = propsObj;
+									args = { props: propsObj };  // Wrap in props field to match model structure
 									dur = parseFloat( durStr ) || 1;
 
 								} else {
 
 									// Just object, no duration
-									args = Function( `"use strict"; return ({${ argsStr }})` )();
+									const propsObj = Function( `"use strict"; return ({${ argsStr }})` )();
+									args = { props: propsObj };  // Wrap in props field
 
 								}
 
