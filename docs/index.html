@@ -170,19 +170,7 @@
 					signals.sceneGraphChanged.add( saveState );
 					signals.scriptChanged.add( saveState );
 					signals.historyChanged.add( saveState );
-
-				} );
-
-				//
-
-				document.addEventListener( 'dragover', function ( event ) {
-
-					event.preventDefault();
-					event.dataTransfer.dropEffect = 'copy';
-
-				} );
-
-				document.addEventListener( 'drop', function ( event ) {
+				signals.timelineChanged.add( saveState );
 
 					event.preventDefault();
 
