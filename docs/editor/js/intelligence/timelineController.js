@@ -33,6 +33,15 @@ export function syncTimeline( editor ) {
 	const model = editor.timeline;
 	if ( ! model ) return null;
 
+	// Recipes read each target's LIVE transform as their baseline (S0/P0/Q0).
+	// If the timeline was left mid-scrub/paused (pose held, never restored —
+	// see "Hold / release" below) when an edit triggers a recompile, that
+	// transient pose would get baked in as the new rest pose, drifting scale/
+	// position/rotation further with every play+edit cycle. Snap every
+	// currently-held target back to the OLD clip's t=0 first so the recompile
+	// always reads a stable rest pose.
+	holdTimelineAt( editor, 0 );
+
 	stripTimelineClip( editor );
 
 	// Persist the canonical (absolute) representation into the scene JSON.
