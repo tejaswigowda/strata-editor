@@ -280,10 +280,11 @@ function Timeline( editor ) {
 							} else {
 
 								// Other ops: try numeric first, then object
+								// One time unit everywhere: ms at the surface (matches .animate())
 								const numVal = parseFloat( argsStr );
 								if ( ! isNaN( numVal ) && argsStr.trim() === String( numVal ) ) {
 
-									dur = numVal;
+									dur = numVal / 1000;
 
 								} else {
 
@@ -292,7 +293,7 @@ function Timeline( editor ) {
 									args = argObj;
 									if ( argObj.duration !== undefined ) {
 
-										dur = argObj.duration;
+										dur = argObj.duration / 1000;
 										delete args.duration;
 
 									}
@@ -994,6 +995,8 @@ function Timeline( editor ) {
 			let v = args[ key ];
 			if ( key === 'duration' && ( v === undefined || v === null ) ) v = dur;
 			if ( v === undefined || v === null ) continue;
+			// One time unit everywhere: ms at the surface (matches .animate())
+			if ( key === 'duration' ) v = Math.round( v * 1000 );
 			parts.push( fmtVal( v ) );
 
 		}
