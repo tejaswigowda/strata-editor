@@ -99,12 +99,13 @@ function Timeline( editor ) {
 	bar.appendChild( deleteButton.dom );
 
 	const codeButton = new UIButton( '</>' );
-	codeButton.dom.title = 'Show the compiled $S/.then() sugar';
+	codeButton.dom.title = 'Show the compiled $S/.then() sugar (edit and click Save)';
 	codeButton.dom.style.cssText = 'height:24px;padding:0 8px;border-radius:4px;font-size:11px;';
 	codeButton.onClick( function () {
 
 		showCode = ! showCode;
 		codePanel.style.display = showCode ? 'block' : 'none';
+		codeBtnContainer.style.display = 'none'; // Hide buttons when closing panel
 		if ( showCode ) refreshCode();
 
 	} );
@@ -137,9 +138,34 @@ function Timeline( editor ) {
 
 	// ── Code panel (compiled sugar, now editable) ──────────────────────────────
 	const codePanel = document.createElement( 'textarea' );
-	codePanel.spellcheck = false;
-	codePanel.style.cssText = 'display:none;width:100%;box-sizing:border-box;height:120px;border:none;border-top:1px solid #ccc;font-family:monospace;font-size:11px;padding:8px;resize:vertical;background:#1e1e1e;color:#d4d4d4;';
-	container.dom.appendChild( codePanel );
+	// Save/Cancel button container (appears when code is focused)
+	const codeBtnContainer = document.createElement( 'div' );
+	codeBtnContainer.style.cssText = 'display:none;height:28px;padding:6px 8px;border-top:1px solid #ccc;gap:8px;flex-direction:row;justify-content:flex-end;align-items:center;background:#2a2a2a;';
+	container.dom.appendChild( codeBtnContainer );
+
+	const saveBtn = new UIButton( 'Save' );
+	saveBtn.dom.style.cssText = 'height:24px;padding:0 12px;border-radius:4px;font-size:11px;background:#4CAF50;color:white;cursor:pointer;';
+	saveBtn.onClick( function () {
+
+		parseAndApplyCode( codePanel.value );
+		codeBtnContainer.style.display = 'none';
+		codePanel.style.display = 'none';
+		if ( currentActions.length ) for ( const a of currentActions ) a.play(); // Resume animation
+
+	} );
+	codeBtnContainer.appendChild( saveBtn.dom );
+
+	const cancelBtn = new UIButton( 'Cancel' );
+	cancelBtn.dom.style.cssText = 'height:24px;padding:0 12px;border-radius:4px;font-size:11px;background:#666;color:white;cursor:pointer;';
+	cancelBtn.onClick( function () {
+
+		refreshCode(); // Revert to saved state
+		codeBtnContainer.style.display = 'none';
+		codePanel.style.display = 'none';
+		if ( currentActions.length ) for ( const a of currentActions ) a.play(); // Resume animation
+
+	} );
+	codeBtnContainer.appendChild( cancelBtn.dom );
 
 	// Parse edited code and update timeline model
 	function parseAndApplyCode( codeText ) {
@@ -215,25 +241,26 @@ function Timeline( editor ) {
 
 			// Update timeline and save (directly with our built model)
 			editor.execute( new SetTimelineCommand( editor, model.toJSON(), 'Edit code' ) );
-			
-		// NOTE: Do NOT refresh code display here — let the user keep typing
-		// without their edits being overwritten. Only refresh when code panel
-		// is explicitly opened or when code comes from other sources (drag events).
 
-	} catch ( e ) {
+		} catch ( e ) {
 
-		console.warn( 'Code parse error:', e.message );
+			console.warn( 'Code parse error:', e.message );
+
+		}
 
 	}
 
-}
+	// Show Save/Cancel buttons and pause animation when code panel gets focus
+	codePanel.addEventListener( 'focus', function () {
 
-// Debounce code changes to avoid rapid re-compiles
-let codeTimeout;
-codePanel.addEventListener( 'input', function () {
+		codeBtnContainer.style.display = 'flex';
+		// Pause animation while editing
+		if ( currentActions.length ) for ( const a of currentActions ) a.paused = true;
 
-		clearTimeout( codeTimeout );
-		codeTimeout = setTimeout( () => parseAndApplyCode( codePanel.value ), 500 );
+	} );
+	codePanel.addEventListener( 'blur', function () {
+
+		// Don't hide buttons—they'll be hidden by Save/Cancel click handlers
 
 	} );
 
