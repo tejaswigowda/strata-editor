@@ -192,39 +192,107 @@ function Timeline( editor ) {
 				if ( ! selectorMatch ) continue;
 				const selector = selectorMatch[ 2 ];
 
-				// Extract .at(time).op(args) chains
-				const chainMatches = block.matchAll( /\.at\(([^)]+)\)\.(\w+)\(([^)]*)\)/g );
-				for ( const m of chainMatches ) {
+				// Extract .at(time).op(args) chains with balanced paren/brace support
+				const chainRegex = /\.at\(([^)]+)\)\.(\w+)\(/g;
+				let m;
+				while ( ( m = chainRegex.exec( block ) ) !== null ) {
 
 					const at = parseFloat( m[ 1 ] );
 					const op = m[ 2 ];
-					const argsStr = m[ 3 ];
-
 					if ( isNaN( at ) || ! op ) continue;
 
-					// Parse args — for recipes with a single duration param (fade*, zoom*, slide*, etc),
-					// extract it as a number. Otherwise try JSON object syntax.
+					// Extract balanced arguments starting after the opening paren
+					const argsStart = m.index + m[ 0 ].length;
+					let depth = 0;
+					let argsEnd = argsStart;
+					let foundEnd = false;
+
+					for ( let i = argsStart; i < block.length; i ++ ) {
+
+						const c = block[ i ];
+						if ( c === '{' || c === '[' || c === '(' ) depth ++;
+						else if ( c === '}' || c === ']' || c === ')' ) {
+
+							if ( depth === 0 ) {
+
+								argsEnd = i;
+								foundEnd = true;
+								break;
+
+							}
+							depth --;
+
+						}
+
+					}
+
+					if ( ! foundEnd ) continue;
+					const argsStr = block.substring( argsStart, argsEnd );
+
+					// Parse args: handle animate(obj, dur) vs op(dur) vs op(obj)
 					let args = {};
 					let dur = 1;
+
 					if ( argsStr.trim() ) {
 
 						try {
 
-							// First try: single numeric parameter (common for fade/zoom/slide recipes)
-							const numVal = parseFloat( argsStr );
-							if ( ! isNaN( numVal ) && argsStr.trim() === String( numVal ) ) {
+							// Special case: animate(propsObj, duration)
+							if ( op === 'animate' ) {
 
-								dur = numVal;
+								// Find the comma that separates object from duration
+								let commaDepth = 0;
+								let commaIdx = - 1;
+								for ( let i = 0; i < argsStr.length; i ++ ) {
+
+									const c = argsStr[ i ];
+									if ( c === '{' || c === '[' ) commaDepth ++;
+									else if ( c === '}' || c === ']' ) commaDepth --;
+									else if ( c === ',' && commaDepth === 0 ) {
+
+										commaIdx = i;
+										break;
+
+									}
+
+								}
+
+								if ( commaIdx !== - 1 ) {
+
+									// We have object, duration
+									const objStr = argsStr.substring( 0, commaIdx ).trim();
+									const durStr = argsStr.substring( commaIdx + 1 ).trim();
+									const propsObj = Function( `"use strict"; return ({${ objStr }})` )();
+									args = propsObj;
+									dur = parseFloat( durStr ) || 1;
+
+								} else {
+
+									// Just object, no duration
+									args = Function( `"use strict"; return ({${ argsStr }})` )();
+
+								}
 
 							} else {
 
-								// Fall back to JSON object parsing
-								const argObj = Function( `"use strict"; return ({${ argsStr }})` )();
-								args = argObj;
-								// Check if duration was in the object
-								if ( argObj.duration !== undefined ) {
-									dur = argObj.duration;
-									delete args.duration; // Remove from args since it goes in dur field
+								// Other ops: try numeric first, then object
+								const numVal = parseFloat( argsStr );
+								if ( ! isNaN( numVal ) && argsStr.trim() === String( numVal ) ) {
+
+									dur = numVal;
+
+								} else {
+
+									// Try as object (e.g., scale(1, 'x') or other args)
+									const argObj = Function( `"use strict"; return ({${ argsStr }})` )();
+									args = argObj;
+									if ( argObj.duration !== undefined ) {
+
+										dur = argObj.duration;
+										delete args.duration;
+
+									}
+
 								}
 
 							}
