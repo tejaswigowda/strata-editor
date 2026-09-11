@@ -265,13 +265,15 @@ function Timeline( editor ) {
 									// objStr already includes its own { }, evaluate as-is (don't re-wrap)
 									const propsObj = Function( `"use strict"; return (${ objStr })` )();
 									args = { props: propsObj };  // Wrap in props field to match model structure
-									dur = parseFloat( durStr ) || 1;
+									// Surface grammar is ms (jQuery-style); model stores seconds
+									dur = ( parseFloat( durStr ) || 400 ) / 1000;
 
 								} else {
 
 									// Just object, no duration — already includes its own { }
 									const propsObj = Function( `"use strict"; return (${ argsStr })` )();
 									args = { props: propsObj };  // Wrap in props field
+									dur = 0.4; // matches animateRecipe's default
 
 								}
 
