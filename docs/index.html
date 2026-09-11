@@ -176,22 +176,22 @@
 
 						event.preventDefault();
 
-					if ( event.dataTransfer.types[ 0 ] === 'text/plain' ) return; // Outliner drop
-					if ( event.dataTransfer.types.includes( 'application/x-stencil' ) ) return; // Stencils drop
+						if ( event.dataTransfer.types[ 0 ] === 'text/plain' ) return; // Outliner drop
+						if ( event.dataTransfer.types.includes( 'application/x-stencil' ) ) return; // Stencils drop
 
-					if ( event.dataTransfer.items ) {
+						if ( event.dataTransfer.items ) {
 
-						// DataTransferItemList supports folders
+							// DataTransferItemList supports folders
 
-						editor.loader.loadItemList( event.dataTransfer.items );
+							editor.loader.loadItemList( event.dataTransfer.items );
 
-					} else {
+						} else {
 
-						editor.loader.loadFiles( event.dataTransfer.files );
+							editor.loader.loadFiles( event.dataTransfer.files );
 
-					}
+						}
 
-				} );
+					} );
 
 				function onWindowResize() {
 
