@@ -170,9 +170,11 @@
 					signals.sceneGraphChanged.add( saveState );
 					signals.scriptChanged.add( saveState );
 					signals.historyChanged.add( saveState );
-				signals.timelineChanged.add( saveState );
+					signals.timelineChanged.add( saveState );
 
-					event.preventDefault();
+					document.addEventListener( 'drop', function ( event ) {
+
+						event.preventDefault();
 
 					if ( event.dataTransfer.types[ 0 ] === 'text/plain' ) return; // Outliner drop
 					if ( event.dataTransfer.types.includes( 'application/x-stencil' ) ) return; // Stencils drop
