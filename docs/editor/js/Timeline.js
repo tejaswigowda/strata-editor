@@ -213,8 +213,8 @@ function Timeline( editor ) {
 
 			}
 
-			// Update timeline and save
-			commitMutation( () => model, 'Edit code' );
+			// Update timeline and save (directly with our built model)
+			editor.execute( new SetTimelineCommand( editor, model.toJSON(), 'Edit code' ) );
 			
 			// After save, refresh the code display to show normalized/final state
 			setTimeout( () => refreshCode(), 50 );
