@@ -780,8 +780,16 @@ function Timeline( editor ) {
 
 				if ( c && c.duration > 0 ) {
 
-					const action = editor.mixer.clipAction( c, editor.scene );
-					actions.push( action );
+					try {
+
+						const action = editor.mixer.clipAction( c, editor.scene );
+						actions.push( action );
+
+					} catch ( e ) {
+
+						console.warn( `Failed to create action for clip "${ c.name }":`, e.message );
+
+					}
 
 				}
 
@@ -795,11 +803,19 @@ function Timeline( editor ) {
 		
 		for ( const a of actions ) {
 
-			a.reset();
-			a.enabled = true;
-			a.paused = false;
-			a.time = playhead % clip.duration;
-			a.play();
+			try {
+
+				a.reset();
+				a.enabled = true;
+				a.paused = false;
+				a.time = playhead % clip.duration;
+				a.play();
+
+			} catch ( e ) {
+
+				console.warn( `Failed to play action:`, e.message );
+
+			}
 
 		}
 		currentActions = actions;
