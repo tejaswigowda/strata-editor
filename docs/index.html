@@ -172,26 +172,37 @@
 					signals.historyChanged.add( saveState );
 					signals.timelineChanged.add( saveState );
 
-					document.addEventListener( 'drop', function ( event ) {
+				} );
 
-						event.preventDefault();
+				//
 
-						if ( event.dataTransfer.types[ 0 ] === 'text/plain' ) return; // Outliner drop
-						if ( event.dataTransfer.types.includes( 'application/x-stencil' ) ) return; // Stencils drop
+				document.addEventListener( 'dragover', function ( event ) {
 
-						if ( event.dataTransfer.items ) {
+					event.preventDefault();
+					event.dataTransfer.dropEffect = 'copy';
 
-							// DataTransferItemList supports folders
+				} );
 
-							editor.loader.loadItemList( event.dataTransfer.items );
+				document.addEventListener( 'drop', function ( event ) {
 
-						} else {
+					event.preventDefault();
 
-							editor.loader.loadFiles( event.dataTransfer.files );
+					if ( event.dataTransfer.types[ 0 ] === 'text/plain' ) return; // Outliner drop
+					if ( event.dataTransfer.types.includes( 'application/x-stencil' ) ) return; // Stencils drop
 
-						}
+					if ( event.dataTransfer.items ) {
 
-					} );
+						// DataTransferItemList supports folders
+
+						editor.loader.loadItemList( event.dataTransfer.items );
+
+					} else {
+
+						editor.loader.loadFiles( event.dataTransfer.files );
+
+					}
+
+				} );
 
 				function onWindowResize() {
 
