@@ -216,13 +216,9 @@ function Timeline( editor ) {
 			// Update timeline and save (directly with our built model)
 			editor.execute( new SetTimelineCommand( editor, model.toJSON(), 'Edit code' ) );
 			
-			// After save, refresh the code display to show normalized/final state
-			setTimeout( () => refreshCode(), 50 );
-
-		} catch ( e ) {
-
-			console.warn( 'Code parse error:', e.message );
-
+		// NOTE: Do NOT refresh code display here — let the user keep typing
+		// without their edits being overwritten. Only refresh when code panel
+		// is explicitly opened or when code comes from other sources (drag events).
 		}
 
 	}
