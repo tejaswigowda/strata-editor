@@ -215,6 +215,9 @@ function Timeline( editor ) {
 
 			// Update timeline and save
 			commitMutation( () => model, 'Edit code' );
+			
+			// After save, refresh the code display to show normalized/final state
+			setTimeout( () => refreshCode(), 50 );
 
 		} catch ( e ) {
 
@@ -226,7 +229,7 @@ function Timeline( editor ) {
 
 	// Debounce code changes to avoid rapid re-compiles
 	let codeTimeout;
-	codePanel.addEventListener( 'change', function () {
+	codePanel.addEventListener( 'input', function () {
 
 		clearTimeout( codeTimeout );
 		codeTimeout = setTimeout( () => parseAndApplyCode( codePanel.value ), 500 );
