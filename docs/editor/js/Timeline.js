@@ -219,15 +219,14 @@ function Timeline( editor ) {
 		// NOTE: Do NOT refresh code display here — let the user keep typing
 		// without their edits being overwritten. Only refresh when code panel
 		// is explicitly opened or when code comes from other sources (drag events).
-		}
+
+	} catch ( e ) {
+
+		console.warn( 'Code parse error:', e.message );
 
 	}
 
-	// Debounce code changes to avoid rapid re-compiles
-	let codeTimeout;
-	codePanel.addEventListener( 'input', function () {
-
-		clearTimeout( codeTimeout );
+}
 		codeTimeout = setTimeout( () => parseAndApplyCode( codePanel.value ), 500 );
 
 	} );
