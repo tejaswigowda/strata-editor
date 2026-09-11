@@ -138,6 +138,10 @@ function Timeline( editor ) {
 
 	// ── Code panel (compiled sugar, now editable) ──────────────────────────────
 	const codePanel = document.createElement( 'textarea' );
+	codePanel.spellcheck = false;
+	codePanel.style.cssText = 'display:none;width:100%;box-sizing:border-box;height:120px;border:none;border-top:1px solid #ccc;font-family:monospace;font-size:11px;padding:8px;resize:vertical;background:#1e1e1e;color:#d4d4d4;';
+	container.dom.appendChild( codePanel );
+
 	// Save/Cancel button container (appears when code is focused)
 	const codeBtnContainer = document.createElement( 'div' );
 	codeBtnContainer.style.cssText = 'display:none;height:28px;padding:6px 8px;border-top:1px solid #ccc;gap:8px;flex-direction:row;justify-content:flex-end;align-items:center;background:#2a2a2a;';
