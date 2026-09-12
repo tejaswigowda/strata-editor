@@ -324,7 +324,7 @@ function SidebarStencils( editor ) {
 	addStencil( 'text', strings.getKey( 'menubar/add/text' ), function ( editor, position ) {
 
 		const loader = new FontLoader();
-		loader.load( '../examples/fonts/helvetiker_bold.typeface.json', function ( font ) {
+		loader.load( 'examples/fonts/helvetiker_bold.typeface.json', function ( font ) {
 
 			const text = 'THREE.JS';
 
@@ -346,6 +346,10 @@ function SidebarStencils( editor ) {
 			const mesh = new THREE.Mesh( geometry, new THREE.MeshStandardMaterial() );
 			mesh.name = 'Text';
 			addObject( editor, mesh, position );
+
+		}, undefined, function ( error ) {
+
+			console.error( 'Text stencil: failed to load font', error );
 
 		} );
 
