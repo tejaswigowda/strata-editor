@@ -23,6 +23,7 @@ import { ViewportPathtracer } from './Viewport.Pathtracer.js';
 import { createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { lassoSelect } from './intelligence/lassoSelect.js';
 import { releaseTimelineObject } from './intelligence/timelineController.js';
+import { hydrateHtmlEmbed } from './HtmlEmbed.js';
 
 function Viewport( editor ) {
 
@@ -1480,6 +1481,16 @@ function Viewport( editor ) {
 
 		renderer.setViewport( 0, 0, container.dom.offsetWidth, container.dom.offsetHeight );
 		renderer.render( scene, editor.viewportCamera );
+
+		// 'html' stencil meshes never carry baked pixels out of a scene load (see
+		// HtmlEmbed.js) — re-rasterize the ones still missing their texture, then
+		// re-render once the (async) bake lands.
+		scene.traverse( function ( o ) {
+
+			const bake = hydrateHtmlEmbed( o );
+			if ( bake ) bake.then( render );
+
+		} );
 
 		if ( camera === editor.viewportCamera ) {
 

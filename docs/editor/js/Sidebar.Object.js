@@ -13,6 +13,7 @@ import { SetShadowValueCommand } from './commands/SetShadowValueCommand.js';
 import { SetLabelCommand } from './commands/SetLabelCommand.js';
 import { SetClassCommand } from './commands/SetClassCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
+import { refreshHtmlEmbed } from './HtmlEmbed.js';
 import { getAllClasses, toClassSet } from './intelligence/classDerive.js';
 
 function SidebarObject( editor ) {
@@ -165,6 +166,49 @@ function SidebarObject( editor ) {
 	objectNameRow.add( objectName );
 
 	container.add( objectNameRow );
+
+	// html embed content (only shown for 'html' stencil objects, see HtmlEmbed.js)
+	// A static, transparent-background "slide" baked to a texture — no live
+	// interaction, so edits here re-rasterize rather than mutate a live DOM node.
+
+	const objectHtmlRow = new UIRow();
+	const objectHtml = new UITextArea().setWidth( '150px' ).setHeight( '80px' ).setFontSize( '11px' ).onChange( function () {
+
+		const object = editor.selected;
+		const userData = Object.assign( {}, object.userData, { html: objectHtml.getValue() } );
+		editor.execute( new SetValueCommand( editor, object, 'userData', userData ) );
+		refreshHtmlEmbed( object ).then( function () { signals.sceneGraphChanged.dispatch(); } );
+
+	} );
+
+	objectHtmlRow.add( new UIText( 'HTML' ).setClass( 'Label' ) );
+	objectHtmlRow.add( objectHtml );
+
+	container.add( objectHtmlRow );
+
+	const objectHtmlSizeRow = new UIRow();
+	const objectHtmlWidth = new UINumber().setPrecision( 2 ).setWidth( '50px' ).setRange( 0.1, Infinity ).onChange( function () {
+
+		const object = editor.selected;
+		const userData = Object.assign( {}, object.userData, { width: objectHtmlWidth.getValue() } );
+		editor.execute( new SetValueCommand( editor, object, 'userData', userData ) );
+		refreshHtmlEmbed( object ).then( function () { signals.sceneGraphChanged.dispatch(); } );
+
+	} );
+	const objectHtmlHeight = new UINumber().setPrecision( 2 ).setWidth( '50px' ).setRange( 0.1, Infinity ).onChange( function () {
+
+		const object = editor.selected;
+		const userData = Object.assign( {}, object.userData, { height: objectHtmlHeight.getValue() } );
+		editor.execute( new SetValueCommand( editor, object, 'userData', userData ) );
+		refreshHtmlEmbed( object ).then( function () { signals.sceneGraphChanged.dispatch(); } );
+
+	} );
+
+	objectHtmlSizeRow.add( new UIText( 'HTML Size' ).setClass( 'Label' ) );
+	objectHtmlSizeRow.add( objectHtmlWidth );
+	objectHtmlSizeRow.add( objectHtmlHeight );
+
+	container.add( objectHtmlSizeRow );
 
 
 	// classes - chip-based UI with autocomplete
@@ -1002,6 +1046,10 @@ function SidebarObject( editor ) {
 
 		}
 
+		const isHtmlEmbed = !! ( object.userData && object.userData.isHtmlEmbed );
+		objectHtmlRow.setDisplay( isHtmlEmbed ? '' : 'none' );
+		objectHtmlSizeRow.setDisplay( isHtmlEmbed ? '' : 'none' );
+
 	}
 
 	function updateTransformRows( object ) {
@@ -1190,6 +1238,14 @@ function SidebarObject( editor ) {
 		objectVisible.setValue( object.visible );
 		objectFrustumCulled.setValue( object.frustumCulled );
 		objectRenderOrder.setValue( object.renderOrder );
+
+		if ( object.userData && object.userData.isHtmlEmbed ) {
+
+			objectHtml.setValue( object.userData.html || '' );
+			objectHtmlWidth.setValue( object.userData.width ?? 2 );
+			objectHtmlHeight.setValue( object.userData.height ?? 1.5 );
+
+		}
 
 		try {
 
