@@ -151,7 +151,8 @@ function Timeline( editor ) {
 	saveBtn.dom.style.cssText = 'height:24px;padding:0 12px;border-radius:4px;font-size:11px;background:#4CAF50;color:white;cursor:pointer;';
 	saveBtn.onClick( function () {
 
-		parseAndApplyCode( codePanel.value );
+		const saved = parseAndApplyCode( codePanel.value );
+		if ( ! saved ) return; // keep the panel open so the warning stays visible
 		codeBtnContainer.style.display = 'none';
 		codePanel.style.display = 'none';
 		if ( currentActions.length ) for ( const a of currentActions ) a.play(); // Resume animation
@@ -164,6 +165,7 @@ function Timeline( editor ) {
 	cancelBtn.onClick( function () {
 
 		refreshCode(); // Revert to saved state
+		clearCodeWarning();
 		codeBtnContainer.style.display = 'none';
 		codePanel.style.display = 'none';
 		if ( currentActions.length ) for ( const a of currentActions ) a.play(); // Resume animation
@@ -171,15 +173,17 @@ function Timeline( editor ) {
 	} );
 	codeBtnContainer.appendChild( cancelBtn.dom );
 
-	// Parse edited code and update timeline model
+	// Parse edited code and update timeline model. Returns true if the save
+	// went through, false if it was aborted (see the empty-parse guard below).
 	function parseAndApplyCode( codeText ) {
 
-		if ( ! codeText.trim() || ! editor.timeline ) return;
+		if ( ! codeText.trim() ) return false;
 
 		try {
 
-			const model = TimelineModel.fromJSON( editor.timeline.toJSON() );
+			const model = editor.timeline ? TimelineModel.fromJSON( editor.timeline.toJSON() ) : new TimelineModel();
 			model.tracks = []; // clear all events, rebuild from code
+			let eventCount = 0;
 
 			// Parse $S('selector').at(time).op(args).at(time).op(args); blocks
 			const blocks = codeText.split( /\$S\(/ );
@@ -311,19 +315,55 @@ function Timeline( editor ) {
 					}
 
 					model.addEvent( selector, { at, op, args, dur } );
+					eventCount ++;
 
 				}
 
 			}
 
+			if ( eventCount === 0 ) {
+
+				// Nothing parsed — most likely a chain is missing .at(time) before
+				// an op (required here since this is the ABSOLUTE timeline, unlike
+				// the JS Shell's immediate $S().animate(...)). Abort rather than
+				// saving an emptied-out model over the user's existing timeline.
+				showCodeWarning( 'No events parsed — each op needs a preceding .at(time), e.g. .at(0).animate(...)' );
+				return false;
+
+			}
+
+			clearCodeWarning();
+
 			// Update timeline and save (directly with our built model)
 			editor.execute( new SetTimelineCommand( editor, model.toJSON(), 'Edit code' ) );
+			return true;
 
 		} catch ( e ) {
 
 			console.warn( 'Code parse error:', e.message );
+			showCodeWarning( 'Code parse error: ' + e.message );
+			return false;
 
 		}
+
+	}
+
+	const codeWarning = document.createElement( 'div' );
+	codeWarning.style.cssText = 'display:none;padding:4px 8px;font-size:10px;color:#ffb4b4;background:#3a1f1f;border-top:1px solid #ccc;';
+	container.dom.insertBefore( codeWarning, codeBtnContainer );
+
+	function showCodeWarning( message ) {
+
+		codeWarning.textContent = message;
+		codeWarning.style.display = 'block';
+		codePanel.style.borderColor = '#ff6b6b';
+
+	}
+
+	function clearCodeWarning() {
+
+		codeWarning.style.display = 'none';
+		codePanel.style.borderColor = '';
 
 	}
 
