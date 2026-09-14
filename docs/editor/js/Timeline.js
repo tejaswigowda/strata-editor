@@ -155,7 +155,17 @@ function Timeline( editor ) {
 		if ( ! saved ) return; // keep the panel open so the warning stays visible
 		codeBtnContainer.style.display = 'none';
 		codePanel.style.display = 'none';
-		if ( currentActions.length ) for ( const a of currentActions ) a.play(); // Resume animation
+
+		// The save just recompiled the clip (syncTimeline holds+uncaches the OLD
+		// actions), so `currentActions` are stale — resuming THEM would play the
+		// pre-edit values, not what was just saved. Fetch fresh actions bound to
+		// the new clip before resuming.
+		if ( playing ) {
+
+			currentActions = getTimelineTargetActions( editor );
+			for ( const a of currentActions ) a.play();
+
+		}
 
 	} );
 	codeBtnContainer.appendChild( saveBtn.dom );
@@ -168,7 +178,7 @@ function Timeline( editor ) {
 		clearCodeWarning();
 		codeBtnContainer.style.display = 'none';
 		codePanel.style.display = 'none';
-		if ( currentActions.length ) for ( const a of currentActions ) a.play(); // Resume animation
+		if ( playing ) for ( const a of currentActions ) a.play(); // Resume animation (unchanged, no recompile happened)
 
 	} );
 	codeBtnContainer.appendChild( cancelBtn.dom );
