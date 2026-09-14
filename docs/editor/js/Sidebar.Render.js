@@ -93,7 +93,23 @@ function SidebarRender( editor ) {
 	fpsRow.add( fpsSelect );
 	container.add( fpsRow );
 
+	// ── Skip First (trims the render's in-point, e.g. to cut a static lead-in) ─
+
+	const skipRow = new UIRow();
+	skipRow.add( new UIText( 'Skip First' ).setClass( 'Label' ) );
+	const skipSelect = new UISelect().setWidth( '160px' );
+	skipSelect.setOptions( { '0': 'None', '1': '1 s', '2': '2 s', '3': '3 s', '4': '4 s', '5': '5 s' } );
+	skipSelect.setValue( '0' );
+	skipSelect.onChange( updateDuration );
+	skipRow.add( skipSelect );
+	container.add( skipRow );
+
 	// ── Duration (from the universal timeline — read-only) ───────────────────
+
+	// Extra time recorded after the timeline's last frame, holding it frozen —
+	// gives viewers a beat to register the final state instead of the video
+	// cutting off the instant the last animation ends.
+	const RENDER_TAIL_SECONDS = 2;
 
 	const durationRow = new UIRow();
 	durationRow.add( new UIText( 'Duration' ).setClass( 'Label' ) );
@@ -110,10 +126,22 @@ function SidebarRender( editor ) {
 
 	}
 
+	function skipSeconds( duration ) {
+
+		return Math.min( parseFloat( skipSelect.getValue() ) || 0, duration );
+
+	}
+
+	function outputDuration( duration ) {
+
+		return Math.max( 0, duration - skipSeconds( duration ) ) + RENDER_TAIL_SECONDS;
+
+	}
+
 	function updateDuration() {
 
 		const d = timelineDuration();
-		durationText.setValue( d > 0 ? d.toFixed( 2 ) + ' s' : 'Timeline is empty' );
+		durationText.setValue( d > 0 ? `${ d.toFixed( 2 ) } s (renders ${ outputDuration( d ).toFixed( 2 ) } s)` : 'Timeline is empty' );
 		renderButton.dom.disabled = ( d <= 0 ) || rendering;
 
 	}
@@ -464,6 +492,8 @@ function SidebarRender( editor ) {
 		const fallbackCamera = editor.cameras[ cameraSelect.getValue() ] || editor.camera;
 		const [ width, height ] = resolutionSelect.getValue().split( 'x' ).map( Number );
 		const fps = parseInt( fpsSelect.getValue(), 10 );
+		const skip = skipSeconds( duration );
+		const renderLength = outputDuration( duration );
 
 		rendering = true;
 		cancelRequested = false;
@@ -584,15 +614,17 @@ function SidebarRender( editor ) {
 		const recorderStopped = new Promise( resolve => { recorder.onstop = resolve; } );
 		recorder.start();
 
-		const totalFrames = Math.max( 1, Math.round( duration * fps ) );
+		const totalFrames = Math.max( 1, Math.round( renderLength * fps ) );
 		const frameMs = 1000 / fps;
 
 		try {
 
 			// Wall-clock driven: MediaRecorder timestamps frames by real time, so
 			// sampling the timeline at the true elapsed time keeps the output video
-			// duration equal to the timeline duration even when the browser
-			// throttles timers (background tab) — throttling just drops frames.
+			// duration equal to the render length even when the browser throttles
+			// timers (background tab) — throttling just drops frames. `elapsed` is
+			// OUTPUT video time; content time is offset by `skip` and clamped to
+			// `duration` so the tail seconds hold the last frame frozen.
 			const startWall = performance.now();
 
 			while ( true ) {
@@ -600,7 +632,8 @@ function SidebarRender( editor ) {
 				if ( cancelRequested ) break;
 
 				const elapsed = ( performance.now() - startWall ) / 1000;
-				const t = Math.min( duration, elapsed );
+				const outT = Math.min( renderLength, elapsed );
+				const t = Math.min( duration, skip + outT );
 
 				holdTimelineAt( editor, t );
 
@@ -626,9 +659,10 @@ function SidebarRender( editor ) {
 
 				if ( videoTrack.requestFrame ) videoTrack.requestFrame();
 
-				setProgress( t / duration, `Rendering ${ t.toFixed( 2 ) }s / ${ duration.toFixed( 2 ) }s (${ Math.round( t * fps ) } / ${ totalFrames } frames)` );
+				const tail = t >= duration && outT < renderLength ? ' (holding final frame)' : '';
+				setProgress( outT / renderLength, `Rendering ${ outT.toFixed( 2 ) }s / ${ renderLength.toFixed( 2 ) }s (${ Math.round( outT * fps ) } / ${ totalFrames } frames)${ tail }` );
 
-				if ( t >= duration ) break;
+				if ( outT >= renderLength ) break;
 
 				await sleep( frameMs );
 
