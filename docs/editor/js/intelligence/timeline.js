@@ -346,6 +346,60 @@ export function compileTimeline( model, ctx ) {
 	const { editor, THREE, recipes, selectorEngine } = ctx;
 	if ( ! model || model.isEmpty() ) return null;
 
+	// Selector → node(s), with the same camera/uuid fallbacks used for track
+	// targets below. Shared by the lookAt and moveTo/moveToEach resolvers.
+	function resolveSelectorNodes( selector ) {
+
+		let found = [];
+		try { found = selectorEngine.query( editor.scene, selector ); } catch ( e ) {}
+		if ( found.length === 0 && /(^|[.#\s])camera\b/i.test( selector ) && editor.camera ) found = [ editor.camera ];
+		if ( found.length === 0 && editor.scene.getObjectByProperty ) {
+
+			const byUuid = editor.scene.getObjectByProperty( 'uuid', selector );
+			if ( byUuid ) found = [ byUuid ];
+
+		}
+
+		return found;
+
+	}
+
+	function worldPositionOf( obj ) {
+
+		if ( typeof obj.getWorldPosition === 'function' && THREE && THREE.Vector3 ) {
+
+			const v = obj.getWorldPosition( new THREE.Vector3() );
+			return [ v.x, v.y, v.z ];
+
+		}
+
+		return obj.position ? [ obj.position.x || 0, obj.position.y || 0, obj.position.z || 0 ] : null;
+
+	}
+
+	// Selector or literal [x,y,z] → a single WORLD position, averaging if the
+	// selector matches multiple nodes (matches lookAt's existing convention).
+	function resolveWorldPoint( selectorOrPoint ) {
+
+		if ( Array.isArray( selectorOrPoint ) ) return selectorOrPoint.map( Number );
+		if ( typeof selectorOrPoint !== 'string' ) return null;
+
+		const targets = resolveSelectorNodes( selectorOrPoint );
+		if ( targets.length === 0 ) return null;
+
+		const p = [ 0, 0, 0 ];
+		let n = 0;
+		for ( const tgt of targets ) {
+
+			const v = worldPositionOf( tgt );
+			if ( v ) { p[ 0 ] += v[ 0 ]; p[ 1 ] += v[ 1 ]; p[ 2 ] += v[ 2 ]; n ++; }
+
+		}
+
+		return n > 0 ? [ p[ 0 ] / n, p[ 1 ] / n, p[ 2 ] / n ] : null;
+
+	}
+
 	const rawTracks = [];
 
 	for ( const track of model.tracks ) {
@@ -393,47 +447,41 @@ export function compileTimeline( model, ctx ) {
 			// transient computation detail, never authored/stored/exported.
 			if ( event.op === 'animate' && params.props && params.props.lookAt != null ) {
 
-				const la = params.props.lookAt;
-				if ( Array.isArray( la ) ) {
+				const world = resolveWorldPoint( params.props.lookAt );
+				if ( world ) params.lookAtWorld = world;
 
-					params.lookAtWorld = la.map( Number );
+			}
 
-				} else if ( typeof la === 'string' ) {
+			// moveTo: resolve the target selector to a WORLD position HOST-SIDE at
+			// bake time (compile-time resolution is the whole point — see
+			// ANIMATION.md — it's what makes this a plain, portable position track).
+			if ( event.op === 'moveTo' ) {
 
-					let targets = [];
-					try { targets = selectorEngine.query( editor.scene, la ); } catch ( e ) {}
-					if ( targets.length === 0 && /(^|[.#\s])camera\b/i.test( la ) && editor.camera ) targets = [ editor.camera ];
-					if ( targets.length === 0 && editor.scene.getObjectByProperty ) {
+				const world = resolveWorldPoint( params.target );
+				if ( world ) params.targetWorld = world;
+				else console.warn( `moveTo(): target "${ params.target }" did not resolve to any object — "${ track.target }" was not moved.` );
 
-						const byUuid = editor.scene.getObjectByProperty( 'uuid', la );
-						if ( byUuid ) targets = [ byUuid ];
+			}
 
-					}
+			// moveToEach: pair source[i] -> target[i] POSITIONALLY. A count
+			// mismatch WARNS (never-silently-wrong) rather than truncating/
+			// wrapping silently; only the min(source,target) count is paired.
+			let perNodeTargetWorld = null;
+			if ( event.op === 'moveToEach' ) {
 
-					if ( targets.length > 0 ) {
+				const targets = resolveSelectorNodes( params.target );
+				const pairCount = Math.min( nodes.length, targets.length );
 
-						const p = [ 0, 0, 0 ];
-						let n = 0;
-						for ( const tgt of targets ) {
+				if ( nodes.length !== targets.length ) {
 
-							if ( typeof tgt.getWorldPosition === 'function' && THREE && THREE.Vector3 ) {
-
-								const v = tgt.getWorldPosition( new THREE.Vector3() );
-								p[ 0 ] += v.x; p[ 1 ] += v.y; p[ 2 ] += v.z; n ++;
-
-							} else if ( tgt.position ) {
-
-								p[ 0 ] += tgt.position.x || 0; p[ 1 ] += tgt.position.y || 0; p[ 2 ] += tgt.position.z || 0; n ++;
-
-							}
-
-						}
-
-						if ( n > 0 ) params.lookAtWorld = [ p[ 0 ] / n, p[ 1 ] / n, p[ 2 ] / n ];
-
-					}
+					console.warn(
+						`moveToEach(): "${ track.target }" has ${ nodes.length } source(s) but "${ params.target }" has ${ targets.length } target(s) — ` +
+						`only the first ${ pairCount } pair(s) were animated. Subset your selectors so the counts match.`
+					);
 
 				}
+
+				perNodeTargetWorld = nodes.map( ( n, i ) => i < pairCount ? worldPositionOf( targets[ i ] ) : null );
 
 			}
 
@@ -462,12 +510,20 @@ export function compileTimeline( model, ctx ) {
 
 			}
 
-			for ( const node of nodesToAnimate ) {
+			for ( let ni = 0; ni < nodesToAnimate.length; ni ++ ) {
+
+				const node = nodesToAnimate[ ni ];
+
+				// moveToEach: this source's paired target didn't resolve (mismatch,
+				// already warned above) — skip rather than animate to a wrong point.
+				if ( perNodeTargetWorld && ! perNodeTargetWorld[ ni ] ) continue;
+
+				const nodeParams = perNodeTargetWorld ? { ...params, targetWorld: perNodeTargetWorld[ ni ] } : params;
 
 				let clip;
 				try {
 
-					clip = recipeFn( node, params );
+					clip = recipeFn( node, nodeParams );
 
 				} catch ( e ) {
 

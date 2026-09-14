@@ -312,8 +312,26 @@ function Timeline( editor ) {
 
 								}
 
-							} else {
+							} else if ( op === 'moveTo' || op === 'moveToEach' ) {
 
+								// moveTo('#target', 600) / moveToEach('#targetSet .cell', 800)
+								const strMatch = argsStr.match( /^\s*(['"`])((?:\\.|(?!\1).)*)\1\s*/ );
+								if ( ! strMatch ) throw new Error( `${ op }() expects a quoted selector as its first argument` );
+
+								const target = strMatch[ 2 ].replace( /\\(['"`\\])/g, '$1' );
+								const rest = argsStr.slice( strMatch[ 0 ].length ).replace( /^,\s*/, '' ).trim();
+
+								args = { target };
+								dur = 0.4; // matches moveToRecipe's default
+
+								if ( rest ) {
+
+									const ms = parseFloat( rest );
+									if ( ! isNaN( ms ) ) dur = ms / 1000;
+
+								}
+
+							} else {
 								// Other ops: try numeric first, then object
 								// One time unit everywhere: ms at the surface (matches .animate())
 								const numVal = parseFloat( argsStr );
@@ -1071,6 +1089,16 @@ function Timeline( editor ) {
 			}
 
 			return fmtVal( args.text ?? '' );
+
+		}
+
+		// moveTo('#target', ms) — event-stored args are {target, duration}. Special-
+		// cased because OP_VOCABULARY.moveTo describes the OTHER (instant, x/y/z)
+		// overload of this same ChainableSet method — see opPrimitive.js.
+		if ( op === 'moveTo' || op === 'moveToEach' ) {
+
+			const ms = Math.round( ( dur ?? args.duration ?? 0 ) * 1000 );
+			return `${ fmtVal( args.target ?? '' ) }, ${ ms }`;
 
 		}
 

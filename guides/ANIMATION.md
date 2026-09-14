@@ -87,6 +87,32 @@ glTF has no "animate the string on this node" channel — only TRS (translation/
 
 **Non-goals:** no glyph-level tweening (letters don't morph into each other), no new text-rendering system, and content is piecewise-constant, not interpolated — there is no "70% of the way from `3` to `9`".
 
+## `.moveTo()` / `.moveToEach()` — object-referenced destination animation
+
+Animate an object (or a **set** of objects) to the position of *another object*, referenced by selector — not a raw coordinate. Useful whenever a destination is more naturally "where that other thing is" than a magic-number triple, e.g. a dissection reveal where source cubes migrate onto the cells of a target square.
+
+```js
+$S('#cube-a').at(2).moveTo('#slot-a', 600)                              // → #slot-a's position, over 600ms
+
+// pair a SET of sources to a SET of targets, positionally: source[i] → target[i]
+$S('#3x3-square .cube').at(3).moveToEach('#5x5-square .cellGroupA', 800)   // 9 cubes  → 9 cells
+$S('#4x4-square .cube').at(3).moveToEach('#5x5-square .cellGroupB', 800)   // 16 cubes → 16 cells
+```
+
+> **`.moveTo()` is overloaded.** `$S(sel).moveTo(x, y, z)` already existed as the *instant* "set absolute world position" edit — unrelated to the timeline. Calling it with a **string** first argument (`.moveTo('#target', ms)`) instead invokes this animated, timeline-recorded form. The two never collide in practice: a raw coordinate is always three numbers, a destination reference is always one selector string.
+
+- **Destination is resolved at COMPILE time, not tracked live.** `moveTo`/`moveToEach` bake the target's *world position* into an ordinary absolute-position keyframe track the moment the timeline compiles — they do not follow the target during playback. This is a deliberate choice: the target is static authoring scaffolding ("go to where that is"), and baking makes the result a **plain, portable TRS translation track** — the same channel every glTF viewer already honors, no custom runtime dependency. (Playback-time following is a different verb, `follow()`, out of scope here.)
+- **The reference is what's stored — the coordinate is a derived compile output.** The scene JSON stores `{ at, op:'moveTo'|'moveToEach', args:{ target: selector }, dur }`, just like any other timeline event. Move the target object and recompile (`syncTimeline`, which runs automatically) and the mover(s) re-resolve to the new position — no animation code to edit.
+- **`moveToEach` pairs positionally**: source[i] ↔ target[i], in the same deterministic order `$S` yields each set. **A count mismatch warns (console), it never silently truncates, wraps, or drops.** Resolve a mismatch by subsetting your selectors so the counts match (e.g. split a 5×5 target square into a 9-cell `.cellGroupA` and a 16-cell `.cellGroupB` to match a 3×3 and a 4×4 source set).
+- **Position only** — `moveTo`/`moveToEach` never touch rotation or scale; compose a separate `.animate()` (or another recipe) on the same object/track for those.
+- **Composes normally**: an object can `moveTo` and `scale`/`fadeIn`/etc. at once (separate channels on the same clip); scrubbing is deterministic and reversible like any other baked keyframe track.
+
+**glTF export:** because the destination is already baked to a standard position track at compile time, `moveTo`/`moveToEach` need **no export-time lowering at all** — the track rides through the normal combined-clip export path unchanged, and plays in any glTF viewer. The target scaffold object itself does **not** need to be exported: mark it **hidden** (`Visible` unchecked in the Object panel) and it — and its whole subtree — is skipped automatically (`GLTFExporter`'s `onlyVisible` default), leaving only the resolved coordinates baked into the movers.
+
+**Recommended pattern — hidden target scaffold for tiling/dissection reveals:** author a target shape (e.g. a 5×5 square built from cell placeholders) purely as a destination reference, set it **not visible**, and `moveToEach` the source objects onto its cells. The destinations then live in the scene graph — authored visually, git-versioned, adjustable by just moving the scaffold — instead of as magic-number coordinates buried in animation code.
+
+**Non-goals:** not playback-time following (see `follow()`, unbuilt); not path/spline control (motion follows the timeline's own interpolation/easing, straight or eased — no curved paths); not orientation matching (position only); not a collision solver (movers can pass through each other mid-flight — stage timing or pair sources to their nearest target, by hand, to avoid ugly crossings).
+
 ## AI-authored animation
 
 The AI authors animation from natural language: "make the box bounce", "spin the wheel 360 over 2 seconds", "fade it out". The emit target is `.animate()` over CSS transforms (the dense prior), plus **named convenience recipes** (`spin`, `bounce`, `pulse`, `fade`, `orbit`, `shake`, and the entrance/exit/attention set below) that compile to the same absolute-time events. The host expands everything into winding-safe tracks on the universal timeline, command-backed. The model never writes keyframe math. Ops are recorded by **selector string** (resolved at compile time), so scene-wide addressables like the camera still record even when the live set is empty.

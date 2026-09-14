@@ -29,7 +29,7 @@ export const RECIPE_SCHEMA = {
 				'fadeOut', 'zoomOut', 'slideOutUp', 'slideOutDown', 'slideOutLeft', 'slideOutRight',
 				'bounceOut', 'flipOutX', 'flipOutY', 'rotateOut',
 				'flash', 'rubberBand', 'jello', 'heartBeat', 'tada', 'wobble',
-				'change'
+				'change', 'moveTo', 'moveToEach'
 			],
 		},
 		selector: { type: 'string' },
@@ -1566,6 +1566,67 @@ export function changeRecipe( node, params = {} ) {
 }
 
 /**
+ * MoveTo recipe: animate position to a WORLD point resolved HOST-SIDE at bake
+ * time from the target selector — see compileTimeline's `targetWorld`
+ * injection (same pattern as animate's `lookAtWorld`). The recipe itself stays
+ * pure: it only ever sees a plain [x,y,z], never a selector.
+ *
+ * The resolved point is WORLD-space (the target may live under a different
+ * parent than the mover — e.g. two separate groups in a tiling reveal), so it
+ * is converted into the mover's OWN parent's local space before tweening —
+ * otherwise a raw copy would be wrong whenever the two objects' parents don't
+ * share the same transform.
+ *
+ * Params: { targetWorld: [x,y,z], duration, easing }. Returns null (no clip)
+ * if targetWorld didn't resolve — compileTimeline already warned; never
+ * silently animates to [0,0,0].
+ */
+export function moveToRecipe( node, params = {} ) {
+
+	const THREE = window.THREE;
+	if ( ! Array.isArray( params.targetWorld ) ) return null;
+
+	const duration = Math.max( 0.001, params.duration ?? 0.4 );
+	const ease = cssEasingFunction( params.easing );
+	const isLinear = ! params.easing || params.easing === 'linear';
+
+	const P0 = node.position.clone();
+	const worldTarget = new THREE.Vector3( ...params.targetWorld.map( Number ) );
+	const P1 = node.parent ? node.parent.worldToLocal( worldTarget.clone() ) : worldTarget;
+
+	const N = isLinear ? 1 : Math.min( 60, Math.max( 8, Math.ceil( duration * 12 ) ) );
+	const times = [];
+	const values = [];
+
+	for ( let i = 0; i <= N; i ++ ) {
+
+		const t = i / N;
+		const k = ease( t );
+		times.push( t * duration );
+		values.push(
+			P0.x + ( P1.x - P0.x ) * k,
+			P0.y + ( P1.y - P0.y ) * k,
+			P0.z + ( P1.z - P0.z ) * k
+		);
+
+	}
+
+	return new THREE.AnimationClip( 'MoveTo', - 1, [ vectorTrack( node.uuid, 'position', times, values ) ] );
+
+}
+
+/**
+ * MoveToEach recipe: identical per-node tween once compileTimeline has
+ * resolved and injected THIS node's paired targetWorld (see the moveToEach
+ * pairing block there) — the recipe itself doesn't know it's part of a set.
+ */
+export function moveToEachRecipe( node, params = {} ) {
+
+	return moveToRecipe( node, params );
+
+}
+
+/**
  * SpinWheels recipe: specialized spin for wheel sets (e.g., car wheels).
  * Spins around X-axis (like wheels on ground).
  * Params: {speed:1, duration:auto}
@@ -1758,6 +1819,10 @@ export function executeRecipe( node, recipeData ) {
 				return wobbleRecipe( node, params );
 			case 'change':
 				return changeRecipe( node, params );
+			case 'moveTo':
+				return moveToRecipe( node, params );
+			case 'moveToEach':
+				return moveToEachRecipe( node, params );
 
 			default:
 				return null;

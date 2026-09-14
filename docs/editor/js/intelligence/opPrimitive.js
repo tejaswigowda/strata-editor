@@ -21,6 +21,7 @@ import { selectorCounts } from './vocabInjection.js';
 import {
 	recolorOp, scaleOp, moveOp, rotateOp, deleteOp, duplicateOp, setMaterialOp,
 	setOpacityOp, setVisibleOp, wireframeOp,
+	moveToOp, rotateToOp, scaleToOp, resetOp, lookAtOp,
 	bulkApply, setObjectPropOp, setMaterialPropOp, setMaterialColorOp,
 	setLightPropOp, setLightColorOp, setCameraPropOp,
 } from './editOps.js';
@@ -52,7 +53,7 @@ export const OP_VOCABULARY = {
 	setOpacity:  { kind: 'edit', args: { value: 'number' },                         summary: 'set transparency (0–1)' },
 	setVisible:  { kind: 'edit', args: { visible: 'boolean' },                      summary: 'set visibility' },
 	wireframe:   { kind: 'edit', args: { wireframe: 'boolean' },                    summary: 'toggle wireframe render mode' },
-	moveTo:      { kind: 'edit', args: { x: 'number', y: 'number', z: 'number' },  summary: 'set absolute world position' },
+	moveTo:      { kind: 'edit', args: { x: 'number', y: 'number', z: 'number' },  summary: 'set absolute world position. OVERLOADED on ChainableSet: .moveTo(selector, ms) instead animates to another object\'s position, referenced by selector, resolved at compile time — see ANIMATION.md' },
 	rotateTo:    { kind: 'edit', args: { x: 'number', y: 'number', z: 'number' },  summary: 'set absolute rotation (Euler in degrees)' },
 	scaleTo:     { kind: 'edit', args: { factor: 'number' },                        summary: 'set absolute uniform scale' },
 	reset:       { kind: 'edit', args: {},                                          summary: 'restore to original transform' },
@@ -94,6 +95,10 @@ export const OP_VOCABULARY = {
 	// ── Absolute-target tweens (camera dolly / object move over time) ──
 	flyTo:       { kind: 'anim', args: { x: 'number?', y: 'number?', z: 'number?', duration: 'number?' }, summary: 'animate to an absolute position (the animated moveTo; camera/object dolly)' },
 	turnTo:      { kind: 'anim', args: { x: 'number?', y: 'number?', z: 'number?', duration: 'number?' }, summary: 'animate to an absolute rotation (Euler degrees; the animated rotateTo)' },
+
+	// ── Object-referenced destination tween (SET form only — the singular form
+	// overloads the existing edit `moveTo` below; see ChainableSet.moveTo()) ──
+	moveToEach:  { kind: 'anim', args: { target: 'string', duration: 'number?' },  summary: 'animate a SET of objects to a SET of target objects, paired positionally (source[i] -> target[i]). A source/target count mismatch warns (console) rather than silently truncating or wrapping.' },
 
 	// ── Entrance animations (appear with style) ──
 	fadeIn:        { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade in from transparent' },
@@ -317,6 +322,11 @@ export function op( editor, opJSON ) {
 			case 'setOpacity':  return withFlag( setOpacityOp( editor, selector, opJSON.value ) );
 			case 'setVisible':  return withFlag( setVisibleOp( editor, selector, opJSON.visible ) );
 			case 'wireframe':   return withFlag( wireframeOp( editor, selector, opJSON.wireframe ) );
+			case 'moveTo':      return withFlag( moveToOp( editor, selector, opJSON.x, opJSON.y, opJSON.z ) );
+			case 'rotateTo':    return withFlag( rotateToOp( editor, selector, opJSON.x, opJSON.y, opJSON.z ) );
+			case 'scaleTo':     return withFlag( scaleToOp( editor, selector, opJSON.factor ) );
+			case 'reset':       return withFlag( resetOp( editor, selector ) );
+			case 'lookAt':      return withFlag( lookAtOp( editor, selector, opJSON.target ) );
 
 			// ── Bulk property setters (fan-out over the whole set, one undo batch) ──
 			case 'castShadow':        return withFlag( setObjectPropOp( editor, selector, 'castShadow', Boolean( opJSON.value ), n => n.isMesh || n.isLight ) );
@@ -561,6 +571,21 @@ class ChainableSet {
 		const transition = options.transition === 'fade' ? 'fade' : 'cut';
 		const seconds = Math.max( 0, Number( options.dur ) || 0 ) / 1000;
 		return this._recordAnim( { type: 'change', text: String( text ), transition, duration: seconds } );
+
+	}
+
+	/**
+	 * Animate a SET of objects to a SET of target objects, paired
+	 * POSITIONALLY: source[i] -> target[i], in the order $S yields each set.
+	 * A count mismatch warns (console) rather than silently truncating or
+	 * wrapping — subset your selectors so the counts match.
+	 *
+	 *   $S('#3x3-square .cube').at(3).moveToEach('#5x5-square .cellGroupA', 800)
+	 */
+	moveToEach( target, dur = 400 ) {
+
+		const seconds = Math.max( 0, Number( dur ) || 0 ) / 1000;
+		return this._recordAnim( { type: 'moveToEach', target: String( target ), duration: seconds } );
 
 	}
 
@@ -1094,8 +1119,29 @@ class ChainableSet {
 	// .rotate(axis, degrees) - relative rotation
 	// .scale(factor, axis?) - relative scale
 
-	/** Set absolute world position. */
-	moveTo( x, y, z ) { return this.op( { type: 'moveTo', x, y, z } ); }
+	/**
+	 * Set absolute world position — OR, overloaded, animate to the WORLD
+	 * POSITION of another object referenced by selector (not a raw
+	 * coordinate), resolved ONCE at compile time (see compileTimeline's
+	 * targetWorld injection in timeline.js): the target is scaffolding and
+	 * doesn't need to be exported (hide it — GLTFExporter skips invisible
+	 * objects by default).
+	 *
+	 *   $S('#box').moveTo(1, 2, 3)             // instant, absolute (unchanged)
+	 *   $S('#cube-a').at(2).moveTo('#slot-a', 600)   // animated, by reference
+	 */
+	moveTo( x, y, z ) {
+
+		if ( typeof x === 'string' ) {
+
+			const seconds = Math.max( 0, Number( y ) || 0 ) / 1000;
+			return this._recordAnim( { type: 'moveTo', target: x, duration: seconds } );
+
+		}
+
+		return this.op( { type: 'moveTo', x, y, z } );
+
+	}
 
 	/** Set absolute rotation (Euler angles in degrees). */
 	rotateTo( x, y, z ) { return this.op( { type: 'rotateTo', x, y, z } ); }
