@@ -6,6 +6,7 @@ import { TimelineModel, TIMELINE_CLIP_NAME } from './intelligence/timeline.js';
 import { holdTimelineAt, getTimelineTargetActions, refreshCameraProjections } from './intelligence/timelineController.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import * as recipes from './intelligence/animationRecipes.js';
+import { applyContentAt } from './intelligence/textChange.js';
 
 // ── Timeline.js ───────────────────────────────────────────────────────────────
 // The Animations-tab REDO: the scene-wide UNIVERSAL TIMELINE editor. One absolute
@@ -288,6 +289,26 @@ function Timeline( editor ) {
 									const propsObj = Function( `"use strict"; return (${ argsStr })` )();
 									args = { props: propsObj };  // Wrap in props field
 									dur = 0.4; // matches animateRecipe's default
+
+								}
+
+							} else if ( op === 'change' ) {
+
+								// change('text') or change('text', { transition:'fade', dur:ms })
+								const strMatch = argsStr.match( /^\s*(['"`])((?:\\.|(?!\1).)*)\1\s*/ );
+								if ( ! strMatch ) throw new Error( 'change() expects a quoted string as its first argument' );
+
+								const text = strMatch[ 2 ].replace( /\\(['"`\\])/g, '$1' );
+								const rest = argsStr.slice( strMatch[ 0 ].length ).replace( /^,\s*/, '' ).trim();
+
+								args = { text };
+								dur = 0;
+
+								if ( rest ) {
+
+									const opts = Function( `"use strict"; return (${ rest })` )();
+									if ( opts.transition === 'fade' ) args.transition = 'fade';
+									dur = ( parseFloat( opts.dur ) || 0 ) / 1000;
 
 								}
 
@@ -855,7 +876,8 @@ function Timeline( editor ) {
 
 		const target = bestSelectorFor( object );
 		const dur = 1;
-		commitMutation( m => m.addEvent( target, { at: Math.round( playhead * 1000 ) / 1000, op, args: {}, dur } ), `Add ${ op }` );
+		const args = op === 'change' ? { text: '' } : {};
+		commitMutation( m => m.addEvent( target, { at: Math.round( playhead * 1000 ) / 1000, op, args, dur } ), `Add ${ op }` );
 
 	}
 
@@ -1038,6 +1060,20 @@ function Timeline( editor ) {
 
 		}
 
+		// change(text) for an instant cut; change(text, { transition:'fade', dur:ms }) for a cross-fade
+		if ( op === 'change' ) {
+
+			if ( args.transition === 'fade' ) {
+
+				const ms = Math.round( ( dur ?? args.duration ?? 0 ) * 1000 );
+				return `${ fmtVal( args.text ?? '' ) }, { transition: 'fade', dur: ${ ms } }`;
+
+			}
+
+			return fmtVal( args.text ?? '' );
+
+		}
+
 		const spec = OP_VOCABULARY[ op ] && OP_VOCABULARY[ op ].args ? OP_VOCABULARY[ op ].args : {};
 		const parts = [];
 		for ( const key of Object.keys( spec ) ) {
@@ -1080,16 +1116,38 @@ function Timeline( editor ) {
 	}
 
 	// ── rAF playhead read-out during playback ─────────────────────────────────
+	let tickLastTime = null; // manual wall-clock fallback when there are no transform actions to drive playhead (a purely change()-based timeline)
+
 	function tick() {
 
 		const clip = getClip();
-		if ( playing && currentActions.length && clip && clip.duration > 0 ) {
 
-			playhead = currentActions[ 0 ].time % clip.duration;
+		if ( playing && clip && clip.duration > 0 ) {
+
+			if ( currentActions.length ) {
+
+				playhead = currentActions[ 0 ].time % clip.duration;
+				tickLastTime = null;
+
+			} else {
+
+				const now = performance.now();
+				if ( tickLastTime !== null ) playhead = ( playhead + ( now - tickLastTime ) / 1000 ) % clip.duration;
+				tickLastTime = now;
+
+			}
+
 			updatePlayheadUI();
 
 			// fov tracks write camera.fov but never the projection matrix
 			refreshCameraProjections( editor );
+
+			// content is a step function, not a keyframe track — sample separately
+			applyContentAt( editor, editor.timeline, playhead );
+
+		} else {
+
+			tickLastTime = null;
 
 		}
 

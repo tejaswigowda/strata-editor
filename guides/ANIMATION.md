@@ -58,6 +58,35 @@ Each `.animate()` call compiles to absolute-time keyframe event(s) `{at, op:'ani
 
 > **Migration note:** `.then()`/`.with()` are removed. Chained `.animate()` calls already sequence (jQuery queue); parallel is multi-prop or `{queue:false}`. The old methods warn and no-op.
 
+## `.change()` — animatable text-content edit
+
+`.change()` animates a text object's **content** (the string), not its transform — e.g. a counter or label that reads `3`, then `3×3`, then `9` as the scene plays. It is authored once and realized correctly in both **live playback/scrubbing** and **glTF export**, by two separate mechanisms behind the same call:
+
+```js
+$S('#label').at(0).change('3')
+$S('#label').at(2).change('3×3')
+$S('#label').at(3).change('9', { transition: 'fade', dur: 300 })   // cross-fade over 300ms
+```
+
+- **Content is a step function, not a tween.** There is no glyph-level morph between `'3×3'` and `'9'` — the value simply *is* the most-recently-keyed text at the sampled time. This applies uniformly whether you're playing forward, scrubbing backward, or jumping straight to a time — the content at time `t` is always determined by the last `change()` at or before `t`, never by replaying intermediate edits.
+- **`transition: 'fade'`** cross-fades the OLD text's opacity down to 0 while the NEW text's opacity ramps up to 1, over `dur` milliseconds (jQuery-style ms at the authoring surface, stored as seconds on the timeline like every other duration). Omit `transition` (or use the default `'cut'`) for an instant swap.
+- **Target must be a text mesh** — an object whose geometry was built from `TextGeometry` (i.e. `geometry.parameters.options.text` is a string). Targeting anything else does not silently apply to a transform instead: it's skipped and a console warning is emitted once per object.
+
+### Why glTF needs special handling
+
+glTF has no "animate the string on this node" channel — only TRS (translation/rotation/scale) and material properties can be keyframed. So `.change()` is **lowered** at export time rather than dropped:
+
+- Each distinct text **state** (`'3'`, `'3×3'`, `'9'`, …) is **materialized** as its own child text mesh, added under the original label so it inherits the label's transform (and any `.animate()` tracks on that same label, for free).
+- Visibility of each state over time is driven by a **scale-to-zero** keyframe track (scale collapses to `0` outside the state's interval, restores to the label's own scale inside it), **for every state, fade or not**. Scale is the one channel every glTF exporter/viewer honors, and glTF core has no boolean visibility channel — so this is what actually keeps the exported *content sequence* correct.
+- **`transition: 'fade'` states additionally get a `material.opacity` keyframe track**, for any consumer that *does* support material-property animation. This project's own vendored `GLTFExporter` does **not** (only `scale`/`position`/`rotation`/morph-`weights` channels are recognized — see `PATH_PROPERTIES` in `GLTFExporter.js`); it drops the opacity track with a console warning and keeps going. Since the scale track is always present too, the export is still **correct** (the right text shows at the right time) — it just degrades a soft cross-fade to a hard cut. This degradation is disclosed via an export-time warning (see below), not silently swallowed.
+- The **original label node becomes an inert transform-carrier**: its own geometry is cleared (so it renders nothing itself) but its uuid — and any transform-animation tracks that already target it — still apply, and its materialized children inherit that transform.
+- **Node-growth trade-off:** a label with *N* distinct `change()` states exports as *N* extra nodes (one text mesh per state) plus one scale track per state (plus an opacity track per fade state). A counter that changes 50 times exports 50 extra nodes. This is disclosed here rather than hidden — budget for it in text-heavy scenes.
+- **Never silently wrong:** export shows an alert listing every event that couldn't be lowered as authored — both hard failures (target isn't a text mesh / was deleted or renamed) and soft degradations (a `fade` that exported as a cut because this exporter can't animate material opacity).
+
+`.change()` events are stored in the scene's timeline JSON exactly like any other event — `{ at, op:'change', args:{ text, transition }, dur }` on the target's track — so they version, diff, and undo the same way `.animate()` events do.
+
+**Non-goals:** no glyph-level tweening (letters don't morph into each other), no new text-rendering system, and content is piecewise-constant, not interpolated — there is no "70% of the way from `3` to `9`".
+
 ## AI-authored animation
 
 The AI authors animation from natural language: "make the box bounce", "spin the wheel 360 over 2 seconds", "fade it out". The emit target is `.animate()` over CSS transforms (the dense prior), plus **named convenience recipes** (`spin`, `bounce`, `pulse`, `fade`, `orbit`, `shake`, and the entrance/exit/attention set below) that compile to the same absolute-time events. The host expands everything into winding-safe tracks on the universal timeline, command-backed. The model never writes keyframe math. Ops are recorded by **selector string** (resolved at compile time), so scene-wide addressables like the camera still record even when the live set is empty.

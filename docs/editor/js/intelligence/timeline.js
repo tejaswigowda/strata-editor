@@ -491,7 +491,19 @@ export function compileTimeline( model, ctx ) {
 
 	}
 
-	if ( rawTracks.length === 0 ) return null;
+	if ( rawTracks.length === 0 ) {
+
+		// A model can be non-empty (has events) yet produce zero transform
+		// tracks — e.g. a timeline built entirely from 'change' events (content,
+		// not a keyframe-track animation; see textChange.js). Still emit an
+		// empty clip so scrub/playback timing (duration, mixer hold) keeps
+		// working; content itself is sampled separately by applyContentAt().
+		if ( ! ( model.duration > 0 ) ) return null;
+		const empty = new THREE.AnimationClip( TIMELINE_CLIP_NAME, model.duration, [] );
+		empty.userData = { isTimeline: true };
+		return empty;
+
+	}
 
 	const merged = mergeTracks( THREE, rawTracks );
 	const clip = new THREE.AnimationClip( TIMELINE_CLIP_NAME, model.duration || - 1, merged );

@@ -89,6 +89,7 @@ export const OP_VOCABULARY = {
 	fade:        { kind: 'anim', args: { from: 'number?', to: 'number?', duration: 'number?' },         summary: 'opacity transition' },
 	orbit:       { kind: 'anim', args: { center: 'vec3?', radius: 'number?', duration: 'number?' },     summary: 'circular motion around a point' },
 	shake:       { kind: 'anim', args: { intensity: 'number?', duration: 'number?' },                   summary: 'jittery motion' },
+	change:      { kind: 'anim', args: { text: 'string', transition: 'string?', duration: 'number?' },  summary: 'change a text object\'s content at this time (step function, not a tween). Optional { transition: "fade" } cross-fades the swap. Lowered to materialized per-state objects + scale/opacity animation at glTF export (see ANIMATION.md).' },
 
 	// ── Absolute-target tweens (camera dolly / object move over time) ──
 	flyTo:       { kind: 'anim', args: { x: 'number?', y: 'number?', z: 'number?', duration: 'number?' }, summary: 'animate to an absolute position (the animated moveTo; camera/object dolly)' },
@@ -540,6 +541,26 @@ class ChainableSet {
 
 		const seconds = Math.max( 0, Number( duration ) || 0 ) / 1000;
 		return this._recordAnim( { type: 'animate', props, easing, duration: seconds, _parallel: parallel } );
+
+	}
+
+	/**
+	 * Change a text object's CONTENT at the current cursor time — a step
+	 * function, not a tween (glTF has no string-typed track; see ANIMATION.md
+	 * for how this lowers to materialized per-state objects at export).
+	 *
+	 *   $S('#label').at(0).change('3')
+	 *   $S('#label').at(2).change('3×3')
+	 *   $S('#label').at(3).change('9', { transition: 'fade', dur: 300 })
+	 *
+	 * options.transition: 'cut' (default, instant) | 'fade' (cross-fade over
+	 * options.dur milliseconds).
+	 */
+	change( text, options = {} ) {
+
+		const transition = options.transition === 'fade' ? 'fade' : 'cut';
+		const seconds = Math.max( 0, Number( options.dur ) || 0 ) / 1000;
+		return this._recordAnim( { type: 'change', text: String( text ), transition, duration: seconds } );
 
 	}
 

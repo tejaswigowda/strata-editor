@@ -28,7 +28,8 @@ export const RECIPE_SCHEMA = {
 				'bounceIn', 'flipInX', 'flipInY', 'rotateIn',
 				'fadeOut', 'zoomOut', 'slideOutUp', 'slideOutDown', 'slideOutLeft', 'slideOutRight',
 				'bounceOut', 'flipOutX', 'flipOutY', 'rotateOut',
-				'flash', 'rubberBand', 'jello', 'heartBeat', 'tada', 'wobble'
+				'flash', 'rubberBand', 'jello', 'heartBeat', 'tada', 'wobble',
+				'change'
 			],
 		},
 		selector: { type: 'string' },
@@ -1551,6 +1552,20 @@ export function wobbleRecipe( node, params = {} ) {
 }
 
 /**
+ * Change recipe: animates a text object's CONTENT, not its transform — no
+ * keyframe track exists for a string, so this is intentionally a no-op stub
+ * here (present only so compileTimeline's `recipes[event.op+'Recipe']` lookup
+ * and the "+ Event at playhead" dropdown recognize 'change' as a real op).
+ * The actual live-sampling and glTF-export lowering live in textChange.js —
+ * see applyContentAt() / lowerChangeEventsForExport().
+ */
+export function changeRecipe( node, params = {} ) {
+
+	return null;
+
+}
+
+/**
  * SpinWheels recipe: specialized spin for wheel sets (e.g., car wheels).
  * Spins around X-axis (like wheels on ground).
  * Params: {speed:1, duration:auto}
@@ -1741,6 +1756,8 @@ export function executeRecipe( node, recipeData ) {
 				return tadaRecipe( node, params );
 			case 'wobble':
 				return wobbleRecipe( node, params );
+			case 'change':
+				return changeRecipe( node, params );
 
 			default:
 				return null;

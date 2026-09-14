@@ -3,10 +3,58 @@
 // live in the File → Export submenu (DRC, GLB, GLTF, OBJ, PLY, STL, USDZ).
 
 import { UIPanel } from './libs/ui.js';
-import { PropertyBinding, AnimationClip } from 'three';
+import { PropertyBinding, AnimationClip, Mesh, BufferGeometry, VectorKeyframeTrack, NumberKeyframeTrack } from 'three';
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { includeCameraForBinding } from './intelligence/timelineController.js';
+import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/textChange.js';
+
+// Minimal THREE-shaped namespace for lowerChangeEventsForExport (this file
+// imports individual classes rather than `* as THREE`, matching its style).
+const THREE_NS = { Mesh, BufferGeometry, VectorKeyframeTrack, NumberKeyframeTrack, AnimationClip };
+
+// change() lowering: materialize text states + scale/opacity tracks onto
+// `scene` (a clone — never the live scene), warn (don't silently drop) on
+// failure, and return clips to merge into the export's animations array.
+function lowerChangesForExport( editor, scene ) {
+
+	if ( ! hasChangeEvents( editor ) ) return [];
+
+	const { clips, warnings } = lowerChangeEventsForExport( editor, scene, THREE_NS );
+
+	if ( warnings.length > 0 ) {
+
+		alert( 'Some change() events could not be exported:\n\n' + warnings.join( '\n' ) );
+
+	}
+
+	return clips;
+
+}
+
+// Object3D.clone() does NOT preserve uuids (a fresh one is generated per
+// node) and only shallow-copies `.animations` — so a bare clone silently
+// breaks every property-binding track in the compiled Timeline clip (which
+// targets the ORIGINAL nodes' uuids). Walk both trees in the same
+// deterministic pre-order traversal and copy uuids across so animation
+// bindings (transform tracks AND change()'s lowered tracks) keep resolving
+// against the clone. Also deep-clones geometry so compression/lowering never
+// mutates the live scene.
+function cloneSceneForExport( scene ) {
+
+	const clone = scene.clone( true );
+
+	const originals = [];
+	scene.traverse( ( o ) => originals.push( o ) );
+	const clones = [];
+	clone.traverse( ( o ) => clones.push( o ) );
+	for ( let i = 0; i < originals.length; i ++ ) clones[ i ].uuid = originals[ i ].uuid;
+
+	clone.traverse( ( child ) => { if ( child.geometry ) child.geometry = child.geometry.clone(); } );
+
+	return clone;
+
+}
 
 // Per-format icons for the export buttons (same box-button style as Stencils).
 function svg( inner ) {
@@ -151,7 +199,7 @@ function SidebarExport( editor ) {
 
 	addButton( 'GLB', async function () {
 
-		const scene = editor.scene;
+		let scene = editor.scene;
 
 		if ( needsUniqueNames( scene ) ) { // see #25179
 
@@ -161,7 +209,20 @@ function SidebarExport( editor ) {
 
 		}
 
-		const animations = combineAnimations( scene );
+		// change() must be LOWERED (materialized states + scale/opacity tracks),
+		// never silently dropped — that requires a clone since it mutates
+		// geometry/children in place. No-op (same live scene) when there are no
+		// change() events at all.
+		let changeClips = [];
+
+		if ( hasChangeEvents( editor ) ) {
+
+			scene = cloneSceneForExport( scene );
+			changeClips = lowerChangesForExport( editor, scene );
+
+		}
+
+		const animations = combineAnimations( scene, changeClips.flatMap( c => c.tracks ) );
 
 		const optimizedAnimations = [];
 
@@ -207,13 +268,14 @@ function SidebarExport( editor ) {
 
 		}
 
-		// Work on a deep copy so compression never mutates the live scene.
-		const clone = scene.clone( true );
-		clone.traverse( ( child ) => {
+		// Work on a deep copy so compression never mutates the live scene. Uuids
+		// are preserved (see cloneSceneForExport) so the compiled Timeline
+		// clip's tracks keep resolving to the right nodes in the clone.
+		const clone = cloneSceneForExport( scene );
 
-			if ( child.geometry ) child.geometry = child.geometry.clone();
-
-		} );
+		// change() must be LOWERED onto this SAME clone (before compression, so
+		// materialized text meshes get optimized too) — never silently dropped.
+		const changeClips = lowerChangesForExport( editor, clone );
 
 		let options;
 
@@ -263,7 +325,7 @@ function SidebarExport( editor ) {
 
 		}
 
-		const animations = combineAnimations( scene );
+		const animations = combineAnimations( clone, changeClips.flatMap( c => c.tracks ) );
 
 		const optimizedAnimations = [];
 
@@ -298,7 +360,7 @@ function SidebarExport( editor ) {
 
 	addButton( 'GLTF', async function () {
 
-		const scene = editor.scene;
+		let scene = editor.scene;
 
 		if ( needsUniqueNames( scene ) ) { // see #25179
 
@@ -308,7 +370,20 @@ function SidebarExport( editor ) {
 
 		}
 
-		const animations = combineAnimations( scene );
+		// change() must be LOWERED (materialized states + scale/opacity tracks),
+		// never silently dropped — that requires a clone since it mutates
+		// geometry/children in place. No-op (same live scene) when there are no
+		// change() events at all.
+		let changeClips = [];
+
+		if ( hasChangeEvents( editor ) ) {
+
+			scene = cloneSceneForExport( scene );
+			changeClips = lowerChangesForExport( editor, scene );
+
+		}
+
+		const animations = combineAnimations( scene, changeClips.flatMap( c => c.tracks ) );
 
 		const optimizedAnimations = [];
 
@@ -432,10 +507,12 @@ function SidebarExport( editor ) {
 	// Merge every clip's tracks into ONE AnimationClip so the exported glTF/GLB
 	// plays all animations together. glTF animations are independent and most
 	// viewers play only one at a time, so separate clips would look like "only
-	// one animation applied". Returns [] when there's nothing to export.
-	function combineAnimations( scene ) {
+	// one animation applied" — this is also why change()'s lowered tracks are
+	// merged in here (as `extraTracks`) rather than kept as their own clips.
+	// Returns [] when there's nothing to export.
+	function combineAnimations( scene, extraTracks = [] ) {
 
-		const tracks = [];
+		const tracks = [ ...extraTracks ];
 
 		scene.traverse( function ( object ) {
 

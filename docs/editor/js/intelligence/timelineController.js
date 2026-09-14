@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import * as recipes from './animationRecipes.js';
 import * as selectorEngine from './selectorEngine.js';
 import { TimelineModel, compileTimeline, TIMELINE_CLIP_NAME } from './timeline.js';
+import { applyContentAt } from './textChange.js';
 
 /** Remove any previously compiled Timeline clip from scene.animations. */
 function stripTimelineClip( editor ) {
@@ -181,6 +182,11 @@ export function getTimelineTargetActions( editor ) {
  * @returns {boolean} whether there was anything to sample
  */
 export function holdTimelineAt( editor, t ) {
+
+	// 'change' events aren't keyframe tracks (no transform actions exist for a
+	// content-only target), so sample them regardless of whether there are any
+	// transform actions to hold below.
+	applyContentAt( editor, editor.timeline, t );
 
 	const actions = getTimelineTargetActions( editor );
 	if ( actions.length === 0 ) return false;
