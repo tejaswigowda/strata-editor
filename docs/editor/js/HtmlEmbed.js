@@ -29,7 +29,7 @@ export const DEFAULT_HEIGHT = 1.5; // world units
 const PIXELS_PER_UNIT = 200; // rasterize resolution
 
 /** Rasterize an HTML string into an offscreen, untainted canvas with a transparent background. */
-function rasterizeHtml( html, pxWidth, pxHeight ) {
+export function rasterizeHtml( html, pxWidth, pxHeight ) {
 
 	const container = document.createElement( 'div' );
 	container.innerHTML = html;

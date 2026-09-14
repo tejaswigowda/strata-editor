@@ -14,6 +14,7 @@ import { SetLabelCommand } from './commands/SetLabelCommand.js';
 import { SetClassCommand } from './commands/SetClassCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 import { refreshHtmlEmbed } from './HtmlEmbed.js';
+import { refreshMarkdownEmbed } from './MarkdownEmbed.js';
 import { getAllClasses, toClassSet } from './intelligence/classDerive.js';
 
 function SidebarObject( editor ) {
@@ -209,6 +210,76 @@ function SidebarObject( editor ) {
 	objectHtmlSizeRow.add( objectHtmlHeight );
 
 	container.add( objectHtmlSizeRow );
+
+	// markdown embed content (only shown for 'md' stencil objects, see MarkdownEmbed.js)
+	// Same baked-texture "slide" as the HTML embed above, authored as Markdown.
+	// Live preview refreshes on 'input' (debounced — re-rasterizing on every
+	// keystroke would be wasteful) as well as 'change' (blur, applied at once);
+	// SetValueCommand's updatable-merge (see History.js) keeps this from
+	// spamming the undo stack during a typing burst.
+
+	let markdownRefreshTimer = null;
+
+	function commitMarkdownEmbed( getOverrides, immediate ) {
+
+		clearTimeout( markdownRefreshTimer );
+
+		const run = function () {
+
+			const object = editor.selected;
+			if ( ! object || ! object.userData || ! object.userData.isMarkdownEmbed ) return;
+			const userData = Object.assign( {}, object.userData, getOverrides() );
+			editor.execute( new SetValueCommand( editor, object, 'userData', userData ) );
+			refreshMarkdownEmbed( object ).then( function () { signals.sceneGraphChanged.dispatch(); } );
+
+		};
+
+		if ( immediate ) run(); else markdownRefreshTimer = setTimeout( run, 300 );
+
+	}
+
+	const objectMarkdownRow = new UIRow();
+	const objectMarkdown = new UITextArea().setWidth( '150px' ).setHeight( '80px' ).setFontSize( '11px' )
+		.onInput( function () { commitMarkdownEmbed( () => ( { markdown: objectMarkdown.getValue() } ), false ); } )
+		.onChange( function () { commitMarkdownEmbed( () => ( { markdown: objectMarkdown.getValue() } ), true ); } );
+
+	objectMarkdownRow.add( new UIText( 'Markdown' ).setClass( 'Label' ) );
+	objectMarkdownRow.add( objectMarkdown );
+
+	container.add( objectMarkdownRow );
+
+	const objectMarkdownSizeRow = new UIRow();
+	const objectMarkdownWidth = new UINumber().setPrecision( 2 ).setWidth( '50px' ).setRange( 0.1, Infinity ).onChange( function () {
+
+		commitMarkdownEmbed( () => ( { width: objectMarkdownWidth.getValue() } ), true );
+
+	} );
+	const objectMarkdownHeight = new UINumber().setPrecision( 2 ).setWidth( '50px' ).setRange( 0.1, Infinity ).onChange( function () {
+
+		commitMarkdownEmbed( () => ( { height: objectMarkdownHeight.getValue() } ), true );
+
+	} );
+
+	objectMarkdownSizeRow.add( new UIText( 'Markdown Size' ).setClass( 'Label' ) );
+	objectMarkdownSizeRow.add( objectMarkdownWidth );
+	objectMarkdownSizeRow.add( objectMarkdownHeight );
+
+	container.add( objectMarkdownSizeRow );
+
+	const objectMarkdownStyleRow = new UIRow();
+	const objectMarkdownFont = new UIInput().setWidth( '104px' ).setFontSize( '11px' )
+		.onInput( function () { commitMarkdownEmbed( () => ( { font: objectMarkdownFont.getValue() } ), false ); } )
+		.onChange( function () { commitMarkdownEmbed( () => ( { font: objectMarkdownFont.getValue() } ), true ); } );
+	const objectMarkdownColor = new UIColor()
+		.onInput( function () { commitMarkdownEmbed( () => ( { color: objectMarkdownColor.getValue() } ), false ); } );
+
+	objectMarkdownStyleRow.add( new UIText( 'Markdown Style' ).setClass( 'Label' ) );
+	objectMarkdownStyleRow.add( objectMarkdownFont );
+	objectMarkdownStyleRow.add( objectMarkdownColor );
+
+	container.add( objectMarkdownStyleRow );
+
+	container.add( objectMarkdownSizeRow );
 
 
 	// classes - chip-based UI with autocomplete
@@ -1050,6 +1121,11 @@ function SidebarObject( editor ) {
 		objectHtmlRow.setDisplay( isHtmlEmbed ? '' : 'none' );
 		objectHtmlSizeRow.setDisplay( isHtmlEmbed ? '' : 'none' );
 
+		const isMarkdownEmbed = !! ( object.userData && object.userData.isMarkdownEmbed );
+		objectMarkdownRow.setDisplay( isMarkdownEmbed ? '' : 'none' );
+		objectMarkdownSizeRow.setDisplay( isMarkdownEmbed ? '' : 'none' );
+		objectMarkdownStyleRow.setDisplay( isMarkdownEmbed ? '' : 'none' );
+
 	}
 
 	function updateTransformRows( object ) {
@@ -1244,6 +1320,19 @@ function SidebarObject( editor ) {
 			objectHtml.setValue( object.userData.html || '' );
 			objectHtmlWidth.setValue( object.userData.width ?? 2 );
 			objectHtmlHeight.setValue( object.userData.height ?? 1.5 );
+
+		}
+
+		if ( object.userData && object.userData.isMarkdownEmbed ) {
+
+			// Skip while the field itself is focused — the debounced live-refresh
+			// above (see commitMarkdownEmbed) re-dispatches objectChanged mid-edit,
+			// and resetting .value here would fight the user's cursor/typing.
+			if ( document.activeElement !== objectMarkdown.dom ) objectMarkdown.setValue( object.userData.markdown || '' );
+			if ( document.activeElement !== objectMarkdownFont.dom ) objectMarkdownFont.setValue( object.userData.font || 'sans-serif' );
+			if ( document.activeElement !== objectMarkdownColor.dom ) objectMarkdownColor.setValue( object.userData.color || '#111111' );
+			objectMarkdownWidth.setValue( object.userData.width ?? 2 );
+			objectMarkdownHeight.setValue( object.userData.height ?? 1.5 );
 
 		}
 

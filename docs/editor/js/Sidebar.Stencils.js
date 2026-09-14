@@ -19,6 +19,7 @@ import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { createHtmlEmbed } from './HtmlEmbed.js';
+import { createMarkdownEmbed } from './MarkdownEmbed.js';
 
 const DRAG_TYPE = 'application/x-stencil';
 
@@ -52,6 +53,7 @@ const ICONS = {
 	tetrahedron: svg( '<path d="M12 3l9 16H3z"/><path d="M12 3v16"/>' ),
 	text: svg( '<path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/>' ),
 	html: svg( '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 9h18"/><path d="M7 13l-1.5 2 1.5 2M11 13l1.5 2-1.5 2"/>' ),
+	md: svg( '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M6 15V9l3 3 3-3v6"/><path d="M15 9v6l2.2-2.2"/>' ),
 	torus: svg( '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><ellipse cx="12" cy="12" rx="3.2" ry="1.6"/>' ),
 	torusknot: svg( '<path d="M9 5a5 7 0 0 0 0 14M15 5a5 7 0 0 1 0 14M5 9a7 5 0 0 0 14 0M5 15a7 5 0 0 1 14 0"/>' ),
 	tube: svg( '<path d="M3 19C3 10 6 5 12 5s9 5 9 14"/><path d="M7 19c0-6 2-10 5-10s5 4 5 10"/>' ),
@@ -360,6 +362,13 @@ function SidebarStencils( editor ) {
 	addStencil( 'html', 'HTML', function ( editor, position ) {
 
 		const object = createHtmlEmbed( '<div style="font:14px sans-serif;padding:12px;color:#111;">Edit me \u2014 select this object, open the <b>Object</b> tab, and edit the HTML field.</div>' );
+		addObject( editor, object, position );
+
+	} );
+
+	addStencil( 'md', 'Markdown', function ( editor, position ) {
+
+		const object = createMarkdownEmbed( '# Edit me\n\nSelect this object, open the **Object** tab, and edit the Markdown field.\n\n- supports lists\n- and `code`' );
 		addObject( editor, object, position );
 
 	} );
