@@ -6,8 +6,9 @@ import { History as _History } from './History.js';
 import { Strings } from './Strings.js';
 import { Storage as _Storage } from './Storage.js';
 import { Selector } from './Selector.js';
-import { TimelineModel } from './intelligence/timeline.js';
+import { TimelineModel, invalidateRestState, clearRestStateCache } from './intelligence/timeline.js';
 import { syncTimeline } from './intelligence/timelineController.js';
+import { findSharedMaterials } from './intelligence/editOps.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 _DEFAULT_CAMERA.name = 'Camera';
@@ -120,6 +121,11 @@ function Editor() {
 
 	};
 
+	// A genuine (non-timeline) edit to an object's base pose/opacity should
+	// become the new compile baseline — every SetPosition/Rotation/Scale/
+	// Material command dispatches this signal (see their execute()/undo()).
+	this.signals.objectChanged.add( function ( object ) { invalidateRestState( object ); } );
+
 	this.config = new Config();
 	this.history = new _History( this );
 	this.selector = new Selector( this );
@@ -196,6 +202,14 @@ Editor.prototype = {
 		this.signals.sceneGraphChanged.dispatch();
 
 		this.signals.sceneEnvironmentChanged.dispatch( this.environmentType, scene.environment );
+
+		// Bug-1 class guard: shared Material instances across nodes silently
+		// couple their per-instance animations/edits together. Loud, not silent.
+		findSharedMaterials( this.scene );
+
+		// A freshly loaded scene's authored values ARE the new canonical rest
+		// state — drop anything cached from whatever scene/session preceded it.
+		clearRestStateCache();
 
 		// Restore the universal timeline from the (versioned) scene JSON, then
 		// recompile it into the scene-wide clip so it plays / exports immediately.

@@ -24,6 +24,78 @@ function uid() {
 
 }
 
+// ── Canonical rest state ───────────────────────────────────────────────────
+// Compile must be a PURE function of (scene + animation model), never of
+// leftover in-memory state from a previous scrub/play/compile. Recipes that
+// read "the node's current value" as their baseline (fadeOut's start opacity,
+// a relative translateX's start position, ...) need a stable rest pose to
+// read from — so each node's PRISTINE transform/opacity is captured the first
+// time compileTimeline ever sees it, cached by uuid, and reasserted at the
+// START of every subsequent compile before any recipe runs. Recompiling the
+// same model twice in a row therefore always samples identically, regardless
+// of how much scrubbing/playing happened in between.
+//
+// The cache is invalidated per-node by genuine (non-timeline) edits — every
+// SetPosition/Rotation/Scale/Material command dispatches `objectChanged` (see
+// Editor.js, which wires that signal to invalidateRestState) — so
+// intentionally re-posing an object's base pose after authoring an animation
+// on it is honored as the new baseline. It's cleared wholesale on scene load.
+const restStateCache = new Map(); // uuid -> { position, quaternion, scale, opacity?, fov? }
+
+function captureRestState( node ) {
+
+	const state = {
+		position: node.position.clone(),
+		quaternion: node.quaternion.clone(),
+		scale: node.scale.clone(),
+	};
+	if ( node.material && ! Array.isArray( node.material ) && typeof node.material.opacity === 'number' ) {
+
+		state.opacity = node.material.opacity;
+
+	}
+
+	if ( typeof node.fov === 'number' ) state.fov = node.fov;
+	return state;
+
+}
+
+function resetToRestState( node ) {
+
+	let state = restStateCache.get( node.uuid );
+	if ( ! state ) {
+
+		state = captureRestState( node );
+		restStateCache.set( node.uuid, state );
+
+	}
+
+	node.position.copy( state.position );
+	node.quaternion.copy( state.quaternion );
+	node.scale.copy( state.scale );
+	if ( state.opacity !== undefined && node.material && ! Array.isArray( node.material ) ) node.material.opacity = state.opacity;
+	if ( state.fov !== undefined ) { node.fov = state.fov; if ( node.updateProjectionMatrix ) node.updateProjectionMatrix(); }
+
+}
+
+/**
+ * Drop one node's cached rest state. Call after a genuine (non-timeline) edit
+ * changes its base pose/opacity, so the next compile re-captures the edited
+ * value as the new baseline instead of reasserting the stale one.
+ */
+export function invalidateRestState( node ) {
+
+	if ( node && node.uuid ) restStateCache.delete( node.uuid );
+
+}
+
+/** Drop every cached rest state. Call on scene load — a freshly loaded scene's authored values are the new baseline. */
+export function clearRestStateCache() {
+
+	restStateCache.clear();
+
+}
+
 // ── The model ─────────────────────────────────────────────────────────────────
 
 /**
@@ -425,6 +497,26 @@ export function compileTimeline( model, ctx ) {
 		}
 
 		return n > 0 ? [ p[ 0 ] / n, p[ 1 ] / n, p[ 2 ] / n ] : null;
+
+	}
+
+	// Reset EVERY node this model could touch (including Group descendants, for
+	// opacity recipes' Group→mesh expansion) to its canonical rest state BEFORE
+	// any event compiles — a single pass up front, so no track's reset can undo
+	// another track's already-compiled progress on a node they both happen to
+	// touch (rare, but possible with overlapping selectors).
+	{
+
+		const toReset = new Set();
+		for ( const track of model.tracks ) {
+
+			let trackNodes = [];
+			try { trackNodes = selectorEngine.query( editor.scene, track.target ); } catch ( e ) {}
+			for ( const n of trackNodes ) n.traverse( child => toReset.add( child ) );
+
+		}
+
+		for ( const n of toReset ) resetToRestState( n );
 
 	}
 

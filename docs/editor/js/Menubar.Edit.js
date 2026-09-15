@@ -3,6 +3,7 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 
 import { UIPanel, UIRow, UIHorizontalRule } from './libs/ui.js';
 import { setMenuIcon } from './Menubar.Icons.js';
+import { isolateMaterials } from './intelligence/editOps.js';
 
 import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
@@ -115,6 +116,7 @@ function MenubarEdit( editor ) {
 		if ( object === null || object.parent === null ) return; // avoid cloning the camera or scene
 
 		object = clone( object );
+		isolateMaterials( object ); // SkeletonUtils.clone() shares materials by reference too
 
 		editor.execute( new AddObjectCommand( editor, object ) );
 

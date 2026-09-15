@@ -35,7 +35,8 @@ import { SceneIntelligence, findByDescription, describeObject, listCandidates, r
 import { findParts } from './intelligence/sceneIndex.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { selectorCounts } from './intelligence/vocabInjection.js';
-import { buildConstrainedOpsSchema, buildReasonConstrainedOpsSchema, buildCandidateConstrainedOpsSchema } from './intelligence/editOps.js';
+import { buildConstrainedOpsSchema, buildReasonConstrainedOpsSchema, buildCandidateConstrainedOpsSchema, findSharedMaterials } from './intelligence/editOps.js';
+import { holdTimelineAt, syncTimeline } from './intelligence/timelineController.js';
 import { rankSelectorCandidates, buildCandidateInjection, candidateIds, resolveEmittedSelector, tryHostResolve, ESCAPE_ID, makeDisambiguationMemory, buildSelectorIndex, segmentRequest, dedupeResolvedOps } from './intelligence/selectorIndex.js';
 import { classifyOpVerb } from './intelligence/opResolve.js';
 import { canonicalizeColorOnlySetMaterial } from './intelligence/argNormalize.js';
@@ -2551,6 +2552,10 @@ function Shell( editor ) {
 				// saveEvalRows() — download the accumulated per-case rows as JSONL.
 				saveEvalRows: function () { return saveEvalRows(); },
 
+				// ── Scene-state guards ──────────────────────────────────────────────
+				checkSharedMaterials: function () { return checkSharedMaterials(); },
+				checkRecompileIdempotency: function ( sampleTimes ) { return checkRecompileIdempotency( sampleTimes ); },
+
 			};
 
 			// Build a named-parameter function so every scope var is a local;
@@ -2782,6 +2787,102 @@ function Shell( editor ) {
 		// bounded by AIEngine.stream's own maxTokens default.
 		const w = aiEngine.contextWindow;
 		return w ? Math.max( 2000, w - 650 ) : undefined;
+
+	}
+
+	// ── Scene-state guards (regression tests for the shared-material and
+	// stale-rest-state bugs — see /memories/repo or the work-order commit) ────
+
+	// checkSharedMaterials() — dev-mode audit: any two meshes in the scene that
+	// reference the SAME Material instance get logged (with names) and returned
+	// as groups. An empty array means every animatable node is independent.
+	function checkSharedMaterials() {
+
+		const groups = findSharedMaterials( editor.scene );
+		appendOutput(
+			groups.length === 0
+				? '✅ No shared materials — every mesh has its own Material instance.'
+				: `⚠️ ${ groups.length } shared-material group(s) found (see console for node names).`,
+			groups.length === 0 ? 'result' : 'error'
+		);
+		return groups;
+
+	}
+
+	// checkRecompileIdempotency([sampleTimes]) — compile is supposed to be a
+	// PURE function of (scene + animation model): sample the timeline at a few
+	// times, then scrub/play/recompile the SAME model, sample again, and assert
+	// byte-identical results. If recompiling depends on leftover runtime state
+	// (the Bug 2 class of defect), this fails.
+	function checkRecompileIdempotency( sampleTimes ) {
+
+		const model = editor.timeline;
+		if ( ! model || model.isEmpty() ) { appendOutput( 'checkRecompileIdempotency: timeline is empty — nothing to check.', 'error' ); return null; }
+
+		const duration = model.duration || 1;
+		const times = sampleTimes || [ 0, duration * 0.25, duration * 0.5, duration * 0.75, duration ];
+
+		function snapshotAt( t ) {
+
+			holdTimelineAt( editor, t );
+			const snap = {};
+			editor.scene.traverse( function ( node ) {
+
+				const entry = {
+					position: node.position.toArray().map( n => Math.round( n * 1e5 ) / 1e5 ),
+					quaternion: node.quaternion.toArray().map( n => Math.round( n * 1e5 ) / 1e5 ),
+					scale: node.scale.toArray().map( n => Math.round( n * 1e5 ) / 1e5 ),
+				};
+				if ( node.material && ! Array.isArray( node.material ) && typeof node.material.opacity === 'number' ) {
+
+					entry.opacity = Math.round( node.material.opacity * 1e5 ) / 1e5;
+
+				}
+
+				snap[ node.uuid ] = entry;
+
+			} );
+			return snap;
+
+		}
+
+		const before = times.map( snapshotAt );
+
+		// Perturb runtime state the way real usage would: scrub around, then
+		// recompile the SAME model with no edits.
+		holdTimelineAt( editor, duration * 0.37 );
+		syncTimeline( editor );
+
+		const after = times.map( snapshotAt );
+
+		const diffs = [];
+		for ( let i = 0; i < times.length; i ++ ) {
+
+			const b = before[ i ], a = after[ i ];
+			for ( const uuid in b ) {
+
+				if ( JSON.stringify( b[ uuid ] ) !== JSON.stringify( a[ uuid ] ) ) {
+
+					diffs.push( { t: times[ i ], uuid, before: b[ uuid ], after: a[ uuid ] } );
+
+				}
+
+			}
+
+		}
+
+		if ( diffs.length === 0 ) {
+
+			appendOutput( `✅ Recompile is idempotent across ${ times.length } sampled times.`, 'result' );
+
+		} else {
+
+			console.warn( 'checkRecompileIdempotency: recompile-dependent drift found:', diffs );
+			appendOutput( `⚠️ Recompile is NOT idempotent — ${ diffs.length } node/time mismatch(es) (see console).`, 'error' );
+
+		}
+
+		return diffs;
 
 	}
 

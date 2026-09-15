@@ -241,6 +241,70 @@ function cloneMaterial( material ) {
 }
 
 /**
+ * Give every mesh in `object`'s subtree (including itself) its own material
+ * instance(s). Call this on the RESULT of any mesh-cloning operation
+ * (duplicate, the Menubar "Clone" command, etc.) — plain Object3D.clone() (and
+ * SkeletonUtils.clone()) share the material BY REFERENCE, so without this, a
+ * per-instance property edit (opacity, color, an opacity animation) on one
+ * clone silently mutates every other mesh still pointing at that same
+ * Material instance. Mutates `object` in place; returns it for chaining.
+ * @param {THREE.Object3D} object
+ * @returns {THREE.Object3D}
+ */
+export function isolateMaterials( object ) {
+
+	object.traverse( function ( node ) {
+
+		if ( ! node.isMesh || ! node.material ) return;
+		node.material = Array.isArray( node.material )
+			? node.material.map( m => cloneMaterial( m ) )
+			: cloneMaterial( node.material );
+
+	} );
+	return object;
+
+}
+
+/**
+ * Dev-mode guard for Bug 1's class of defect: scan `root` for meshes that
+ * reference the SAME Material instance as another mesh elsewhere in the
+ * subtree. Never silently-wrong — this makes shared-material bugs LOUD
+ * (console.warn with the actual node names) instead of manifesting as
+ * "animating one cube moves five others" days later.
+ * @param {THREE.Object3D} root
+ * @returns {Array<string[]>} groups of node names that share one Material instance (empty if none)
+ */
+export function findSharedMaterials( root ) {
+
+	const byMaterial = new Map(); // Material -> node[]
+	root.traverse( function ( node ) {
+
+		if ( ! node.isMesh || ! node.material ) return;
+		const mats = Array.isArray( node.material ) ? node.material : [ node.material ];
+		for ( const mat of mats ) {
+
+			if ( ! byMaterial.has( mat ) ) byMaterial.set( mat, [] );
+			byMaterial.get( mat ).push( node );
+
+		}
+
+	} );
+
+	const groups = [];
+	for ( const nodes of byMaterial.values() ) {
+
+		if ( nodes.length < 2 ) continue;
+		const names = nodes.map( n => n.name || n.uuid );
+		groups.push( names );
+		console.warn( `Shared material detected across ${ names.length } nodes — animating a per-material property (opacity, color, ...) on one will silently affect all of them: ${ names.join( ', ' ) }` );
+
+	}
+
+	return groups;
+
+}
+
+/**
  * Check if a node is part of a merged mesh (single-mesh asset, can't isolate parts).
  * @param {THREE.Object3D} node
  * @returns {boolean}
@@ -641,6 +705,7 @@ export function duplicateOp( editor, selector, dx, dy, dz ) {
 		try {
 
 			const clone = node.clone();
+			isolateMaterials( clone ); // clone() shares materials by reference — don't let per-instance edits bleed back
 
 			// AddObjectCommand parents the clone to the scene root, so bake the
 			// original's WORLD transform onto the clone — otherwise a clone of a
