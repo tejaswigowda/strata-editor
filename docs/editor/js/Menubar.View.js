@@ -22,7 +22,6 @@ function MenubarView( editor ) {
 
 	const states = {
 
-		gridHelper: true,
 		cameraHelpers: true,
 		lightHelpers: true,
 		skeletonHelpers: true
@@ -58,7 +57,6 @@ function MenubarView( editor ) {
 
 	}
 
-	addHelperToggle( 'gridHelper', 'gridHelper' );
 	addHelperToggle( 'cameraHelpers', 'cameraHelpers' );
 	addHelperToggle( 'lightHelpers', 'lightHelpers' );
 	addHelperToggle( 'skeletonHelpers', 'skeletonHelpers' );

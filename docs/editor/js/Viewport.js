@@ -51,74 +51,6 @@ function Viewport( editor ) {
 
 	// helpers
 
-	const GRID_COLORS_LIGHT = [ 0x888888, 0x555555 ];
-	const GRID_COLORS_DARK = [ 0x6f6f6f, 0x2a2a2a ];
-
-	const grid = new THREE.Group();
-
-	// Infinite grid: a large ground plane drawn with a shader so the lines appear
-	// to extend forever and fade out with distance. The plane follows the camera
-	// each frame (see render()), while the lines stay locked to world coordinates.
-
-	const gridMaterial = new THREE.ShaderMaterial( {
-		uniforms: {
-			uColor1: { value: new THREE.Color( GRID_COLORS_LIGHT[ 0 ] ) },
-			uColor2: { value: new THREE.Color( GRID_COLORS_LIGHT[ 1 ] ) },
-			uDistance: { value: 100 }
-		},
-		vertexShader: /* glsl */`
-			varying vec3 vWorldPos;
-			void main() {
-				vec4 world = modelMatrix * vec4( position, 1.0 );
-				vWorldPos = world.xyz;
-				gl_Position = projectionMatrix * viewMatrix * world;
-			}
-		`,
-		fragmentShader: /* glsl */`
-			uniform vec3 uColor1;
-			uniform vec3 uColor2;
-			uniform float uDistance;
-			varying vec3 vWorldPos;
-
-			// Anti-aliased grid lines at the given spacing (in world units).
-			float getGrid( float size ) {
-				vec2 r = vWorldPos.xz / size;
-				vec2 grid = abs( fract( r - 0.5 ) - 0.5 ) / fwidth( r );
-				return 1.0 - min( min( grid.x, grid.y ), 1.0 );
-			}
-
-			void main() {
-				float minorLine = getGrid( 1.0 );
-				float majorLine = getGrid( 10.0 );
-
-				float d = distance( cameraPosition.xz, vWorldPos.xz );
-				
-				// Smoother fade with exponential decay
-				float minorFade = exp( -( d / uDistance ) * ( d / uDistance ) * 0.5 );
-				float majorFade = exp( -( d / ( uDistance * 2.0 ) ) * ( d / ( uDistance * 2.0 ) ) * 0.3 );
-
-				// Major lines are more prominent
-				float alpha = max( minorLine * minorFade * 0.4, majorLine * majorFade * 0.8 );
-				if ( alpha <= 0.001 ) discard;
-
-				// Major (decade) lines are brighter/whiter; minor lines are darker
-				vec3 color = mix( uColor1, uColor2, majorLine );
-				gl_FragColor = vec4( color, alpha );
-			}
-		`,
-		transparent: true,
-		side: THREE.DoubleSide,
-		depthWrite: false,
-		extensions: { derivatives: true }
-	} );
-
-	const gridGeometry = new THREE.PlaneGeometry( 10000, 10000 );
-	gridGeometry.rotateX( - Math.PI / 2 );
-
-	const infiniteGrid = new THREE.Mesh( gridGeometry, gridMaterial );
-	infiniteGrid.frustumCulled = false;
-	grid.add( infiniteGrid );
-
 	const viewHelper = new ViewHelper( camera, container );
 	viewHelper.onRequireRender = () => render();
 
@@ -801,14 +733,12 @@ function Viewport( editor ) {
 			mediaQuery.addEventListener( 'change', function ( event ) {
 
 				renderer.setClearColor( event.matches ? 0x333333 : 0xaaaaaa );
-				updateGridColors( gridMaterial, event.matches ? GRID_COLORS_DARK : GRID_COLORS_LIGHT );
 
 				render();
 
 			} );
 
 			renderer.setClearColor( mediaQuery.matches ? 0x333333 : 0xaaaaaa );
-			updateGridColors( gridMaterial, mediaQuery.matches ? GRID_COLORS_DARK : GRID_COLORS_LIGHT );
 
 		}
 
@@ -1326,8 +1256,6 @@ function Viewport( editor ) {
 
 	signals.showHelpersChanged.add( function ( appearanceStates ) {
 
-		grid.visible = appearanceStates.gridHelper;
-
 		sceneHelpers.traverse( function ( object ) {
 
 			switch ( object.type ) {
@@ -1496,13 +1424,6 @@ function Viewport( editor ) {
 		if ( camera === editor.viewportCamera ) {
 
 			renderer.autoClear = false;
-			if ( grid.visible === true ) {
-
-				// Keep the infinite grid plane centred under the camera so it always fills the view.
-				infiniteGrid.position.set( editor.viewportCamera.position.x, 0, editor.viewportCamera.position.z );
-				renderer.render( grid, camera );
-
-			}
 			if ( sceneHelpers.visible === true ) renderer.render( sceneHelpers, camera );
 			if ( renderer.xr.isPresenting !== true ) viewHelper.render( renderer );
 			renderer.autoClear = true;
@@ -1515,13 +1436,6 @@ function Viewport( editor ) {
 	}
 
 	return container;
-
-}
-
-function updateGridColors( material, colors ) {
-
-	material.uniforms.uColor1.value.setHex( colors[ 0 ] );
-	material.uniforms.uColor2.value.setHex( colors[ 1 ] );
 
 }
 
