@@ -143,9 +143,13 @@ function Timeline( editor ) {
 	codePanel.style.cssText = 'display:none;width:100%;box-sizing:border-box;height:120px;border:none;border-top:1px solid #ccc;font-family:monospace;font-size:11px;padding:8px;resize:vertical;background:#1e1e1e;color:#d4d4d4;';
 	container.dom.appendChild( codePanel );
 
-	// Save/Cancel button container (appears when code is focused)
+	// Save/Cancel button container (appears when code is focused). `sticky` so it
+	// stays pinned to the bottom of the (scrollable) sidebar even when many
+	// tracks + an open keyframe panel push the rest of the Timeline tall enough
+	// to need scrolling — otherwise it can end up scrolled out of view with no
+	// obvious way back to it.
 	const codeBtnContainer = document.createElement( 'div' );
-	codeBtnContainer.style.cssText = 'display:none;height:28px;padding:6px 8px;border-top:1px solid #ccc;gap:8px;flex-direction:row;justify-content:flex-end;align-items:center;background:#2a2a2a;';
+	codeBtnContainer.style.cssText = 'display:none;height:28px;padding:6px 8px;border-top:1px solid #ccc;gap:8px;flex-direction:row;justify-content:flex-end;align-items:center;background:#2a2a2a;position:sticky;bottom:0;z-index:5;';
 	container.dom.appendChild( codeBtnContainer );
 
 	const saveBtn = new UIButton( 'Save' );
@@ -426,6 +430,12 @@ function Timeline( editor ) {
 	codePanel.addEventListener( 'focus', function () {
 
 		codeBtnContainer.style.display = 'flex';
+		// codeBtnContainer is sticky (see its definition) so it stays pinned once
+		// scrolled into range, but with many tracks + an open keyframe panel it
+		// can start out well below the fold — bring it into view right away
+		// instead of relying on the user to find/scroll the (separately
+		// scrollable) sidebar themselves.
+		codeBtnContainer.scrollIntoView( { block: 'nearest' } );
 		// Pause animation while editing
 		if ( currentActions.length ) for ( const a of currentActions ) a.paused = true;
 
