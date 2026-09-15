@@ -95,6 +95,14 @@
 				const resizer = new Resizer( editor );
 				document.body.appendChild( resizer.dom );
 
+				// SidebarProjectRenderer kicks off renderer creation (fire-and-forget)
+				// during its constructor above. Unlike WebGL's synchronous constructor,
+				// WebGPU's is async (adapter/device round-trip), so wait for the first
+				// rendererCreated dispatch before touching the scene/environment below —
+				// otherwise Viewport's PMREMGenerator (created in that same signal
+				// handler) is still null when sceneEnvironmentChanged/fromJSON run.
+				await new Promise( function ( resolve ) { editor.signals.rendererCreated.addOnce( resolve ); } );
+
 				//
 
 				editor.storage.init( function () {

@@ -164,7 +164,13 @@ function Timeline( editor ) {
 		if ( playing ) {
 
 			currentActions = getTimelineTargetActions( editor );
-			for ( const a of currentActions ) a.play();
+			for ( const a of currentActions ) {
+
+				a.setLoop( THREE.LoopOnce, 1 ); // never loop — see play()
+				a.clampWhenFinished = true;
+				a.play();
+
+			}
 
 		}
 
@@ -969,6 +975,9 @@ function Timeline( editor ) {
 			try {
 
 				a.reset();
+				// Play ONCE and hold the final frame — never loop back to the start.
+				a.setLoop( THREE.LoopOnce, 1 );
+				a.clampWhenFinished = true;
 				a.enabled = true;
 				a.paused = false;
 				a.time = playhead % clip.duration;
@@ -1154,14 +1163,19 @@ function Timeline( editor ) {
 
 			if ( currentActions.length ) {
 
-				playhead = currentActions[ 0 ].time % clip.duration;
+				// LoopOnce + clampWhenFinished (see play()) holds .time at the
+				// clip's duration and self-pauses once it gets there — no % wrap,
+				// no loop back to the start.
+				playhead = Math.min( currentActions[ 0 ].time, clip.duration );
 				tickLastTime = null;
+				if ( currentActions[ 0 ].paused ) playing = false; // reached the end on its own
 
 			} else {
 
 				const now = performance.now();
-				if ( tickLastTime !== null ) playhead = ( playhead + ( now - tickLastTime ) / 1000 ) % clip.duration;
+				if ( tickLastTime !== null ) playhead = Math.min( playhead + ( now - tickLastTime ) / 1000, clip.duration );
 				tickLastTime = now;
+				if ( playhead >= clip.duration ) playing = false; // reached the end — don't loop
 
 			}
 

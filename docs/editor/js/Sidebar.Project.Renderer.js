@@ -160,15 +160,17 @@ function SidebarProjectRenderer( editor ) {
 
 	async function createRenderer() {
 
-		const rendererType = rendererTypeSelect.getValue();
+		let rendererType = rendererTypeSelect.getValue();
 		const antialias = antialiasBoolean.getValue();
 
 		let newRenderer = null;
+		let fellBackToWebGL = false;
 
 		try {
 
 			if ( rendererType === 'WebGPURenderer' ) {
 
+				if ( ! navigator.gpu ) throw new Error( 'WebGPU is not available in this browser (navigator.gpu is undefined).' );
 				newRenderer = new WebGPURenderer( { antialias: antialias, logarithmicDepthBuffer: true } );
 				await newRenderer.init();
 
@@ -180,10 +182,35 @@ function SidebarProjectRenderer( editor ) {
 
 		} catch ( error ) {
 
-			console.error( error );
-			showRendererError( rendererType, error );
+			if ( rendererType !== 'WebGPURenderer' ) {
+
+				console.error( error );
+				showRendererError( rendererType, error );
+				if ( newRenderer && typeof newRenderer.dispose === 'function' ) newRenderer.dispose();
+				return;
+
+			}
+
+			// WebGPU unavailable/failed — WebGL is the broadly-supported baseline,
+			// so fall back to it automatically rather than showing an error.
+			console.warn( 'WebGPU unavailable, falling back to WebGL:', ( error && error.message ) || error );
 			if ( newRenderer && typeof newRenderer.dispose === 'function' ) newRenderer.dispose();
-			return;
+
+			try {
+
+				newRenderer = createWebGLRenderer( antialias );
+				rendererType = 'WebGLRenderer';
+				rendererTypeSelect.setValue( 'WebGLRenderer' );
+				fellBackToWebGL = true;
+
+			} catch ( fallbackError ) {
+
+				console.error( fallbackError );
+				showRendererError( 'WebGLRenderer', fallbackError );
+				if ( newRenderer && typeof newRenderer.dispose === 'function' ) newRenderer.dispose();
+				return;
+
+			}
 
 		}
 
@@ -196,8 +223,24 @@ function SidebarProjectRenderer( editor ) {
 		currentRenderer.toneMapping = parseFloat( toneMappingSelect.getValue() );
 		currentRenderer.toneMappingExposure = toneMappingExposure.getValue();
 
+		if ( fellBackToWebGL ) {
+
+			// Persist directly — `createRenderer()` runs synchronously all the way
+			// through on this (no-WebGPU) path, i.e. before the `signals.rendererUpdated.add(...)`
+			// listener below even gets registered on first load, so dispatching the
+			// signal alone wouldn't save it.
+			config.setKey( 'project/renderer/type', 'WebGLRenderer' );
+
+		}
+
 		signals.rendererCreated.dispatch( currentRenderer );
-		signals.rendererUpdated.dispatch();
+		signals.rendererUpdated.dispatch(); // persists the (possibly fallen-back-to) rendererType
+
+		if ( fellBackToWebGL ) {
+
+			console.info( 'Strata: WebGPU was requested but unavailable — using WebGL instead. Retry WebGPU any time in Project \u203A Renderer.' );
+
+		}
 
 	}
 
