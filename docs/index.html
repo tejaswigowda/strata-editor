@@ -77,6 +77,16 @@
 				const viewport = new Viewport( editor );
 				document.body.appendChild( viewport.dom );
 
+				// SidebarProjectRenderer (constructed below, via Sidebar) kicks off
+				// renderer creation synchronously in its own constructor — for the
+				// WebGL path (no `await` reached) rendererCreated dispatches
+				// immediately, before control even returns here. Attach the listener
+				// BEFORE constructing Sidebar so it can't miss that synchronous
+				// dispatch (a `.addOnce()` registered afterward would just hang
+				// forever on that path, silently skipping storage.init()/fromJSON
+				// below and making the scene look like it "isn't auto-loading").
+				const rendererReady = new Promise( function ( resolve ) { editor.signals.rendererCreated.addOnce( resolve ); } );
+
 				const toolbar = new Toolbar( editor );
 				document.body.appendChild( toolbar.dom );
 
@@ -95,13 +105,12 @@
 				const resizer = new Resizer( editor );
 				document.body.appendChild( resizer.dom );
 
-				// SidebarProjectRenderer kicks off renderer creation (fire-and-forget)
-				// during its constructor above. Unlike WebGL's synchronous constructor,
-				// WebGPU's is async (adapter/device round-trip), so wait for the first
+				// WebGPU's renderer creation is async (adapter/device round-trip)
+				// unlike WebGL's synchronous constructor, so wait for the first
 				// rendererCreated dispatch before touching the scene/environment below —
 				// otherwise Viewport's PMREMGenerator (created in that same signal
 				// handler) is still null when sceneEnvironmentChanged/fromJSON run.
-				await new Promise( function ( resolve ) { editor.signals.rendererCreated.addOnce( resolve ); } );
+				await rendererReady;
 
 				//
 
