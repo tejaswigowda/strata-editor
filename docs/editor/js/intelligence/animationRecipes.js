@@ -1082,6 +1082,11 @@ export function fadeOutRecipe( node, params = {} ) {
 
 	const duration = params.duration ?? 1;
 	node.material.transparent = true;
+	// A transparent material that still writes depth can occlude/z-fight with
+	// whatever else occupies its depth range once it's faded to invisible --
+	// e.g. a moveTo()/moveToEach() target scaffold that's hidden forever via
+	// fadeOut(0) at t=0 but still sits in the scene as a position reference.
+	node.material.depthWrite = false;
 	
 	// Ensure opacity is initialized so animation has valid starting point
 	if ( node.material.opacity === undefined ) {
@@ -1391,6 +1396,9 @@ export function flashRecipe( node, params = {} ) {
 	const duration = params.duration ?? 1;
 	const times = params.times ?? 3;
 	node.material.transparent = true;
+	// See fadeOutRecipe's comment: a transparent material that still writes
+	// depth can occlude/z-fight even while invisible.
+	node.material.depthWrite = false;
 	
 	// Ensure opacity is initialized so animation has valid reference
 	if ( node.material.opacity === undefined ) {
