@@ -798,12 +798,28 @@ Editor.prototype = {
 		// default free camera.
 		this.setViewportCamera( savedViewportCameraUuid );
 
-		// setScene() copies the scene's children but not its own animations array.
+		// setScene() copies the scene's children but not its own animations array
+		// — EXCEPT the Universal Timeline clip, which setScene()'s syncTimeline()
+		// call already recompiled fresh from scene.userData.timeline (the model)
+		// + the just-loaded rest state, and pushed onto this.scene.animations
+		// itself. Re-assigning the RAW clip parsed straight out of the saved JSON
+		// here would silently throw that fresh recompile away and reinstate
+		// whatever (possibly stale/pre-fix) keyframes were baked in at save time
+		// — the same "compile must be pure" guarantee canonical-rest-state exists
+		// to protect. Keep only genuinely non-Timeline clips from the saved data
+		// (e.g. an imported asset's own skeletal/character animations) and merge
+		// them in alongside the fresh Timeline clip, instead of overwriting it.
 		if ( Array.isArray( scene.animations ) && scene.animations.length > 0 ) {
 
-			this.scene.animations = scene.animations;
-			this.signals.sceneGraphChanged.dispatch();
-			this.signals.animationsChanged.dispatch();
+			const nonTimelineClips = scene.animations.filter( c => ! ( c.userData && c.userData.isTimeline ) );
+
+			if ( nonTimelineClips.length > 0 ) {
+
+				this.scene.animations = [ ...( this.scene.animations || [] ), ...nonTimelineClips ];
+				this.signals.sceneGraphChanged.dispatch();
+				this.signals.animationsChanged.dispatch();
+
+			}
 
 		}
 
