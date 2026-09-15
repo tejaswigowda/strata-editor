@@ -34,14 +34,14 @@ export function syncTimeline( editor ) {
 	const model = editor.timeline;
 	if ( ! model ) return null;
 
-	// Recipes read each target's LIVE transform as their baseline (S0/P0/Q0).
-	// If the timeline was left mid-scrub/paused (pose held, never restored —
-	// see "Hold / release" below) when an edit triggers a recompile, that
-	// transient pose would get baked in as the new rest pose, drifting scale/
-	// position/rotation further with every play+edit cycle. Snap every
-	// currently-held target back to the OLD clip's t=0 first so the recompile
-	// always reads a stable rest pose.
-	holdTimelineAt( editor, 0 );
+	// NOTE: this used to lead with `holdTimelineAt( editor, 0 )` (snap every
+	// currently-held target back to the OLD clip's t=0) to keep recipes' "read
+	// the live transform as baseline" (S0/P0/Q0) stable across a mid-scrub
+	// recompile. That's now handled more robustly by compileTimeline's own
+	// canonical rest-state cache (timeline.js) — which, unlike this, doesn't
+	// clobber a FRESH edit (e.g. a SetScaleCommand run right before this
+	// syncTimeline call) with the old clip's stale baked-in baseline before
+	// the new compile ever gets to see it.
 
 	stripTimelineClip( editor );
 
