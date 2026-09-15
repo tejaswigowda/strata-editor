@@ -264,6 +264,16 @@ export function animateRecipe( node, params = {} ) {
 	if ( props.scaleZ !== undefined ) mult.z = num( props.scaleZ ) || 1;
 	const hasScale = mult.x !== 1 || mult.y !== 1 || mult.z !== 1;
 
+	// scale/scaleX/scaleY/scaleZ are RELATIVE MULTIPLIERS (CSS transform
+	// convention) — a bare `1` is a literal no-op (current × 1), NOT "reset to
+	// 1". Nobody means to write a no-op, so this is almost always someone
+	// wanting an ABSOLUTE reset instead — which is `to: { scaleX: 1, ... }`.
+	if ( ( props.scale === 1 || props.scaleX === 1 || props.scaleY === 1 || props.scaleZ === 1 ) && ! ( props.to && typeof props.to === 'object' ) ) {
+
+		console.warn( "animate(): scale/scaleX/scaleY/scaleZ: 1 is a relative no-op (multiplies the CURRENT scale by 1), not a reset — it won't undo an earlier squash/stretch. Use `to: { scaleX: 1, scaleY: 1, scaleZ: 1 }` (absolute target) to actually reset scale." );
+
+	}
+
 	// ── base pose (read early — absolute targets below default missing axes to it) ──
 	const P0 = node.position.clone();
 	const Q0 = node.quaternion.clone();
