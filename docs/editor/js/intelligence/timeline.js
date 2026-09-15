@@ -509,6 +509,19 @@ export function compileTimeline( model, ctx ) {
 
 	}
 
+	function worldQuaternionOf( obj ) {
+
+		if ( typeof obj.getWorldQuaternion === 'function' && THREE && THREE.Quaternion ) {
+
+			const q = obj.getWorldQuaternion( new THREE.Quaternion() );
+			return [ q.x, q.y, q.z, q.w ];
+
+		}
+
+		return obj.quaternion ? [ obj.quaternion.x, obj.quaternion.y, obj.quaternion.z, obj.quaternion.w ] : null;
+
+	}
+
 	// Recipes read the node's LIVE transform as their baseline (P0/S0/Q0/etc.) —
 	// this is what makes RELATIVE deltas (translateX, scaleX, spin turns, shake
 	// jitter, ...) mean "relative to wherever this node currently is". Without
@@ -557,6 +570,21 @@ export function compileTimeline( model, ctx ) {
 		}
 
 		return n > 0 ? [ p[ 0 ] / n, p[ 1 ] / n, p[ 2 ] / n ] : null;
+
+	}
+
+	// Selector → the WORLD rotation of the FIRST matched node (unlike position,
+	// quaternions can't be meaningfully averaged across multiple targets — a
+	// literal [x,y,z] point has no rotation to borrow, so this only handles
+	// selector strings).
+	function resolveWorldQuaternion( selectorOrPoint ) {
+
+		if ( typeof selectorOrPoint !== 'string' ) return null;
+
+		const targets = resolveSelectorNodes( selectorOrPoint );
+		if ( targets.length === 0 ) return null;
+
+		return worldQuaternionOf( targets[ 0 ] );
 
 	}
 
@@ -635,11 +663,16 @@ export function compileTimeline( model, ctx ) {
 			// moveTo: resolve the target selector to a WORLD position HOST-SIDE at
 			// bake time (compile-time resolution is the whole point — see
 			// ANIMATION.md — it's what makes this a plain, portable position track).
+			// Also resolve the target's WORLD rotation so the mover ends up facing
+			// the same way as the target, not just standing in its spot.
 			if ( event.op === 'moveTo' ) {
 
 				const world = resolveWorldPoint( params.target );
 				if ( world ) params.targetWorld = world;
 				else console.warn( `moveTo(): target "${ params.target }" did not resolve to any object — "${ track.target }" was not moved.` );
+
+				const worldQ = resolveWorldQuaternion( params.target );
+				if ( worldQ ) params.targetQuaternion = worldQ;
 
 			}
 
@@ -647,6 +680,7 @@ export function compileTimeline( model, ctx ) {
 			// mismatch WARNS (never-silently-wrong) rather than truncating/
 			// wrapping silently; only the min(source,target) count is paired.
 			let perNodeTargetWorld = null;
+			let perNodeTargetQuaternion = null;
 			if ( event.op === 'moveToEach' ) {
 
 				const targets = resolveSelectorNodes( params.target );
@@ -662,6 +696,7 @@ export function compileTimeline( model, ctx ) {
 				}
 
 				perNodeTargetWorld = nodes.map( ( n, i ) => i < pairCount ? worldPositionOf( targets[ i ] ) : null );
+				perNodeTargetQuaternion = nodes.map( ( n, i ) => i < pairCount ? worldQuaternionOf( targets[ i ] ) : null );
 
 			}
 
@@ -707,7 +742,9 @@ export function compileTimeline( model, ctx ) {
 				// already warned above) — skip rather than animate to a wrong point.
 				if ( perNodeTargetWorld && ! perNodeTargetWorld[ ni ] ) continue;
 
-				const nodeParams = perNodeTargetWorld ? { ...params, targetWorld: perNodeTargetWorld[ ni ] } : params;
+				const nodeParams = perNodeTargetWorld
+					? { ...params, targetWorld: perNodeTargetWorld[ ni ], targetQuaternion: perNodeTargetQuaternion[ ni ] }
+					: params;
 
 				let clip;
 				try {

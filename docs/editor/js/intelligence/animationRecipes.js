@@ -1622,9 +1622,17 @@ export function changeRecipe( node, params = {} ) {
  * otherwise a raw copy would be wrong whenever the two objects' parents don't
  * share the same transform.
  *
- * Params: { targetWorld: [x,y,z], duration, easing }. Returns null (no clip)
- * if targetWorld didn't resolve — compileTimeline already warned; never
- * silently animates to [0,0,0].
+ * Params: { targetWorld: [x,y,z], targetQuaternion: [x,y,z,w]?, duration,
+ * easing }. Returns null (no clip) if targetWorld didn't resolve —
+ * compileTimeline already warned; never silently animates to [0,0,0].
+ *
+ * targetQuaternion (optional — resolved host-side alongside targetWorld, same
+ * pattern) is the target's WORLD rotation. Like the position, it's converted
+ * into the mover's OWN parent's local space before slerping (Qlocal = Qparent
+ * ^-1 * Qworld) — node.quaternion is parent-relative, so a raw copy would be
+ * wrong whenever the mover's parent isn't identically oriented to the
+ * target's. Omitted entirely when no targetQuaternion is given, so plain
+ * moveTo()/moveToEach() calls that never asked for rotation are unaffected.
  */
 export function moveToRecipe( node, params = {} ) {
 
@@ -1639,24 +1647,50 @@ export function moveToRecipe( node, params = {} ) {
 	const worldTarget = new THREE.Vector3( ...params.targetWorld.map( Number ) );
 	const P1 = node.parent ? node.parent.worldToLocal( worldTarget.clone() ) : worldTarget;
 
-	const N = isLinear ? 1 : Math.min( 60, Math.max( 8, Math.ceil( duration * 12 ) ) );
+	const Q0 = node.quaternion.clone();
+	let Q1 = null;
+	if ( Array.isArray( params.targetQuaternion ) ) {
+
+		const worldTargetQ = new THREE.Quaternion( ...params.targetQuaternion.map( Number ) );
+		if ( node.parent ) {
+
+			const parentWorldQ = new THREE.Quaternion();
+			node.parent.getWorldQuaternion( parentWorldQ );
+			Q1 = parentWorldQ.invert().multiply( worldTargetQ );
+
+		} else Q1 = worldTargetQ;
+
+	}
+
+	const N = ( isLinear && ! Q1 ) ? 1 : Math.min( 60, Math.max( 8, Math.ceil( duration * 12 ) ) );
 	const times = [];
-	const values = [];
+	const posValues = [];
+	const rotValues = [];
 
 	for ( let i = 0; i <= N; i ++ ) {
 
 		const t = i / N;
 		const k = ease( t );
 		times.push( t * duration );
-		values.push(
+		posValues.push(
 			P0.x + ( P1.x - P0.x ) * k,
 			P0.y + ( P1.y - P0.y ) * k,
 			P0.z + ( P1.z - P0.z ) * k
 		);
 
+		if ( Q1 ) {
+
+			const q = new THREE.Quaternion().copy( Q0 ).slerp( Q1, k );
+			rotValues.push( q.x, q.y, q.z, q.w );
+
+		}
+
 	}
 
-	return new THREE.AnimationClip( 'MoveTo', - 1, [ vectorTrack( node.uuid, 'position', times, values ) ] );
+	const tracks = [ vectorTrack( node.uuid, 'position', times, posValues ) ];
+	if ( Q1 ) tracks.push( quaternionTrack( node.uuid, times, rotValues ) );
+
+	return new THREE.AnimationClip( 'MoveTo', - 1, tracks );
 
 }
 
