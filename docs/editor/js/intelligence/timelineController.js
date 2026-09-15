@@ -208,7 +208,62 @@ export function holdTimelineAt( editor, t ) {
 	}
 	editor.mixer.update( 0 );
 	refreshCameraProjections( editor ); // fov tracks write camera.fov but never the projection matrix
+	syncMaterialTransparency( editor );
 	return true;
+
+}
+
+/**
+ * fade/fadeIn/fadeOut/flash all leave `material.transparent = true` set
+ * permanently once a node is ever faded (see animationRecipes.js) — needed
+ * while opacity is actually animating, but a transparent material sitting at
+ * opacity 1 forever still renders through the renderer's separate transparent
+ * pass (no depth pre-pass, back-to-front sort), which can look visibly
+ * different from a genuinely opaque material — the reported "transparency
+ * issue" on render. Rather than special-case every recipe, resync every
+ * material's transparent/depthWrite flags to its CURRENT sampled opacity
+ * every time the timeline is sampled (scrub, hold, or Render tab capture —
+ * all funnel through here): fully opaque -> real opaque material (depth
+ * pre-pass, normal sorting), fully invisible -> stop writing depth (avoids
+ * z-fighting with whatever it's hidden behind/inside), still mid-fade ->
+ * normal alpha blending.
+ */
+export function syncMaterialTransparency( editor ) {
+
+	editor.scene.traverse( function ( node ) {
+
+		if ( ! node.isMesh || ! node.material ) return;
+
+		const materials = Array.isArray( node.material ) ? node.material : [ node.material ];
+		for ( const mat of materials ) {
+
+			if ( ! mat || mat.opacity === undefined ) continue;
+			if ( ! mat.userData || ! mat.userData.__fadeManaged ) continue; // leave user-authored transparency alone
+
+			const opaque = mat.opacity >= 0.999;
+			const invisible = mat.opacity <= 0.001;
+
+			mat.transparent = ! opaque;
+			mat.depthWrite = ! invisible;
+
+		}
+
+		// Edge-outline children (see Shell's addEdgeOutline helper) have their own
+		// separate material/geometry and aren't touched by the fade recipes at
+		// all (LineSegments isn't a Mesh, so the opacity-recipe Group expansion
+		// skips it) — without this they'd stay permanently visible even while
+		// their parent cube is mid-fade-out/not-yet-faded-in. Mirror the parent's
+		// CURRENT visibility/opacity onto the outline every sample instead.
+		const outline = node.children.find( c => c.userData && c.userData.isEdgeOutline );
+		if ( outline ) {
+
+			const parentMat = Array.isArray( node.material ) ? node.material[ 0 ] : node.material;
+			const parentOpacity = parentMat && parentMat.opacity !== undefined ? parentMat.opacity : 1;
+			outline.visible = node.visible && parentOpacity > 0.001;
+
+		}
+
+	} );
 
 }
 

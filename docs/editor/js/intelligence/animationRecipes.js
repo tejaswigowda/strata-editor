@@ -567,6 +567,10 @@ export function fadeRecipe( node, params = {} ) {
 	const duration = params.duration ?? 1;
 
 	node.material.transparent = true;
+	// Flag this material as fade-managed so syncMaterialTransparency (called on
+	// every timeline sample) knows it's safe to resync transparent/depthWrite
+	// from live opacity -- never touches materials the fade system didn't set up.
+	node.material.userData.__fadeManaged = true;
 	
 	// Ensure opacity is initialized so animation has valid target
 	if ( node.material.opacity === undefined ) {
@@ -685,6 +689,8 @@ export function fadeInRecipe( node, params = {} ) {
 
 	const duration = params.duration ?? 1;
 	node.material.transparent = true;
+	// See fadeRecipe's comment on __fadeManaged.
+	node.material.userData.__fadeManaged = true;
 	
 	// Explicitly set opacity to 0 before animating, ensuring fade-in starts from invisible
 	node.material.opacity = 0;
@@ -1087,6 +1093,8 @@ export function fadeOutRecipe( node, params = {} ) {
 	// e.g. a moveTo()/moveToEach() target scaffold that's hidden forever via
 	// fadeOut(0) at t=0 but still sits in the scene as a position reference.
 	node.material.depthWrite = false;
+	// See fadeRecipe's comment on __fadeManaged.
+	node.material.userData.__fadeManaged = true;
 	
 	// Ensure opacity is initialized so animation has valid starting point
 	if ( node.material.opacity === undefined ) {
@@ -1399,6 +1407,8 @@ export function flashRecipe( node, params = {} ) {
 	// See fadeOutRecipe's comment: a transparent material that still writes
 	// depth can occlude/z-fight even while invisible.
 	node.material.depthWrite = false;
+	// See fadeRecipe's comment on __fadeManaged.
+	node.material.userData.__fadeManaged = true;
 	
 	// Ensure opacity is initialized so animation has valid reference
 	if ( node.material.opacity === undefined ) {

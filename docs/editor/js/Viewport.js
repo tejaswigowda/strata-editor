@@ -22,9 +22,33 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ViewportPathtracer } from './Viewport.Pathtracer.js';
 import { createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { lassoSelect } from './intelligence/lassoSelect.js';
-import { releaseTimelineObject } from './intelligence/timelineController.js';
+import { releaseTimelineObject, syncMaterialTransparency } from './intelligence/timelineController.js';
 import { hydrateHtmlEmbed } from './HtmlEmbed.js';
 import { hydrateMarkdownEmbed } from './MarkdownEmbed.js';
+
+/**
+ * Cube border helper: `node.userData.hasEdgeOutline` is a plain, serializable
+ * boolean flag (set via the JS Shell, e.g. `$S('.cube').each(n =>
+ * n.userData.hasEdgeOutline = true)`); the actual LineSegments/EdgesGeometry
+ * child is rebuilt here on demand instead of being persisted, since
+ * EdgesGeometry has no registered loader in this build (see
+ * withoutEdgeOutlines's doc comment in timeline.js for what happens if one
+ * DOES end up serialized). Idempotent — skips nodes that already have one.
+ */
+function hydrateEdgeOutline( node ) {
+
+	if ( ! node.isMesh || ! node.geometry || ! node.userData || ! node.userData.hasEdgeOutline ) return;
+	if ( node.children.some( c => c.userData && c.userData.isEdgeOutline ) ) return;
+
+	const outline = new THREE.LineSegments(
+		new THREE.EdgesGeometry( node.geometry ),
+		new THREE.LineBasicMaterial( { color: 0x000000 } )
+	);
+	outline.name = '__edgeOutline';
+	outline.userData.isEdgeOutline = true;
+	node.add( outline );
+
+}
 
 function Viewport( editor ) {
 
@@ -1334,6 +1358,10 @@ function Viewport( editor ) {
 
 			mixer.update( delta );
 			needsUpdate = true;
+			// Keep fully-faded-in/out materials genuinely opaque/depth-inert instead
+			// of permanently sitting in the transparent render pass (see
+			// syncMaterialTransparency's own comment for why that looks wrong).
+			syncMaterialTransparency( editor );
 
 			if ( editor.selected !== null ) {
 
@@ -1418,6 +1446,7 @@ function Viewport( editor ) {
 
 			const bake = hydrateHtmlEmbed( o ) || hydrateMarkdownEmbed( o );
 			if ( bake ) bake.then( render );
+			hydrateEdgeOutline( o );
 
 		} );
 

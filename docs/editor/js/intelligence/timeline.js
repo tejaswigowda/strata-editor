@@ -156,6 +156,43 @@ export function withCanonicalRestState( scene, fn ) {
 
 }
 
+/**
+ * Run `fn()` (e.g. `scene.toJSON()`) with every edge-outline helper object
+ * (see Viewport.js's `hydrateEdgeOutline` — a LineSegments over an
+ * EdgesGeometry, added as a child of a cube to draw its border) TEMPORARILY
+ * detached, then reattach them immediately after. EdgesGeometry has no
+ * registered `fromJSON` in this three.js build's Geometries registry, so
+ * `ObjectLoader.parseGeometries()` throws ("Geometries[data.type].fromJSON is
+ * not a function") on the NEXT load if one ever gets serialized — this
+ * silently corrupts the WHOLE saved scene (confirmed: 0 objects loaded).
+ * Outlines are cheap to rebuild from `node.userData.hasEdgeOutline` (a plain,
+ * serializable boolean) every load instead, so they're never persisted at
+ * all — same rationale/pattern as `withCanonicalRestState` just above.
+ */
+export function withoutEdgeOutlines( scene, fn ) {
+
+	const detached = []; // [ parent, outline ][]
+
+	scene.traverse( function ( node ) {
+
+		if ( node.userData && node.userData.isEdgeOutline && node.parent ) detached.push( [ node.parent, node ] );
+
+	} );
+
+	for ( const [ parent, outline ] of detached ) parent.remove( outline );
+
+	try {
+
+		return fn();
+
+	} finally {
+
+		for ( const [ parent, outline ] of detached ) parent.add( outline );
+
+	}
+
+}
+
 // ── The model ─────────────────────────────────────────────────────────────────
 
 /**
