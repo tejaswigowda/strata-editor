@@ -19,7 +19,7 @@ $S('.cube').animate({ rotateY: 360, translateZ: 5 }, 2000, 'ease-in-out')
 $S('camera').animate({ fov: 30 }, 1500, 'ease-out')
 ```
 
-- **props** are CSS 3D transforms (relative deltas, per CSS convention): `translateX/Y/Z`, `translate3d:[x,y,z]`, `rotateX/Y/Z` (**degrees**, CSS convention), `rotate3d:[x,y,z,deg]`, `scale`/`scaleX/Y/Z`/`scale3d` (multipliers), `transformOrigin:[x,y,z]` (world pivot — rotation/scale orbit this point). For **absolute** targets use `to`: `animate({ to: { position:[x,y,z], rotation:[degX,degY,degZ], scale:2 } }, ms)`.
+- **props** are CSS 3D transforms (relative deltas, per CSS convention): `translateX/Y/Z`, `translate3d:[x,y,z]`, `rotateX/Y/Z` (**degrees**, CSS convention), `rotate3d:[x,y,z,deg]`, `scale`/`scaleX/Y/Z`/`scale3d` (multipliers), `transformOrigin:[x,y,z]` (world pivot — rotation/scale orbit this point). For **absolute** targets use `to`: `animate({ to: { position:[x,y,z], rotation:[degX,degY,degZ], scale:2 } }, ms)`. `position`/`scale` accept a **partial** spec — a missing/null axis (or the per-axis `positionX/Y/Z`/`scaleX/Y/Z` form) stays at its current value instead of resetting to 0/1: `animate({ to: { positionX: 0 } }, ms)` resets only X, leaving Y/Z untouched — the simplest way to author a "return to original" event without hand-copying every axis.
 - **duration** is **milliseconds** (jQuery convention); it's stored as seconds on the clock.
 - **easing** is a **CSS timing function**: `'linear' | 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out'` or `'cubic-bezier(0.4, 0, 0.2, 1)'`. The curve bakes into sampled keyframes at compile time, so easing survives to glTF (renderer-agnostic round-trip), not just Strata playback.
 

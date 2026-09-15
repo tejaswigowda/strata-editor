@@ -213,8 +213,14 @@ export function cssEasingFunction( easing ) {
  *   lookAt: selector|[x,y,z]  — aim -Z at target (resolved host-side; BAKES to
  *                               rotation keyframes; overrides rotate* props)
  *   fov: deg                  — camera only; animates TO the value (absolute)
- *   to: { position:[x,y,z], rotation:[degX,degY,degZ], scale:n|[x,y,z] }
- *                             — explicit ABSOLUTE targets
+ *   to: { position:[x,y,z], rotation:[degX,degY,degZ], scale:n|[x,y,z],
+ *         positionX/Y/Z:n, scaleX/Y/Z:n }
+ *                             — explicit ABSOLUTE targets. position/scale
+ *                               accept a PARTIAL array (missing/null entries)
+ *                               or the per-axis positionX/scaleX form — the
+ *                               omitted axis stays at its CURRENT value
+ *                               instead of resetting to 0/1, so e.g.
+ *                               `to: { positionX: 0 }` resets only X.
  *
  * params: { props, easing: CSS timing function, duration: SECONDS (the sugar
  * converts jQuery ms), lookAtWorld: [x,y,z] (injected by compileTimeline) }
@@ -258,18 +264,53 @@ export function animateRecipe( node, params = {} ) {
 	if ( props.scaleZ !== undefined ) mult.z = num( props.scaleZ ) || 1;
 	const hasScale = mult.x !== 1 || mult.y !== 1 || mult.z !== 1;
 
+	// ── base pose (read early — absolute targets below default missing axes to it) ──
+	const P0 = node.position.clone();
+	const Q0 = node.quaternion.clone();
+	const S0 = node.scale.clone();
+	const fov0 = typeof node.fov === 'number' ? node.fov : 50;
+
 	// ── absolute targets ──
+	// Position/scale accept a PARTIAL spec — a missing/null axis (via a short
+	// array or the omitted array entry) stays at its CURRENT value instead of
+	// resetting to 0 (position) or 1 (scale), so "reset just X" doesn't require
+	// knowing/spelling out the other axes:
+	//   to: { positionX: 0 }             // only X moves, Y/Z untouched
+	//   to: { position: [0] }            // same, array form
+	//   to: { scaleX: 1 }                // only X-scale resets to 1
 	const to = props.to && typeof props.to === 'object' ? props.to : null;
-	const toPos = to && Array.isArray( to.position ) ? new THREE.Vector3( num( to.position[ 0 ] ), num( to.position[ 1 ] ), num( to.position[ 2 ] ) ) : null;
+
+	function axisOr( current, arr, index, single ) {
+
+		if ( single !== undefined ) return num( single );
+		if ( Array.isArray( arr ) && arr[ index ] !== undefined && arr[ index ] !== null ) return num( arr[ index ] );
+		return current;
+
+	}
+
+	const hasPositionTarget = !! ( to && ( to.positionX !== undefined || to.positionY !== undefined || to.positionZ !== undefined || Array.isArray( to.position ) ) );
+	const toPos = hasPositionTarget
+		? new THREE.Vector3(
+			axisOr( P0.x, to.position, 0, to.positionX ),
+			axisOr( P0.y, to.position, 1, to.positionY ),
+			axisOr( P0.z, to.position, 2, to.positionZ )
+		)
+		: null;
+
 	const toRotQ = to && Array.isArray( to.rotation )
 		? new THREE.Quaternion().setFromEuler( new THREE.Euler( deg2rad( num( to.rotation[ 0 ] ) ), deg2rad( num( to.rotation[ 1 ] ) ), deg2rad( num( to.rotation[ 2 ] ) ) ) )
 		: null;
-	let toScale = null;
-	if ( to && to.scale !== undefined ) {
 
-		toScale = Array.isArray( to.scale )
-			? new THREE.Vector3( num( to.scale[ 0 ] ) || 1, num( to.scale[ 1 ] ) || 1, num( to.scale[ 2 ] ) || 1 )
-			: new THREE.Vector3( num( to.scale ) || 1, num( to.scale ) || 1, num( to.scale ) || 1 );
+	const hasScaleTarget = !! ( to && ( to.scaleX !== undefined || to.scaleY !== undefined || to.scaleZ !== undefined || to.scale !== undefined ) );
+	let toScale = null;
+	if ( hasScaleTarget ) {
+
+		if ( typeof to.scale === 'number' ) toScale = new THREE.Vector3( to.scale, to.scale, to.scale );
+		else toScale = new THREE.Vector3(
+			axisOr( S0.x, to.scale, 0, to.scaleX ),
+			axisOr( S0.y, to.scale, 1, to.scaleY ),
+			axisOr( S0.z, to.scale, 2, to.scaleZ )
+		);
 
 	}
 
@@ -285,12 +326,6 @@ export function animateRecipe( node, params = {} ) {
 	const lookTarget = Array.isArray( params.lookAtWorld )
 		? new THREE.Vector3( num( params.lookAtWorld[ 0 ] ), num( params.lookAtWorld[ 1 ] ), num( params.lookAtWorld[ 2 ] ) )
 		: null;
-
-	// ── base pose ──
-	const P0 = node.position.clone();
-	const Q0 = node.quaternion.clone();
-	const S0 = node.scale.clone();
-	const fov0 = typeof node.fov === 'number' ? node.fov : 50;
 
 	const needPos = delta.lengthSq() > 0 || toPos !== null || ( origin !== null && ( hasRotDelta || hasScale ) );
 	const needRot = hasRotDelta || toRotQ !== null || lookTarget !== null;
