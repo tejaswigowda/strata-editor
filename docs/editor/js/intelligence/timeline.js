@@ -497,6 +497,15 @@ export function compileTimeline( model, ctx ) {
 
 					if ( visited.has( node ) ) return;
 					visited.add( node );
+
+					// fadeIn means "become visible" — opacity alone can't do that if
+					// an ancestor Group (e.g. a hidden target scaffold, or any
+					// setVisible(false) node) is still visible=false, since three.js
+					// never renders a subtree under an invisible node regardless of
+					// its own opacity. Force the WHOLE matched path visible so the
+					// opacity ramp is actually seen.
+					if ( event.op === 'fadeIn' ) node.visible = true;
+
 					if ( node.isMesh ) nodesToAnimate.push( node );
 					else if ( node.isGroup ) {
 
