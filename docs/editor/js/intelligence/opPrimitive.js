@@ -27,6 +27,7 @@ import {
 } from './editOps.js';
 import { executeRecipeOp } from './animationRecipes.js';
 import { TimelineModel } from './timeline.js';
+import { releaseTimelineObject } from './timelineController.js';
 import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { SetLabelCommand } from '../commands/SetLabelCommand.js';
@@ -762,6 +763,21 @@ class ChainableSet {
 	wobble( angle = 15, duration = 1 )                { return this.op( { type: 'wobble', angle, duration } ); }
 
 	raw( code )                         { return this.op( { type: 'raw', code } ); }
+
+	/**
+	 * jQuery .stop([jumpToEnd]) parity: immediately halt whatever Timeline-driven
+	 * animation is currently playing/held on each selected node, freezing it at
+	 * its CURRENT pose (or, with jumpToEnd, its final keyframed pose) — it
+	 * becomes a normal, freely-editable object. Does not touch the authored
+	 * timeline model or any OTHER (non-selected) target; a no-op per-node for
+	 * anything that isn't currently a Timeline target.
+	 */
+	stop( jumpToEnd = false ) {
+
+		for ( const node of this.nodes ) releaseTimelineObject( this.editor, node, { jumpToEnd } );
+		return this;
+
+	}
 
 	// ────────────────────────────────────────────────────────────────────────────
 	// ── QUERY / INSPECTION (READ-ONLY) ──────────────────────────────────────────

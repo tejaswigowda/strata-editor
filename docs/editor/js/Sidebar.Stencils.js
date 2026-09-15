@@ -347,7 +347,14 @@ function SidebarStencils( editor ) {
 
 			} );
 
-			const mesh = new THREE.Mesh( geometry, new THREE.MeshStandardMaterial() );
+			const mesh = new THREE.Mesh( geometry, new THREE.MeshStandardMaterial( {
+				// Text labels are commonly placed flush against another face (a
+				// cube top, a panel) — nudge the depth buffer so they don't
+				// z-fight with whatever they're sitting on.
+				polygonOffset: true,
+				polygonOffsetFactor: -4,
+				polygonOffsetUnits: -4
+			} ) );
 			mesh.name = 'Text';
 			addObject( editor, mesh, position );
 

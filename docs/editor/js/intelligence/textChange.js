@@ -59,6 +59,23 @@ function changeEventsOf( track ) {
 
 const lastText = new WeakMap(); // node -> last text applied (regen-avoidance cache)
 const warnedNodes = new WeakSet(); // non-text nodes we already warned about once
+const offsetApplied = new WeakSet(); // materials we've already nudged (avoid re-touching every frame)
+
+// change() often labels a face it sits flush against (a cube top, a panel, the
+// floor) — coplanar with the text's own back/side faces, which flickers
+// (z-fighting) since the depth buffer can't consistently pick a winner between
+// two surfaces at the same depth. Push the text slightly toward the camera in
+// the DEPTH BUFFER only (no vertex/position change, so hit-testing/bounds are
+// unaffected) the standard way: a small negative polygon offset.
+function avoidZFighting( material ) {
+
+	if ( ! material || offsetApplied.has( material ) ) return;
+	material.polygonOffset = true;
+	material.polygonOffsetFactor = -4;
+	material.polygonOffsetUnits = -4;
+	offsetApplied.add( material );
+
+}
 
 function regenerateText( node, text ) {
 
@@ -68,6 +85,7 @@ function regenerateText( node, text ) {
 	node.geometry.dispose();
 	node.geometry = geometry;
 	lastText.set( node, text );
+	avoidZFighting( node.material );
 
 }
 
@@ -79,6 +97,7 @@ function getOrCreateGhost( node ) {
 	ghost.name = '__changeGhost';
 	ghost.userData.isChangeGhost = true;
 	ghost.material.transparent = true;
+	avoidZFighting( ghost.material );
 	node.add( ghost );
 	return ghost;
 

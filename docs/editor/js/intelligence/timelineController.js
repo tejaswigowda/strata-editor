@@ -238,22 +238,38 @@ export function refreshCameraProjections( editor ) {
  * so the object doesn't visually jump to its pre-timeline pose — it just becomes
  * a normal, freely-editable object sitting exactly where the playhead showed it.
  * A no-op when `object` isn't currently a Timeline target.
+ *
+ * `jumpToEnd` (jQuery .stop(clearQueue, jumpToEnd) parity): sample the target's
+ * own sub-clip at its final frame before freezing, instead of wherever it
+ * currently sits.
  */
-export function releaseTimelineObject( editor, object ) {
+export function releaseTimelineObject( editor, object, { jumpToEnd = false } = {} ) {
 
 	if ( ! object ) return;
 	const action = getTimelineTargetActions( editor ).find( a => a.getClip().uuid === `timeline-target:${ object.uuid }` );
 	if ( ! action ) return;
 
+	if ( jumpToEnd ) {
+
+		action.paused = true;
+		action.time = action.getClip().duration || 0;
+		editor.mixer.update( 0 );
+
+	}
+
 	const snapshot = {
 		position: object.position.clone(),
 		quaternion: object.quaternion.clone(),
 		scale: object.scale.clone(),
+		opacity: object.material ? object.material.opacity : undefined,
+		fov: object.isPerspectiveCamera ? object.fov : undefined,
 	};
 	action.stop();
 	object.position.copy( snapshot.position );
 	object.quaternion.copy( snapshot.quaternion );
 	object.scale.copy( snapshot.scale );
+	if ( snapshot.opacity !== undefined ) object.material.opacity = snapshot.opacity;
+	if ( snapshot.fov !== undefined ) { object.fov = snapshot.fov; object.updateProjectionMatrix(); }
 
 }
 
