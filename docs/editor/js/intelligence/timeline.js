@@ -96,6 +96,66 @@ export function clearRestStateCache() {
 
 }
 
+/**
+ * Run `fn()` (e.g. `scene.toJSON()`) with every cached-rest-state node
+ * TEMPORARILY snapped to its canonical rest pose, then restore whatever the
+ * live scene was actually showing (mid-scrub/mid-play or otherwise)
+ * immediately after — synchronous, so nothing visibly flickers in the
+ * viewport. This is what makes serialization (autosave, manual Save, git
+ * commit, export) safe to call at ANY moment: without it, saving while the
+ * timeline is mid-animation bakes that transient pose into the object's
+ * base transform/opacity, which the rest-state cache then (correctly, but
+ * wrongly) treats as the new ground truth on the next load/compile — the
+ * exact bug this cache exists to prevent, just moved to serialization time.
+ */
+export function withCanonicalRestState( scene, fn ) {
+
+	const live = new Map(); // uuid -> live pose, restored in `finally`
+
+	scene.traverse( function ( node ) {
+
+		const rest = restStateCache.get( node.uuid );
+		if ( ! rest ) return;
+
+		live.set( node.uuid, {
+			position: node.position.clone(),
+			quaternion: node.quaternion.clone(),
+			scale: node.scale.clone(),
+			opacity: ( node.material && ! Array.isArray( node.material ) ) ? node.material.opacity : undefined,
+			fov: typeof node.fov === 'number' ? node.fov : undefined,
+		} );
+
+		node.position.copy( rest.position );
+		node.quaternion.copy( rest.quaternion );
+		node.scale.copy( rest.scale );
+		if ( rest.opacity !== undefined && node.material && ! Array.isArray( node.material ) ) node.material.opacity = rest.opacity;
+		if ( rest.fov !== undefined ) node.fov = rest.fov;
+
+	} );
+
+	try {
+
+		return fn();
+
+	} finally {
+
+		scene.traverse( function ( node ) {
+
+			const prev = live.get( node.uuid );
+			if ( ! prev ) return;
+
+			node.position.copy( prev.position );
+			node.quaternion.copy( prev.quaternion );
+			node.scale.copy( prev.scale );
+			if ( prev.opacity !== undefined && node.material && ! Array.isArray( node.material ) ) node.material.opacity = prev.opacity;
+			if ( prev.fov !== undefined ) node.fov = prev.fov;
+
+		} );
+
+	}
+
+}
+
 // ── The model ─────────────────────────────────────────────────────────────────
 
 /**

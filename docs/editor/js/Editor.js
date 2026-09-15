@@ -6,7 +6,7 @@ import { History as _History } from './History.js';
 import { Strings } from './Strings.js';
 import { Storage as _Storage } from './Storage.js';
 import { Selector } from './Selector.js';
-import { TimelineModel, invalidateRestState, clearRestStateCache } from './intelligence/timeline.js';
+import { TimelineModel, invalidateRestState, clearRestStateCache, withCanonicalRestState } from './intelligence/timeline.js';
 import { syncTimeline } from './intelligence/timelineController.js';
 import { findSharedMaterials } from './intelligence/editOps.js';
 
@@ -861,7 +861,10 @@ Editor.prototype = {
 			},
 			camera: this.viewportCamera.toJSON(),
 			controls: this.controls.toJSON(),
-			scene: this.scene.toJSON(),
+			// Serialize the CANONICAL rest state, not whatever transient pose the
+			// timeline happens to be showing right now (mid-scrub/mid-play) — see
+			// withCanonicalRestState's own doc comment for why this matters.
+			scene: withCanonicalRestState( this.scene, () => this.scene.toJSON() ),
 			animations: animations,
 			scripts: this.scripts,
 			history: this.history.toJSON(),
