@@ -377,6 +377,34 @@ export function compileTimeline( model, ctx ) {
 
 	}
 
+	// Recipes read the node's LIVE transform as their baseline (P0/S0/Q0/etc.) —
+	// this is what makes RELATIVE deltas (translateX, scaleX, spin turns, shake
+	// jitter, ...) mean "relative to wherever this node currently is". Without
+	// committing each event's OWN final pose back onto the live node before
+	// compiling the NEXT (later) event on the same node, every event would
+	// instead read the same frozen REST POSE regardless of what earlier events
+	// already did — e.g. translateX:0.5 at t=0 then translateX:0.1 at t=10 would
+	// merge into keyframes (0,0)(0.4,0.5)(10,0)(10.4,0.1): the mixer holds
+	// nothing steady and instead DRIFTS from 0.5 back down to 0 across the
+	// entire [0.4,10] gap, because the t=10 keyframe's start value (0, the rest
+	// pose) doesn't match the t=0.4 segment's end value (0.5). Applying each
+	// clip's final frame here makes every subsequent event on the same node
+	// compose against the CORRECT "current" pose, so gaps between events hold
+	// flat instead of drifting.
+	function commitFinalPose( node, track ) {
+
+		const stride = track.getValueSize();
+		const last = Array.from( track.values.slice( track.values.length - stride ) );
+		const propPath = track.name.slice( track.name.indexOf( '.' ) + 1 );
+
+		if ( propPath === 'position' ) node.position.set( last[ 0 ], last[ 1 ], last[ 2 ] );
+		else if ( propPath === 'scale' ) node.scale.set( last[ 0 ], last[ 1 ], last[ 2 ] );
+		else if ( propPath === 'quaternion' ) node.quaternion.set( last[ 0 ], last[ 1 ], last[ 2 ], last[ 3 ] );
+		else if ( propPath === 'fov' ) { node.fov = last[ 0 ]; if ( node.updateProjectionMatrix ) node.updateProjectionMatrix(); }
+		else if ( propPath === 'material.opacity' && node.material ) node.material.opacity = last[ 0 ];
+
+	}
+
 	// Selector or literal [x,y,z] → a single WORLD position, averaging if the
 	// selector matches multiple nodes (matches lookAt's existing convention).
 	function resolveWorldPoint( selectorOrPoint ) {
@@ -547,6 +575,7 @@ export function compileTimeline( model, ctx ) {
 
 					const times = event.at === 0 ? t.times : t.times.map( x => x + event.at );
 					rawTracks.push( new t.constructor( t.name, Array.from( times ), Array.from( t.values ) ) );
+					commitFinalPose( node, t );
 
 				}
 

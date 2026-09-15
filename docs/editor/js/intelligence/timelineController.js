@@ -75,6 +75,14 @@ export function syncTimeline( editor ) {
 
 	}
 
+	// compileTimeline composes relative deltas (translateX, scaleX, spin turns,
+	// ...) by committing each event's final pose onto the live node before
+	// compiling the NEXT event on that node (see commitFinalPose in timeline.js)
+	// — so by the time it returns, targets are left sitting in whatever pose
+	// the LAST compiled event produced, not the rest pose. Snap back to t=0
+	// with the freshly-compiled clip so the visible scene always starts clean.
+	holdTimelineAt( editor, 0 );
+
 	editor.signals.timelineChanged.dispatch( model );
 	editor.signals.animationsChanged.dispatch();
 	return clip;
