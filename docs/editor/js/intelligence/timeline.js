@@ -130,6 +130,7 @@ export function withCanonicalRestState( scene, fn ) {
 		node.scale.copy( rest.scale );
 		if ( rest.opacity !== undefined && node.material && ! Array.isArray( node.material ) ) node.material.opacity = rest.opacity;
 		if ( rest.fov !== undefined ) node.fov = rest.fov;
+		node.updateMatrix();
 
 	} );
 
@@ -149,6 +150,7 @@ export function withCanonicalRestState( scene, fn ) {
 			node.scale.copy( prev.scale );
 			if ( prev.opacity !== undefined && node.material && ! Array.isArray( node.material ) ) node.material.opacity = prev.opacity;
 			if ( prev.fov !== undefined ) node.fov = prev.fov;
+			node.updateMatrix();
 
 		} );
 
