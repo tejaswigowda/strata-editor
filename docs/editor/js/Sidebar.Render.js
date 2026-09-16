@@ -3,8 +3,136 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js';
 
-import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber } from './libs/ui.js';
+import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea } from './libs/ui.js';
 import { holdTimelineAt } from './intelligence/timelineController.js';
+
+// ── SRT helpers (parse / format / word-wrap for hard-burn) ─────────────────
+
+function formatSrtTime( seconds ) {
+
+	seconds = Math.max( 0, seconds );
+	const h = Math.floor( seconds / 3600 );
+	const m = Math.floor( ( seconds % 3600 ) / 60 );
+	const s = Math.floor( seconds % 60 );
+	const ms = Math.round( ( seconds - Math.floor( seconds ) ) * 1000 );
+	const pad = ( n, len ) => String( n ).padStart( len || 2, '0' );
+	return `${ pad( h ) }:${ pad( m ) }:${ pad( s ) },${ pad( ms, 3 ) }`;
+
+}
+
+function parseSrtTime( str ) {
+
+	const m = str.trim().match( /(\d+):(\d{2}):(\d{2})[,.](\d{3})/ );
+	if ( ! m ) return 0;
+	return ( + m[ 1 ] ) * 3600 + ( + m[ 2 ] ) * 60 + ( + m[ 3 ] ) + ( + m[ 4 ] ) / 1000;
+
+}
+
+function newCueId() {
+
+	return 'cue-' + Math.random().toString( 36 ).slice( 2, 9 );
+
+}
+
+/** Parse raw .srt text into { id, start, end, text } cues (index lines optional/ignored, re-numbered on export). */
+function parseSrt( text ) {
+
+	const blocks = String( text ).replace( /\r/g, '' ).split( /\n\s*\n/ ).map( b => b.trim() ).filter( Boolean );
+	const cues = [];
+
+	for ( const block of blocks ) {
+
+		const lines = block.split( '\n' );
+		let idx = 0;
+		if ( /^\d+$/.test( ( lines[ 0 ] || '' ).trim() ) ) idx = 1;
+		const timeLine = lines[ idx ] || '';
+		const m = timeLine.match( /(.+?)\s*-->\s*(.+)/ );
+		if ( ! m ) continue;
+
+		cues.push( {
+			id: newCueId(),
+			start: parseSrtTime( m[ 1 ] ),
+			end: parseSrtTime( m[ 2 ] ),
+			text: lines.slice( idx + 1 ).join( '\n' ).trim(),
+		} );
+
+	}
+
+	return cues;
+
+}
+
+function cuesToSrt( cues ) {
+
+	return cues
+		.slice()
+		.sort( ( a, b ) => a.start - b.start )
+		.map( ( c, i ) => `${ i + 1 }\n${ formatSrtTime( c.start ) } --> ${ formatSrtTime( c.end ) }\n${ c.text }\n` )
+		.join( '\n' );
+
+}
+
+function activeCueAt( cues, t ) {
+
+	return cues.find( c => t >= c.start && t < c.end ) || null;
+
+}
+
+/** Word-wraps and draws one subtitle cue at the bottom of the canvas, with a translucent backing box (classic hard-burn caption look). */
+function drawBurnedCaption( ctx, width, height, text ) {
+
+	const fontSize = Math.max( 12, Math.round( height * 0.045 ) );
+	ctx.save();
+	ctx.font = `bold ${ fontSize }px sans-serif`;
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'alphabetic';
+
+	const maxWidth = width * 0.86;
+	const words = text.split( /\s+/ );
+	const lines = [];
+	let line = '';
+
+	for ( const w of words ) {
+
+		const test = line ? line + ' ' + w : w;
+		if ( line && ctx.measureText( test ).width > maxWidth ) { lines.push( line ); line = w; }
+		else line = test;
+
+	}
+
+	if ( line ) lines.push( line );
+
+	const lineHeight = fontSize * 1.3;
+	const bottomMargin = height * 0.06;
+	const startY = height - bottomMargin - ( lines.length - 1 ) * lineHeight;
+
+	let maxLineWidth = 0;
+	for ( const l of lines ) maxLineWidth = Math.max( maxLineWidth, ctx.measureText( l ).width );
+
+	const padX = fontSize * 0.6, padY = fontSize * 0.4;
+	ctx.fillStyle = 'rgba(0,0,0,0.55)';
+	ctx.fillRect(
+		width / 2 - maxLineWidth / 2 - padX,
+		startY - fontSize - padY,
+		maxLineWidth + padX * 2,
+		( lines.length - 1 ) * lineHeight + fontSize + padY * 2 + fontSize * 0.3
+	);
+
+	ctx.fillStyle = '#fff';
+	ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+	ctx.lineWidth = fontSize * 0.08;
+
+	lines.forEach( ( l, i ) => {
+
+		const y = startY + i * lineHeight;
+		ctx.strokeText( l, width / 2, y );
+		ctx.fillText( l, width / 2, y );
+
+	} );
+
+	ctx.restore();
+
+}
 
 // ── Sidebar.Render.js ─────────────────────────────────────────────────────────
 // The "Render" tab: renders the Universal Timeline to a video file through a
@@ -378,6 +506,156 @@ function SidebarRender( editor ) {
 	signals.editorCleared.add( scheduleSeqRefresh );
 	signals.sceneGraphChanged.add( scheduleSeqRefresh );
 
+	// ── Subtitles (SRT) ───────────────────────────────────────────────────────
+	// Cues persist on scene.userData.renderSubtitles (same pattern as
+	// renderShots). Times are authored in OUTPUT VIDEO seconds (0 = the
+	// exported file's first frame) — that's what an .srt's timestamps mean to
+	// any player, so no skip/tail conversion is needed at render time.
+
+	const subsHeader = new UIRow();
+	subsHeader.add( new UIText( 'Subtitles' ).setFontWeight( 'bold' ) );
+	container.add( subsHeader );
+
+	const subsHelp = new UIText( 'Cue times are OUTPUT video seconds. Hard-burn bakes them into the picture; the .srt sidecar is for embedding downstream (e.g. via ffmpeg).' );
+	subsHelp.dom.style.cssText = 'display:block;font-size:10px;opacity:0.65;margin:0 0 6px;line-height:1.35;';
+	container.add( subsHelp );
+
+	const subsList = document.createElement( 'div' );
+	subsList.style.cssText = 'display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;margin-bottom:6px;';
+	container.dom.appendChild( subsList );
+
+	function getCues() {
+
+		const ud = editor.scene.userData = editor.scene.userData || {};
+		if ( ! Array.isArray( ud.renderSubtitles ) ) ud.renderSubtitles = [];
+		return ud.renderSubtitles;
+
+	}
+
+	function refreshSubsList() {
+
+		const cues = getCues().slice().sort( ( a, b ) => a.start - b.start );
+		subsList.innerHTML = '';
+
+		if ( cues.length === 0 ) {
+
+			const empty = document.createElement( 'div' );
+			empty.style.cssText = 'font-size:10px;opacity:0.55;padding:2px 0 4px;';
+			empty.textContent = 'No cues yet — Add Cue or Import .srt.';
+			subsList.appendChild( empty );
+
+		}
+
+		for ( const cue of cues ) {
+
+			const row = document.createElement( 'div' );
+			row.style.cssText = 'display:flex;align-items:flex-start;gap:4px;';
+			subsList.appendChild( row );
+
+			const startNum = new UINumber( cue.start ).setWidth( '46px' ).setPrecision( 2 ).setRange( 0, 100000 );
+			startNum.dom.title = 'Start (s)';
+			startNum.onChange( function () { cue.start = startNum.getValue(); } );
+			row.appendChild( startNum.dom );
+
+			const arrow = document.createElement( 'span' );
+			arrow.textContent = '\u2192';
+			arrow.style.cssText = 'font-size:10px;opacity:0.6;padding-top:4px;';
+			row.appendChild( arrow );
+
+			const endNum = new UINumber( cue.end ).setWidth( '46px' ).setPrecision( 2 ).setRange( 0, 100000 );
+			endNum.dom.title = 'End (s)';
+			endNum.onChange( function () { cue.end = endNum.getValue(); } );
+			row.appendChild( endNum.dom );
+
+			const textArea = new UITextArea().setValue( cue.text );
+			textArea.dom.rows = 1;
+			textArea.dom.style.cssText += 'flex:1;font-size:11px;resize:vertical;min-height:20px;';
+			textArea.onChange( function () { cue.text = textArea.getValue(); } );
+			row.appendChild( textArea.dom );
+
+			const delBtn = new UIButton( '\u2715' );
+			delBtn.dom.style.cssText = 'height:20px;width:20px;padding:0;border-radius:4px;font-size:10px;flex-shrink:0;';
+			delBtn.onClick( function () {
+
+				const cues2 = getCues();
+				const i = cues2.indexOf( cue );
+				if ( i !== - 1 ) cues2.splice( i, 1 );
+				refreshSubsList();
+
+			} );
+			row.appendChild( delBtn.dom );
+
+		}
+
+	}
+
+	const subsControls = document.createElement( 'div' );
+	subsControls.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;';
+	container.dom.appendChild( subsControls );
+
+	const addCueButton = new UIButton( '+ Add Cue' );
+	addCueButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+	addCueButton.onClick( function () {
+
+		const cues = getCues();
+		const lastEnd = cues.length ? Math.max( ...cues.map( c => c.end ) ) : 0;
+		cues.push( { id: newCueId(), start: lastEnd, end: lastEnd + 3, text: '' } );
+		refreshSubsList();
+
+	} );
+	subsControls.appendChild( addCueButton.dom );
+
+	const importSrtInput = document.createElement( 'input' );
+	importSrtInput.type = 'file';
+	importSrtInput.accept = '.srt';
+	importSrtInput.style.display = 'none';
+	container.dom.appendChild( importSrtInput );
+	importSrtInput.addEventListener( 'change', function () {
+
+		const file = importSrtInput.files[ 0 ];
+		if ( ! file ) return;
+		const reader = new FileReader();
+		reader.onload = function () {
+
+			const ud = editor.scene.userData = editor.scene.userData || {};
+			ud.renderSubtitles = parseSrt( String( reader.result ) );
+			refreshSubsList();
+
+		};
+
+		reader.readAsText( file );
+		importSrtInput.value = '';
+
+	} );
+
+	const importSrtButton = new UIButton( 'Import .srt' );
+	importSrtButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+	importSrtButton.onClick( function () { importSrtInput.click(); } );
+	subsControls.appendChild( importSrtButton.dom );
+
+	const exportSrtButton = new UIButton( 'Export .srt' );
+	exportSrtButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+	exportSrtButton.onClick( function () {
+
+		downloadBlob( new Blob( [ cuesToSrt( getCues() ) ], { type: 'text/plain' } ), 'subtitles.srt' );
+
+	} );
+	subsControls.appendChild( exportSrtButton.dom );
+
+	const burnRow = new UIRow();
+	const burnCheckbox = new UICheckbox( false );
+	burnRow.add( burnCheckbox );
+	burnRow.add( new UIText( ' Hard-burn subtitles into video' ).setFontSize( '11px' ) );
+	container.add( burnRow );
+
+	const sidecarRow = new UIRow();
+	const sidecarCheckbox = new UICheckbox( true );
+	sidecarRow.add( sidecarCheckbox );
+	sidecarRow.add( new UIText( ' Also export a matching .srt file' ).setFontSize( '11px' ) );
+	container.add( sidecarRow );
+
+	refreshSubsList();
+
 	// ── Render / Cancel buttons ───────────────────────────────────────────────
 
 	const buttonRow = new UIRow();
@@ -406,6 +684,12 @@ function SidebarRender( editor ) {
 	const statusText = document.createElement( 'div' );
 	statusText.style.cssText = 'font-size:11px;opacity:0.75;min-height:16px;margin-bottom:8px;';
 	container.dom.appendChild( statusText );
+
+	// Separate from statusText (setProgress() overwrites that via textContent
+	// every call, which would wipe out any buttons appended into it).
+	const postRenderActions = document.createElement( 'div' );
+	postRenderActions.style.cssText = 'margin-bottom:8px;';
+	container.dom.appendChild( postRenderActions );
 
 	function setProgress( fraction, message ) {
 
@@ -605,6 +889,23 @@ function SidebarRender( editor ) {
 		// supported) forces an exact capture per composited frame.
 		const stream = outCanvas.captureStream( fps );
 		const videoTrack = stream.getVideoTracks()[ 0 ];
+
+		// Downstream tools (ffmpeg -map 0:a, etc.) assume every exported video has
+		// an audio channel — MediaRecorder's captureStream() has none by default,
+		// so `-map 0:a` on the plain video-only output errors out with "Stream
+		// map matches no streams". Add a real (silent) audio track: a zero-gain
+		// constant source feeding a MediaStreamDestination, so the recorded file
+		// always has one — just carrying silence.
+		const AudioCtx = window.AudioContext || window.webkitAudioContext;
+		const audioCtx = new AudioCtx();
+		const audioDest = audioCtx.createMediaStreamDestination();
+		const silenceGain = audioCtx.createGain();
+		silenceGain.gain.value = 0;
+		const silenceSource = audioCtx.createConstantSource();
+		silenceSource.connect( silenceGain ).connect( audioDest );
+		silenceSource.start();
+		for ( const track of audioDest.stream.getAudioTracks() ) stream.addTrack( track );
+
 		const recorder = new MediaRecorder( stream, {
 			mimeType: mime,
 			videoBitsPerSecond: Math.min( 24_000_000, width * height * fps * 0.15 ),
@@ -657,6 +958,13 @@ function SidebarRender( editor ) {
 
 				}
 
+				if ( burnCheckbox.getValue() ) {
+
+					const cue = activeCueAt( getCues(), outT );
+					if ( cue && cue.text ) drawBurnedCaption( ctx, width, height, cue.text );
+
+				}
+
 				if ( videoTrack.requestFrame ) videoTrack.requestFrame();
 
 				const tail = t >= duration && outT < renderLength ? ' (holding final frame)' : '';
@@ -672,6 +980,9 @@ function SidebarRender( editor ) {
 
 			recorder.stop();
 			await recorderStopped;
+
+			silenceSource.stop();
+			audioCtx.close();
 
 			for ( const restore of cameraRestores ) restore();
 			restoreEnvironment();
@@ -695,7 +1006,28 @@ function SidebarRender( editor ) {
 
 		const blob = new Blob( chunks, { type: mime.split( ';' )[ 0 ] } );
 		const label = shots.length > 0 ? 'sequence' : ( fallbackCamera.name || 'camera' ).replace( /[^\w\-]+/g, '_' );
-		downloadBlob( blob, `render-${ label }-${ width }x${ height }-${ fps }fps.${ extensionFor( mime ) }` );
+		const baseName = `render-${ label }-${ width }x${ height }-${ fps }fps`;
+		downloadBlob( blob, `${ baseName }.${ extensionFor( mime ) }` );
+
+		postRenderActions.innerHTML = '';
+
+		// A second automatic download() right after the first is silently
+		// blocked by Chrome/Firefox's multi-download abuse guard (no new user
+		// gesture in between) — confirmed empirically, the .srt never reached
+		// disk. Surface a real button instead: a genuine click always passes.
+		if ( sidecarCheckbox.getValue() && getCues().length > 0 ) {
+
+			const srtLink = new UIButton( '\u2b07 Download matching .srt' );
+			srtLink.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+			srtLink.onClick( function () {
+
+				downloadBlob( new Blob( [ cuesToSrt( getCues() ) ], { type: 'text/plain' } ), `${ baseName }.srt` );
+
+			} );
+			postRenderActions.appendChild( srtLink.dom );
+
+		}
+
 		setProgress( 1, 'Done — video downloaded.' );
 
 	}
