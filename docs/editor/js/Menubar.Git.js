@@ -399,12 +399,20 @@ async function openGitCompare( editor, strings ) {
 		const apiPath  = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
 		const remote   = await ghGetSceneJSON( apiPath, cfg.pat );
 		await internalizeFromGit( remote, parsed, cfg.branch || 'main', cfg.pat );
+		// ghGetSceneJSON returns the FULL editor.toJSON() wrapper
+		// ({ metadata, project, camera, scene: {...}, ... }) — but `local` below
+		// and diffScenes()/MergeViewport both expect a raw THREE.Scene.toJSON()
+		// shape (`.object.children` at the top level, no `scene:` wrapper).
+		// Passing the wrapper directly made `remoteJSON.object` always undefined,
+		// so every local object was misreported as "added" regardless of whether
+		// it actually matched the remote content.
+		const remoteScene = remote.scene || remote;
 		const local    = editor.scene.toJSON();
-		const diff     = diffScenes( local, remote );
+		const diff     = diffScenes( local, remoteScene );
 
 		banner.remove();
 
-		const mv = new MergeViewport( editor, local, remote, diff );
+		const mv = new MergeViewport( editor, local, remoteScene, diff );
 		await mv.open();
 
 	} catch ( err ) {
