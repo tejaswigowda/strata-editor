@@ -4,6 +4,8 @@
 
 **A deterministic, human-readable selector language for editing and versioning 3D scenes. Sovereign, browser-native, no build. Optional AI that stays within bounds.**
 
+**[About](docs/about/) · [Paper](https://arxiv.org/abs/2608.28950) · [3DOM](https://github.com/tejaswigowda/3dom)**
+
 **The language is the workhorse.** Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors, change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely **by hand, without any AI**. It is the primary product. Every mutation is undoable, git-tracked, and human-readable.
 
 **AI is a slim optional front door.** Because the language is small and explicit, a stock on-device model can map natural language onto it. No task-specific training is needed. The layer is **model-agnostic: bring your own AI**. Run a stock model on-device (WebGPU / WebLLM), or connect any external API (Ollama, OpenAI, Claude) through `fetchAPI`. The same scaffolding, harness, and constrained decoding wrap every model, so they lift both local small models and frontier APIs onto the language. It is the natural-language layer *over* the deterministic interface, not the foundation. It debuts most vividly at **animation**: "make it bounce" becomes a real keyframe clip. Generation (blocking out a scene from a prompt) is kept as **scaffolding**, not the headline.
