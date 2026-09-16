@@ -23,6 +23,19 @@ Content is fetched with the GitHub raw media type. It handles files over 1 MB an
 
 Scenes are diffable JSON. See [scene representation](ARCHITECTURE.md#scene-representation) for the round-trip guarantees that make git diffs meaningful.
 
+## Shareable links (URL hash preload)
+
+Appending `#repo=<owner>/<repo>&file=<path>` to the app URL loads that scene from a repo automatically on page open — before local autosave or the configured `git-settings` repo, so it always wins when present. An optional `&branch=<name>` selects a non-`main` branch.
+
+```
+https://your-strata-host/#repo=tejaswigowda/test1&file=scene.json
+https://your-strata-host/#repo=tejaswigowda/test1&file=scene.json&branch=dev
+```
+
+- **No token required to read a public repo.** The hash loader always tries an anonymous GitHub API request first; a token already saved in the Git tab is reused opportunistically (e.g. to read a private repo) but is never required just to view a public one. Committing back still requires a token, entered in the Git tab as usual.
+- The Git tab's Repo/Branch/Path fields update to reflect the loaded scene (without touching a saved token), so **Compare with Remote** and **Commit** immediately target the same place.
+- A missing hash, an unparseable `repo=` value, or any load failure (bad path, rate limit, network error) is logged to the console only — it never throws or shows a blocking dialog — and the editor falls through to its normal boot sequence (local autosave, then the configured-repo auto-load) unchanged.
+
 ---
 
 **Next:** [Architecture](ARCHITECTURE.md) · [← Back to README](../README.md)

@@ -56,7 +56,7 @@ This README is the landing page and the thesis. The reference material is split 
 | [**JS Shell**](guides/JS_SHELL.md) | The primary editing surface: Monaco integration, core globals, object lookup, spatial helpers, modeling ops, Edit Mode, and `fetchAPI`. |
 | [**Optional AI acceleration**](guides/AI_GUIDE.md) | The agentic loop, AI scene context, model configuration (WebLLM / external / client-side), cost tracking, and the generation eval. |
 | [**Architecture**](guides/ARCHITECTURE.md) | Two-form scene representation (git-diffable round-trip) and the full module map. |
-| [**Git versioning**](guides/GIT_VERSIONING.md) | Repository sync, the merge-conflict viewport, and access-token scope. |
+| [**Git versioning**](guides/GIT_VERSIONING.md) | Repository sync, the merge-conflict viewport, access-token scope, and `#repo=owner/repo&file=path` URL hash preload. |
 | [**Roadmap**](guides/ROADMAP.md) | Done / next / then. |
 | [**Dev Mode API**](guides/DEV_MODE_API.md) | Server-side external-model proxy and its security model. |
 | Mesh editing | [Quick start](guides/MESH_EDITING_QUICK_START.md) · [Guide](guides/MESH_EDITING_GUIDE.md) · [Technical](guides/MESH_EDITING_TECHNICAL.md) · [Status](guides/IMPLEMENTATION_STATUS.md) |
@@ -103,7 +103,7 @@ The host enforces: clone-on-write (shared materials), normalization ("black" →
 | | |
 |---|---|
 | **Selector-based language** | Address parts by CSS-like selector (`$S('.wheel.front')`). Edit with guarded ops: `recolor`, `scale`, `spin`, etc. Deterministic resolution. See [LANGUAGE.md](guides/LANGUAGE.md). |
-| **Git versioning** | Auto-load, commit, split-screen merge-conflict resolution. AI writes diff-aware messages. Diffable JSON. See [GIT_VERSIONING.md](guides/GIT_VERSIONING.md). |
+| **Git versioning** | Auto-load, commit, split-screen merge-conflict resolution. AI writes diff-aware messages. Diffable JSON. **Shareable links:** `#repo=owner/repo&file=path.json[&branch=name]` in the URL preloads that scene straight from a git repo on page load — no token needed for a public repo (a token is only required to commit). See [GIT_VERSIONING.md](guides/GIT_VERSIONING.md). |
 | **JS Shell** | REPL: type queries, edit manually, or ask AI. Every command undoable and versioned. See [JS_SHELL.md](guides/JS_SHELL.md). |
 | **Sovereign by default** | On-device inference (WebGPU/WebLLM). Nothing leaves the device except by your explicit action (git, `fetchAPI`). |
 | **Universal timeline** | Scene-wide absolute clock. Tracks addressed by selector (objects + camera). Keyframe P/S/R editor in the Animations tab: stage a pose (rotation deferrable to a look-at target), key it at the playhead, or select a block and edit it in place. Events versioned in JSON and glTF. AI authors via deterministic recipes. See [ANIMATION.md](guides/ANIMATION.md). |
