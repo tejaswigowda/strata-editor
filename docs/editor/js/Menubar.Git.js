@@ -148,18 +148,37 @@ function saveSettings( s ) {
 
 }
 
-// ── Parse owner/repo from a GitHub URL ───────────────────────────────────────
+// ── Parse owner/repo from a GitHub URL, or the bare "owner/repo" shorthand ────
 
 function parseRepo( url ) {
 
-	const m = String( url ).trim().replace( /\.git$/, '' )
-		.match( /github\.com[/:]([^/]+)\/([^/]+)/ );
-	if ( ! m ) return null;
-	return { owner: m[ 1 ], repo: m[ 2 ] };
+	const str = String( url ).trim().replace( /\.git$/, '' );
+
+	const m = str.match( /github\.com[/:]([^/]+)\/([^/]+)/ );
+	if ( m ) return { owner: m[ 1 ], repo: m[ 2 ] };
+
+	// Bare "owner/repo" (no host) — what a URL hash preload naturally carries.
+	const shorthand = str.match( /^([\w.-]+)\/([\w.-]+)$/ );
+	if ( shorthand ) return { owner: shorthand[ 1 ], repo: shorthand[ 2 ] };
+
+	return null;
 
 }
 
 // ── GitHub REST helpers ───────────────────────────────────────────────────────
+
+// Omits Authorization entirely when no token is given, rather than sending a
+// malformed "Bearer undefined"/"Bearer null" — GitHub treats a bad bearer token
+// as a 401 even on public repos, whereas a genuinely anonymous request is
+// allowed (at a lower, IP-based rate limit) for public-repo reads. Committing
+// always needs a real token regardless; only reads can go tokenless.
+function ghHeaders( token, accept ) {
+
+	const headers = { Accept: accept };
+	if ( token ) headers.Authorization = `Bearer ${ token }`;
+	return headers;
+
+}
 
 async function ghGet( path, token ) {
 
@@ -168,7 +187,7 @@ async function ghGet( path, token ) {
 	const url = `https://api.github.com${ path }${ sep }_ts=${ Date.now() }`;
 
 	const res = await fetch( url, {
-		headers: { Authorization: `Bearer ${ token }`, Accept: 'application/vnd.github+json' },
+		headers: ghHeaders( token, 'application/vnd.github+json' ),
 		cache: 'no-store',   // bypass browser HTTP cache
 	} );
 
@@ -187,7 +206,7 @@ async function ghGetSceneJSON( path, token ) {
 	const url = `https://api.github.com${ path }${ sep }_ts=${ Date.now() }`;
 
 	const res = await fetch( url, {
-		headers: { Authorization: `Bearer ${ token }`, Accept: 'application/vnd.github.raw' },
+		headers: ghHeaders( token, 'application/vnd.github.raw' ),
 		cache: 'no-store',
 	} );
 
@@ -272,7 +291,7 @@ async function ghGetBytes( parsed, branch, path, token ) {
 	const url = `https://api.github.com/repos/${ parsed.owner }/${ parsed.repo }/contents/${ path }?ref=${ branch }&_ts=${ Date.now() }`;
 
 	const res = await fetch( url, {
-		headers: { Authorization: `Bearer ${ token }`, Accept: 'application/vnd.github.raw' },
+		headers: ghHeaders( token, 'application/vnd.github.raw' ),
 		cache: 'no-store',
 	} );
 
@@ -930,6 +949,94 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 	} finally {
 
 		banner.remove();
+
+	}
+
+}
+
+// ── Hash-based scene preload ──────────────────────────────────────────────────
+// #repo=<owner>/<repo>&file=<path>[&branch=<branch>] in the URL loads that
+// scene from a repo on page load — no token needed for a PUBLIC repo (GitHub
+// allows anonymous reads at a lower, IP-based rate limit; see ghHeaders()).
+// Any parse or network failure here is swallowed (console-warned, never
+// thrown/alerted) so a bad or absent hash always falls through to the normal
+// boot sequence unchanged — this is a pure addition, never a way to break it.
+// Committing back still needs a real PAT, entered in the Git tab as usual.
+export async function loadSceneFromHash( editor ) {
+
+	const hash = window.location.hash;
+	if ( ! hash || hash.indexOf( 'repo=' ) === - 1 ) return false;
+
+	let params;
+	try {
+
+		params = new URLSearchParams( hash.replace( /^#/, '' ) );
+
+	} catch {
+
+		return false;
+
+	}
+
+	const repoParam = params.get( 'repo' );
+	const file      = params.get( 'file' );
+	const branch    = params.get( 'branch' ) || 'main';
+
+	if ( ! repoParam || ! file ) return false;
+
+	const parsed = parseRepo( repoParam );
+
+	if ( ! parsed ) {
+
+		console.warn( `loadSceneFromHash(): "${ repoParam }" is not a valid GitHub repo ("owner/repo" or a github.com URL) — ignoring URL hash, booting normally.` );
+		return false;
+
+	}
+
+	// An existing token (saved from a prior session) is reused if it happens to
+	// cover this repo — but reading never REQUIRES one for a public repo, so a
+	// missing/wrong token here still degrades to a plain anonymous read rather
+	// than failing outright.
+	const existingPat = loadSettings().pat || null;
+
+	const banner = _showBanner( `Loading ${ parsed.owner }/${ parsed.repo } from URL…` );
+
+	try {
+
+		const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ file }?ref=${ branch }`;
+		const json    = await ghGetSceneJSON( apiPath, existingPat );
+
+		await internalizeFromGit( json, parsed, branch, existingPat );
+
+		editor.clear();
+		await editor.fromJSON( json );
+
+		localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+
+		// Reflect what was loaded in the Git tab (repo/branch/file) so Compare/
+		// Commit target the same place — WITHOUT touching any saved token; that
+		// keeps working (or keeps being absent) exactly as it already was.
+		saveSettings( { ...loadSettings(), repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch, scenePath: file } );
+		editor.signals.gitSettingsChanged.dispatch();
+
+		try {
+
+			const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, existingPat );
+			setSyncedCommit( parsed, file, branch, ref && ref.object && ref.object.sha );
+
+		} catch { /* non-fatal */ }
+
+		banner.remove();
+		const tokenHint = existingPat ? '' : ' — add a token in the Git tab to enable commits';
+		_showBanner( `✓ Loaded ${ parsed.owner }/${ parsed.repo }/${ file } from URL${ tokenHint }`, 4000 );
+
+		return true;
+
+	} catch ( err ) {
+
+		banner.remove();
+		console.warn( `loadSceneFromHash(): failed to load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ err.message }. Falling back to normal startup.` );
+		return false;
 
 	}
 

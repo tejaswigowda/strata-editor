@@ -119,6 +119,10 @@ function Editor() {
 		// Lasso selection mode
 		lassoModeChanged:     new Signal(),  // { active }
 
+		// Git repo/branch/path settings changed programmatically (e.g. a
+		// #repo=...&file=... URL hash preload) — the Git sidebar tab reflects it.
+		gitSettingsChanged:   new Signal(),
+
 	};
 
 	// A genuine (non-timeline) edit to an object's base pose/opacity should

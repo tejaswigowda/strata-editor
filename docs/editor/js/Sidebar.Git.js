@@ -77,6 +77,17 @@ function SidebarGit( editor ) {
 	noteRow.add( note );
 	container.add( noteRow );
 
+	// A token is only ever REQUIRED to commit (GitHub always needs auth to
+	// write). Reading a PUBLIC repo — by hand here, or via a #repo=...&file=...
+	// URL hash preload — works with no token at all, at GitHub's lower anonymous
+	// rate limit. Private repos need a token for reads too.
+	const tokenHintRow = new UIRow();
+	const tokenHint = new UIText( 'Token required to commit. Loading a public repo (incl. via a #repo=…&file=… URL) works without one.' ).setWidth( '100%' );
+	tokenHint.setStyle( 'fontSize', [ '11px' ] );
+	tokenHint.setStyle( 'opacity', [ '0.5' ] );
+	tokenHintRow.add( tokenHint );
+	container.add( tokenHintRow );
+
 	function persist() {
 
 		saveSettings( {
@@ -90,6 +101,19 @@ function SidebarGit( editor ) {
 
 	// Auto-save when a field loses focus / changes.
 	[ repoInput, branchInput, pathInput, patInput ].forEach( input => input.onChange( persist ) );
+
+	// Reflect settings changed elsewhere (e.g. a #repo=...&file=... URL hash
+	// preload on this same page load) without clobbering what the user is
+	// actively typing.
+	editor.signals.gitSettingsChanged.add( function () {
+
+		const fresh = loadSettings();
+		repoInput.setValue( fresh.repoUrl || '' );
+		branchInput.setValue( fresh.branch || 'main' );
+		pathInput.setValue( fresh.scenePath || 'scene.json' );
+		patInput.setValue( fresh.pat || '' );
+
+	} );
 
 	container.add( new UIHorizontalRule() );
 
