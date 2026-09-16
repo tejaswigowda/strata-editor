@@ -106,6 +106,38 @@ function removeGhost( node ) {
 
 }
 
+// A fade's incoming text gets its OWN hidden child mesh, rendered (at
+// near-zero opacity) for the ENTIRE fade window instead of being created and
+// shown on `node` itself right at the crossover. Building + first-rendering a
+// TextGeometry is when the WebGPU renderer compiles that geometry/material's
+// render pipeline — if that compile is still in flight the very frame the
+// text needs to become significantly visible, the frame renders corrupted
+// (garbled overlapping glyphs). Warming it at ~0 opacity across the whole
+// fade gives the renderer the full duration to finish before it matters.
+function getOrCreateNextSlot( node ) {
+
+	let slot = node.children.find( c => c.userData && c.userData.isNextSlot );
+	if ( slot ) return slot;
+	slot = new node.constructor( node.geometry.clone(), node.material.clone() );
+	slot.name = '__nextTextSlot';
+	slot.userData.isNextSlot = true;
+	slot.material.transparent = true;
+	avoidZFighting( slot.material );
+	node.add( slot );
+	return slot;
+
+}
+
+function removeNextSlot( node ) {
+
+	const slot = node.children.find( c => c.userData && c.userData.isNextSlot );
+	if ( ! slot ) return;
+	node.remove( slot );
+	slot.geometry.dispose();
+	slot.material.dispose();
+
+}
+
 /**
  * Sample every 'change' track in `model` at absolute time `t` and apply the
  * result directly to each target's live TextGeometry mesh (content swap, plus
@@ -139,6 +171,7 @@ export function applyContentAt( editor, model, t ) {
 
 				if ( ! isTextMesh( node ) ) continue;
 				removeGhost( node );
+				removeNextSlot( node );
 				node.material.opacity = 1;
 
 			}
@@ -176,27 +209,77 @@ export function applyContentAt( editor, model, t ) {
 				// at the same anchor and looked like garbled overlapping digits.
 				// Fixed by never showing both at once: dip through zero opacity
 				// instead — old text fades out over the first half of the
-				// window, new text fades in over the second half.
+				// window, new text (pre-warmed on a hidden slot, see above)
+				// fades in over the second half. Both materials also drop
+				// depthWrite while translucent/hidden — a transparent mesh at
+				// opacity 0 is invisible but, with depthWrite on, still wins the
+				// depth test and blocks whatever draws behind/alongside it,
+				// punching a silhouette-shaped hole out of the other mesh's text
+				// wherever their glyphs overlap on screen.
 				removeGhost( node );
 				node.material.transparent = true;
+				node.material.depthWrite = false;
+
+				const nextSlot = getOrCreateNextSlot( node );
+				regenerateText( nextSlot, active.args.text );
+				nextSlot.material.transparent = true;
+				nextSlot.material.depthWrite = false;
+				nextSlot.visible = true;
 
 				if ( fadeRatio < 0.5 ) {
 
 					regenerateText( node, changeEvents[ activeIdx - 1 ].args.text );
 					node.material.opacity = 1 - ( fadeRatio / 0.5 );
+					nextSlot.material.opacity = 0.001; // "warm" but imperceptible
 
 				} else {
 
-					regenerateText( node, active.args.text );
-					node.material.opacity = ( fadeRatio - 0.5 ) / 0.5;
+					node.material.opacity = 0;
+					nextSlot.material.opacity = ( fadeRatio - 0.5 ) / 0.5;
 
 				}
 
 			} else {
 
-				regenerateText( node, active.args.text );
-				node.material.opacity = 1;
+				// Settling right after a fade — adopt the pre-warmed slot's
+				// (already rendered, pipeline-hot) geometry instead of building
+				// + first-showing a fresh one exactly on this frame.
+				const nextSlot = node.children.find( c => c.userData && c.userData.isNextSlot );
+				if ( nextSlot && lastText.get( nextSlot ) === active.args.text ) {
+
+					const old = node.geometry;
+					node.geometry = nextSlot.geometry;
+					lastText.set( node, active.args.text );
+					avoidZFighting( node.material );
+					requestAnimationFrame( () => old.dispose() );
+					node.remove( nextSlot );
+					nextSlot.material.dispose();
+
+				} else {
+
+					regenerateText( node, active.args.text );
+
+				}
+
+				// A node can ALSO carry an unrelated animate()-recipe opacity
+				// track on the same material (e.g. a fadeOut() after its last
+				// change()) — mirrors the mixer, so it's already been keyed to
+				// whatever that recipe wants by now. Forcing opacity back to 1
+				// here unconditionally fought with it every single frame after
+				// this change()'s own fade window closed, permanently undoing
+				// a fadeOut() that ran later and leaving the "old" text stuck
+				// fully visible (looked like garbled overlapping glyphs once
+				// stacked on top of whatever text replaced it at the same
+				// position). Only claim opacity when nothing else owns it.
+				if ( ! ( node.material.userData && node.material.userData.__fadeManaged ) ) {
+
+					node.material.opacity = 1;
+					node.material.depthWrite = true;
+
+				}
+
 				removeGhost( node );
+				removeNextSlot( node );
 
 			}
 

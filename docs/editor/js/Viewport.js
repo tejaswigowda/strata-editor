@@ -1383,6 +1383,16 @@ function Viewport( editor ) {
 
 		}
 
+		// Timeline.js's own rAF loop samples change()-event content independently
+		// of this mixer-driven loop (see its tick() for why) — honor its request
+		// for one more render so a content update settled there always shows up.
+		if ( editor.needsContentRender === true ) {
+
+			editor.needsContentRender = false;
+			needsUpdate = true;
+
+		}
+
 		if ( renderer.xr.isPresenting === true ) {
 
 			needsUpdate = true;

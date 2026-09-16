@@ -1197,6 +1197,16 @@ function Timeline( editor ) {
 			// content is a step function, not a keyframe track — sample separately
 			applyContentAt( editor, editor.timeline, playhead );
 
+			// This tick() loop runs independently of Viewport's own animate()
+			// loop, which only calls render() while mixer.stats.actions.inUse
+			// is nonzero (plus one grace frame). The two loops can settle a
+			// frame apart right as playback ends, freezing the canvas on
+			// whatever mid-fade content state happened to be live when
+			// Viewport's rendering stopped — never showing the truly-final
+			// content this tick just computed. Flag it so Viewport's next
+			// animate() forces one more render regardless of mixer state.
+			editor.needsContentRender = true;
+
 		} else {
 
 			tickLastTime = null;
