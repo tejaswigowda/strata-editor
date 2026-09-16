@@ -71,19 +71,36 @@ function snapshotCallcard( pxWidth, pxHeight ) {
 		iframe.onload = function () {
 
 			clearTimeout( timeout );
-			// One tick so the card's own <script type="module"> (version stamp)
-			// has run before we rasterize.
-			setTimeout( function () {
 
-				html2canvas( iframe.contentDocument.body, {
-					width: pxWidth,
-					height: pxHeight,
-					backgroundColor: null,
-					scale: 1,
-					logging: false
-				} ).then( resolve ).catch( reject );
+			// Wait for the card's own <script type="module"> (version stamp) to
+			// run AND every <img> (the QR) to finish decoding before rasterizing —
+			// a fixed short delay isn't reliable for image decode timing, and
+			// html2canvas silently paints a blank box for an undecoded <img>.
+			const doc = iframe.contentDocument;
+			const images = Array.from( doc.images );
+			const imagesReady = Promise.all( images.map( function ( img ) {
 
-			}, 50 );
+				if ( img.complete && img.naturalWidth > 0 ) return Promise.resolve();
+				if ( typeof img.decode === 'function' ) return img.decode().catch( function () {} );
+				return new Promise( function ( res ) { img.onload = img.onerror = res; } );
+
+			} ) );
+
+			imagesReady
+				.then( function () { return new Promise( function ( res ) { requestAnimationFrame( function () { requestAnimationFrame( res ); } ); } ); } )
+				.then( function () {
+
+					return html2canvas( doc.body, {
+						width: pxWidth,
+						height: pxHeight,
+						backgroundColor: null,
+						scale: 1,
+						logging: false
+					} );
+
+				} )
+				.then( resolve )
+				.catch( reject );
 
 		};
 

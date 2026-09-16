@@ -4,7 +4,7 @@
 
 **A deterministic, human-readable selector language for editing and versioning 3D scenes. Sovereign, browser-native, no build. Optional AI that stays within bounds.**
 
-**[About](docs/about/) · [Paper](https://arxiv.org/abs/2608.28950) · [3DOM](https://github.com/tejaswigowda/3dom)**
+**[About](https://tejaswigowda.com/strata-editor/about/) · [Paper](https://arxiv.org/abs/2608.28950) · [3DOM](https://github.com/tejaswigowda/3dom)**
 
 **The language is the workhorse.** Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors, change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely **by hand, without any AI**. It is the primary product. Every mutation is undoable, git-tracked, and human-readable.
 
