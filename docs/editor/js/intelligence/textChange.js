@@ -82,24 +82,17 @@ function regenerateText( node, text ) {
 	if ( lastText.get( node ) === text ) return;
 	const options = node.geometry.parameters.options;
 	const geometry = new node.geometry.constructor( text, { ...options, text } );
-	node.geometry.dispose();
+	const old = node.geometry;
 	node.geometry = geometry;
 	lastText.set( node, text );
 	avoidZFighting( node.material );
 
-}
-
-function getOrCreateGhost( node ) {
-
-	let ghost = node.children.find( c => c.userData && c.userData.isChangeGhost );
-	if ( ghost ) return ghost;
-	ghost = new node.constructor( node.geometry.clone(), node.material.clone() );
-	ghost.name = '__changeGhost';
-	ghost.userData.isChangeGhost = true;
-	ghost.material.transparent = true;
-	avoidZFighting( ghost.material );
-	node.add( ghost );
-	return ghost;
+	// Deferred dispose: disposing the OLD geometry synchronously here races the
+	// WebGPU renderer's already-in-flight frame, which can still reference the
+	// old buffer — corrupting that frame into a garbled overlap of the old and
+	// new glyphs for a single visible frame. Freeing it a frame later lets the
+	// renderer finish drawing with the new geometry first.
+	requestAnimationFrame( () => old.dispose() );
 
 }
 
@@ -174,19 +167,34 @@ export function applyContentAt( editor, model, t ) {
 
 			}
 
-			regenerateText( node, active.args.text );
-
 			if ( fading ) {
 
+				// Old and new strings are rarely the same width, so overlaying
+				// both at once (classic crossfade, ghost + main simultaneously
+				// visible) blends mismatched glyphs into an unreadable smear —
+				// e.g. "5²" fading into "a² + b² = c²" left both partly opaque
+				// at the same anchor and looked like garbled overlapping digits.
+				// Fixed by never showing both at once: dip through zero opacity
+				// instead — old text fades out over the first half of the
+				// window, new text fades in over the second half.
+				removeGhost( node );
 				node.material.transparent = true;
-				node.material.opacity = fadeRatio;
-				const ghost = getOrCreateGhost( node );
-				regenerateText( ghost, changeEvents[ activeIdx - 1 ].args.text );
-				ghost.material.opacity = 1 - fadeRatio;
-				ghost.visible = true;
+
+				if ( fadeRatio < 0.5 ) {
+
+					regenerateText( node, changeEvents[ activeIdx - 1 ].args.text );
+					node.material.opacity = 1 - ( fadeRatio / 0.5 );
+
+				} else {
+
+					regenerateText( node, active.args.text );
+					node.material.opacity = ( fadeRatio - 0.5 ) / 0.5;
+
+				}
 
 			} else {
 
+				regenerateText( node, active.args.text );
 				node.material.opacity = 1;
 				removeGhost( node );
 
