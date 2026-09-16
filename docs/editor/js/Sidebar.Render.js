@@ -5,6 +5,7 @@ import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js'
 
 import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea } from './libs/ui.js';
 import { holdTimelineAt } from './intelligence/timelineController.js';
+import { findCallcards, refreshCallcard } from './Callcard.js';
 
 // ── SRT helpers (parse / format / word-wrap for hard-burn) ─────────────────
 
@@ -905,6 +906,21 @@ function SidebarRender( editor ) {
 		silenceSource.connect( silenceGain ).connect( audioDest );
 		silenceSource.start();
 		for ( const track of audioDest.stream.getAudioTracks() ) stream.addTrack( track );
+
+		// Re-bake any call-card object(s) with a FRESH live fetch of
+		// /about/callcard right before recording starts — this is what makes the
+		// card "living for future renders": whatever the card says right now is
+		// what gets baked into this export, stamped with its current version.
+		// Already-rendered mp4s are unaffected (their frames were baked at THEIR
+		// render time). Best-effort: a failed fetch just leaves whatever texture
+		// the object already had (logged via refreshCallcard's own console.warn).
+		const callcards = findCallcards( scene );
+		if ( callcards.length ) {
+
+			setProgress( 0, 'Refreshing call card\u2026' );
+			await Promise.all( callcards.map( refreshCallcard ) );
+
+		}
 
 		const recorder = new MediaRecorder( stream, {
 			mimeType: mime,

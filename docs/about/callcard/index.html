@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Strata — call card</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+	/about/callcard — the living end-card every Strata short embeds.
+
+	Single source, no build step, zero third-party network calls (no CDN, no
+	fonts, no analytics; the QR is a pre-baked local qr.svg, not a live
+	generator or a third-party QR API). Visiting this page directly always
+	shows the CURRENT card ("living"). A render bakes a snapshot of exactly
+	this page at render time (see docs/editor/js/Callcard.js), so a rendered
+	short freezes whatever this page said the day it was rendered, stamped
+	with the version below.
+
+	Keep this page visually self-contained: it is designed to be rasterized
+	at a fixed pixel box (whatever size the embedding <canvas> plane asks
+	for), not just viewed in a full browser window.
+-->
+<style>
+	:root {
+		color-scheme: dark;
+	}
+	html, body {
+		margin: 0;
+		padding: 0;
+		width: 100%;
+		height: 100%;
+		background: #14161a;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	}
+	.card {
+		box-sizing: border-box;
+		width: 100%;
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 2.5vw;
+		padding: 6vh 6vw;
+		background:
+			radial-gradient(circle at 12% 18%, rgba(110, 168, 255, 0.16), transparent 55%),
+			linear-gradient(135deg, #14161a 0%, #1b1e24 100%);
+	}
+	.text {
+		display: flex;
+		flex-direction: column;
+		gap: 1.1vh;
+		min-width: 0;
+	}
+	.tagline {
+		margin: 0;
+		color: #f3f5f8;
+		font-size: clamp(20px, 5.4vw, 46px);
+		font-weight: 700;
+		line-height: 1.15;
+		letter-spacing: -0.01em;
+	}
+	.mark {
+		margin: 0;
+		color: #9aa4b2;
+		font-size: clamp(12px, 2.1vw, 20px);
+		font-weight: 400;
+		line-height: 1.4;
+	}
+	.mark strong {
+		color: #d9dde3;
+		font-weight: 600;
+	}
+	.qr-block {
+		flex: 0 0 auto;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.8vh;
+	}
+	.qr-block img {
+		display: block;
+		width: clamp(84px, 16vw, 168px);
+		height: clamp(84px, 16vw, 168px);
+		background: #ffffff10;
+		border-radius: 10px;
+		padding: 8px;
+		box-sizing: border-box;
+	}
+	.qr-caption {
+		margin: 0;
+		color: #7d8794;
+		font-size: clamp(9px, 1.3vw, 12px);
+		text-align: center;
+		max-width: 22ch;
+	}
+	.stamp {
+		position: absolute;
+		right: 1.4vw;
+		bottom: 1.2vh;
+		color: #5b6470;
+		font-size: clamp(9px, 1.1vw, 12px);
+		letter-spacing: 0.02em;
+		font-variant-numeric: tabular-nums;
+	}
+</style>
+</head>
+<body>
+	<div class="card" id="card">
+		<div class="text">
+			<p class="tagline">The idea outlasts the engine.</p>
+			<p class="mark"><strong>Made with Strata</strong> — sovereign 3D in the browser.</p>
+		</div>
+		<div class="qr-block">
+			<img src="qr.svg" width="168" height="168" alt="QR code linking to the Strata editor">
+			<p class="qr-caption">tejaswigowda.com/strata-editor</p>
+		</div>
+	</div>
+	<div class="stamp" id="stamp"></div>
+
+	<script type="module">
+		import { STRATA_VERSION } from '../../strata-version.js';
+		document.getElementById( 'stamp' ).textContent = `Strata v${ STRATA_VERSION }`;
+	</script>
+</body>
+</html>

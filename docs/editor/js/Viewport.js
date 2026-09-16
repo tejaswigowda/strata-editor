@@ -25,6 +25,7 @@ import { lassoSelect } from './intelligence/lassoSelect.js';
 import { releaseTimelineObject, syncMaterialTransparency } from './intelligence/timelineController.js';
 import { hydrateHtmlEmbed } from './HtmlEmbed.js';
 import { hydrateMarkdownEmbed } from './MarkdownEmbed.js';
+import { hydrateCallcard } from './Callcard.js';
 
 /**
  * Cube border helper: `node.userData.hasEdgeOutline` is a plain, serializable
@@ -1454,7 +1455,7 @@ function Viewport( editor ) {
 		// missing their texture, then re-render once the (async) bake lands.
 		scene.traverse( function ( o ) {
 
-			const bake = hydrateHtmlEmbed( o ) || hydrateMarkdownEmbed( o );
+			const bake = hydrateHtmlEmbed( o ) || hydrateMarkdownEmbed( o ) || hydrateCallcard( o );
 			if ( bake ) bake.then( render );
 			hydrateEdgeOutline( o );
 

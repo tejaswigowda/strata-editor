@@ -20,6 +20,7 @@ import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { createHtmlEmbed } from './HtmlEmbed.js';
 import { createMarkdownEmbed } from './MarkdownEmbed.js';
+import { createCallcard } from './Callcard.js';
 
 const DRAG_TYPE = 'application/x-stencil';
 
@@ -54,6 +55,7 @@ const ICONS = {
 	text: svg( '<path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/>' ),
 	html: svg( '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 9h18"/><path d="M7 13l-1.5 2 1.5 2M11 13l1.5 2-1.5 2"/>' ),
 	md: svg( '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M6 15V9l3 3 3-3v6"/><path d="M15 9v6l2.2-2.2"/>' ),
+	callcard: svg( '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M7 9.5h6M7 12.5h4"/><rect x="15.5" y="9" width="4" height="4" rx="0.5"/>' ),
 	torus: svg( '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><ellipse cx="12" cy="12" rx="3.2" ry="1.6"/>' ),
 	torusknot: svg( '<path d="M9 5a5 7 0 0 0 0 14M15 5a5 7 0 0 1 0 14M5 9a7 5 0 0 0 14 0M5 15a7 5 0 0 1 14 0"/>' ),
 	tube: svg( '<path d="M3 19C3 10 6 5 12 5s9 5 9 14"/><path d="M7 19c0-6 2-10 5-10s5 4 5 10"/>' ),
@@ -376,6 +378,16 @@ function SidebarStencils( editor ) {
 	addStencil( 'md', 'Markdown', function ( editor, position ) {
 
 		const object = createMarkdownEmbed( '# Edit me\n\nSelect this object, open the **Object** tab, and edit the Markdown field.\n\n- supports lists\n- and `code`' );
+		addObject( editor, object, position );
+
+	} );
+
+	addStencil( 'callcard', 'Call card', function ( editor, position ) {
+
+		// Living end-card: embeds /about/callcard live, and re-fetches it fresh
+		// at every render (see Callcard.js) — update the card once, every future
+		// render/view picks it up without touching this object.
+		const object = createCallcard();
 		addObject( editor, object, position );
 
 	} );

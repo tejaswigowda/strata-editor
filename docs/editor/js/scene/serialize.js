@@ -17,7 +17,34 @@
  */
 export function sceneToJSON( editor ) {
 
-	return editor.scene.toJSON();
+	// Call-card meshes bake a live-fetched snapshot into material.map at
+	// runtime (see Callcard.js) — strip it before serializing so scene JSON
+	// (autosave, git commits) stores only the reference (isCallcard flag +
+	// embed size), never a copy of the card's pixels. Restored immediately
+	// after: toJSON() is synchronous, so there's no observable gap in the
+	// live view, and the texture object itself never changes (no GPU
+	// re-upload), only briefly detached from the material.
+	const stripped = [];
+	editor.scene.traverse( function ( o ) {
+
+		if ( o.userData && o.userData.isCallcard && o.material && o.material.map ) {
+
+			stripped.push( { material: o.material, map: o.material.map } );
+			o.material.map = null;
+
+		}
+
+	} );
+
+	try {
+
+		return editor.scene.toJSON();
+
+	} finally {
+
+		stripped.forEach( function ( s ) { s.material.map = s.map; } );
+
+	}
 
 }
 

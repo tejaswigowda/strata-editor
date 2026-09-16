@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>About Strata</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Strata: a deterministic, git-versioned, sovereign, browser-native tool for editing and animating 3D scenes.">
+<!--
+	Public front door for Strata. Static, no build step, same-origin only:
+	no trackers, no analytics, no third-party calls beyond the links a
+	visitor actually clicks. Content is lifted from README.md — keep this
+	page and the README in sync in tone (honest, no marketing inflation).
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.6;
+	}
+	main {
+		max-width: 720px;
+		margin: 0 auto;
+		padding: 8vh 24px 12vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 2.1rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.2em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.4em 0 0.6em;
+		font-size: 1.15rem;
+		color: #f3f5f8;
+		border-bottom: 1px solid #2a2e36;
+		padding-bottom: 0.4em;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	.links {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5em;
+	}
+	.links a { font-size: 1.02rem; }
+	.links .desc { color: #7d8794; font-size: 0.88rem; }
+	footer {
+		margin-top: 3em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+	code {
+		background: #1e2127;
+		border-radius: 4px;
+		padding: 0.1em 0.4em;
+		font-size: 0.92em;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Strata</h1>
+	<p class="tagline">A deterministic, human-readable selector language for editing and versioning 3D scenes. Sovereign, browser-native, no build. Optional AI that stays within bounds.</p>
+
+	<h2>What it is</h2>
+	<p>Strata puts a small, familiar interface over a 3D scene: address parts with CSS-like selectors (<code>$S('.wheel.front')</code>), change them with a closed set of command-backed ops, and version the result with git. The interface is deterministic and works entirely by hand, without any AI — that's the primary product. Every mutation is undoable, git-tracked, and human-readable.</p>
+	<p>AI is a slim, optional front door. Because the language is small and explicit, a stock on-device model can map natural language onto it with no task-specific training — bring your own model (on-device WebGPU/WebLLM, or any external API through <code>fetchAPI</code>). It debuts most vividly at animation: "make it bounce" becomes a real keyframe clip.</p>
+
+	<h2>Why it exists</h2>
+	<p>Fundamentals outlive engine and runtime fashion. Most tools in this space embody the opposite of what's worth teaching: closed formats, cloud dependence, opaque state. Strata's properties — open, local, inspectable, versioned, yours — aren't just implementation details. They're the lesson. A scene you can read, diff, and own is a better artifact than one you can't.</p>
+	<p>Nothing leaves the device except by explicit action (a git sync, a deliberate <code>fetchAPI</code> call). Inference is local. Scene state stays on-device by default.</p>
+
+	<h2>Go further</h2>
+	<ul class="links">
+		<li><a href="../">Open the editor →</a> <div class="desc">the app itself — no install, no account, just a URL</div></li>
+		<li><a href="https://github.com/tejaswigowda/strata-editor">Source on GitHub →</a> <div class="desc">strata-editor — read the code, file an issue, fork it</div></li>
+		<li><a href="https://github.com/tejaswigowda/3dom">3DOM →</a> <div class="desc">the standalone "jQuery for 3D" library Strata is built on: selectors, auto-labelling, op-chaining over any three.js scene</div></li>
+		<li><a href="http://tejaswigowda.com/3dom/">3DOM docs & demo →</a> <div class="desc">live examples of the selector engine on its own</div></li>
+		<li><a href="callcard/">The call card →</a> <div class="desc">the living end-card every Strata short embeds</div></li>
+	</ul>
+
+	<footer>
+		Strata is built in the open. This page and the editor are static, served from the same place, with no build step.
+	</footer>
+</main>
+</body>
+</html>

@@ -598,12 +598,33 @@ const server = http.createServer((req, res) => {
   }
 
   fs.stat(filePath, (err, stat) => {
+    if (!err && stat.isDirectory()) {
+      // Directory request (e.g. /about, /about/callcard) — fall back to its
+      // index.html, same convention as the '/' rewrite above and what static
+      // hosts (GitHub Pages included) already do, so local dev matches prod.
+      const indexPath = path.join(filePath, 'index.html');
+      fs.stat(indexPath, (err2, stat2) => {
+        if (err2 || !stat2.isFile()) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('404 Not Found');
+          return;
+        }
+        serveFile(indexPath, stat2, res);
+      });
+      return;
+    }
+
     if (err || !stat.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('404 Not Found');
       return;
     }
 
+    serveFile(filePath, stat, res);
+  });
+});
+
+function serveFile(filePath, stat, res) {
     // ── Headers required for SharedArrayBuffer / cross-origin isolation ──
     res.setHeader('Cross-Origin-Opener-Policy',   'same-origin');
     res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
@@ -636,8 +657,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200);
 
     fs.createReadStream(filePath).pipe(res);
-  });
-});
+}
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`Serving docs/ at http://127.0.0.1:${PORT}`);
