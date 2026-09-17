@@ -36,8 +36,8 @@
 import * as THREE from 'three';
 import html2canvas from 'html2canvas';
 
-export const DEFAULT_WIDTH = 3.2;   // world units (16:9-ish end-card plane)
-export const DEFAULT_HEIGHT = 1.8;
+export const DEFAULT_WIDTH = 1.8;   // world units (9:16-ish portrait, for shorts)
+export const DEFAULT_HEIGHT = 3.2;
 const PIXELS_PER_UNIT = 300;        // rasterize resolution
 const EMBED_PATH = 'about/callcard/'; // resolved relative to document.baseURI
 
