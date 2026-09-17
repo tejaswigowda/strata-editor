@@ -172,12 +172,15 @@ export function createCallcard( width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT )
 
 }
 
-// In-memory only (never serialized) — tracks which live object INSTANCES have
-// already been hydrated, so the per-frame Viewport hydration pass (below)
-// fetches once per scene load instead of once per rendered frame. A fresh
-// object instance from a new fromJSON() parse is a new WeakSet key, so a
-// reload always re-hydrates — only repeat ticks on the SAME instance skip.
-const hydrated = new WeakSet();
+// Tracked directly on the object (a non-enumerable runtime-only property, so
+// it never serializes) rather than a module-scoped WeakSet — a WeakSet is
+// only reliable if every caller shares the exact same module instance, which
+// breaks under dev-time cache-busted re-imports and can otherwise cause the
+// per-frame Viewport hydration pass (below) to see "not yet hydrated" forever
+// and re-fetch/re-bake on every tick (visible as flicker). A fresh object
+// instance from a new fromJSON() parse has no such property, so a reload
+// always re-hydrates — only repeat ticks on the SAME instance skip.
+const HYDRATED_FLAG = '__strataCallcardHydrated';
 
 /**
  * Called on scene load (Viewport.js hydration pass, alongside
@@ -191,8 +194,8 @@ const hydrated = new WeakSet();
 export function hydrateCallcard( object ) {
 
 	if ( ! object.userData || ! object.userData.isCallcard ) return;
-	if ( hydrated.has( object ) ) return;
-	hydrated.add( object );
+	if ( object[ HYDRATED_FLAG ] ) return;
+	Object.defineProperty( object, HYDRATED_FLAG, { value: true, enumerable: false, configurable: true } );
 	return refreshCallcard( object );
 
 }
