@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Make a Pythagorean-theorem short — Strata tutorials</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: build an animated Pythagorean-theorem dissection short in Strata, entirely by hand via the JS Shell and the Universal Timeline.">
+<!--
+	/about/tutorials/makeshort.html — a from-scratch, by-hand tutorial.
+	Every snippet is real Strata surface (JS Shell globals + the public
+	$S().animate()/.at()/.moveToEach()/.change() grammar documented in
+	guides/ANIMATION.md) — copy/paste each block into the Shell tab in
+	order and the short builds up incrementally. Static page, no build
+	step, no third-party calls.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Make a Pythagorean-theorem short</h1>
+	<p class="tagline">Three squares, a right triangle, a classic dissection proof, and a living end-card — built entirely by hand, no AI, via the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<div class="note"><strong>Why the Shell, not clicking.</strong> Every edit below is a real, undoable, git-diffable command (<code>editor.execute(...)</code> under the hood) — the Shell is just the fastest way to author them. You can always inspect or hand-tweak the result afterward in the Outliner/Object panel; nothing here is a special "script mode."</div>
+
+	<h2><span class="step">1</span> Build the three squares</h2>
+	<p class="lede">A square-of-side-<var>n</var> is just an <var>n</var>×<var>n</var> grid of unit cubes, grouped. Paste this once to get a helper, then call it three times for the 3², 4², and 5² squares.</p>
+	<pre><code>function buildSquare(name, n, color) {
+  const group = new Group();
+  group.name = name;
+  const step = 1.08; // cell size + a small gap
+  const offset = (n - 1) * step / 2;
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      const cube = new Mesh(
+        new BoxGeometry(1, 1, 1),
+        new MeshStandardMaterial({ color })
+      );
+      cube.position.set(col * step - offset, row * step - offset, 0);
+      group.add(cube);
+    }
+  }
+  editor.execute(new AddObjectCommand(editor, group));
+  return group;
+}
+
+buildSquare('3x3-square', 3, 0xff8a5c);
+buildSquare('4x4-square', 4, 0x5cc8ff);
+buildSquare('5x5-square', 5, 0x8a5cff);</code></pre>
+	<p>Give every cell an addressable class so the timeline can target "all cubes in this square" as one selector:</p>
+	<pre><code>$S('#3x3-square > *').addClass('cube');
+$S('#4x4-square > *').addClass('cube');
+$S('#5x5-square > *').addClass('cube');</code></pre>
+	<p>Now position the three squares (side by side for now — you'll move the 3×3 and 4×4 onto the 5×5 during the reveal) and add a right triangle whose legs equal 3 and 4:</p>
+	<pre><code>$S('#3x3-square').moveTo(-6, 0, 0);
+$S('#4x4-square').moveTo(-1, -0.5, 0);
+$S('#5x5-square').moveTo(6, 0, 0);
+
+const tri = new Mesh(
+  new ShapeGeometry(new Shape([
+    new Vector2(0, 0),
+    new Vector2(4, 0),
+    new Vector2(0, 3),
+  ])),
+  new MeshStandardMaterial({ color: 0xd9dde3 })
+);
+tri.name = 'RightTriangle';
+editor.execute(new AddObjectCommand(editor, tri));
+$S('#RightTriangle').moveTo(-3.5, -2, 0);</code></pre>
+
+	<h2><span class="step">2</span> Label the squares</h2>
+	<p class="lede">Add the exponent labels and the equation as real 3D text (the <strong>Text</strong> stencil, or scripted the same way) — give them a class so you can style them as a set later.</p>
+	<pre><code>// Repeat for '3', '4', '5' at each square's position, or drag the
+// "Text" stencil in from the Stencils tab and set its Text field by hand —
+// either way you get an ordinary addressable text mesh.
+$S('#three, #four, #eqn').addClass('label');</code></pre>
+	<div class="note">Text meshes are lit like anything else (<code>MeshStandardMaterial</code>) — against a busy or colorful background they can wash out. Skip to <a href="#contrast">step 6</a> before you judge final contrast.</div>
+
+	<h2><span class="step">3</span> Choreograph the entrance</h2>
+	<p class="lede">Everything below is one clock. <code>.at(t)</code> places an event at an absolute time in seconds; chained <code>.animate()</code> calls without <code>.at()</code> just queue after the previous one on that same object.</p>
+	<pre><code>$S('#RightTriangle').at(0).fadeIn(1.5);
+$S('#3x3-square').at(1).fadeIn(1);
+$S('#4x4-square').at(1.5).fadeIn(1);
+$S('#eqn').at(2).change('a\u00B2 + b\u00B2 = c\u00B2');</code></pre>
+
+	<h2><span class="step">4</span> The dissection reveal</h2>
+	<p class="lede">This is the actual proof, staged as motion: the 3×3 and 4×4 squares' cells migrate onto the 5×5 square's cells. <code>moveToEach</code> pairs sources to targets <em>positionally</em> — split the 5×5's 25 cells into a 9-cell group and a 16-cell group first so the counts line up.</p>
+	<pre><code>// however you partition the 25 cells into a 9-set and a 16-set —
+// by hand-picked indices, or however suits your layout:
+const cells = $S('#5x5-square .cube').toArray();
+cells.slice(0, 9).forEach(c => $S(c).addClass('cellA'));
+cells.slice(9, 25).forEach(c => $S(c).addClass('cellB'));
+
+$S('#3x3-square .cube').at(4).moveToEach('#5x5-square .cellA', 800);
+$S('#4x4-square .cube').at(4).moveToEach('#5x5-square .cellB', 800);
+$S('#eqn').at(5).change('9 + 16 = 25', { transition: 'fade', dur: 300 });</code></pre>
+	<p>Scrub the timeline (Animations tab) back and forth — the reveal is fully deterministic and reversible, because the destinations are baked from the 5×5 square's <em>actual</em> cell positions at compile time, not hand-typed coordinates. Move the 5×5 square and the reveal re-targets automatically.</p>
+
+	<h2><span class="step">5</span> Add a background</h2>
+	<p class="lede">A flat default background reads as unfinished. <code>makeTexture</code> is a Shell helper — hand it a function that paints a 2D canvas, and it returns a ready-to-use texture:</p>
+	<pre><code>scene.background = makeTexture((ctx, size) => {
+  const g = ctx.createLinearGradient(0, 0, 0, size);
+  g.addColorStop(0, '#1b2340');
+  g.addColorStop(0.55, '#141a2e');
+  g.addColorStop(1, '#0a0d18');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+}, 512);</code></pre>
+
+	<h2 id="contrast"><span class="step">6</span> Keep labels readable against it</h2>
+	<p class="lede">Text meshes lit only by scene lights can look faint against a moody background. Give them a bit of their own glow so they read consistently regardless of lighting or backdrop:</p>
+	<pre><code>$S('.label').toArray().forEach(o => {
+  o.material.emissive = new Color(0xffffff);
+  o.material.emissiveIntensity = 0.7;
+  o.material.needsUpdate = true;
+});</code></pre>
+
+	<h2><span class="step">7</span> Add the living end-card</h2>
+	<p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it (or drag it into the viewport) — it inserts an addressable plane that embeds the current <a href="../callcard/">/about/callcard</a> live. Place it <em>behind</em> where the camera starts, scaled up past the frame, hidden until the reveal:</p>
+	<pre><code>const cam = camera; // the live viewport camera
+$S('#callcard').moveTo(cam.position.x, cam.position.y, cam.position.z + 15);
+$S('#callcard').scale(8);</code></pre>
+	<div class="note">The call card faces <strong>away</strong> from its default orientation once it's behind the camera — select it, open the <strong>Object</strong> panel, and set Rotation Y to 180° so its printed side faces back toward where the camera will turn to look. It starts effectively hidden by being fully transparent; fade it in during the reveal below rather than toggling visibility by hand.</div>
+	<p>Now the reveal beat: fade the card in and turn the camera <strong>180° about Y</strong> — an explicit about-face, not a computed look-at — to land on it:</p>
+	<pre><code>$S('#callcard').at(6).fadeIn(3);
+$S('camera').at(6).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
+	<p>Scrub to the end of the timeline — the camera should finish turned fully around, framing a call card that fills (and slightly exceeds) the visible frame.</p>
+
+	<h2><span class="step">8</span> Render it</h2>
+	<ol class="steps">
+		<li>Open the <strong>Render</strong> tab.</li>
+		<li>Pick a resolution/FPS (portrait crops are a manual resolution choice today — the card itself is authored vertical/centered so it composes correctly once cropped).</li>
+		<li>Click <strong>Render &amp; Export</strong> and wait — rendering is real-time (a 60s timeline takes ~60s to render).</li>
+		<li>The card is re-fetched and re-baked <em>fresh</em> at render time — edit <code>/about/callcard</code> later and every future render picks up the change automatically, with no edits to this scene.</li>
+	</ol>
+
+	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="../../../guides/ANIMATION.md">the animation guide</a> and <a href="../../../guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
