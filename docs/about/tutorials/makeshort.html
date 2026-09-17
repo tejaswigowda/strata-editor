@@ -143,10 +143,17 @@ editor.execute(new AddObjectCommand(editor, tri));
 $S('#RightTriangle').moveTo(-3.5, -2, 0);</code></pre>
 
 	<h2><span class="step">2</span> Label the squares</h2>
-	<p class="lede">Add the exponent labels and the equation as real 3D text (the <strong>Text</strong> stencil, or scripted the same way) — give them a class so you can style them as a set later.</p>
-	<pre><code>// Repeat for '3', '4', '5' at each square's position, or drag the
-// "Text" stencil in from the Stencils tab and set its Text field by hand —
-// either way you get an ordinary addressable text mesh.
+	<p class="lede">Text isn't scriptable from the Shell directly (font loading needs the UI's loader) — use the <strong>Text</strong> stencil three times, then rename and set each one's content. This is the one step that's click-driven rather than pasted.</p>
+	<ol class="steps">
+		<li>Open <strong>Stencils → Mesh → Text</strong> and click it three times — you get three objects named <code>Text</code>, <code>Text 2</code>, <code>Text 3</code>, all reading "THREE.JS".</li>
+		<li>Select the first one. In the <strong>Object</strong> panel, set <strong>Name</strong> to <code>three</code>. In the <strong>Geometry</strong> panel, set <strong>Text</strong> to <code>3²</code>.</li>
+		<li>Select the second. Name it <code>four</code>, set its Geometry → Text to <code>4²</code>.</li>
+		<li>Select the third. Name it <code>eqn</code>, set its Geometry → Text to a single placeholder character like <code>-</code> — its real content is authored entirely via <code>.change()</code> in the next step, so anything here is just a non-empty placeholder.</li>
+	</ol>
+	<p>Now position and class them from the Shell like anything else:</p>
+	<pre><code>$S('#three').moveTo(-6, -2.2, 0.3);
+$S('#four').moveTo(-1, -3, 0.3);
+$S('#eqn').moveTo(0, 4, 0.3);
 $S('#three, #four, #eqn').addClass('label');</code></pre>
 	<div class="note">Text meshes are lit like anything else (<code>MeshStandardMaterial</code>) — against a busy or colorful background they can wash out. Skip to <a href="#contrast">step 6</a> before you judge final contrast.</div>
 
@@ -165,9 +172,10 @@ const cells = $S('#5x5-square .cube').toArray();
 cells.slice(0, 9).forEach(c => $S(c).addClass('cellA'));
 cells.slice(9, 25).forEach(c => $S(c).addClass('cellB'));
 
-$S('#3x3-square .cube').at(4).moveToEach('#5x5-square .cellA', 800);
-$S('#4x4-square .cube').at(4).moveToEach('#5x5-square .cellB', 800);
+$S('#3x3-square .cube').at(4).moveToEach('#5x5-square .cellA', 3000);
+$S('#4x4-square .cube').at(4).moveToEach('#5x5-square .cellB', 3000);
 $S('#eqn').at(5).change('9 + 16 = 25', { transition: 'fade', dur: 300 });</code></pre>
+	<div class="note"><strong>Why 3 seconds, not less.</strong> 25 cubes migrating at once reads as a blur under ~1s — slow enough to migrate for a full 3 seconds and a viewer can actually track "those 9 went there, those 16 went there." This is the exact duration used to render the real short; a faster value looks fine scrubbing by hand in the editor but reads as a pop in real-time playback.</div>
 	<p>Scrub the timeline (Animations tab) back and forth — the reveal is fully deterministic and reversible, because the destinations are baked from the 5×5 square's <em>actual</em> cell positions at compile time, not hand-typed coordinates. Move the 5×5 square and the reveal re-targets automatically.</p>
 
 	<h2><span class="step">5</span> Add a background</h2>
@@ -196,9 +204,9 @@ $S('#callcard').moveTo(cam.position.x, cam.position.y, cam.position.z + 15);
 $S('#callcard').scale(8);</code></pre>
 	<div class="note">The call card faces <strong>away</strong> from its default orientation once it's behind the camera — select it, open the <strong>Object</strong> panel, and set Rotation Y to 180° so its printed side faces back toward where the camera will turn to look. It starts effectively hidden by being fully transparent; fade it in during the reveal below rather than toggling visibility by hand.</div>
 	<p>Now the reveal beat: fade the card in and turn the camera <strong>180° about Y</strong> — an explicit about-face, not a computed look-at — to land on it:</p>
-	<pre><code>$S('#callcard').at(6).fadeIn(3);
-$S('camera').at(6).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
-	<p>Scrub to the end of the timeline — the camera should finish turned fully around, framing a call card that fills (and slightly exceeds) the visible frame.</p>
+	<pre><code>$S('#callcard').at(8).fadeIn(3);
+$S('camera').at(8).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
+	<p>Note the <code>at(8)</code> — a full second after the dissection reveal (started at <code>4</code>, 3s long) actually finishes at <code>7</code>. Don't start this beat while cubes are still mid-flight; let the proof land, hold for a moment, <em>then</em> turn.</p>
 
 	<h2><span class="step">8</span> Render it</h2>
 	<ol class="steps">
