@@ -70,6 +70,7 @@ function Viewport( editor ) {
 	let pmremGenerator = null;
 	let pathtracer = null;
 	let contextLostTimer = null;
+	let renderingPaused = false; // see pauseViewportRendering/resumeViewportRendering below
 
 	const camera = editor.camera;
 	const scene = editor.scene;
@@ -723,6 +724,24 @@ function Viewport( editor ) {
 
 	} );
 
+	// See Editor.js's pauseViewportRendering/resumeViewportRendering comment.
+	// `renderingPaused` blocks render() itself (many signal handlers below call
+	// it directly, not just the animate loop) — stopping setAnimationLoop alone
+	// isn't enough, those direct calls still reach the live renderer otherwise.
+	signals.pauseViewportRendering.add( function () {
+
+		renderingPaused = true;
+		if ( renderer !== null ) renderer.setAnimationLoop( null );
+
+	} );
+
+	signals.resumeViewportRendering.add( function () {
+
+		renderingPaused = false;
+		if ( renderer !== null ) renderer.setAnimationLoop( animate );
+
+	} );
+
 	signals.rendererCreated.add( function ( newRenderer ) {
 
 		hideContextLostOverlay();
@@ -819,6 +838,22 @@ function Viewport( editor ) {
 			render();
 
 		}, false );
+
+		// WebGPU has no DOM 'webglcontextlost' equivalent — a lost GPU device
+		// (same mobile memory/thermal pressure, or a fatal validation error) is
+		// reported through this renderer callback instead, and unlike WebGL it
+		// can't be silently restored in place (there's no 'contextrestored' to
+		// wait for), so go straight to the "couldn't recover" reload prompt.
+		if ( renderer.isWebGPURenderer ) {
+
+			renderer.onDeviceLost = function ( info ) {
+
+				console.warn( 'Strata: WebGPU device lost.', info.message || info.reason || info );
+				showContextLostOverlay( false );
+
+			};
+
+		}
 
 		signals.sceneEnvironmentChanged.dispatch( editor.environmentType );
 
@@ -1521,7 +1556,7 @@ function Viewport( editor ) {
 
 	function render() {
 
-		if ( renderer === null ) return;
+		if ( renderer === null || renderingPaused === true ) return;
 
 		startTime = performance.now();
 

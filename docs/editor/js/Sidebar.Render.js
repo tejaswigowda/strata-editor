@@ -135,6 +135,53 @@ function drawBurnedCaption( ctx, width, height, text ) {
 
 }
 
+// ── 360° video metadata (Google Spherical Video V1 XML) ────────────────────
+// Pixel content alone never tells YouTube/VR players "this is a 360 video" —
+// they key off this metadata box. Splicing a "uuid" box in right after the
+// leading "ftyp" box works for MP4 (a plain top-level box insertion, no
+// existing box sizes need updating). WebM's EBML container would instead need
+// the Tracks/TrackEntry element sizes recomputed to insert a Projection
+// element, which risks corrupting MediaRecorder's often unknown-size output —
+// so WebM exports are left unmodified (re-export as MP4 to get 360 metadata).
+
+const SPHERICAL_XML = '<?xml version="1.0"?>\n<rdf:SphericalVideo\n' +
+	'xmlns:rdf=\'http://www.w3.org/1999/02/22-rdf-syntax-ns#\'\n' +
+	'xmlns:GSpherical=\'http://ns.google.com/videos/1.0/spherical/\'>\n' +
+	'<GSpherical:Spherical>true</GSpherical:Spherical>\n' +
+	'<GSpherical:Stitched>true</GSpherical:Stitched>\n' +
+	'<GSpherical:StitchingSoftware>Strata</GSpherical:StitchingSoftware>\n' +
+	'<GSpherical:ProjectionType>equirectangular</GSpherical:ProjectionType>\n' +
+	'</rdf:SphericalVideo>\n';
+
+const SPHERICAL_UUID = [ 0xff, 0xcc, 0x82, 0x63, 0xf8, 0x55, 0x4a, 0x93, 0x88, 0x14, 0x58, 0x7a, 0x02, 0x52, 0x1f, 0xdd ];
+
+/** Returns a new Blob with the spherical-video "uuid" box spliced in after "ftyp" — or the original blob unchanged if it isn't a plain MP4 this can patch. */
+async function injectSphericalMetadata( blob ) {
+
+	const buf = new Uint8Array( await blob.arrayBuffer() );
+	if ( buf.length < 8 || String.fromCharCode( buf[ 4 ], buf[ 5 ], buf[ 6 ], buf[ 7 ] ) !== 'ftyp' ) return blob;
+
+	const ftypSize = new DataView( buf.buffer ).getUint32( 0, false );
+	if ( ftypSize < 8 || ftypSize > buf.length ) return blob;
+
+	const xmlBytes = new TextEncoder().encode( SPHERICAL_XML );
+	const boxSize = 8 + SPHERICAL_UUID.length + xmlBytes.length;
+
+	const box = new Uint8Array( boxSize );
+	new DataView( box.buffer ).setUint32( 0, boxSize, false );
+	box.set( [ 0x75, 0x75, 0x69, 0x64 ], 4 ); // 'uuid'
+	box.set( SPHERICAL_UUID, 8 );
+	box.set( xmlBytes, 8 + SPHERICAL_UUID.length );
+
+	const out = new Uint8Array( buf.length + boxSize );
+	out.set( buf.subarray( 0, ftypSize ), 0 );
+	out.set( box, ftypSize );
+	out.set( buf.subarray( ftypSize ), ftypSize + boxSize );
+
+	return new Blob( [ out ], { type: blob.type } );
+
+}
+
 // ── Sidebar.Render.js ─────────────────────────────────────────────────────────
 // The "Render" tab: renders the Universal Timeline to a video file through a
 // chosen camera. Uses a dedicated offscreen WebGLRenderer (so the viewport is
@@ -678,7 +725,7 @@ function SidebarRender( editor ) {
 	equirectRow.add( equirectResolutionSelect );
 	container.add( equirectRow );
 
-	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the camera(s) above\u2019s POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time.' );
+	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the camera(s) above\u2019s POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time. Records MP4 (360\u00b0 metadata embedded, for YouTube/VR players) and WebM in parallel when the browser supports both — MP4 downloads automatically, WebM is offered as an extra download below.' );
 	equirectHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
 	container.add( equirectHelp );
 
@@ -800,6 +847,28 @@ function SidebarRender( editor ) {
 
 	}
 
+	// 360 renders record MP4 and WebM in parallel (one recorder per supported
+	// mime, off the SAME captured stream) when the browser supports both —
+	// MP4 is what carries the embedded 360° metadata YouTube/VR players need,
+	// WebM is offered alongside as a smaller/lossless-alpha-friendlier option.
+	// Flat renders keep the single "best available" pick as before.
+	function pickExportMimes( kind ) {
+
+		if ( kind !== '360' ) {
+
+			const m = pickMimeType();
+			return m ? [ m ] : [];
+
+		}
+
+		const supported = ( m ) => window.MediaRecorder && MediaRecorder.isTypeSupported( m );
+		const mp4 = [ 'video/mp4;codecs=avc1.42E01E', 'video/mp4' ].find( supported );
+		const webm = [ 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm' ].find( supported );
+
+		return [ mp4, webm ].filter( Boolean );
+
+	}
+
 	function extensionFor( mime ) {
 
 		return mime.indexOf( 'mp4' ) !== - 1 ? 'mp4' : 'webm';
@@ -837,8 +906,8 @@ function SidebarRender( editor ) {
 
 		}
 
-		const mime = pickMimeType();
-		if ( ! mime ) {
+		const mimes = pickExportMimes( kind );
+		if ( mimes.length === 0 ) {
 
 			setProgress( 0, 'MediaRecorder video capture is not supported in this browser.' );
 			return;
@@ -858,6 +927,12 @@ function SidebarRender( editor ) {
 		equirectButton.dom.disabled = true;
 		cancelButton.dom.style.display = '';
 		showRenderOverlay();
+
+		// Stop the live viewport's own renderer entirely while this offscreen one
+		// runs — two renderer backends (e.g. the live WebGPURenderer + this
+		// export's WebGLRenderer) touching the same scene's shared GPU resources
+		// (light shadow maps in particular) at once corrupts/destroys them mid-submit.
+		signals.pauseViewportRendering.dispatch();
 
 		// Two canvases: WebGL renders offscreen, a 2D canvas composites (needed
 		// for crossfades: draw shot A, then shot B on top with globalAlpha) and is
@@ -1067,14 +1142,19 @@ function SidebarRender( editor ) {
 
 		}
 
-		const recorder = new MediaRecorder( stream, {
-			mimeType: mime,
-			videoBitsPerSecond: Math.min( 24_000_000, width * height * fps * 0.15 ),
+		const recorders = mimes.map( function ( m ) {
+
+			const rec = new MediaRecorder( stream, {
+				mimeType: m,
+				videoBitsPerSecond: Math.min( 24_000_000, width * height * fps * 0.15 ),
+			} );
+			const chunks = [];
+			rec.ondataavailable = e => { if ( e.data && e.data.size > 0 ) chunks.push( e.data ); };
+			const stopped = new Promise( resolve => { rec.onstop = resolve; } );
+			return { mime: m, recorder: rec, chunks, stopped };
+
 		} );
-		const chunks = [];
-		recorder.ondataavailable = e => { if ( e.data && e.data.size > 0 ) chunks.push( e.data ); };
-		const recorderStopped = new Promise( resolve => { recorder.onstop = resolve; } );
-		recorder.start();
+		for ( const r of recorders ) r.recorder.start();
 
 		const totalFrames = Math.max( 1, Math.round( renderLength * fps ) );
 		const frameMs = 1000 / fps;
@@ -1146,8 +1226,8 @@ function SidebarRender( editor ) {
 
 		} finally {
 
-			recorder.stop();
-			await recorderStopped;
+			for ( const r of recorders ) r.recorder.stop();
+			await Promise.all( recorders.map( r => r.stopped ) );
 
 			silenceSource.stop();
 			audioCtx.close();
@@ -1156,7 +1236,11 @@ function SidebarRender( editor ) {
 			restoreEnvironment();
 			holdTimelineAt( editor, 0 );
 			signals.sceneGraphChanged.dispatch();
-			renderer.dispose();
+			// Dispose the cube render target BEFORE the renderer itself — the
+			// renderer needs its still-intact internal GPU-resource bookkeeping to
+			// deallocate the render target's framebuffers; disposing the renderer
+			// first leaves that bookkeeping cleared, so the target's own dispose()
+			// throws reading into an already-emptied framebuffer list.
 			if ( is360 ) {
 
 				cubeRenderTarget.dispose();
@@ -1165,9 +1249,12 @@ function SidebarRender( editor ) {
 
 			}
 
+			renderer.dispose();
+
 			rendering = false;
 			cancelButton.dom.style.display = 'none';
 			hideRenderOverlay();
+			signals.resumeViewportRendering.dispatch();
 			updateDuration(); // re-enables the render button if timeline non-empty
 
 		}
@@ -1180,10 +1267,32 @@ function SidebarRender( editor ) {
 
 		}
 
-		const blob = new Blob( chunks, { type: mime.split( ';' )[ 0 ] } );
 		const label = shots.length > 0 ? 'sequence' : ( fallbackCamera.name || 'camera' ).replace( /[^\w\-]+/g, '_' );
 		const baseName = `render-${ is360 ? '360-' : '' }${ label }-${ width }x${ height }-${ fps }fps`;
-		downloadBlob( blob, `${ baseName }.${ extensionFor( mime ) }` );
+
+		// One output per recorder (360 mode may have recorded MP4 + WebM in
+		// parallel off the same stream) — MP4 first so it's always the
+		// auto-downloaded "primary" file when both are available.
+		const outputs = [];
+		for ( const r of recorders ) {
+
+			const ext = extensionFor( r.mime );
+			const isMp4 = ext === 'mp4';
+			let blob = new Blob( r.chunks, { type: r.mime.split( ';' )[ 0 ] } );
+
+			if ( is360 && isMp4 ) {
+
+				setProgress( 1, 'Embedding 360\u00b0 metadata\u2026' );
+				blob = await injectSphericalMetadata( blob );
+
+			}
+
+			outputs.push( { blob, ext, isMp4 } );
+
+		}
+
+		const [ primary, ...extraOutputs ] = outputs;
+		downloadBlob( primary.blob, `${ baseName }.${ primary.ext }` );
 
 		postRenderActions.innerHTML = '';
 
@@ -1191,6 +1300,15 @@ function SidebarRender( editor ) {
 		// blocked by Chrome/Firefox's multi-download abuse guard (no new user
 		// gesture in between) — confirmed empirically, the .srt never reached
 		// disk. Surface a real button instead: a genuine click always passes.
+		for ( const extra of extraOutputs ) {
+
+			const extraButton = new UIButton( `\u2b07 Download .${ extra.ext } version` );
+			extraButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;margin-right:6px;';
+			extraButton.onClick( function () { downloadBlob( extra.blob, `${ baseName }.${ extra.ext }` ); } );
+			postRenderActions.appendChild( extraButton.dom );
+
+		}
+
 		if ( sidecarCheckbox.getValue() && getCues().length > 0 ) {
 
 			const srtLink = new UIButton( '\u2b07 Download matching .srt' );
@@ -1204,7 +1322,23 @@ function SidebarRender( editor ) {
 
 		}
 
-		setProgress( 1, is360 ? 'Done — 360 video downloaded.' : 'Done — video downloaded.' );
+		if ( ! is360 ) {
+
+			setProgress( 1, 'Done \u2014 video downloaded.' );
+
+		} else if ( extraOutputs.length > 0 ) {
+
+			setProgress( 1, 'Done \u2014 360\u00b0 video downloaded as MP4 (metadata embedded for YouTube/VR players); a WebM version is also available below.' );
+
+		} else if ( primary.isMp4 ) {
+
+			setProgress( 1, 'Done \u2014 360\u00b0 video downloaded (metadata embedded for YouTube/VR players).' );
+
+		} else {
+
+			setProgress( 1, 'Done \u2014 360\u00b0 video downloaded. Your browser only supports WebM recording \u2014 360\u00b0 metadata is only embedded in MP4 output, so this file won\u2019t be recognized as a 360 video by YouTube/VR players.' );
+
+		}
 
 	}
 

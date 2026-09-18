@@ -98,6 +98,14 @@ function Editor() {
 		viewportShadingChanged: new Signal(),
 		timelinePlayRequested: new Signal(), // external "play" trigger (e.g. the #...&play=true overlay button) — Timeline.js listens and calls its own play()
 
+		// Fully halts the live viewport's own render loop (Viewport.js's
+		// renderer.setAnimationLoop) — used by Sidebar.Render.js while its own
+		// offscreen renderer exports frames, so two renderer backends (e.g. the
+		// live WebGPURenderer and the export's WebGLRenderer) never submit to the
+		// same scene's shared GPU resources (light shadow maps, etc.) at once.
+		pauseViewportRendering: new Signal(),
+		resumeViewportRendering: new Signal(),
+
 		intersectionsDetected: new Signal(),
 
 		pathTracerUpdated: new Signal(),
