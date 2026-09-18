@@ -37,6 +37,37 @@ The embed URL always resolves to this same-origin `/about/callcard` route — it
 
 Edit `docs/about/callcard/index.html` (and bump `docs/strata-version.js` if it's a real release). Nothing else needs to change — every future render and every live view picks it up automatically; nothing already rendered is affected.
 
+## Cinematic reveal: filling the frame
+
+The card is a plane, `DEFAULT_WIDTH = 1.8` × `DEFAULT_HEIGHT = 3.2` world units (a 9:16-ish portrait). Its point isn't to sit visible-but-small in a corner of a shot — for an end-card beat, the camera should arrive at a distance where the card **fills the frame edge-to-edge**, with nothing else visible. Two things make that land well:
+
+**1. Compute the fill distance from the card's real size, not a guess.** For a camera with vertical FOV `fov` and aspect `a`, the horizontal FOV is `2·atan(tan(fov/2)·a)`. Solve for the distance `d` where the card's world-space width exactly spans that horizontal FOV:
+
+```js
+const cardWidth = 1.8 * scale;                    // world units, after $S('#callcard').scale(scale)
+const hFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * aspect);
+const fillDistance = (cardWidth / 2) / Math.tan(hFov / 2);
+```
+
+Land a little *closer* than the exact solution (e.g. `fillDistance * 0.85`) — an exact edge-to-edge fit reads as "almost full frame" once encoding/scaling softens the edges; slightly overfilling (bleeding a little off-frame) reads as **fully** filling it.
+
+**2. A cinematic reveal is a push-in along one axis, not a teleport.** Choreograph it as a `Group` of `.animate()` legs on the camera that all share the same direction vector — the direction the camera was already facing when it turns to notice the card — just at decreasing distance from the card:
+
+```js
+const dir = lookAtTarget.clone().sub(cameraPos).normalize();   // the camera's existing forward axis
+const posAtDistance = (d) => cardPos.clone().add(dir.clone().multiplyScalar(d));
+
+$S('#camera').at(T).animate({ to: { position: posAtDistance(13).toArray() }, lookAt: cardPos.toArray() }, 2500, 'ease-in-out');
+$S('#camera').at(T + 2.5).animate({ to: { position: posAtDistance(fillDistance).toArray() }, lookAt: cardPos.toArray() }, 3000, 'ease-in');
+$S('#callcard').at(T + 0.3).fadeIn(2.2);
+```
+
+Keep **FOV constant** across the legs — animating FOV and distance together is a dolly-zoom (vertigo effect), which reads as a mistake here, not a choice.
+
+**3. The rotation-vs-approach-side gotcha.** The card's un-rotated `PlaneGeometry` faces world `+Z`. If you set `rotation.y = Math.PI` (a common pattern for "place it behind the camera, then rotate so it faces back"), that only shows the printed side correctly if your camera ends up on the plane's **new** facing side — i.e. at a *lower* world Z than the card, if the card sits at a *higher* Z than where you're placing the camera. Concretely: `rotation.y` should be `0` if your final camera position has a **higher** value along the card's original facing axis than the card itself, and `Math.PI` if **lower**. Getting this backwards doesn't hide the card — a `DoubleSide` material still renders it, just mirrored and upside-down (the back face, not simply "facing away"). If the reveal looks flipped, this is almost always why — check which side of the card's un-rotated normal your final camera position actually lands on, don't just copy the `Math.PI` default.
+
 ---
+
+
 
 **Next:** [Animation](ANIMATION.md) · [← Back to README](../README.md)

@@ -217,15 +217,31 @@ $S('#eqn').at(5).change('9 + 16 = 25', { transition: 'fade', dur: 300 });</code>
 });</code></pre>
 
 	<h2><span class="step">7</span> Add the living end-card</h2>
-	<p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it (or drag it into the viewport) — it inserts an addressable plane that embeds the current <a href="../callcard/">/about/callcard</a> live. Place it <em>behind</em> where the camera starts, scaled up past the frame, hidden until the reveal:</p>
+	<p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it (or drag it into the viewport) — it inserts an addressable plane that embeds the current <a href="../callcard/">/about/callcard</a> live. The point of the reveal isn't just to show the card — it's to end with the card <strong>filling the whole frame</strong>, like a real end-card. Place it behind where the camera starts, scaled up, hidden until the reveal:</p>
 	<pre><code>const cam = camera; // the live viewport camera
-$S('#callcard').moveTo(cam.position.x, cam.position.y, cam.position.z + 15);
-$S('#callcard').scale(8);</code></pre>
-	<div class="note">The call card faces <strong>away</strong> from its default orientation once it's behind the camera — select it, open the <strong>Object</strong> panel, and set Rotation Y to 180° so its printed side faces back toward where the camera will turn to look. It starts effectively hidden by being fully transparent; fade it in during the reveal below rather than toggling visibility by hand.</div>
-	<p>Now the reveal beat: fade the card in and turn the camera <strong>180° about Y</strong> — an explicit about-face, not a computed look-at — to land on it:</p>
-	<pre><code>$S('#callcard').at(8).fadeIn(3);
-$S('camera').at(8).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
-	<p>Note the <code>at(8)</code> — a full second after the dissection reveal (started at <code>4</code>, 3s long) actually finishes at <code>7</code>. Don't start this beat while cubes are still mid-flight; let the proof land, hold for a moment, <em>then</em> turn.</p>
+const startPos = cam.position.clone();
+const startLookAt = new Vector3(0, 0, 0); // wherever cam is already aimed
+const dir = startLookAt.clone().sub(startPos).normalize();
+
+const cardScale = 8;
+const cardPos = startPos.clone().sub(dir.clone().multiplyScalar(15)); // behind the camera
+$S('#callcard').moveTo(cardPos.x, cardPos.y, cardPos.z);
+$S('#callcard').scale(cardScale);</code></pre>
+	<div class="note"><strong>Which way the card faces depends on which side the camera ends up on</strong> — not a fixed rule. The card's un-rotated plane faces world <code>+Z</code>. If your final camera position wins up on the <em>opposite</em> side of the card from where <code>dir</code> points, rotate it — <code>$S('#callcard').nodes[0].rotation.y = Math.PI</code>. If your camera stays on the <em>same</em> side, leave rotation at <code>0</code>. Getting it backwards doesn't hide the card (the material is double-sided) — it shows the card <strong>mirrored and upside-down</strong>, which is the tell that you picked the wrong one. It starts effectively hidden by being fully transparent (<code>$S('#callcard').nodes[0].material.opacity = 0</code>); fade it in during the reveal below rather than toggling visibility by hand.</div>
+
+	<p>Now the reveal: a two-leg <strong>push-in</strong>, not a snap-to-position. Compute the distance where the card's real width exactly spans the camera's horizontal FOV, land a little closer than that (a small overfill reads as "fills the frame" better than an exact fit), and turn to face it while closing that distance:</p>
+	<pre><code>const fov = 36, aspect = 16 / 9;
+const cardWidth = 1.8 * cardScale;
+const hFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * aspect);
+const fillDistance = (cardWidth / 2) / Math.tan(hFov / 2) * 0.85; // slight overfill
+
+const posAtDistance = (d) => cardPos.clone().add(dir.clone().multiplyScalar(d));
+
+$S('camera').at(8).animate({ to: { position: posAtDistance(11).toArray() }, lookAt: cardPos.toArray() }, 2500, 'ease-in-out');
+$S('camera').at(10.5).animate({ to: { position: posAtDistance(fillDistance).toArray() }, lookAt: cardPos.toArray() }, 3000, 'ease-in');
+$S('#callcard').at(8.3).fadeIn(2.2);</code></pre>
+	<p>Note the <strong>constant FOV</strong> across both legs — animating FOV and distance together is a dolly-zoom (a deliberate vertigo effect), not what a clean reveal wants. And note <code>at(8)</code> — a full second after the dissection reveal (started at <code>4</code>, 3s long) actually finishes at <code>7</code>. Don't start this beat while cubes are still mid-flight; let the proof land, hold for a moment, <em>then</em> push in.</p>
+
 
 	<h2><span class="step">8</span> Render it</h2>
 	<ol class="steps">
