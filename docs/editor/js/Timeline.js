@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
-import { UIPanel, UIText, UIButton, UISelect, UINumber } from './libs/ui.js';
+import { UIPanel, UIText, UIButton, UISelect, UINumber, UICheckbox } from './libs/ui.js';
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
 import { TimelineModel, TIMELINE_CLIP_NAME } from './intelligence/timeline.js';
-import { holdTimelineAt, getTimelineTargetActions, refreshCameraProjections } from './intelligence/timelineController.js';
+import { holdTimelineAt, getTimelineTargetActions, refreshCameraProjections, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import * as recipes from './intelligence/animationRecipes.js';
 import { applyContentAt } from './intelligence/textChange.js';
@@ -28,6 +28,8 @@ function Timeline( editor ) {
 	let playhead = 0;               // seconds (the shared clock)
 	let selectedEventId = null;
 	let showCode = false;
+	let followRenderCamera = false; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback
+	let followedAway = false;       // true once WE switched editor.viewportCamera away from editor.camera, so we know to restore it
 
 	// ── Container ─────────────────────────────────────────────────────────────
 	const container = new UIPanel();
@@ -111,6 +113,33 @@ function Timeline( editor ) {
 
 	} );
 	bar.appendChild( codeButton.dom );
+
+	// Below the toolbar: the viewport can track whichever camera the Render
+	// tab's Camera Sequence would be using at the current playhead time (or
+	// editor.camera if no sequence is configured) while the timeline plays —
+	// a live preview of what the export will actually look like.
+	const followRow = document.createElement( 'div' );
+	followRow.style.cssText = 'padding:2px 10px 6px;border-bottom:1px solid #ccc;display:flex;align-items:center;gap:6px;flex-shrink:0;';
+	container.dom.appendChild( followRow );
+
+	const followCheckbox = new UICheckbox( false );
+	followCheckbox.dom.title = 'While playing, switch the viewport to whichever camera the Render tab\'s Camera Sequence is using right now (or the default camera if none is set)';
+	followRow.appendChild( followCheckbox.dom );
+	const followLabel = new UIText( 'Follow render camera' ).setFontSize( '11px' );
+	followLabel.dom.style.cursor = 'pointer';
+	followLabel.dom.addEventListener( 'click', () => {
+
+		followCheckbox.setValue( ! followCheckbox.getValue() );
+		followCheckbox.dom.dispatchEvent( new Event( 'change' ) );
+
+	} );
+	followRow.appendChild( followLabel.dom );
+	followCheckbox.dom.addEventListener( 'change', function () {
+
+		followRenderCamera = followCheckbox.getValue();
+		if ( ! followRenderCamera ) restoreViewportCamera();
+
+	} );
 
 	// ── Timeline area (ruler + track rows + playhead) ─────────────────────────
 	const area = document.createElement( 'div' );
@@ -1012,6 +1041,7 @@ function Timeline( editor ) {
 			playhead = currentActions[ 0 ].time;
 			playing = false;
 			holdTimelineAt( editor, playhead ); // hold, don't stop — pose stays put
+			restoreViewportCamera();
 			updatePlayheadUI();
 
 		}
@@ -1023,6 +1053,7 @@ function Timeline( editor ) {
 		playing = false;
 		playhead = 0;
 		sampleAt( 0 ); // "Stop (rewind to 0)" — an explicit, user-initiated return to the base frame
+		restoreViewportCamera();
 		updatePlayheadUI();
 
 	}
@@ -1162,6 +1193,34 @@ function Timeline( editor ) {
 
 	}
 
+	// ── Follow render camera (viewport tracks the Camera Sequence while playing) ─
+	function applyFollowCamera() {
+
+		if ( ! followRenderCamera ) return;
+		const cam = activeRenderCameraAt( editor, playhead );
+		if ( cam && editor.viewportCamera !== cam ) {
+
+			editor.viewportCamera = cam;
+			followedAway = true;
+			signals.viewportCameraChanged.dispatch();
+
+		}
+
+	}
+
+	function restoreViewportCamera() {
+
+		if ( followedAway && editor.viewportCamera !== editor.camera ) {
+
+			editor.viewportCamera = editor.camera;
+			signals.viewportCameraChanged.dispatch();
+
+		}
+
+		followedAway = false;
+
+	}
+
 	// ── rAF playhead read-out during playback ─────────────────────────────────
 	let tickLastTime = null; // manual wall-clock fallback when there are no transform actions to drive playhead (a purely change()-based timeline)
 
@@ -1196,6 +1255,8 @@ function Timeline( editor ) {
 
 			// content is a step function, not a keyframe track — sample separately
 			applyContentAt( editor, editor.timeline, playhead );
+
+			applyFollowCamera();
 
 			// This tick() loop runs independently of Viewport's own animate()
 			// loop, which only calls render() while mixer.stats.actions.inUse

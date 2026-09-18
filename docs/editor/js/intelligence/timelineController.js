@@ -123,6 +123,27 @@ export function includeCameraForBinding( editor, clipOrClips ) {
 
 }
 
+// Which camera the Render tab's Camera Sequence would be using at time `t`,
+// given the current scene.userData.renderShots — mirrors Sidebar.Render.js's
+// own shot-lookup (minus the crossfade blend, which a live viewport preview
+// doesn't need: it just needs to know which single camera is "in charge" right
+// now). Falls back to editor.camera when no sequence is configured, same as
+// the render export path's own fallback.
+export function activeRenderCameraAt( editor, t ) {
+
+	const shots = ( editor.scene.userData && Array.isArray( editor.scene.userData.renderShots ) )
+		? editor.scene.userData.renderShots.slice().sort( ( a, b ) => a.at - b.at )
+		: [];
+
+	if ( shots.length === 0 ) return editor.camera;
+
+	let i = shots.length - 1;
+	while ( i > 0 && shots[ i ].at > t ) i --;
+
+	return ( editor.cameras && editor.cameras[ shots[ i ].camera ] ) || editor.camera;
+
+}
+
 // ── Hold / release (scrub & pause without the "restoreOriginalState" snap-back) ─
 // AnimationAction.stop() decrements each binding's use-count to 0, which makes
 // three.js write the ORIGINAL (pre-bind) value back onto the object immediately
