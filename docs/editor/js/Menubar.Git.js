@@ -270,6 +270,15 @@ async function ghSend( method, path, body, token ) {
 // Content-addressed asset paths (assets/<sha1>.*) are immutable, so their bytes
 // are cached in the browser Cache Storage: on a later load only NEW blobs hit the
 // network — unchanged geometry is served locally. Non-asset paths bypass the cache.
+//
+// Fetched from raw.githubusercontent.com (reads straight from git storage) rather
+// than the Contents API — empirically, right after a large multi-file commit (a
+// scene can add 100+ asset blobs in one push) the Contents API's "raw" media type
+// serves STALE content for some paths for a while (confirmed: same path returned
+// consistently-wrong byte length via api.github.com while raw.githubusercontent.com
+// and `git cat-file` agreed on the correct one), corrupting typed-array rehydration.
+// Falls back to the Contents API (which does need a token for private repos) if
+// the raw host ever fails outright.
 async function ghGetBytes( parsed, branch, path, token ) {
 
 	const immutable = path.startsWith( 'assets/' );
@@ -288,16 +297,32 @@ async function ghGetBytes( parsed, branch, path, token ) {
 
 	}
 
-	const url = `https://api.github.com/repos/${ parsed.owner }/${ parsed.repo }/contents/${ path }?ref=${ branch }&_ts=${ Date.now() }`;
+	const rawUrl = `https://raw.githubusercontent.com/${ parsed.owner }/${ parsed.repo }/${ branch }/${ path.split( '/' ).map( encodeURIComponent ).join( '/' ) }`;
 
-	const res = await fetch( url, {
-		headers: ghHeaders( token, 'application/vnd.github.raw' ),
-		cache: 'no-store',
-	} );
+	let bytes;
+	try {
 
-	if ( ! res.ok ) throw new Error( `GitHub ${ res.status } fetching ${ path }: ${ await res.text() }` );
+		const headers = token ? { Authorization: `Bearer ${ token }` } : undefined;
+		const res = await fetch( rawUrl, { headers, cache: 'no-store' } );
+		if ( ! res.ok ) throw new Error( `raw ${ res.status }` );
+		bytes = new Uint8Array( await res.arrayBuffer() );
 
-	const bytes = new Uint8Array( await res.arrayBuffer() );
+	} catch {
+
+		// Fallback: the Contents API — slower to reflect very recent pushes, but
+		// works even when raw.githubusercontent.com is unreachable (e.g. blocked).
+		const url = `https://api.github.com/repos/${ parsed.owner }/${ parsed.repo }/contents/${ path }?ref=${ branch }&_ts=${ Date.now() }`;
+
+		const res = await fetch( url, {
+			headers: ghHeaders( token, 'application/vnd.github.raw' ),
+			cache: 'no-store',
+		} );
+
+		if ( ! res.ok ) throw new Error( `GitHub ${ res.status } fetching ${ path }: ${ await res.text() }` );
+
+		bytes = new Uint8Array( await res.arrayBuffer() );
+
+	}
 
 	if ( cache ) { try { await cache.put( cacheUrl, new Response( bytes ) ); } catch { /* cache full — non-fatal */ } }
 
