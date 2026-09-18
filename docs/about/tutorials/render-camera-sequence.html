@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a static hero camera to a render sequence — Strata tutorials</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: add a fixed, non-animated camera and cut it into the Render tab's Camera Sequence to showcase a moment your main animated camera doesn't frame well.">
+<!--
+	/about/tutorials/render-camera-sequence.html — a from-scratch, by-hand
+	tutorial. Every snippet is real Strata surface (JS Shell globals +
+	editor.scene.userData.renderShots, the Render tab's own persisted
+	model) — copy/paste each block into the Shell tab in order. Static
+	page, no build step, no third-party calls.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Add a static hero camera to a render sequence</h1>
+	<p class="tagline">Your main camera is animated for the whole timeline — but sometimes one moment (an explosion, a headlight beam, a reveal) deserves its own fixed, carefully-framed shot cut into the middle of the video. This tutorial adds a second, <em>non-animated</em> camera and schedules it in the <strong>Render</strong> tab's Camera Sequence. Open the <a href="../../">editor</a>, load a scene with an existing timeline, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<div class="note"><strong>Why a second camera, not more keyframes.</strong> The Camera Sequence is a completely separate mechanism from animating <code>camera</code> itself: it's a list of <em>shots</em>, each naming a camera object and a start time, persisted on <code>scene.userData.renderShots</code>. A shot's camera does not need any keyframes at all — it can simply sit wherever you put it for the whole time it's on screen. That's the point: a hero shot is often better hand-framed once than animated.</div>
+
+	<h2><span class="step">1</span> Find a moment worth a dedicated shot</h2>
+	<p class="lede">Scrub the timeline to the moment you want to showcase and look at what your main camera shows there. Use <code>holdTimelineAt</code> to jump straight to a timestamp without pressing play:</p>
+	<pre><code>const { holdTimelineAt } = await import('./editor/js/intelligence/timelineController.js');
+holdTimelineAt(editor, 24); // seconds into the Universal Timeline</code></pre>
+	<p>If the main camera's framing doesn't do that moment justice — too far, wrong angle, an object in the way — that's exactly the case for a second, purpose-built camera.</p>
+
+	<h2><span class="step">2</span> Add the new camera</h2>
+	<p class="lede">A plain <code>THREE.PerspectiveCamera</code>, added like any other object. Give it a name — you'll use it to select the camera again later. <strong>Don't add any keyframes to it</strong>; point it once and leave it:</p>
+	<pre><code>const heroCam = new THREE.PerspectiveCamera(38, 16 / 9, 0.1, 500);
+heroCam.name = 'HeadlightHeroCam';
+heroCam.position.set(-4.15, 3.2, 14);
+heroCam.lookAt(-4.15, 1.0, -40);
+editor.execute(new AddObjectCommand(editor, heroCam));</code></pre>
+	<p>Jump back to your target moment and check the framing from the new camera before wiring it into anything — swap the viewport over to it temporarily:</p>
+	<pre><code>editor.viewportCamera = heroCam;
+editor.signals.viewportCameraChanged.dispatch();
+holdTimelineAt(editor, 24);</code></pre>
+	<p>Nudge <code>heroCam.position</code> / re-run <code>.lookAt(...)</code> and re-dispatch <code>objectChanged</code> until it reads well across the <em>whole</em> span you'll use it for — not just one instant. A bus or character can move a long way in a few seconds; check both ends of the window:</p>
+	<pre><code>heroCam.position.set(-4.15, 3.2, 14);
+heroCam.lookAt(-4.15, 1.0, -40);
+editor.signals.objectChanged.dispatch(heroCam);</code></pre>
+	<div class="note"><strong>Keep it clear of anything that moves.</strong> A static camera parked directly in a moving object's path will get run over mid-shot. Offset it to the side, or elevate it, so the subject passes near — not through — the lens for the shot's entire duration.</div>
+
+	<h2><span class="step">3</span> Cut it into the Camera Sequence</h2>
+	<p class="lede">The sequence is a plain array on <code>scene.userData.renderShots</code>: <code>{ id, at, camera: uuid, transition, transitionDur }</code>. A shot runs from its <code>at</code> until the next shot's <code>at</code> (or the timeline's end). Build a three-shot sequence — main camera, then the hero shot, then back to the main camera:</p>
+	<pre><code>const shots = [
+  { id: 'shot-intro',     at: 0,  camera: editor.camera.uuid, transition: 'cut',  transitionDur: 0.5 },
+  { id: 'shot-headlight', at: 20, camera: heroCam.uuid,       transition: 'fade', transitionDur: 0.8 },
+  { id: 'shot-return',    at: 29, camera: editor.camera.uuid, transition: 'fade', transitionDur: 0.8 },
+];
+editor.scene.userData = editor.scene.userData || {};
+editor.scene.userData.renderShots = shots;
+editor.signals.sceneGraphChanged.dispatch(); // refreshes the Render tab's sequencer UI</code></pre>
+	<p>Switch the viewport back to your main camera when you're done previewing:</p>
+	<pre><code>editor.viewportCamera = editor.camera;
+editor.signals.viewportCameraChanged.dispatch();</code></pre>
+
+	<h2><span class="step">4</span> Check it in the Render tab</h2>
+	<ol class="steps">
+		<li>Open the <strong>Render</strong> tab. The <strong>Camera Sequence</strong> lane now shows three colored blocks — one per shot, labeled with the camera name and its cut/fade transition.</li>
+		<li>Click a block to select it; the detail row below lets you retarget its camera, nudge its start time, or change <code>cut</code>/<code>fade</code> and the fade duration — all without touching the Shell again.</li>
+		<li>With <strong>zero</strong> shots, the render always falls back to the single camera picked in the <strong>Camera</strong> dropdown at the top — the sequence is opt-in, never required.</li>
+	</ol>
+
+	<h2><span class="step">5</span> Render it</h2>
+	<p class="lede">Pick a resolution/FPS and click <strong>Render &amp; Export</strong>. The sequence plays back exactly as scheduled: your main camera's own animation runs during its shots, then the render cuts (or fades) to the static hero camera at <code>20s</code>, holds its fixed framing for nine seconds, then cuts back.</p>
+
+	<div class="note"><strong>Real example this tutorial is based on.</strong> A bus's headlight beams were nearly invisible from the main animated camera's angle at that distance. Rather than re-choreograph the whole approach, one static camera placed dead-center on the road — elevated above the bus's roofline, looking straight down the lane the headlights travel — was cut in for just the arrival. The beams read as two clean glowing cones converging on the lens, then the sequence handed back to the main camera for the stop and boarding. See <a href="../../../guides/ANIMATION.md">the animation guide</a> for the full <code>$S(...)</code> grammar this tutorial's main camera would otherwise use.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
