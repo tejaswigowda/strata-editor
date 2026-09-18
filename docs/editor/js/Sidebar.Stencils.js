@@ -20,7 +20,7 @@ import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { createHtmlEmbed } from './HtmlEmbed.js';
 import { createMarkdownEmbed } from './MarkdownEmbed.js';
-import { createCallcard } from './Callcard.js';
+import { createCallcard, fitCallcardToCamera } from './Callcard.js';
 
 const DRAG_TYPE = 'application/x-stencil';
 
@@ -382,13 +382,18 @@ function SidebarStencils( editor ) {
 
 	} );
 
-	addStencil( 'callcard', 'Call card', function ( editor, position ) {
+	addStencil( 'callcard', 'Call card', function ( editor ) {
 
 		// Living end-card: embeds /about/callcard live, and re-fetches it fresh
 		// at every render (see Callcard.js) — update the card once, every future
-		// render/view picks it up without touching this object.
+		// render/view picks it up without touching this object. Fit it to the
+		// current viewport camera so it starts out filling the frame, front
+		// forward and readable — not a size/rotation guessing game (drop
+		// position is ignored: a full-frame end card in an arbitrary spot isn't
+		// useful the way other stencils' click-to-place placement is).
 		const object = createCallcard();
-		addObject( editor, object, position );
+		fitCallcardToCamera( object, editor.viewportCamera );
+		addObject( editor, object );
 
 	} );
 

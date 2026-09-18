@@ -24,6 +24,8 @@ $S('#callcard')                                  // it's just another node
 $S('#camera').at(END).moveTo('#callcard', 2)     // pan/zoom to it at the short's end
 ```
 
+Adding it fits it to the **current viewport camera** immediately — positioned in front of it, scaled to fill the frame, and rotated front-face-forward so it's readable right away (drop position is ignored; a full-frame end card sitting off in some arbitrary spot isn't useful the way other stencils' click-to-place behavior is). If you move the camera afterward and want to re-fit the card to its new position, call the same helper from the Shell/dev console: `fitCallcardToCamera($S('#callcard').nodes[0], editor.viewportCamera)` (`docs/editor/js/Callcard.js`). It also replaces the old "rotate 180° if the camera ends up on the opposite side, else leave it at 0" manual rule — the helper's `lookAt()` + 180° turn works for *any* relative camera angle, not just the two axis-aligned cases.
+
 The object stores only a **reference** — `userData.isCallcard` plus its plane size — never a copy of the card's HTML or pixels:
 
 - **In the live scene**, the object loads `/about/callcard` in a hidden same-origin iframe and rasterizes it once per scene load (`docs/editor/js/Callcard.js`, `hydrateCallcard`). It's a real `CanvasTexture` on a real plane `Mesh`, so it renders through the normal pipeline — no special-case viewport code.

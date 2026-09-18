@@ -697,6 +697,46 @@ function SidebarRender( editor ) {
 		progressOuter.style.display = '';
 		progressInner.style.width = ( Math.max( 0, Math.min( 1, fraction ) ) * 100 ).toFixed( 1 ) + '%';
 		statusText.textContent = message || '';
+		updateRenderOverlay( fraction, message );
+
+	}
+
+	// ── Viewport overlay (mirrors the sidebar progress bar, but over the 3D
+	// view itself, since the sidebar can be scrolled out of sight / collapsed
+	// while a render runs) ─────────────────────────────────────────────────────
+
+	const renderOverlay = document.createElement( 'div' );
+	renderOverlay.id = 'render-progress-overlay';
+	renderOverlay.style.cssText = 'position:absolute;inset:0;z-index:90;display:none;' +
+		'flex-direction:column;align-items:center;justify-content:center;gap:12px;' +
+		'background:rgba(20,20,20,0.75);color:#eee;' +
+		'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;' +
+		'text-align:center;padding:24px;box-sizing:border-box;pointer-events:none;';
+	renderOverlay.innerHTML =
+		'<div style="font-size:14px;font-weight:bold;">Rendering\u2026</div>' +
+		'<div style="width:min(320px,70%);height:10px;background:rgba(255,255,255,0.15);border-radius:5px;overflow:hidden;">' +
+			'<div class="bar" style="height:100%;width:0%;background:#08f;transition:width 0.1s linear;"></div>' +
+		'</div>' +
+		'<div class="label" style="font-size:12px;opacity:0.85;max-width:360px;"></div>';
+
+	function showRenderOverlay() {
+
+		const viewport = document.getElementById( 'viewport' );
+		if ( viewport && renderOverlay.parentNode !== viewport ) viewport.appendChild( renderOverlay );
+		renderOverlay.style.display = 'flex';
+
+	}
+
+	function hideRenderOverlay() {
+
+		renderOverlay.style.display = 'none';
+
+	}
+
+	function updateRenderOverlay( fraction, message ) {
+
+		renderOverlay.querySelector( '.bar' ).style.width = ( Math.max( 0, Math.min( 1, fraction ) ) * 100 ).toFixed( 1 ) + '%';
+		renderOverlay.querySelector( '.label' ).textContent = message || '';
 
 	}
 
@@ -784,6 +824,7 @@ function SidebarRender( editor ) {
 		cancelRequested = false;
 		renderButton.dom.disabled = true;
 		cancelButton.dom.style.display = '';
+		showRenderOverlay();
 
 		// Two canvases: WebGL renders offscreen, a 2D canvas composites (needed
 		// for crossfades: draw shot A, then shot B on top with globalAlpha) and is
@@ -954,7 +995,14 @@ function SidebarRender( editor ) {
 
 				holdTimelineAt( editor, t );
 
-				const state = shotStateAt( t );
+				// Shot/camera-cut blend time is intentionally NOT clamped to `duration`
+				// like `t` above — a shot cut placed right at the timeline's end (e.g.
+				// a fade into a trailing call card) would otherwise freeze stuck at the
+				// START of its transition (blend 0) for the whole tail, instead of
+				// finishing the fade and holding on the fully-resolved final shot.
+				const shotT = skip + outT;
+
+				const state = shotStateAt( shotT );
 
 				if ( state.from ) {
 
@@ -1008,6 +1056,7 @@ function SidebarRender( editor ) {
 
 			rendering = false;
 			cancelButton.dom.style.display = 'none';
+			hideRenderOverlay();
 			updateDuration(); // re-enables the render button if timeline non-empty
 
 		}

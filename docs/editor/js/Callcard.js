@@ -172,6 +172,45 @@ export function createCallcard( width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT )
 
 }
 
+/**
+ * Position, scale and orient a call-card (or any plane) so it fills `camera`'s
+ * CURRENT view, front face toward the camera and right-side-forward (readable,
+ * not mirrored) — regardless of which direction the camera happens to be
+ * facing. Generalizes the old "rotate 180\u00b0 if the camera ends up on the
+ * opposite side, else leave it at 0" manual rule (see guides/CALLCARD.md) to
+ * any camera angle, not just the two axis-aligned cases.
+ *
+ * A plain `object.lookAt(camPos)` aims the object's local -Z at the camera,
+ * which points this plane's FRONT (+Z) normal AWAY from it — the extra 180\u00b0
+ * turn is what corrects that for an arbitrary relative angle.
+ */
+export function fitCallcardToCamera( object, camera, { distance = 6, fill = 0.85 } = {} ) {
+
+	camera.updateWorldMatrix( true, false );
+	const camPos = camera.getWorldPosition( new THREE.Vector3() );
+	const camDir = camera.getWorldDirection( new THREE.Vector3() );
+
+	object.position.copy( camPos ).addScaledVector( camDir, distance );
+	object.lookAt( camPos );
+	object.rotateY( Math.PI );
+
+	if ( camera.isPerspectiveCamera ) {
+
+		// Scale uniformly so the card's width spans `fill` of the camera's
+		// horizontal FOV at `distance` — the card fills the frame, not just
+		// exactly touches its edges.
+		const width = object.userData.width || DEFAULT_WIDTH;
+		const vFov = THREE.MathUtils.degToRad( camera.fov );
+		const hFov = 2 * Math.atan( Math.tan( vFov / 2 ) * camera.aspect );
+		const targetWidth = 2 * distance * Math.tan( hFov / 2 ) * fill;
+		object.scale.setScalar( targetWidth / width );
+
+	}
+
+	return object;
+
+}
+
 // Tracked directly on the object (a non-enumerable runtime-only property, so
 // it never serializes) rather than a module-scoped WeakSet — a WeakSet is
 // only reliable if every caller shares the exact same module instance, which
