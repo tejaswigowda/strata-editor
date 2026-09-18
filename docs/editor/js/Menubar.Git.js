@@ -980,13 +980,17 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 }
 
 // ── Hash-based scene preload ──────────────────────────────────────────────────
-// #repo=<owner>/<repo>&file=<path>[&branch=<branch>] in the URL loads that
-// scene from a repo on page load — no token needed for a PUBLIC repo (GitHub
-// allows anonymous reads at a lower, IP-based rate limit; see ghHeaders()).
+// #repo=<owner>/<repo>&file=<path>[&branch=<branch>][&play=true] in the URL loads
+// that scene from a repo on page load — no token needed for a PUBLIC repo (GitHub
+// allows anonymous reads at a lower, IP-based rate limit; see ghHeaders()). The
+// optional play=true flag shows a big overlay play button (see index.html) that
+// starts the Universal Timeline on click — a shareable "watch this" link.
 // Any parse or network failure here is swallowed (console-warned, never
 // thrown/alerted) so a bad or absent hash always falls through to the normal
 // boot sequence unchanged — this is a pure addition, never a way to break it.
 // Committing back still needs a real PAT, entered in the Git tab as usual.
+// Returns `false` on any failure/absence, or `{ loaded: true, play: boolean }`
+// on success — both forms are correctly truthy/falsy for a plain `if (...)` check.
 export async function loadSceneFromHash( editor ) {
 
 	const hash = window.location.hash;
@@ -1006,6 +1010,7 @@ export async function loadSceneFromHash( editor ) {
 	const repoParam = params.get( 'repo' );
 	const file      = params.get( 'file' );
 	const branch    = params.get( 'branch' ) || 'main';
+	const play      = params.get( 'play' ) === 'true';
 
 	if ( ! repoParam || ! file ) return false;
 
@@ -1055,7 +1060,7 @@ export async function loadSceneFromHash( editor ) {
 		const tokenHint = existingPat ? '' : ' — add a token in the Git tab to enable commits';
 		_showBanner( `✓ Loaded ${ parsed.owner }/${ parsed.repo }/${ file } from URL${ tokenHint }`, 4000 );
 
-		return true;
+		return { loaded: true, play };
 
 	} catch ( err ) {
 
@@ -1089,6 +1094,46 @@ function _showBanner( text, durationMs = 0 ) {
 	}
 
 	return el;
+
+}
+
+// Big centered "▶" overlay for a #...&play=true shareable link — a viewer lands
+// on a fully-loaded, non-animating scene and clicks once to start the Universal
+// Timeline (autoplay-on-load is blocked by browsers for audio/video anyway, and
+// an explicit click is clearer than a scene that silently starts moving).
+// Dispatches timelinePlayRequested (Timeline.js owns the actual play() call)
+// then removes itself — one-shot, not a persistent playback control.
+export function showPlayOverlay( editor ) {
+
+	const overlay = document.createElement( 'div' );
+	overlay.style.cssText = [
+		'position:fixed', 'inset:0', 'display:flex', 'align-items:center', 'justify-content:center',
+		'background:rgba(0,0,0,0.25)', 'z-index:99998', 'cursor:pointer',
+	].join( ';' );
+	overlay.title = 'Play';
+
+	const button = document.createElement( 'div' );
+	button.style.cssText = [
+		'width:96px', 'height:96px', 'border-radius:50%',
+		'background:rgba(20,20,20,0.85)', 'border:3px solid #fff',
+		'display:flex', 'align-items:center', 'justify-content:center',
+		'box-shadow:0 4px 24px rgba(0,0,0,0.5)', 'transition:transform 0.15s',
+	].join( ';' );
+	button.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg>';
+	overlay.appendChild( button );
+
+	overlay.addEventListener( 'mouseenter', () => { button.style.transform = 'scale(1.08)'; } );
+	overlay.addEventListener( 'mouseleave', () => { button.style.transform = 'scale(1)'; } );
+
+	overlay.addEventListener( 'click', () => {
+
+		editor.signals.timelinePlayRequested.dispatch();
+		overlay.remove();
+
+	}, { once: true } );
+
+	document.body.appendChild( overlay );
+	return overlay;
 
 }
 

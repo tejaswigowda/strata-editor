@@ -94,6 +94,7 @@ function Editor() {
 
 		viewportCameraChanged: new Signal(),
 		viewportShadingChanged: new Signal(),
+		timelinePlayRequested: new Signal(), // external "play" trigger (e.g. the #...&play=true overlay button) — Timeline.js listens and calls its own play()
 
 		intersectionsDetected: new Signal(),
 

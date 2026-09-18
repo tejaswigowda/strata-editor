@@ -58,7 +58,7 @@
 			import { Sidebar } from './editor/js/Sidebar.js';
 			import { Menubar } from './editor/js/Menubar.js';
 			import { Resizer } from './editor/js/Resizer.js';
-			import { autoLoadFromGit, loadSceneFromHash } from './editor/js/Menubar.Git.js';
+			import { autoLoadFromGit, loadSceneFromHash, showPlayOverlay } from './editor/js/Menubar.Git.js';
 
 			import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
@@ -114,14 +114,16 @@
 
 				//
 
-				// #repo=<owner>/<repo>&file=<path>[&branch=<branch>] preloads a scene
-				// from a (public, tokenless-readable) git repo — tried BEFORE the
+				// #repo=<owner>/<repo>&file=<path>[&branch=<branch>][&play=true] preloads a
+				// scene from a (public, tokenless-readable) git repo — tried BEFORE the
 				// normal local-autosave / configured-git-repo boot sequence so its
 				// success/failure is known synchronously relative to that sequence,
 				// not racing it. Any parse/network failure resolves to false here and
 				// the normal sequence below runs completely unchanged — this is a
 				// pure addition, never a way to break existing startup behavior.
-				const hashScenePreloaded = await loadSceneFromHash( editor );
+				const hashResult = await loadSceneFromHash( editor );
+				const hashScenePreloaded = !! hashResult;
+				if ( hashResult && hashResult.play ) showPlayOverlay( editor );
 
 				editor.storage.init( function () {
 

@@ -28,7 +28,7 @@ function Timeline( editor ) {
 	let playhead = 0;               // seconds (the shared clock)
 	let selectedEventId = null;
 	let showCode = false;
-	let followRenderCamera = false; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback
+	let followRenderCamera = true; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback (default on)
 	let followedAway = false;       // true once WE switched editor.viewportCamera away from editor.camera, so we know to restore it
 
 	// ── Container ─────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ function Timeline( editor ) {
 	followRow.style.cssText = 'padding:2px 10px 6px;border-bottom:1px solid #ccc;display:flex;align-items:center;gap:6px;flex-shrink:0;';
 	container.dom.appendChild( followRow );
 
-	const followCheckbox = new UICheckbox( false );
+	const followCheckbox = new UICheckbox( true );
 	followCheckbox.dom.title = 'While playing, switch the viewport to whichever camera the Render tab\'s Camera Sequence is using right now (or the default camera if none is set)';
 	followRow.appendChild( followCheckbox.dom );
 	const followLabel = new UIText( 'Follow render camera' ).setFontSize( '11px' );
@@ -1302,6 +1302,7 @@ function Timeline( editor ) {
 	// ── Signals ───────────────────────────────────────────────────────────────
 	signals.timelineChanged.add( function () { render(); if ( showCode ) refreshCode(); } );
 	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );	signals.objectSelected.add( function () { selectedEventId = null; refreshKeyPanel(); } );
+	signals.timelinePlayRequested.add( play ); // external trigger, e.g. the #...&play=true overlay button
 	signals.objectChanged.add( function ( object ) {
 
 		// object mode only: keep the staged pose in sync with gizmo edits
