@@ -980,11 +980,14 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 }
 
 // ── Hash-based scene preload ──────────────────────────────────────────────────
-// #repo=<owner>/<repo>&file=<path>[&branch=<branch>][&play=true] in the URL loads
-// that scene from a repo on page load — no token needed for a PUBLIC repo (GitHub
-// allows anonymous reads at a lower, IP-based rate limit; see ghHeaders()). The
-// optional play=true flag shows a big overlay play button (see index.html) that
-// starts the Universal Timeline on click — a shareable "watch this" link.
+// #repo=<owner>/<repo>&file=<path>[&branch=<branch>][&play=true|false] in the URL
+// loads that scene from a repo on page load — no token needed for a PUBLIC repo
+// (GitHub allows anonymous reads at a lower, IP-based rate limit; see ghHeaders()).
+// The overlay play button (see index.html) shows by default whenever the loaded
+// scene actually has an animation to play — a shareable "watch this" link needs
+// no extra flag. play=true forces it on (e.g. for a scene whose animation lives
+// off a Timeline clip in some other form); play=false forces it off even if the
+// scene does have one (e.g. sharing a static pose/build, not the animated short).
 // Any parse or network failure here is swallowed (console-warned, never
 // thrown/alerted) so a bad or absent hash always falls through to the normal
 // boot sequence unchanged — this is a pure addition, never a way to break it.
@@ -1010,7 +1013,7 @@ export async function loadSceneFromHash( editor ) {
 	const repoParam = params.get( 'repo' );
 	const file      = params.get( 'file' );
 	const branch    = params.get( 'branch' ) || 'main';
-	const play      = params.get( 'play' ) === 'true';
+	const playParam = params.get( 'play' ); // 'true' | 'false' | null (default: on iff the scene has an animation)
 
 	if ( ! repoParam || ! file ) return false;
 
@@ -1040,6 +1043,14 @@ export async function loadSceneFromHash( editor ) {
 
 		editor.clear();
 		await editor.fromJSON( json );
+
+		// play=true/false always wins explicitly; with neither, the overlay
+		// defaults to showing whenever the loaded scene actually has something to
+		// play — a shared link to a static (non-animated) scene shouldn't offer a
+		// play button that does nothing.
+		const hasAnimation = ( editor.timeline && editor.timeline.duration > 0 )
+			|| ( Array.isArray( editor.scene.animations ) && editor.scene.animations.some( c => c.duration > 0 ) );
+		const play = playParam === 'false' ? false : ( playParam === 'true' ? true : !! hasAnimation );
 
 		localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 

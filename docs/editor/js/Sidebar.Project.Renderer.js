@@ -158,6 +158,36 @@ function SidebarProjectRenderer( editor ) {
 
 	}
 
+	// Android in particular sometimes fails the *first* context request right after
+	// a backgrounded tab is resumed (or right after page load) because the GPU
+	// process hasn't finished restarting yet, then succeeds a moment later. Retry
+	// a couple of times with short backoff before treating it as a real failure.
+
+	async function createWebGLRendererWithRetries( antialias ) {
+
+		const delays = [ 0, 300, 800 ];
+		let lastError = null;
+
+		for ( const ms of delays ) {
+
+			if ( ms > 0 ) await new Promise( resolve => setTimeout( resolve, ms ) );
+
+			try {
+
+				return createWebGLRenderer( antialias );
+
+			} catch ( error ) {
+
+				lastError = error;
+
+			}
+
+		}
+
+		throw lastError;
+
+	}
+
 	async function createRenderer() {
 
 		let rendererType = rendererTypeSelect.getValue();
@@ -176,7 +206,7 @@ function SidebarProjectRenderer( editor ) {
 
 			} else {
 
-				newRenderer = createWebGLRenderer( antialias );
+				newRenderer = await createWebGLRendererWithRetries( antialias );
 
 			}
 
@@ -198,7 +228,7 @@ function SidebarProjectRenderer( editor ) {
 
 			try {
 
-				newRenderer = createWebGLRenderer( antialias );
+				newRenderer = await createWebGLRendererWithRetries( antialias );
 				rendererType = 'WebGLRenderer';
 				rendererTypeSelect.setValue( 'WebGLRenderer' );
 				fellBackToWebGL = true;
@@ -283,9 +313,12 @@ function SidebarProjectRenderer( editor ) {
 						'<code>--enable-unsafe-swiftshader</code> (software fallback) or ' +
 						'<code>--use-gl=angle --use-angle=gl</code>.</li>' +
 					( isWebGPU ? '<li>Switch the renderer back to <strong>WebGL</strong> in Project \u203A Renderer.</li>' : '' ) +
+					'<li>On mobile, this can happen transiently after switching apps or tabs — <strong>Try again</strong> often recovers without a full reload.</li>' +
 				'</ul>' +
+				'<button id="webgl-error-retry" style="margin-right:8px;padding:6px 14px;' +
+					'background:#2a82da;color:#fff;border:none;border-radius:4px;cursor:pointer;">Try again</button>' +
 				'<button id="webgl-error-reload" style="margin-right:8px;padding:6px 14px;' +
-					'background:#2a82da;color:#fff;border:none;border-radius:4px;cursor:pointer;">Reload</button>' +
+					'background:#3a3a3a;color:#fff;border:none;border-radius:4px;cursor:pointer;">Reload</button>' +
 				'<details style="margin-top:14px;color:#9a9a9a;">' +
 					'<summary style="cursor:pointer;">Technical details</summary>' +
 					'<pre style="white-space:pre-wrap;word-break:break-word;margin:8px 0 0;font-size:12px;">' +
@@ -293,6 +326,9 @@ function SidebarProjectRenderer( editor ) {
 					'</pre>' +
 				'</details>' +
 			'</div>';
+
+		const retryButton = document.getElementById( 'webgl-error-retry' );
+		if ( retryButton !== null ) retryButton.onclick = () => createRenderer();
 
 		const reloadButton = document.getElementById( 'webgl-error-reload' );
 		if ( reloadButton !== null ) reloadButton.onclick = () => location.reload();
