@@ -49,6 +49,8 @@ function Editor() {
 		rendererCreated: new Signal(),
 		rendererUpdated: new Signal(),
 		rendererDetectKTX2Support: new Signal(),
+		rendererContextLost: new Signal(),
+		rendererContextRestored: new Signal(),
 
 		sceneBackgroundChanged: new Signal(),
 		sceneEnvironmentChanged: new Signal(),

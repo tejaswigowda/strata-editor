@@ -69,6 +69,7 @@ function Viewport( editor ) {
 	let renderer = null;
 	let pmremGenerator = null;
 	let pathtracer = null;
+	let contextLostTimer = null;
 
 	const camera = editor.camera;
 	const scene = editor.scene;
@@ -724,6 +725,8 @@ function Viewport( editor ) {
 
 	signals.rendererCreated.add( function ( newRenderer ) {
 
+		hideContextLostOverlay();
+
 		if ( renderer !== null ) {
 
 			renderer.setAnimationLoop( null );
@@ -789,11 +792,86 @@ function Viewport( editor ) {
 
 		container.dom.appendChild( renderer.domElement );
 
+		// Mobile GPUs (Android in particular) can drop the context under memory/
+		// thermal pressure mid-session — e.g. while an animation is playing and
+		// draw calls spike — leaving the canvas permanently blank with no error.
+		// three.js itself no-ops render() once lost and restores its own GL state
+		// if/when the browser fires 'webglcontextrestored', but that isn't
+		// guaranteed to happen, so surface it instead of silently freezing.
+		renderer.domElement.addEventListener( 'webglcontextlost', function ( event ) {
+
+			event.preventDefault();
+			console.warn( 'Strata: WebGL context lost.' );
+			showContextLostOverlay( true );
+
+			contextLostTimer = setTimeout( function () {
+
+				showContextLostOverlay( false );
+
+			}, 4000 );
+
+		}, false );
+
+		renderer.domElement.addEventListener( 'webglcontextrestored', function () {
+
+			console.info( 'Strata: WebGL context restored.' );
+			hideContextLostOverlay();
+			render();
+
+		}, false );
+
 		signals.sceneEnvironmentChanged.dispatch( editor.environmentType );
 
 		render();
 
 	} );
+
+	function showContextLostOverlay( canRecoverAutomatically ) {
+
+		let overlay = document.getElementById( 'webgl-context-lost-overlay' );
+
+		if ( overlay === null ) {
+
+			overlay = document.createElement( 'div' );
+			overlay.id = 'webgl-context-lost-overlay';
+			overlay.style.cssText = 'position:absolute;inset:0;z-index:100;display:flex;' +
+				'align-items:center;justify-content:center;text-align:center;' +
+				'background:rgba(25,25,25,0.92);color:#d6d6d6;' +
+				'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;' +
+				'padding:24px;box-sizing:border-box;';
+			container.dom.appendChild( overlay );
+
+		}
+
+		overlay.innerHTML =
+			'<div style="max-width:360px;line-height:1.5;">' +
+				'<p style="margin:0 0 12px;font-size:14px;">The 3D view lost its graphics ' +
+				'context (common on mobile under memory or thermal pressure) ' +
+				( canRecoverAutomatically ?
+					'and is trying to recover\u2026</p>' :
+					'and couldn\u2019t recover automatically.</p>' +
+					'<button id="webgl-context-lost-reload" style="padding:6px 14px;' +
+						'background:#2a82da;color:#fff;border:none;border-radius:4px;cursor:pointer;">Reload</button>' ) +
+			'</div>';
+
+		const reloadButton = document.getElementById( 'webgl-context-lost-reload' );
+		if ( reloadButton !== null ) reloadButton.onclick = () => location.reload();
+
+	}
+
+	function hideContextLostOverlay() {
+
+		const overlay = document.getElementById( 'webgl-context-lost-overlay' );
+		if ( overlay !== null ) overlay.remove();
+
+		if ( contextLostTimer !== null ) {
+
+			clearTimeout( contextLostTimer );
+			contextLostTimer = null;
+
+		}
+
+	}
 
 	signals.rendererDetectKTX2Support.add( function ( ktx2Loader ) {
 
