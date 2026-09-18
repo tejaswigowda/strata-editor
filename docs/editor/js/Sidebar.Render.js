@@ -272,6 +272,7 @@ function SidebarRender( editor ) {
 		const d = timelineDuration();
 		durationText.setValue( d > 0 ? `${ d.toFixed( 2 ) } s (renders ${ outputDuration( d ).toFixed( 2 ) } s)` : 'Timeline is empty' );
 		renderButton.dom.disabled = ( d <= 0 ) || rendering;
+		equirectButton.dom.disabled = ( d <= 0 ) || rendering;
 
 	}
 
@@ -657,14 +658,43 @@ function SidebarRender( editor ) {
 
 	refreshSubsList();
 
+	// ── 360 (equirectangular) video ────────────────────────────────────────────
+	// Reuses the Camera/FPS/Skip/shot-sequence/subtitle settings above — only
+	// the output resolution differs (must be 2:1 for a standard equirect video).
+	// The shot sequence's cameras contribute POSITION only; orientation and FOV
+	// are meaningless for a 360 video (the viewer looks in every direction), so
+	// no camera-aspect pinning happens for this mode.
+
+	const equirectRow = new UIRow();
+	equirectRow.add( new UIText( '360 Resolution' ).setClass( 'Label' ) );
+	const equirectResolutionSelect = new UISelect().setWidth( '160px' );
+	equirectResolutionSelect.setOptions( {
+		'3840x1920': '3840 × 1920 (2:1)',
+		'2560x1280': '2560 × 1280 (2:1)',
+		'1920x960': '1920 × 960 (2:1)',
+		'1280x640': '1280 × 640 (2:1)',
+	} );
+	equirectResolutionSelect.setValue( '1920x960' );
+	equirectRow.add( equirectResolutionSelect );
+	container.add( equirectRow );
+
+	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the camera(s) above\u2019s POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time.' );
+	equirectHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
+	container.add( equirectHelp );
+
 	// ── Render / Cancel buttons ───────────────────────────────────────────────
 
 	const buttonRow = new UIRow();
 
 	const renderButton = new UIButton( 'Render & Export' );
 	renderButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;';
-	renderButton.onClick( function () { startRender(); } );
+	renderButton.onClick( function () { startRender( 'flat' ); } );
 	buttonRow.add( renderButton );
+
+	const equirectButton = new UIButton( 'Render 360 Video' );
+	equirectButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;margin-left:6px;';
+	equirectButton.onClick( function () { startRender( '360' ); } );
+	buttonRow.add( equirectButton );
 
 	const cancelButton = new UIButton( 'Cancel' );
 	cancelButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;margin-left:6px;display:none;';
@@ -793,9 +823,11 @@ function SidebarRender( editor ) {
 
 	}
 
-	async function startRender() {
+	async function startRender( kind = 'flat' ) {
 
 		if ( rendering ) return;
+
+		const is360 = kind === '360';
 
 		const duration = timelineDuration();
 		if ( ! ( duration > 0 ) ) {
@@ -815,7 +847,7 @@ function SidebarRender( editor ) {
 
 		const shots = getShots().slice();
 		const fallbackCamera = editor.cameras[ cameraSelect.getValue() ] || editor.camera;
-		const [ width, height ] = resolutionSelect.getValue().split( 'x' ).map( Number );
+		const [ width, height ] = ( is360 ? equirectResolutionSelect : resolutionSelect ).getValue().split( 'x' ).map( Number );
 		const fps = parseInt( fpsSelect.getValue(), 10 );
 		const skip = skipSeconds( duration );
 		const renderLength = outputDuration( duration );
@@ -823,6 +855,7 @@ function SidebarRender( editor ) {
 		rendering = true;
 		cancelRequested = false;
 		renderButton.dom.disabled = true;
+		equirectButton.dom.disabled = true;
 		cancelButton.dom.style.display = '';
 		showRenderOverlay();
 
@@ -881,29 +914,100 @@ function SidebarRender( editor ) {
 		}
 
 		// Set the render aspect on EVERY camera used (sequence + fallback),
-		// restore all afterwards.
+		// restore all afterwards. Skipped for 360: a cube capture always covers
+		// the full surrounding sphere regardless of any camera's aspect/FOV, so
+		// there is nothing meaningful to pin.
 		const aspect = width / height;
-		const camerasUsed = new Set( [ fallbackCamera ] );
-		for ( const s of shots ) camerasUsed.add( cameraOf( s ) );
 		const cameraRestores = [];
-		for ( const cam of camerasUsed ) {
+		if ( ! is360 ) {
 
-			if ( cam.isPerspectiveCamera ) {
+			const camerasUsed = new Set( [ fallbackCamera ] );
+			for ( const s of shots ) camerasUsed.add( cameraOf( s ) );
+			for ( const cam of camerasUsed ) {
 
-				const prevAspect = cam.aspect;
-				cam.aspect = aspect;
-				cam.updateProjectionMatrix();
-				cameraRestores.push( () => { cam.aspect = prevAspect; cam.updateProjectionMatrix(); } );
+				if ( cam.isPerspectiveCamera ) {
 
-			} else if ( cam.isOrthographicCamera ) {
+					const prevAspect = cam.aspect;
+					cam.aspect = aspect;
+					cam.updateProjectionMatrix();
+					cameraRestores.push( () => { cam.aspect = prevAspect; cam.updateProjectionMatrix(); } );
 
-				const prev = { left: cam.left, right: cam.right };
-				cam.left = - aspect;
-				cam.right = aspect;
-				cam.updateProjectionMatrix();
-				cameraRestores.push( () => { cam.left = prev.left; cam.right = prev.right; cam.updateProjectionMatrix(); } );
+				} else if ( cam.isOrthographicCamera ) {
+
+					const prev = { left: cam.left, right: cam.right };
+					cam.left = - aspect;
+					cam.right = aspect;
+					cam.updateProjectionMatrix();
+					cameraRestores.push( () => { cam.left = prev.left; cam.right = prev.right; cam.updateProjectionMatrix(); } );
+
+				}
 
 			}
+
+		}
+
+		// 360 mode: each frame, bake the scene surrounding the active camera's
+		// POSITION into a cube render target (world-axis-aligned faces), then
+		// re-project that cube map onto an equirectangular (2:1) quad with a
+		// small shader — the standard "360 photo/video" capture technique. The
+		// source camera's ORIENTATION only rotates which part of the equirect
+		// image reads as "forward" (u=0.5); the capture itself always covers the
+		// full sphere regardless.
+		let cubeCamera = null, cubeRenderTarget = null, equirectMaterial = null, quadScene = null, quadCamera = null, quadGeometry = null;
+		const basisMatrix = new THREE.Matrix3();
+		const scratchPos = new THREE.Vector3();
+
+		if ( is360 ) {
+
+			const faceSize = Math.min( 2048, Math.max( 256, Math.round( height ) ) );
+			cubeRenderTarget = new THREE.WebGLCubeRenderTarget( faceSize );
+			cubeCamera = new THREE.CubeCamera( 0.05, 2000, cubeRenderTarget );
+
+			equirectMaterial = new THREE.ShaderMaterial( {
+				uniforms: {
+					tCube: { value: cubeRenderTarget.texture },
+					uBasis: { value: basisMatrix },
+				},
+				vertexShader: `
+					varying vec2 vUv;
+					void main() {
+						vUv = uv;
+						gl_Position = vec4( position.xy, 0.0, 1.0 );
+					}
+				`,
+				fragmentShader: `
+					uniform samplerCube tCube;
+					uniform mat3 uBasis;
+					varying vec2 vUv;
+					void main() {
+						float theta = ( vUv.x - 0.5 ) * 6.28318530718;
+						float phi = ( vUv.y - 0.5 ) * 3.14159265359;
+						vec3 localDir = vec3( sin( theta ) * cos( phi ), sin( phi ), - cos( theta ) * cos( phi ) );
+						gl_FragColor = textureCube( tCube, uBasis * localDir );
+					}
+				`,
+				depthTest: false,
+				depthWrite: false,
+			} );
+
+			quadGeometry = new THREE.PlaneGeometry( 2, 2 );
+			const quadMesh = new THREE.Mesh( quadGeometry, equirectMaterial );
+			quadMesh.frustumCulled = false; // vertex shader writes clip space directly; culling against quadCamera would be meaningless
+			quadScene = new THREE.Scene();
+			quadScene.add( quadMesh );
+			quadCamera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0, 10 );
+			quadCamera.position.z = 1;
+
+		}
+
+		function renderEquirectFace( cam ) {
+
+			cam.updateWorldMatrix( true, false );
+			cubeCamera.position.copy( cam.getWorldPosition( scratchPos ) );
+			cubeCamera.update( renderer, scene );
+			basisMatrix.setFromMatrix4( cam.matrixWorld );
+			renderer.setRenderTarget( null );
+			renderer.render( quadScene, quadCamera );
 
 		}
 
@@ -1007,17 +1111,17 @@ function SidebarRender( editor ) {
 				if ( state.from ) {
 
 					// crossfade: previous shot full, current shot on top with alpha
-					renderer.render( scene, state.from );
+					if ( is360 ) renderEquirectFace( state.from ); else renderer.render( scene, state.from );
 					ctx.globalAlpha = 1;
 					ctx.drawImage( glCanvas, 0, 0 );
-					renderer.render( scene, state.camera );
+					if ( is360 ) renderEquirectFace( state.camera ); else renderer.render( scene, state.camera );
 					ctx.globalAlpha = state.blend;
 					ctx.drawImage( glCanvas, 0, 0 );
 					ctx.globalAlpha = 1;
 
 				} else {
 
-					renderer.render( scene, state.camera );
+					if ( is360 ) renderEquirectFace( state.camera ); else renderer.render( scene, state.camera );
 					ctx.drawImage( glCanvas, 0, 0 );
 
 				}
@@ -1053,6 +1157,13 @@ function SidebarRender( editor ) {
 			holdTimelineAt( editor, 0 );
 			signals.sceneGraphChanged.dispatch();
 			renderer.dispose();
+			if ( is360 ) {
+
+				cubeRenderTarget.dispose();
+				equirectMaterial.dispose();
+				quadGeometry.dispose();
+
+			}
 
 			rendering = false;
 			cancelButton.dom.style.display = 'none';
@@ -1071,7 +1182,7 @@ function SidebarRender( editor ) {
 
 		const blob = new Blob( chunks, { type: mime.split( ';' )[ 0 ] } );
 		const label = shots.length > 0 ? 'sequence' : ( fallbackCamera.name || 'camera' ).replace( /[^\w\-]+/g, '_' );
-		const baseName = `render-${ label }-${ width }x${ height }-${ fps }fps`;
+		const baseName = `render-${ is360 ? '360-' : '' }${ label }-${ width }x${ height }-${ fps }fps`;
 		downloadBlob( blob, `${ baseName }.${ extensionFor( mime ) }` );
 
 		postRenderActions.innerHTML = '';
@@ -1093,7 +1204,7 @@ function SidebarRender( editor ) {
 
 		}
 
-		setProgress( 1, 'Done — video downloaded.' );
+		setProgress( 1, is360 ? 'Done — 360 video downloaded.' : 'Done — video downloaded.' );
 
 	}
 
