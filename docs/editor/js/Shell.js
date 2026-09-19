@@ -31,6 +31,8 @@ import { bevel }       from './mesh/ops/bevel.js';
 import { deleteFaces } from './mesh/ops/delete.js';
 import { weld }        from './mesh/ops/weld.js';
 import { planarUV, boxUV } from './mesh/ops/uv.js';
+import { soften }      from './mesh/ops/soften.js';
+import { sculpt }      from './mesh/ops/sculpt.js';
 import { SceneIntelligence, findByDescription, describeObject, listCandidates, resolvePartAI } from './intelligence/sceneIndex.js';
 import { findParts } from './intelligence/sceneIndex.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
@@ -2118,6 +2120,8 @@ function Shell( editor ) {
 				weld:        ( threshold = 0.01 )=> editor.editModeController.runOp( ( em, sel ) => weld( em, sel, { threshold } ),     'weld',        { threshold } ),
 				planarUV:    ( axis = 'y' )      => editor.editModeController.runOp( ( em, sel ) => planarUV( em, sel, axis ),          'planarUV',    { axis } ),
 				boxUV:       ()                  => editor.editModeController.runOp( ( em, sel ) => boxUV( em, sel ),                   'boxUV',       {} ),
+				soften:      ( iterations = 1, factor = 0.5 ) => editor.editModeController.runOp( ( em, sel ) => soften( em, sel, { iterations, factor } ), 'soften', { iterations, factor } ),
+				sculpt:      ( strength = 0.2, radius = 0.5, falloff = 'smooth' ) => editor.editModeController.runOp( ( em, sel ) => sculpt( em, sel, { strength, radius, falloff } ), 'sculpt', { strength, radius, falloff } ),
 
 				// ── Selection helpers (used directly and in recipe-replayed code) ────────
 				selectFaces:    ( ...ids ) => { const emc = editor.editModeController; if ( emc.active ) { emc.selection.setMode( 'face' ); ids.forEach( id => emc.selection.add( id ) ); emc.updateOverlay(); } },
@@ -4012,7 +4016,7 @@ ${ notes.join( '\n' ) }
 		appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)', 'info' );
 		appendOutput( 'organic geometry: LatheGeometry(pts,segs)  TubeGeometry(curve,…)  ExtrudeGeometry(shape,{})  CatmullRomCurve3(pts)', 'info' );
 		appendOutput( 'PBR textures: makeTexture(fn,size)  makeCheckerTex(sz,dark,light,tiles)  makeGridTex(sz,color,divs,bg)  + MeshPhysicalMaterial', 'info' );
-		appendOutput( 'edit mode: enterEditMode()  exitEditMode()  extrude(d)  inset(t)  bevel(t)  deleteFaces()  weld(eps)  planarUV(axis)  boxUV()  — Tab to toggle', 'info' );
+		appendOutput( 'edit mode: enterEditMode()  exitEditMode()  extrude(d)  inset(t)  bevel(t)  deleteFaces()  weld(eps)  planarUV(axis)  boxUV()  soften(iters,factor)  sculpt(strength,radius,falloff)  — Tab to toggle', 'info' );
 		appendOutput( 'selection criteria (M6): selectTopFaces(count)  selectFacingUp(threshold)  selectBoundaryEdges()  selectFaces(…ids)  selectVertices(…ids)  selectEdges(…ids)  clearSelection()', 'info' );
 
 	}

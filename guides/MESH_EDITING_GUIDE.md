@@ -87,6 +87,8 @@ Then use:
 - `weld(threshold=0.01)`: Merge nearby vertices
 - `planarUV(axis='y')`: Project UVs onto a plane
 - `boxUV()`: Box/cubic UV projection
+- `soften(iterations=1, factor=0.5)`: Laplacian-smooth selected vertices (or the whole mesh if nothing is selected) toward their neighbor average
+- `sculpt(strength=0.2, radius=0.5, falloff='smooth')`: Proportional-falloff brush — push/pull vertices near the selection (or whole mesh) along their smooth normals, fading out over `radius`
 
 Exit edit mode:
 ```javascript
@@ -119,6 +121,40 @@ exitEditMode();  // Done!
 - `selectVertices(...ids)`: Select specific vertex IDs
 - `selectEdges(...ids)`: Select specific edge IDs
 - `clearSelection()`: Clear all selections
+
+### M9: Sculpting (Proportional Editing)
+
+`sculpt()` and `soften()` are the two primitives that make organic/freeform shaping
+possible without hand-rolling vertex math in the shell (see
+[MESH_EDITING_TECHNICAL.md](./MESH_EDITING_TECHNICAL.md#m9-sculpting-primitives)
+for why this was needed and how it's implemented):
+
+- **`sculpt(strength, radius, falloff)`** is a soft-select brush: it finds the
+  centroid of the current selection (any mode — vertex/edge/face — or the
+  whole mesh if nothing is selected) and pushes/pulls every vertex within
+  `radius` of that point along its own smooth normal, weighted by distance so
+  the effect fades to zero at the edge of the brush instead of cutting off
+  sharply. Select a single vertex near the spot you want to shape, then call
+  `sculpt()` — no need to select the whole affected region up front.
+- **`soften(iterations, factor)`** is Laplacian smoothing: it repeatedly pulls
+  each target vertex toward the average position of its neighbors. Use it
+  after one or more `sculpt()` calls (or on hand-written vertex displacement)
+  to relax steep bumps into smooth-reading curvature — this is what turns a
+  faceted-looking blob into an actually smooth surface.
+
+```javascript
+enterEditMode(mesh);
+
+// Push a bump up out of the mesh near a specific point
+selectVertices(closestVertexIdTo(mesh, [0, 0.05, 0.5]));  // your own lookup helper
+sculpt(0.09, 0.2, 'smooth');   // push out
+sculpt(-0.05, 0.16);           // negative strength = push in (e.g. an eye socket)
+
+clearSelection();
+soften(1, 0.35);   // relax the whole mesh so bumps read as smooth curvature
+
+exitEditMode();
+```
 
 ## Keyboard Shortcuts (in Edit Mode)
 
@@ -184,21 +220,22 @@ Compact() on each operation ensures no memory leaks from deleted faces/vertices.
 
 ## Limitations & Future Work
 
-### Current Scope (M1-M6)
+### Current Scope (M1-M6, M9)
 ✓ Boolean operations  
 ✓ Mirror, array, subdivide  
 ✓ Extrude, inset, bevel, delete, weld  
 ✓ Planar and box UV projection  
 ✓ Selection by criteria  
+✓ Sculpting (proportional soft-select brush + Laplacian smoothing)
 
-### Not Yet Implemented (M7-M8)
+### Not Yet Implemented (M7-M8+)
 - glTF/OBJ import with edit history
 - Loop cut (edge-based subdivision)
-- Proportional/soft-select editing
 - Snapping (grid, vertex, edge, face)
 - Numeric entry for precise transforms
 - Advanced UV unwrapping (angle-based)
-- Sculpting or physics simulation
+- Morph-target / blend-toward-reference-mesh sculpting
+- Physics simulation
 
 ## Testing the Implementation
 
@@ -230,6 +267,17 @@ selectFacingUp(0.5);  // Select upper-facing faces
 inset(0.3);
 selectBoundaryEdges();
 weld(0.05);
+exitEditMode();
+
+// Test M9 (Sculpting)
+const ball = new Mesh(new SphereGeometry(0.5, 48, 32), new MeshStandardMaterial());
+ball.name = 'Sculptable';
+editor.execute(new AddObjectCommand(editor, ball));
+enterEditMode(ball);
+selectVertices(0);       // any single vertex near where you want to push
+sculpt(0.1, 0.2);        // push a smooth bump out around it
+clearSelection();
+soften(1, 0.4);          // relax the whole mesh so it reads as smooth curvature
 exitEditMode();
 ```
 

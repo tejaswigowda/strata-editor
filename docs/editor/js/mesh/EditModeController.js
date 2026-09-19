@@ -24,7 +24,7 @@ import { SetGeometryCommand } from '../commands/SetGeometryCommand.js';
 import { PARAM_ORDER, PARAM_DEFAULTS } from '../scene/geometryParams.js';
 
 // Edit-mode ops that are safe to record in a recipe (all others produce non-replayable geometry)
-const RECIPE_OPS = new Set( [ 'extrude', 'inset', 'bevel', 'deleteFaces', 'weld', 'planarUV', 'boxUV' ] );
+const RECIPE_OPS = new Set( [ 'extrude', 'inset', 'bevel', 'deleteFaces', 'weld', 'planarUV', 'boxUV', 'soften', 'sculpt' ] );
 
 // Detect the primitive constructor entry from a geometry
 function _primitiveEntry( geom ) {

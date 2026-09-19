@@ -1002,7 +1002,11 @@ export async function loadSceneFromHash( editor ) {
 	let params;
 	try {
 
-		params = new URLSearchParams( hash.replace( /^#/, '' ) );
+		// Strip ALL leading '#' (not just one) — a stray "##repo=…" (e.g. from a
+		// pasted URL or an extra '#' typed in the address bar) otherwise leaves a
+		// literal '#' stuck onto the first param name, so URLSearchParams parses
+		// it as key "#repo" instead of "repo" and this silently no-ops below.
+		params = new URLSearchParams( hash.replace( /^#+/, '' ) );
 
 	} catch {
 

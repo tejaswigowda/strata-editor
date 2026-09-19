@@ -189,6 +189,47 @@ registerOp('extrude', {
 | **M2** | mirror.js, array.js, subdivide.js | Transform operations |
 | **M5** | extrude.js, inset.js, bevel.js, delete.js, weld.js | Core mesh editing |
 | **M8** | uv.js | UV mapping |
+| **M9** | soften.js, sculpt.js | Sculpting (Laplacian smoothing, proportional-falloff brush) |
+
+## M9: Sculpting Primitives
+
+Added after hitting the limits of the M1-M6 op set: it has no way to express
+"push this region out/in smoothly." The workaround was hand-rolling per-vertex
+displacement directly against `em.vertices` from the shell (see
+[MESH_EDITING_GUIDE.md](./MESH_EDITING_GUIDE.md#sculpting-proportional-editing)
+for the user-facing writeup) — mathematically fine, but with no soft-select
+falloff, a slightly-too-steep amplitude/width ratio (e.g. amplitude 0.14 over a
+sigma of 0.13) reads as visibly faceted, because linear normal interpolation
+between adjacent vertices can't approximate a sharp curvature change smoothly.
+There was also no operator to fix that after the fact.
+
+**`sculpt.js`** (`sculpt(em, selection, { strength, radius, falloff })`):
+- Brush center = centroid of the current selection's vertices (any mode —
+  `faceVertices()`/half-edge walks resolve face/edge selections down to
+  vertex ids), or the whole mesh's centroid if nothing is selected.
+- Every vertex within `radius` of that center is displaced along its **smooth
+  vertex normal** — the average of `faceNormal()` across its incident faces
+  (via a `Map<vertexId, faceId[]>` built once per call) — not "away from mesh
+  center," so it's correct on any topology, not just spheres.
+- Displacement weight = `strength * falloff(dist / radius)`, where `falloff`
+  is `1 - smoothstep(t)` (`'smooth'`, default) or `1 - t` (`'linear'`) — zero
+  at the brush edge, full strength at the center, continuous everywhere.
+
+**`soften.js`** (`soften(em, selection, { iterations, factor })`):
+- Standard Laplacian smoothing over the selected vertices (or all vertices).
+- Adjacency (`Map<vertexId, Set<neighborId>>`) is built once from
+  `em.halfEdges` (both `he.v → next.v` directions, since half-edges are
+  directional but adjacency isn't).
+- Each iteration computes ALL next-positions from the current pass before
+  writing any of them back (double-buffered) — mutating `em.vertices` in
+  place mid-pass would make later vertices in iteration order see
+  already-smoothed neighbors, biasing the result.
+
+Both are registered like any other op (`registerOp`, `RECIPE_OPS` in
+`EditModeController.js`, Shell.js globals) — no special-casing elsewhere in
+the pipeline. `soften()` after one or more `sculpt()` calls is what turns a
+steep bump into a smooth-reading one; reducing `strength`/increasing `radius`
+on `sculpt()` itself also helps but `soften()` is the general fix.
 
 ## Integration Points
 
@@ -362,6 +403,7 @@ exitEditMode();
 ### Experimental (may change)
 
 - `selectTopFaces()`, `selectFacingUp()` - New M6 criteria, may evolve
+- `sculpt()`, `soften()` - New M9 sculpting primitives, params/falloff shape may evolve
 - Recipe format - Not yet serialized to disk, format TBD
 - Operation registry format - Internal, subject to refactoring
 
@@ -397,12 +439,13 @@ exitEditMode();
 
 ### Polish
 
-- Soft-select (falloff toward neighbors)
-- Proportional editing (op scales with distance)
 - Numeric entry (precise transform values)
 - Constraint snapping (grid, vertex, edge, face)
 - Mirror modifier (non-destructive)
 - Array modifier (non-destructive)
+- Loop cut (edge-based subdivision, concentrates density where sculpting happens)
+- Morph-target / blend-toward-reference-mesh sculpting (procedural bumps alone
+  don't get you a recognizable face — see MESH_EDITING_GUIDE.md's sculpting section)
 
 ## Debugging
 
@@ -442,5 +485,5 @@ console.log('Mode:', sel.mode, 'Count:', sel.count, 'IDs:', Array.from(sel.ids))
 
 ---
 
-**Last Updated:** 2024  
-**Status:** M1-M6 Complete, M7-M8 Not Implemented
+**Last Updated:** 2026-09-18  
+**Status:** M1-M6, M9 Complete (sculpting); M7 (import/export), M8+ (advanced UV/texture) Not Implemented
