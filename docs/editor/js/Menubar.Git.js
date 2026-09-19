@@ -426,7 +426,8 @@ async function openGitCompare( editor, strings ) {
 	const cfg    = loadSettings();
 	const parsed = parseRepo( cfg.repoUrl );
 
-	if ( ! parsed || ! cfg.pat ) {
+	// Comparing is a read, same as loading — no token needed for a public repo.
+	if ( ! parsed ) {
 
 		alert( strings.getKey( 'menubar/git/no_settings' ) );
 		return;
@@ -642,12 +643,9 @@ class GitLoadDialog {
 
 			}
 
-			if ( ! cfg.pat ) {
-
-				status.textContent = strings.getKey( 'menubar/git/error/no_pat' );
-				return;
-
-			}
+			// No PAT check here — reads (ghGetSceneJSON/internalizeFromGit/ghGet
+			// below) all work tokenlessly against a public repo; a token is only
+			// ever required to commit.
 
 			loadBtn.dom.disabled = true;
 			status.textContent = strings.getKey( 'menubar/git/loading' );
@@ -883,7 +881,11 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 	const cfg    = loadSettings();
 	const parsed = parseRepo( cfg.repoUrl );
 
-	if ( ! parsed || ! cfg.pat ) return;  // not configured
+	// A token is only required to COMMIT — every read call below (ghGet,
+	// ghGetSceneJSON, ghGetBytes via internalizeFromGit) already omits the
+	// Authorization header entirely when cfg.pat is falsy, so a saved repo URL
+	// alone is enough to auto-load a public repo tokenlessly.
+	if ( ! parsed ) return;  // no repo configured
 
 	const scenePath = cfg.scenePath || 'scene.json';
 	const branch    = cfg.branch || 'main';
