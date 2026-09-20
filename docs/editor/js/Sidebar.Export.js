@@ -3,7 +3,7 @@
 // live in the File → Export submenu (DRC, GLB, GLTF, OBJ, PLY, STL, USDZ).
 
 import { UIPanel } from './libs/ui.js';
-import { PropertyBinding, AnimationClip, Mesh, BufferGeometry, VectorKeyframeTrack, NumberKeyframeTrack } from 'three';
+import { PropertyBinding, AnimationClip, AnimationMixer, Mesh, BufferGeometry, VectorKeyframeTrack, NumberKeyframeTrack } from 'three';
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { includeCameraForBinding } from './intelligence/timelineController.js';
@@ -38,8 +38,12 @@ function lowerChangesForExport( editor, scene ) {
 // targets the ORIGINAL nodes' uuids). Walk both trees in the same
 // deterministic pre-order traversal and copy uuids across so animation
 // bindings (transform tracks AND change()'s lowered tracks) keep resolving
-// against the clone. Also deep-clones geometry so compression/lowering never
-// mutates the live scene.
+// against the clone. Also deep-clones geometry AND material so compression,
+// change()-lowering, and rest-pose baking never mutate the live scene —
+// Object3D.clone() shares the SAME material instance between original and
+// clone by reference, so writing to a "cloned" mesh's material.opacity (e.g.
+// via cloneSceneAtRestPose's mixer) would otherwise silently corrupt the live
+// scene's materials too.
 function cloneSceneForExport( scene ) {
 
 	const clone = scene.clone( true );
@@ -50,7 +54,43 @@ function cloneSceneForExport( scene ) {
 	clone.traverse( ( o ) => clones.push( o ) );
 	for ( let i = 0; i < originals.length; i ++ ) clones[ i ].uuid = originals[ i ].uuid;
 
-	clone.traverse( ( child ) => { if ( child.geometry ) child.geometry = child.geometry.clone(); } );
+	clone.traverse( ( child ) => {
+
+		if ( child.geometry ) child.geometry = child.geometry.clone();
+		if ( child.material ) child.material = Array.isArray( child.material ) ? child.material.map( m => m.clone() ) : child.material.clone();
+
+	} );
+
+	return clone;
+
+}
+
+// Exports must show a sensible STATIC pose to viewers that don't auto-play the
+// embedded clip (most standalone glTF/USDZ viewers, AR Quick Look, etc.) — but
+// the live scene's actual node transforms are whatever pose the Animations tab
+// last happened to be scrubbed/held to, which can be any mid-animation frame
+// (a rider/scooter/etc. can look "missing" simply because it got baked off in
+// its position from t=40s instead of its resting spot). Resetting the LIVE
+// scene to t=0 and restoring it after export sounds simpler, but races the
+// live viewport/mixer (which can re-sample the old scrub position from its own
+// state in between) — so instead this bakes t=0 onto the EXPORT CLONE only,
+// via a throwaway AnimationMixer bound to the clone, never touching
+// editor.mixer/editor.scene at all.
+function cloneSceneAtRestPose( editor, scene ) {
+
+	const clone = cloneSceneForExport( scene );
+
+	const clip = ( editor.scene.animations || [] ).find( c => c.userData && c.userData.isTimeline );
+	if ( clip ) {
+
+		const mixer = new AnimationMixer( clone );
+		const action = mixer.clipAction( clip, clone );
+		action.play();
+		action.paused = true;
+		action.time = 0;
+		mixer.update( 0 );
+
+	}
 
 	return clone;
 
@@ -199,7 +239,7 @@ function SidebarExport( editor ) {
 
 	addButton( 'GLB', async function () {
 
-		let scene = editor.scene;
+		const scene = editor.scene;
 
 		if ( needsUniqueNames( scene ) ) { // see #25179
 
@@ -209,20 +249,13 @@ function SidebarExport( editor ) {
 
 		}
 
-		// change() must be LOWERED (materialized states + scale/opacity tracks),
-		// never silently dropped — that requires a clone since it mutates
-		// geometry/children in place. No-op (same live scene) when there are no
-		// change() events at all.
-		let changeClips = [];
+		// Always export a clone baked at the t=0 rest pose (see
+		// cloneSceneAtRestPose) rather than whatever the live scene happens to
+		// be scrubbed to, then lower any change() events onto that same clone.
+		const exportScene = cloneSceneAtRestPose( editor, scene );
+		const changeClips = lowerChangesForExport( editor, exportScene );
 
-		if ( hasChangeEvents( editor ) ) {
-
-			scene = cloneSceneForExport( scene );
-			changeClips = lowerChangesForExport( editor, scene );
-
-		}
-
-		const animations = combineAnimations( scene, changeClips.flatMap( c => c.tracks ) );
+		const animations = combineAnimations( exportScene, changeClips.flatMap( c => c.tracks ) );
 
 		const optimizedAnimations = [];
 
@@ -236,9 +269,9 @@ function SidebarExport( editor ) {
 
 		const exporter = new GLTFExporter();
 
-		const restoreCamera = includeCameraForExport( scene, optimizedAnimations );
+		const restoreCamera = includeCameraForExport( exportScene, optimizedAnimations );
 
-		exporter.parse( scene, function ( result ) {
+		exporter.parse( exportScene, function ( result ) {
 
 			restoreCamera();
 			saveArrayBuffer( result, 'scene.glb' );
@@ -268,10 +301,11 @@ function SidebarExport( editor ) {
 
 		}
 
-		// Work on a deep copy so compression never mutates the live scene. Uuids
-		// are preserved (see cloneSceneForExport) so the compiled Timeline
-		// clip's tracks keep resolving to the right nodes in the clone.
-		const clone = cloneSceneForExport( scene );
+		// Bake at the t=0 rest pose (see cloneSceneAtRestPose) rather than
+		// whatever the live scene happens to be scrubbed to. Uuids are
+		// preserved (see cloneSceneForExport) so the compiled Timeline clip's
+		// tracks keep resolving to the right nodes in the clone.
+		const clone = cloneSceneAtRestPose( editor, scene );
 
 		// change() must be LOWERED onto this SAME clone (before compression, so
 		// materialized text meshes get optimized too) — never silently dropped.
@@ -360,7 +394,7 @@ function SidebarExport( editor ) {
 
 	addButton( 'GLTF', async function () {
 
-		let scene = editor.scene;
+		const scene = editor.scene;
 
 		if ( needsUniqueNames( scene ) ) { // see #25179
 
@@ -370,20 +404,13 @@ function SidebarExport( editor ) {
 
 		}
 
-		// change() must be LOWERED (materialized states + scale/opacity tracks),
-		// never silently dropped — that requires a clone since it mutates
-		// geometry/children in place. No-op (same live scene) when there are no
-		// change() events at all.
-		let changeClips = [];
+		// Always export a clone baked at the t=0 rest pose (see
+		// cloneSceneAtRestPose) rather than whatever the live scene happens to
+		// be scrubbed to, then lower any change() events onto that same clone.
+		const exportScene = cloneSceneAtRestPose( editor, scene );
+		const changeClips = lowerChangesForExport( editor, exportScene );
 
-		if ( hasChangeEvents( editor ) ) {
-
-			scene = cloneSceneForExport( scene );
-			changeClips = lowerChangesForExport( editor, scene );
-
-		}
-
-		const animations = combineAnimations( scene, changeClips.flatMap( c => c.tracks ) );
+		const animations = combineAnimations( exportScene, changeClips.flatMap( c => c.tracks ) );
 
 		const optimizedAnimations = [];
 
@@ -397,9 +424,9 @@ function SidebarExport( editor ) {
 
 		const exporter = new GLTFExporter();
 
-		const restoreCamera = includeCameraForExport( scene, optimizedAnimations );
+		const restoreCamera = includeCameraForExport( exportScene, optimizedAnimations );
 
-		exporter.parse( scene, function ( result ) {
+		exporter.parse( exportScene, function ( result ) {
 
 			restoreCamera();
 			saveString( JSON.stringify( result, null, 2 ), 'scene.gltf' );
@@ -494,11 +521,39 @@ function SidebarExport( editor ) {
 
 	addButton( 'USDZ', async function () {
 
+		// Always export a clone baked at the t=0 rest pose (see
+		// cloneSceneAtRestPose) rather than whatever the live scene happens to
+		// be scrubbed to. Same change()-lowering + animation-combining as
+		// GLB/GLTF above — USDZ's exporter silently exports zero animation
+		// unless clips are explicitly passed via options.animations.
+		const scene = cloneSceneAtRestPose( editor, editor.scene );
+		const changeClips = lowerChangesForExport( editor, scene );
+
+		const animations = combineAnimations( scene, changeClips.flatMap( c => c.tracks ) );
+
+		const optimizedAnimations = [];
+
+		for ( const animation of animations ) {
+
+			optimizedAnimations.push( animation.clone().optimize() );
+
+		}
+
 		const { USDZExporter } = await import( 'three/addons/exporters/USDZExporter.js' );
 
 		const exporter = new USDZExporter();
 
-		saveArrayBuffer( await exporter.parseAsync( editor.scene ), 'model.usdz' );
+		const restoreCamera = includeCameraForExport( scene, optimizedAnimations );
+
+		try {
+
+			saveArrayBuffer( await exporter.parseAsync( scene, { animations: optimizedAnimations } ), 'model.usdz' );
+
+		} finally {
+
+			restoreCamera();
+
+		}
 
 	} );
 

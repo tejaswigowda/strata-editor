@@ -517,6 +517,10 @@ export function compileTimeline( model, ctx ) {
 	const { editor, THREE, recipes, selectorEngine } = ctx;
 	if ( ! model || model.isEmpty() ) return null;
 
+	// Per-NODE (not per-material) committed opacity — see commitFinalPose below
+	// for why this can't just live on node.material.opacity.
+	const nodeOpacity = new Map();
+
 	// Selector → node(s), with the same camera/uuid fallbacks used for track
 	// targets below. Shared by the lookAt and moveTo/moveToEach resolvers.
 	function resolveSelectorNodes( selector ) {
@@ -585,7 +589,21 @@ export function compileTimeline( model, ctx ) {
 		else if ( propPath === 'scale' ) node.scale.set( last[ 0 ], last[ 1 ], last[ 2 ] );
 		else if ( propPath === 'quaternion' ) node.quaternion.set( last[ 0 ], last[ 1 ], last[ 2 ], last[ 3 ] );
 		else if ( propPath === 'fov' ) { node.fov = last[ 0 ]; if ( node.updateProjectionMatrix ) node.updateProjectionMatrix(); }
-		else if ( propPath === 'material.opacity' && node.material ) node.material.opacity = last[ 0 ];
+		else if ( propPath === 'material.opacity' && node.material ) {
+
+			// Several expanded meshes (see expandGroupsToMeshes) commonly SHARE one
+			// material instance (e.g. one "body" material across many parts) —
+			// writing straight to node.material.opacity here would leak THIS
+			// node's final value onto every sibling using the same material,
+			// corrupting the initialOpacity THEY read when their own event
+			// compiles later in this same pass (a real bug this once caused:
+			// siblings baked a bogus opaque->0 "fade" instead of their real
+			// 1->0). Track it per node uuid instead, and restore just before
+			// each node's own next opacity recipe call (below).
+			node.material.opacity = last[ 0 ];
+			nodeOpacity.set( node.uuid, last[ 0 ] );
+
+		}
 
 	}
 
@@ -784,6 +802,27 @@ export function compileTimeline( model, ctx ) {
 				const nodeParams = perNodeTargetWorld
 					? { ...params, targetWorld: perNodeTargetWorld[ ni ], targetQuaternion: perNodeTargetQuaternion[ ni ] }
 					: params;
+
+				// Restore THIS node's own last-committed (or, if this is its first
+				// opacity event in this pass, its own REST) opacity before letting
+				// an opacity recipe read node.material.opacity as its baseline — a
+				// sibling mesh processed earlier in this same pass may share the
+				// material instance and have just overwritten it via
+				// commitFinalPose (see nodeOpacity comment there).
+				if ( OPACITY_RECIPES.has( event.op ) && node.material ) {
+
+					if ( nodeOpacity.has( node.uuid ) ) {
+
+						node.material.opacity = nodeOpacity.get( node.uuid );
+
+					} else {
+
+						const rest = restStateCache.get( node.uuid );
+						if ( rest && rest.opacity !== undefined ) node.material.opacity = rest.opacity;
+
+					}
+
+				}
 
 				let clip;
 				try {

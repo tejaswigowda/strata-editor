@@ -15,6 +15,7 @@ import { SetClassCommand } from './commands/SetClassCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
 import { refreshHtmlEmbed } from './HtmlEmbed.js';
 import { refreshMarkdownEmbed } from './MarkdownEmbed.js';
+import { refreshCallcard, fitCallcardToCamera } from './Callcard.js';
 import { getAllClasses, toClassSet } from './intelligence/classDerive.js';
 
 function SidebarObject( editor ) {
@@ -281,6 +282,27 @@ function SidebarObject( editor ) {
 
 	container.add( objectMarkdownSizeRow );
 
+	// call card (only shown for 'callcard' stencil objects, see Callcard.js) —
+	// re-fits the card to the viewport's CURRENT camera on demand, so moving
+	// the camera (or the card drifting via animation) doesn't leave it stuck
+	// off-center forever the way the create-time-only fit in Sidebar.Stencils.js would.
+
+	const objectCallcardRow = new UIRow();
+	const objectCallcardCenterButton = new UIButton( 'Center on Camera' );
+	objectCallcardCenterButton.onClick( function () {
+
+		const object = editor.selected;
+		if ( ! object || ! object.userData || ! object.userData.isCallcard ) return;
+		fitCallcardToCamera( object, editor.viewportCamera );
+		refreshCallcard( object ).then( function () { signals.sceneGraphChanged.dispatch(); } );
+		signals.objectChanged.dispatch( object );
+
+	} );
+
+	objectCallcardRow.add( new UIText( 'Call Card' ).setClass( 'Label' ) );
+	objectCallcardRow.add( objectCallcardCenterButton );
+
+	container.add( objectCallcardRow );
 
 	// classes - chip-based UI with autocomplete
 
@@ -1125,6 +1147,9 @@ function SidebarObject( editor ) {
 		objectMarkdownRow.setDisplay( isMarkdownEmbed ? '' : 'none' );
 		objectMarkdownSizeRow.setDisplay( isMarkdownEmbed ? '' : 'none' );
 		objectMarkdownStyleRow.setDisplay( isMarkdownEmbed ? '' : 'none' );
+
+		const isCallcard = !! ( object.userData && object.userData.isCallcard );
+		objectCallcardRow.setDisplay( isCallcard ? '' : 'none' );
 
 	}
 

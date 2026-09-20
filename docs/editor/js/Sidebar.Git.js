@@ -1,10 +1,11 @@
 // ── Sidebar.Git.js ────────────────────────────────────────────────────────────
-// Git repository panel in the right sidebar. Provides the same functionality
-// that used to live in the Git menubar: Settings (inline), Load Scene, Compare
-// with Remote, and Commit Scene. Reuses the dialogs/helpers from Menubar.Git.js.
+// Git repository panel in the right sidebar: Settings (inline), Load Scene,
+// Compare with Remote, and Commit Scene — all inline, no popup dialogs. A
+// shared progress bar + status line reports whichever action is running, and
+// every action button disables while busy so they can't overlap.
 
 import { UIPanel, UIRow, UIText, UIInput, UIButton, UIHorizontalRule } from './libs/ui.js';
-import { GitLoadDialog, GitCommitDialog, openGitCompare } from './Menubar.Git.js';
+import { loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage } from './Menubar.Git.js';
 
 const LS_KEY = 'git-settings';
 
@@ -117,15 +118,68 @@ function SidebarGit( editor ) {
 
 	container.add( new UIHorizontalRule() );
 
+	// ── Shared progress bar + status (Load/Compare/Commit are mutually
+	// exclusive, so one area covers all three instead of each having its own).
+	const progressOuter = document.createElement( 'div' );
+	progressOuter.style.cssText = 'height:6px;background:rgba(128,128,128,0.25);border-radius:3px;overflow:hidden;margin:2px 0 4px;display:none;';
+	const progressInner = document.createElement( 'div' );
+	progressInner.style.cssText = 'height:100%;width:0%;background:#08f;transition:width 0.15s linear;';
+	progressOuter.appendChild( progressInner );
+	container.dom.appendChild( progressOuter );
+
+	const statusText = document.createElement( 'div' );
+	statusText.style.cssText = 'font-size:11px;opacity:0.75;min-height:14px;margin-bottom:6px;';
+	container.dom.appendChild( statusText );
+
+	// fraction === null hides the bar (idle/done) but leaves the message showing.
+	function setProgress( fraction, message ) {
+
+		progressOuter.style.display = fraction === null ? 'none' : '';
+		if ( fraction !== null ) progressInner.style.width = ( Math.max( 0, Math.min( 1, fraction ) ) * 100 ).toFixed( 0 ) + '%';
+		statusText.textContent = message || '';
+
+	}
+
+	let busy = false;
+
+	// Disables every action (not just the one running) so Load/Commit/Compare
+	// can't overlap, and the commit-message field can't be edited mid-upload.
+	function setBusy( isBusy ) {
+
+		busy = isBusy;
+		loadButton.dom.disabled = isBusy;
+		compareButton.dom.disabled = isBusy;
+		commitButton.dom.disabled = isBusy;
+		msgInput.dom.disabled = isBusy;
+
+	}
+
 	// ── Actions ───────────────────────────────────────────────────────────────
 
-	// Load scene
+	// Load scene — no dialog: click, watch the progress bar, done.
 	const loadRow = new UIRow();
 	const loadButton = new UIButton( strings.getKey( 'menubar/git/load' ) ).setWidth( '100%' );
-	loadButton.onClick( () => {
+	loadButton.onClick( async () => {
 
+		if ( busy ) return;
 		persist();
-		document.body.appendChild( new GitLoadDialog( editor, strings ).dom );
+		setBusy( true );
+		setProgress( 0.05, 'Loading…' );
+
+		try {
+
+			await loadSceneFromRepo( editor, { onStatus: setProgress } );
+			setTimeout( () => setProgress( null, '' ), 1500 );
+
+		} catch ( err ) {
+
+			setProgress( null, `Error: ${ err.message }` );
+
+		} finally {
+
+			setBusy( false );
+
+		}
 
 	} );
 	loadRow.add( loadButton );
@@ -134,22 +188,78 @@ function SidebarGit( editor ) {
 	// Compare with remote
 	const compareRow = new UIRow();
 	const compareButton = new UIButton( strings.getKey( 'menubar/git/compare' ) ).setWidth( '100%' );
-	compareButton.onClick( () => {
+	compareButton.onClick( async () => {
 
+		if ( busy ) return;
 		persist();
-		openGitCompare( editor, strings );
+		setBusy( true );
+
+		try {
+
+			await openGitCompare( editor, strings );
+
+		} finally {
+
+			setBusy( false );
+
+		}
 
 	} );
 	compareRow.add( compareButton );
 	container.add( compareRow );
 
-	// Commit scene
+	container.add( new UIHorizontalRule() );
+
+	// Commit scene — message stays inline (no separate dialog): auto-filled by
+	// the local AI once when this panel is built, editable before committing.
+	const msgRow = new UIRow();
+	msgRow.add( new UIText( strings.getKey( 'menubar/git/commit/message' ) ).setClass( 'Label' ) );
+	const msgInput = new UIInput( 'Update scene' ).setWidth( '160px' );
+	msgRow.add( msgInput );
+	container.add( msgRow );
+
+	if ( editor.aiEngine && editor.aiEngine.ready ) {
+
+		msgInput.setValue( '…' );
+		msgInput.dom.disabled = true;
+
+		generateCommitMessage( editor ).then( msg => {
+
+			msgInput.dom.disabled = false;
+			msgInput.setValue( msg || 'Update scene' );
+
+		} ).catch( () => {
+
+			msgInput.dom.disabled = false;
+			msgInput.setValue( 'Update scene' );
+
+		} );
+
+	}
+
 	const commitRow = new UIRow();
 	const commitButton = new UIButton( strings.getKey( 'menubar/git/commit' ) ).setWidth( '100%' );
-	commitButton.onClick( () => {
+	commitButton.onClick( async () => {
 
+		if ( busy ) return;
 		persist();
-		document.body.appendChild( new GitCommitDialog( editor, strings ).dom );
+		setBusy( true );
+		setProgress( 0, 'Preparing assets…' );
+
+		try {
+
+			await commitSceneToRepo( editor, msgInput.getValue(), { onProgress: setProgress } );
+			setTimeout( () => setProgress( null, '' ), 1500 );
+
+		} catch ( err ) {
+
+			setProgress( null, `Error: ${ err.message }` );
+
+		} finally {
+
+			setBusy( false );
+
+		}
 
 	} );
 	commitRow.add( commitButton );

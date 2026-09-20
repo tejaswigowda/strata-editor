@@ -43,6 +43,8 @@ DEV=1 node server.js
 # External models now appear in the model dropdown
 ```
 
+Beyond device-local (browser WebLLM), Strata runs org-sovereign: a local model on an on-prem/institutional GPU (ollama), an agent harness in VS Code, driving the live editor — no cloud AI, no per-token cost. (Setup guide: TBD link.)
+
 ---
 
 ## Documentation
@@ -130,7 +132,15 @@ The host enforces: clone-on-write (shared materials), normalization ("black" →
 
 **Why the boundary matters:** No runtime, no interaction, no render-wait-during-iteration. Once a task needs one of those, it belongs downstream.
 
-**Export status (honest):** glTF with animations works today, and the Render tab exports the timeline as video (mp4/webm) directly in-editor — including multi-camera shot sequences with transitions, hard-burned or sidecar-`.srt` subtitles, and a silent audio track for ffmpeg compatibility. Label strings ride along on `userData → extras`. Auto-classes don't yet serialize; end-to-end handoff is partial/roadmap.
+**Export & interoperability.** Strata exports the scene to glTF/GLB: geometry, PBR materials, multiple named cameras, and animation — including **camera animation** — as standard glTF node animation. The Render tab additionally exports the timeline as video (mp4/webm) directly in-editor — multi-camera shot sequences with transitions, hard-burned or sidecar-`.srt` subtitles, and a silent audio track for ffmpeg compatibility. Label strings ride along on `userData → extras`; auto-classes don't yet serialize.
+
+**Verified round-trips (Sept 2026).** The exported file imports into **Blender 4.5** with cameras and full object- and camera-animation intact — the animated camera drives the view — and into **Apple Quick Look** (via GLB→USDZ) with cameras and animation playing. Two independent renderer pipelines, glTF-native and USD, carrying the same file: the *interchange* does the work, not a Strata-specific integration. That's the idea outlasting the engine, concretely.
+
+**What round-trips:** geometry, transforms, PBR material parameters, named cameras, object- and camera-animation.
+
+**What is authored per-renderer (by design):** the *look*. World/background, fog, ambient/hemisphere light, tone mapping, and exposure are not part of glTF, and punctual-light intensities follow per-renderer unit conventions. glTF is a geometry/animation interchange, not a look interchange — lighting and grade in the target renderer are a deliberate, separate step.
+
+**Not yet verified:** Unreal Engine and Unity. Both are expected to work through the FBX or USD bridge each imports best, but this has not been tested, and is not claimed here until it is.
 
 ---
 

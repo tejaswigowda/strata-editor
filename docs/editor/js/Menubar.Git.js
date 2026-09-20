@@ -587,278 +587,91 @@ class GitSettingsDialog {
 
 }
 
-// ── Load Dialog ───────────────────────────────────────────────────────────────
+// ── Shared load/commit logic ──────────────────────────────────────────────────
+// Used by autoLoadFromGit (page-start) AND SidebarGit's inline Load/Commit
+// buttons — one code path, reported through an onStatus/onProgress callback
+// instead of each caller re-implementing the same fetch/internalize/apply
+// (or externalize/upload) sequence behind its own popup.
 
-class GitLoadDialog {
+// Fetches scene.json + assets from the configured repo and swaps it into the
+// editor. Throws (with `.status` set for a 404) on failure — callers decide
+// how to surface that.
+export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) {
 
-	constructor( editor, strings ) {
+	const cfg    = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl );
+	if ( ! parsed ) throw new Error( 'No repository configured' );
 
-		const dom = document.createElement( 'div' );
-		dom.className = 'Dialog';
-		this.dom = dom;
+	const scenePath = cfg.scenePath || 'scene.json';
+	const branch    = cfg.branch || 'main';
 
-		const bg = document.createElement( 'div' );
-		bg.className = 'Dialog-background';
-		bg.addEventListener( 'click', () => this.close() );
-		dom.appendChild( bg );
+	onStatus( 0.15, `Fetching ${ scenePath }…` );
+	const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ branch }`;
+	const json    = await ghGetSceneJSON( apiPath, cfg.pat );
 
-		const content = document.createElement( 'div' );
-		content.className = 'Dialog-content';
-		dom.appendChild( content );
+	onStatus( 0.5, 'Fetching assets…' );
+	await internalizeFromGit( json, parsed, branch, cfg.pat );
 
-		const titleBar = document.createElement( 'div' );
-		titleBar.className = 'Dialog-title';
-		titleBar.textContent = strings.getKey( 'menubar/git/load/title' );
-		content.appendChild( titleBar );
+	onStatus( 0.85, 'Applying scene…' );
+	editor.clear();
+	await editor.fromJSON( json );
 
-		const body = document.createElement( 'div' );
-		body.className = 'Dialog-body';
-		content.appendChild( body );
+	localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 
-		// Status text
-		const status = document.createElement( 'div' );
-		status.style.cssText = 'min-height:40px;padding:8px 0;font-size:12px;';
-		const s = loadSettings();
-		status.textContent = s.repoUrl
-			? `${ s.repoUrl }  /  ${ s.scenePath || 'scene.json' }  @  ${ s.branch || 'main' }`
-			: strings.getKey( 'menubar/git/no_settings' );
-		body.appendChild( status );
+	// Record the commit we just loaded so a later startup/compare can skip a
+	// redundant re-download while the local copy stays current. Best-effort —
+	// a failure here doesn't affect the load that already succeeded.
+	try {
 
-		// Buttons
-		const buttonsRow = document.createElement( 'div' );
-		buttonsRow.className = 'Dialog-buttons';
-		body.appendChild( buttonsRow );
+		const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, cfg.pat );
+		setSyncedCommit( parsed, scenePath, branch, ref && ref.object && ref.object.sha );
 
-		const loadBtn = new UIButton( strings.getKey( 'menubar/git/load/confirm' ) );
-		loadBtn.setWidth( '100px' );
-		loadBtn.onClick( async () => {
+	} catch { /* non-fatal */ }
 
-			const cfg = loadSettings();
-			const parsed = parseRepo( cfg.repoUrl );
+	onStatus( 1, `✓ Loaded ${ parsed.owner }/${ parsed.repo }` );
 
-			if ( ! parsed ) {
-
-				status.textContent = strings.getKey( 'menubar/git/error/no_repo' );
-				return;
-
-			}
-
-			// No PAT check here — reads (ghGetSceneJSON/internalizeFromGit/ghGet
-			// below) all work tokenlessly against a public repo; a token is only
-			// ever required to commit.
-
-			loadBtn.dom.disabled = true;
-			status.textContent = strings.getKey( 'menubar/git/loading' );
-
-			try {
-
-				const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
-				const json = await ghGetSceneJSON( apiPath, cfg.pat );
-				await internalizeFromGit( json, parsed, cfg.branch || 'main', cfg.pat );
-				editor.clear();
-				await editor.fromJSON( json );
-
-				// Establish baseline so the first commit after load diffs correctly
-				localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
-
-				// Record the commit we loaded so the next startup can skip re-downloading.
-				try {
-
-					const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ cfg.branch || 'main' }`, cfg.pat );
-					setSyncedCommit( parsed, cfg.scenePath || 'scene.json', cfg.branch || 'main', ref && ref.object && ref.object.sha );
-
-				} catch { /* non-fatal */ }
-
-				status.textContent = strings.getKey( 'menubar/git/load/success' );
-				setTimeout( () => this.close(), 800 );
-
-			} catch ( err ) {
-
-				loadBtn.dom.disabled = false;
-				status.textContent = `Error: ${ err.message }`;
-
-			}
-
-		} );
-		buttonsRow.appendChild( loadBtn.dom );
-
-		const cancelBtn = new UIButton( strings.getKey( 'menubar/git/cancel' ) );
-		cancelBtn.setWidth( '80px' );
-		cancelBtn.setMarginLeft( '8px' );
-		cancelBtn.onClick( () => this.close() );
-		buttonsRow.appendChild( cancelBtn.dom );
-
-	}
-
-	close() { this.dom.remove(); }
+	return { owner: parsed.owner, repo: parsed.repo, scenePath, branch };
 
 }
 
-// ── Commit Dialog ─────────────────────────────────────────────────────────────
+// Externalizes + uploads the current scene as one atomic commit. Reports real
+// upload progress (blob count, not just a spinner) via onProgress(fraction, msg).
+export async function commitSceneToRepo( editor, message, { onProgress = () => {} } = {} ) {
 
-class GitCommitDialog {
+	const cfg    = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl );
+	if ( ! parsed ) throw new Error( 'No repository configured' );
+	if ( ! cfg.pat ) throw new Error( 'A token is required to commit' );
 
-	constructor( editor, strings ) {
+	const scenePath = cfg.scenePath || 'scene.json';
+	const branch    = cfg.branch || 'main';
+	const msg       = ( message || '' ).trim() || 'Update scene';
 
-		const dom = document.createElement( 'div' );
-		dom.className = 'Dialog';
-		this.dom = dom;
+	onProgress( 0, 'Preparing assets…' );
 
-		const bg = document.createElement( 'div' );
-		bg.className = 'Dialog-background';
-		bg.addEventListener( 'click', () => this.close() );
-		dom.appendChild( bg );
+	// Split the scene into a small, diffable scene.json plus separate binary
+	// asset blobs (geometry buffers / images) — keeps the committed scene file
+	// tiny and avoids serializing hundreds of MB of float text.
+	const { json, assets } = await externalizeScene( editor.toJSON() );
+	const sceneBytes = new TextEncoder().encode( JSON.stringify( json, null, 2 ) );
 
-		const content = document.createElement( 'div' );
-		content.className = 'Dialog-content';
-		dom.appendChild( content );
+	const files = [];
+	for ( const [ path, u8 ] of assets ) files.push( { path, base64: u8ToBase64( u8 ), immutable: true } );
+	files.push( { path: scenePath, base64: u8ToBase64( sceneBytes ), immutable: false } );
 
-		const titleBar = document.createElement( 'div' );
-		titleBar.className = 'Dialog-title';
-		titleBar.textContent = strings.getKey( 'menubar/git/commit/title' );
-		content.appendChild( titleBar );
+	// One atomic commit for scene.json + all (new) assets.
+	const commit = await commitFiles( parsed, branch, cfg.pat, files, msg, ( done, total ) => {
 
-		const body = document.createElement( 'div' );
-		body.className = 'Dialog-body';
-		content.appendChild( body );
+		onProgress( done / total, `Uploading ${ done }/${ total }…` );
 
-		// ── Commit message row ────────────────────────────────────────────────
-		const msgRow = new UIRow();
-		msgRow.add( new UIText( strings.getKey( 'menubar/git/commit/message' ) ).setClass( 'Label' ) );
+	} );
 
-		const msgInput = document.createElement( 'input' );
-		msgInput.className = 'Input';
-		msgInput.style.cssText = 'flex:1;padding:2px;width:240px;';
-		msgInput.placeholder = strings.getKey( 'menubar/git/commit/placeholder' );
-		msgInput.addEventListener( 'keydown', e => e.stopPropagation() );
-		msgRow.dom.appendChild( msgInput );
-		body.appendChild( msgRow.dom );
+	setSyncedCommit( parsed, scenePath, branch, commit && commit.sha );
+	localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 
-		// (hint div removed — placeholder on msgInput carries the state)
+	onProgress( 1, '✓ Committed' );
 
-		// ── Target / status line ──────────────────────────────────────────────
-		const status = document.createElement( 'div' );
-		status.style.cssText = 'min-height:32px;padding:6px 0;font-size:12px;';
-		const cfg = loadSettings();
-		status.textContent = cfg.repoUrl
-			? `→  ${ cfg.repoUrl }  /  ${ cfg.scenePath || 'scene.json' }  @  ${ cfg.branch || 'main' }`
-			: strings.getKey( 'menubar/git/no_settings' );
-		body.appendChild( status );
-
-		// ── Buttons ───────────────────────────────────────────────────────────
-		const buttonsRow = document.createElement( 'div' );
-		buttonsRow.className = 'Dialog-buttons';
-		body.appendChild( buttonsRow );
-
-		const commitBtn = new UIButton( strings.getKey( 'menubar/git/commit/confirm' ) );
-		commitBtn.setWidth( '100px' );
-		buttonsRow.appendChild( commitBtn.dom );
-
-		const cancelBtn = new UIButton( strings.getKey( 'menubar/git/cancel' ) );
-		cancelBtn.setWidth( '80px' );
-		cancelBtn.setMarginLeft( '8px' );
-		cancelBtn.onClick( () => this.close() );
-		buttonsRow.appendChild( cancelBtn.dom );
-
-		// ── Auto-generate message on open ─────────────────────────────────────
-		const ai = editor.aiEngine;
-
-		if ( ai && ai.ready ) {
-
-			msgInput.value = '';
-			msgInput.disabled = true;
-			msgInput.placeholder = '…';
-			commitBtn.dom.disabled = true;
-
-			generateCommitMessage( editor ).then( msg => {
-
-				msgInput.disabled = false;
-				commitBtn.dom.disabled = false;
-				msgInput.value = msg || 'Update scene';
-				msgInput.placeholder = strings.getKey( 'menubar/git/commit/placeholder' );
-				msgInput.focus();
-				msgInput.select();
-
-			} ).catch( () => {
-
-				msgInput.disabled = false;
-				commitBtn.dom.disabled = false;
-				msgInput.value = 'Update scene';
-				msgInput.placeholder = strings.getKey( 'menubar/git/commit/placeholder' );
-
-			} );
-
-		} else {
-
-			msgInput.value = 'Update scene';
-
-		}
-
-		// ── Commit action ─────────────────────────────────────────────────────
-		commitBtn.onClick( async () => {
-
-			const cfg = loadSettings();
-			const parsed = parseRepo( cfg.repoUrl );
-
-			if ( ! parsed ) { status.textContent = strings.getKey( 'menubar/git/error/no_repo' ); return; }
-			if ( ! cfg.pat )  { status.textContent = strings.getKey( 'menubar/git/error/no_pat' );  return; }
-
-			commitBtn.dom.disabled = true;
-			status.textContent = strings.getKey( 'menubar/git/committing' );
-
-			try {
-
-				const scenePath = cfg.scenePath || 'scene.json';
-				const branch    = cfg.branch || 'main';
-				const msg       = msgInput.value.trim() || 'Update scene';
-
-				// Split the scene into a small, diffable scene.json plus separate
-				// binary asset blobs (geometry buffers / images). This keeps the
-				// committed scene file tiny and avoids serializing hundreds of MB
-				// of float text — which previously overflowed btoa()/string limits
-				// and exceeded GitHub's per-file size cap.
-				status.textContent = 'Preparing assets…';
-				const { json, assets } = await externalizeScene( editor.toJSON() );
-
-				const sceneBytes = new TextEncoder().encode( JSON.stringify( json, null, 2 ) );
-
-				const files = [];
-				for ( const [ path, u8 ] of assets ) {
-
-					files.push( { path, base64: u8ToBase64( u8 ), immutable: true } );
-
-				}
-				files.push( { path: scenePath, base64: u8ToBase64( sceneBytes ), immutable: false } );
-
-				// One atomic commit for scene.json + all (new) assets.
-				const commit = await commitFiles( parsed, branch, cfg.pat, files, msg, ( done, total ) => {
-
-					status.textContent = `Uploading ${ done }/${ total }…`;
-
-				} );
-
-				// Record the commit we just synced to, so the next startup sees the
-				// local copy as current and skips re-downloading the whole scene.
-				setSyncedCommit( parsed, scenePath, branch, commit && commit.sha );
-
-				// Snapshot current context so the next commit can diff against it
-				localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
-
-				status.textContent = strings.getKey( 'menubar/git/commit/success' );
-				setTimeout( () => this.close(), 800 );
-
-			} catch ( err ) {
-
-				commitBtn.dom.disabled = false;
-				status.textContent = `Error: ${ err.message }`;
-
-			}
-
-		} );
-
-	}
-
-	close() { this.dom.remove(); }
+	return commit;
 
 }
 
@@ -935,25 +748,7 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 
 	try {
 
-		const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ branch }`;
-		const json    = await ghGetSceneJSON( apiPath, cfg.pat );
-
-		await internalizeFromGit( json, parsed, branch, cfg.pat );
-
-		editor.clear();
-		await editor.fromJSON( json );
-
-		// Establish diff baseline for the next commit
-		localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
-
-		// Record the commit we just loaded so subsequent startups can skip the
-		// full download while the local copy stays current.
-		try {
-
-			const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, cfg.pat );
-			setSyncedCommit( parsed, scenePath, branch, ref && ref.object && ref.object.sha );
-
-		} catch { /* non-fatal — next startup just does a normal load */ }
+		await loadSceneFromRepo( editor, { onStatus: ( _fraction, message ) => { banner.textContent = message; } } );
 
 		_showBanner( `✓ Scene loaded from ${ parsed.owner }/${ parsed.repo }`, 2500 );
 
@@ -1154,4 +949,4 @@ export function showPlayOverlay( editor ) {
 
 }
 
-export { GitSettingsDialog, GitLoadDialog, GitCommitDialog, openGitCompare };
+export { GitSettingsDialog, openGitCompare, generateCommitMessage };

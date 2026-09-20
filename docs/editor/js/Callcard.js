@@ -134,7 +134,21 @@ export function refreshCallcard( object ) {
 
 	}
 
-	return snapshotCallcard( Math.round( width * PIXELS_PER_UNIT ), Math.round( height * PIXELS_PER_UNIT ) )
+	// Bake at a resolution matching the card's ACTUAL on-screen size, not just
+	// its unscaled geometry — fitCallcardToCamera() scales the object up
+	// (often 5-10x) to fill the frame, and a fixed low-res bake then gets
+	// GPU-magnified that far, reading as soft/blurry instead of crisp text.
+	object.updateWorldMatrix( true, false );
+	const worldScale = object.getWorldScale( new THREE.Vector3() );
+	const MAX_PX = 2048; // cap so an extreme scale can't blow past canvas/texture limits
+	let pxWidth  = width * worldScale.x * PIXELS_PER_UNIT;
+	let pxHeight = height * worldScale.y * PIXELS_PER_UNIT;
+	const overshoot = Math.max( pxWidth, pxHeight ) / MAX_PX;
+	if ( overshoot > 1 ) { pxWidth /= overshoot; pxHeight /= overshoot; } // scale both down together — keeps the aspect ratio intact
+	pxWidth = Math.round( pxWidth );
+	pxHeight = Math.round( pxHeight );
+
+	return snapshotCallcard( pxWidth, pxHeight )
 		.then( function ( canvas ) {
 
 			const texture = new THREE.CanvasTexture( canvas );
@@ -176,13 +190,16 @@ export function createCallcard( width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT )
  * Position, scale and orient a call-card (or any plane) so it fills `camera`'s
  * CURRENT view, front face toward the camera and right-side-forward (readable,
  * not mirrored) — regardless of which direction the camera happens to be
- * facing. Generalizes the old "rotate 180\u00b0 if the camera ends up on the
- * opposite side, else leave it at 0" manual rule (see guides/CALLCARD.md) to
- * any camera angle, not just the two axis-aligned cases.
+ * facing.
  *
- * A plain `object.lookAt(camPos)` aims the object's local -Z at the camera,
- * which points this plane's FRONT (+Z) normal AWAY from it — the extra 180\u00b0
- * turn is what corrects that for an arbitrary relative angle.
+ * Matches the camera's own world orientation exactly (rather than
+ * `object.lookAt(camPos)`, which rebuilds an orientation from world-up and
+ * goes unstable — flipping the card upside down/mirrored — whenever the
+ * camera itself is rolled or looking near-straight up/down, e.g. an animated
+ * StoryCam). Since the plane's front (+Z) and the camera's local +Z both then
+ * point back along the same world direction, and the plane's +Y matches the
+ * camera's actual (possibly rolled) up, the card reads upright and unmirrored
+ * from that camera's point of view no matter how it's tilted.
  */
 export function fitCallcardToCamera( object, camera, { distance = 6, fill = 0.85 } = {} ) {
 
@@ -191,8 +208,7 @@ export function fitCallcardToCamera( object, camera, { distance = 6, fill = 0.85
 	const camDir = camera.getWorldDirection( new THREE.Vector3() );
 
 	object.position.copy( camPos ).addScaledVector( camDir, distance );
-	object.lookAt( camPos );
-	object.rotateY( Math.PI );
+	camera.getWorldQuaternion( object.quaternion );
 
 	if ( camera.isPerspectiveCamera ) {
 
