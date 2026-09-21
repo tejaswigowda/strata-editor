@@ -205,43 +205,9 @@ function SidebarRender( editor ) {
 	header.add( new UIText( 'Video Render' ).setFontWeight( 'bold' ) );
 	container.add( header );
 
-	const help = new UIText( 'Renders the Universal Timeline to a video. Use the camera sequence below to cut/fade between cameras over time; with no shots the single camera above is used throughout.' );
+	const help = new UIText( 'Renders the Universal Timeline to a video. Use the camera sequence below to cut/fade between cameras over time; with no shots, Edit Camera (the viewport nav camera) is used throughout.' );
 	help.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
 	container.add( help );
-
-	// ── Camera ────────────────────────────────────────────────────────────────
-
-	const cameraRow = new UIRow();
-	cameraRow.add( new UIText( 'Camera' ).setClass( 'Label' ) );
-	const cameraSelect = new UISelect().setWidth( '160px' );
-	cameraRow.add( cameraSelect );
-	container.add( cameraRow );
-
-	function updateCameraList() {
-
-		const options = {};
-		for ( const uuid in editor.cameras ) {
-
-			const cam = editor.cameras[ uuid ];
-			options[ uuid ] = cam.name || 'Camera';
-
-		}
-
-		const prev = cameraSelect.getValue();
-		cameraSelect.setOptions( options );
-		cameraSelect.setValue( options[ prev ] !== undefined ? prev : editor.camera.uuid );
-
-	}
-
-	signals.cameraAdded.add( updateCameraList );
-	signals.cameraRemoved.add( updateCameraList );
-	signals.objectChanged.add( function ( object ) {
-
-		if ( object && object.isCamera ) updateCameraList();
-
-	} );
-	signals.editorCleared.add( updateCameraList );
-	updateCameraList();
 
 	// ── Resolution ────────────────────────────────────────────────────────────
 
@@ -377,10 +343,15 @@ function SidebarRender( editor ) {
 		const dur = Math.max( timelineDuration(), 1 );
 		const lastAt = shots.length ? shots[ shots.length - 1 ].at : - 1;
 		const at = shots.length === 0 ? 0 : Math.min( dur - 0.1, lastAt + Math.max( 0.5, ( dur - lastAt ) / 2 ) );
+		// Edit Camera (editor.camera) IS in editor.cameras (it's also the
+		// viewport's own camera switcher's default entry), but it's never a
+		// valid shot camera here — default to whichever scene camera exists
+		// first instead.
+		const firstSceneCamera = Object.keys( editor.cameras ).find( uuid => uuid !== editor.camera.uuid ) || editor.camera.uuid;
 		const shot = {
 			id: 'shot-' + Math.random().toString( 36 ).slice( 2, 9 ),
 			at: Math.max( 0, at ),
-			camera: cameraSelect.getValue() || editor.camera.uuid,
+			camera: firstSceneCamera,
 			transition: shots.length === 0 ? 'cut' : 'fade',
 			transitionDur: 0.5,
 		};
@@ -483,10 +454,17 @@ function SidebarRender( editor ) {
 		row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;';
 		shotDetail.appendChild( row );
 
-		// camera picker
+		// camera picker — editor.camera ("Edit Camera") is registered in
+		// editor.cameras too (for the viewport's OWN camera switcher), but it's
+		// never a valid shot camera here.
 		const camSel = new UISelect().setWidth( '110px' );
 		const camOptions = {};
-		for ( const uuid in editor.cameras ) camOptions[ uuid ] = editor.cameras[ uuid ].name || 'Camera';
+		for ( const uuid in editor.cameras ) {
+
+			if ( uuid === editor.camera.uuid ) continue;
+			camOptions[ uuid ] = editor.cameras[ uuid ].name || 'Camera';
+
+		}
 		camSel.setOptions( camOptions );
 		camSel.setValue( shot.camera );
 		camSel.onChange( function () { shot.camera = this.getValue(); refreshSequencer(); } );
@@ -915,7 +893,7 @@ function SidebarRender( editor ) {
 		}
 
 		const shots = getShots().slice();
-		const fallbackCamera = editor.cameras[ cameraSelect.getValue() ] || editor.camera;
+		const fallbackCamera = editor.camera; // no shots -> render through Edit Camera throughout
 		const [ width, height ] = ( is360 ? equirectResolutionSelect : resolutionSelect ).getValue().split( 'x' ).map( Number );
 		const fps = parseInt( fpsSelect.getValue(), 10 );
 		const skip = skipSeconds( duration );
@@ -933,6 +911,35 @@ function SidebarRender( editor ) {
 		// export's WebGLRenderer) touching the same scene's shared GPU resources
 		// (light shadow maps in particular) at once corrupts/destroys them mid-submit.
 		signals.pauseViewportRendering.dispatch();
+
+		// A shadow-casting light's `shadow.map` render target is allocated by
+		// whichever renderer backend last used it — the live viewport's
+		// WebGPURenderer creates a WebGPU-native target (e.g. a point light's
+		// CubeRenderTarget), which this renderer (always WebGL) can't reuse.
+		// Silently corrupts the WHOLE shadow pass (not just that one light),
+		// making most lit materials render solid black. Clear every
+		// shadow-casting light's map so THIS renderer allocates its own
+		// WebGL-compatible one; reset again in the `finally` below so the live
+		// viewport regenerates its own WebGPU one next time it renders.
+		const shadowLights = [];
+		editor.scene.traverse( function ( o ) { if ( o.isLight && o.castShadow ) shadowLights.push( o ); } );
+		function resetShadowMaps() {
+
+			for ( const light of shadowLights ) {
+
+				if ( light.shadow && light.shadow.map ) {
+
+					if ( typeof light.shadow.map.dispose === 'function' ) light.shadow.map.dispose();
+					light.shadow.map = null;
+
+				}
+
+				if ( light.shadow ) light.shadow.needsUpdate = true;
+
+			}
+
+		}
+		resetShadowMaps();
 
 		// Two canvases: WebGL renders offscreen, a 2D canvas composites (needed
 		// for crossfades: draw shot A, then shot B on top with globalAlpha) and is
@@ -1234,6 +1241,7 @@ function SidebarRender( editor ) {
 
 			for ( const restore of cameraRestores ) restore();
 			restoreEnvironment();
+			resetShadowMaps(); // this renderer's WebGL shadow maps are just as invalid for the live WebGPU viewport — force it to regenerate its own
 			holdTimelineAt( editor, 0 );
 			signals.sceneGraphChanged.dispatch();
 			// Dispose the cube render target BEFORE the renderer itself — the

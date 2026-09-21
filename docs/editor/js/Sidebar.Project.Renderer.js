@@ -347,19 +347,6 @@ function SidebarProjectRenderer( editor ) {
 
 	// Signals
 
-	// A live WebGPU device was lost (Viewport.js's onDeviceLost \u2014 common on
-	// Android under memory/thermal pressure) and, unlike WebGL, can't be
-	// restored in place. Switch straight to WebGL instead of leaving the
-	// viewer stuck behind a reload prompt.
-	signals.rendererContextLost.add( function () {
-
-		if ( rendererTypeSelect.getValue() !== 'WebGPURenderer' ) return; // already WebGL, nothing to fall back to
-
-		console.warn( 'Strata: falling back to WebGL after a WebGPU device loss.' );
-		rendererTypeSelect.setValue( 'WebGLRenderer' );
-		createRenderer();
-
-	} );
 
 	signals.editorCleared.add( function () {
 

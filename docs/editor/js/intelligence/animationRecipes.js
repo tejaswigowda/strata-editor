@@ -566,6 +566,15 @@ export function fadeRecipe( node, params = {} ) {
 	const to = params.to ?? 0;
 	const duration = params.duration ?? 1;
 
+	// Remember whatever `transparent` the material had BEFORE the fade system
+	// touched it (e.g. a texture like a baked call card that needs its OWN
+	// alpha channel even at full opacity) -- syncMaterialTransparency restores
+	// THIS, not a hardcoded false, once the fade reaches full opacity.
+	if ( node.material.userData.__fadeManagedOrigTransparent === undefined ) {
+
+		node.material.userData.__fadeManagedOrigTransparent = node.material.transparent;
+
+	}
 	node.material.transparent = true;
 	// Flag this material as fade-managed so syncMaterialTransparency (called on
 	// every timeline sample) knows it's safe to resync transparent/depthWrite
@@ -688,6 +697,12 @@ export function fadeInRecipe( node, params = {} ) {
 	}
 
 	const duration = params.duration ?? 1;
+	// See fadeRecipe's comment on __fadeManagedOrigTransparent.
+	if ( node.material.userData.__fadeManagedOrigTransparent === undefined ) {
+
+		node.material.userData.__fadeManagedOrigTransparent = node.material.transparent;
+
+	}
 	node.material.transparent = true;
 	// See fadeRecipe's comment on __fadeManaged.
 	node.material.userData.__fadeManaged = true;
@@ -1087,6 +1102,12 @@ export function fadeOutRecipe( node, params = {} ) {
 	}
 
 	const duration = params.duration ?? 1;
+	// See fadeRecipe's comment on __fadeManagedOrigTransparent.
+	if ( node.material.userData.__fadeManagedOrigTransparent === undefined ) {
+
+		node.material.userData.__fadeManagedOrigTransparent = node.material.transparent;
+
+	}
 	node.material.transparent = true;
 	// A transparent material that still writes depth can occlude/z-fight with
 	// whatever else occupies its depth range once it's faded to invisible --
@@ -1403,6 +1424,12 @@ export function flashRecipe( node, params = {} ) {
 
 	const duration = params.duration ?? 1;
 	const times = params.times ?? 3;
+	// See fadeRecipe's comment on __fadeManagedOrigTransparent.
+	if ( node.material.userData.__fadeManagedOrigTransparent === undefined ) {
+
+		node.material.userData.__fadeManagedOrigTransparent = node.material.transparent;
+
+	}
 	node.material.transparent = true;
 	// See fadeOutRecipe's comment: a transparent material that still writes
 	// depth can occlude/z-fight even while invisible.

@@ -11,7 +11,7 @@ import { syncTimeline } from './intelligence/timelineController.js';
 import { findSharedMaterials } from './intelligence/editOps.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
-_DEFAULT_CAMERA.name = 'Camera';
+_DEFAULT_CAMERA.name = 'Edit Camera'; // the built-in nav camera — never added to editor.cameras, so it can never appear in the Render tab's camera sequencer
 _DEFAULT_CAMERA.position.set( 0, 5, 10 );
 _DEFAULT_CAMERA.lookAt( new THREE.Vector3() );
 
@@ -49,7 +49,7 @@ function Editor() {
 		rendererCreated: new Signal(),
 		rendererUpdated: new Signal(),
 		rendererDetectKTX2Support: new Signal(),
-		rendererContextLost: new Signal(), // WebGPU device lost (Viewport.js) — Sidebar.Project.Renderer.js falls back to WebGL
+		rendererContextLost: new Signal(),
 		rendererContextRestored: new Signal(),
 
 		sceneBackgroundChanged: new Signal(),

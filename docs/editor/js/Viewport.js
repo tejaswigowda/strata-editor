@@ -760,19 +760,7 @@ function Viewport( editor ) {
 
 			}
 
-			try {
-
-				// Disposing a renderer whose GPU device/context is already lost (the
-				// WebGPU-device-lost fallback below replaces it with a fresh WebGL
-				// renderer) can itself throw — never let that stop the swap-in of
-				// the new renderer.
-				renderer.dispose();
-
-			} catch ( e ) {
-
-				console.warn( 'Renderer dispose error:', e );
-
-			}
+			renderer.dispose();
 
 			container.dom.removeChild( renderer.domElement );
 
@@ -855,19 +843,13 @@ function Viewport( editor ) {
 		// (same mobile memory/thermal pressure, or a fatal validation error) is
 		// reported through this renderer callback instead, and unlike WebGL it
 		// can't be silently restored in place (there's no 'contextrestored' to
-		// wait for). This is common on Android, so instead of just prompting a
-		// reload, dispatch rendererContextLost — Sidebar.Project.Renderer.js
-		// listens and swaps in a fresh WebGLRenderer automatically. The overlay
-		// shown here auto-hides via rendererCreated (top of this handler) as
-		// soon as that fallback renderer is up; if the fallback itself fails,
-		// showRendererError()'s overlay takes over instead.
+		// wait for), so go straight to the "couldn't recover" reload prompt.
 		if ( renderer.isWebGPURenderer ) {
 
 			renderer.onDeviceLost = function ( info ) {
 
 				console.warn( 'Strata: WebGPU device lost.', info.message || info.reason || info );
-				showContextLostOverlay( true );
-				signals.rendererContextLost.dispatch( info );
+				showContextLostOverlay( false );
 
 			};
 

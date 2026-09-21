@@ -99,31 +99,6 @@ function snapshotCallcard( pxWidth, pxHeight ) {
 					} );
 
 				} )
-				.then( function ( canvas ) {
-
-					// html2canvas rasterizes <img> elements through its own,
-					// separate resource loader — even once the DOM's own decode
-					// (imagesReady above) has finished, that internal pass has an
-					// intermittent race that can still bake the QR as a blank
-					// box. Composite every already-decoded <img> onto the
-					// finished canvas ourselves (redundant, harmless if
-					// html2canvas already drew it correctly) so the QR is never
-					// missing regardless of that race.
-					const ctx = canvas.getContext( '2d' );
-					for ( const img of images ) {
-
-						const rect = img.getBoundingClientRect();
-						try {
-
-							ctx.drawImage( img, rect.left, rect.top, rect.width, rect.height );
-
-						} catch ( e ) { /* non-fatal — leave whatever html2canvas already drew */ }
-
-					}
-
-					return canvas;
-
-				} )
 				.then( resolve )
 				.catch( reject );
 

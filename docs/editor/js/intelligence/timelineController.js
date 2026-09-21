@@ -264,7 +264,13 @@ export function syncMaterialTransparency( editor ) {
 			const opaque = mat.opacity >= 0.999;
 			const invisible = mat.opacity <= 0.001;
 
-			mat.transparent = ! opaque;
+			// Fully opaque -> restore whatever `transparent` the material had
+			// BEFORE the fade recipe touched it (see fadeRecipe's
+			// __fadeManagedOrigTransparent comment), not a hardcoded false --
+			// a texture that needs its OWN alpha channel even at opacity 1
+			// (e.g. a baked call card with a transparent-background QR) would
+			// otherwise render with alpha ignored, wiping out its content.
+			mat.transparent = opaque ? !! mat.userData.__fadeManagedOrigTransparent : true;
 			mat.depthWrite = ! invisible;
 
 		}
