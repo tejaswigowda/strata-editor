@@ -1096,6 +1096,7 @@ function Timeline( editor ) {
 		const dur = editor.timeline ? editor.timeline.duration : 0;
 		timeReadout.textContent = `${ playhead.toFixed( 2 ) } / ${ dur.toFixed( 2 ) }`;
 		deleteButton.dom.disabled = ! selectedEventId;
+		signals.timelinePlayheadUpdated.dispatch( { time: playhead, duration: dur, playing } );
 
 	}
 
@@ -1303,6 +1304,9 @@ function Timeline( editor ) {
 	signals.timelineChanged.add( function () { render(); if ( showCode ) refreshCode(); } );
 	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );	signals.objectSelected.add( function () { selectedEventId = null; refreshKeyPanel(); } );
 	signals.timelinePlayRequested.add( play ); // external trigger, e.g. the #...&play=true overlay button
+	signals.timelinePauseRequested.add( pause ); // external trigger, e.g. Present mode's transport bar
+	signals.timelineStopRequested.add( stop ); // external trigger, e.g. Present mode's transport bar
+	signals.timelineSeekRequested.add( gotoTime ); // external trigger, e.g. Present mode's seek bar
 	signals.objectChanged.add( function ( object ) {
 
 		// object mode only: keep the staged pose in sync with gizmo edits

@@ -97,6 +97,10 @@ function Editor() {
 		viewportCameraChanged: new Signal(),
 		viewportShadingChanged: new Signal(),
 		timelinePlayRequested: new Signal(), // external "play" trigger (e.g. the #...&play=true overlay button) — Timeline.js listens and calls its own play()
+		timelinePauseRequested: new Signal(), // external "pause" trigger (e.g. Present mode's transport bar)
+		timelineStopRequested: new Signal(), // external "stop" (rewind to 0) trigger (e.g. Present mode's transport bar)
+		timelineSeekRequested: new Signal(), // external scrub trigger, dispatched with a target time in seconds (e.g. Present mode's seek bar)
+		timelinePlayheadUpdated: new Signal(), // dispatched every tick with { time, duration } — external listeners (e.g. Present mode's seek bar) mirror the playhead without owning the clock
 
 		// Fully halts the live viewport's own render loop (Viewport.js's
 		// renderer.setAnimationLoop) — used by Sidebar.Render.js while its own

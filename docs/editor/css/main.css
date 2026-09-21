@@ -481,6 +481,77 @@ hr {
 	bottom: 0;
 }
 
+/* ── Present mode (#...&present=true) — viewer-only, no editing chrome ───────
+   Hides the menubar (top toolbar), the floating tool palette (bottom option)
+   and the sidebar, and lets #viewport/#script/#player fill the whole screen.
+   #present-bar (play/pause/stop + seek) is the only chrome left, shown only
+   in this mode. */
+body.present-mode #menubar,
+body.present-mode #toolbar,
+body.present-mode #sidebar,
+body.present-mode #resizer,
+body.present-mode #animation,
+body.present-mode #animation-resizer {
+	display: none !important;
+}
+
+body.present-mode #viewport,
+body.present-mode #script,
+body.present-mode #player {
+	top: 0;
+	right: 0;
+}
+
+#present-bar {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 44px;
+	background: rgba( 20, 20, 20, 0.85 );
+	display: none;
+	align-items: center;
+	gap: 10px;
+	padding: 0 14px;
+	box-sizing: border-box;
+	z-index: 50;
+}
+
+body.present-mode #present-bar {
+	display: flex;
+}
+
+	#present-bar button {
+		flex-shrink: 0;
+		width: 28px;
+		height: 28px;
+		border: none;
+		border-radius: 4px;
+		background: rgba( 255, 255, 255, 0.12 );
+		color: #fff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+	}
+
+		#present-bar button:hover {
+			background: rgba( 255, 255, 255, 0.24 );
+		}
+
+	#present-bar input[type="range"] {
+		flex: 1;
+		accent-color: #08f;
+	}
+
+	#present-bar .present-time {
+		flex-shrink: 0;
+		min-width: 90px;
+		text-align: right;
+		font: 11px/1 monospace;
+		color: #ddd;
+	}
+
 /* ── Sidebar docking position (toggled from the menubar) ─────────────────────
    Default (no body class) keeps the sidebar on the right. */
 

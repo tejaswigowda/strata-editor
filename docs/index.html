@@ -55,6 +55,7 @@
 			import { Toolbar } from './editor/js/Toolbar.js';
 			import { Script } from './editor/js/Script.js';
 			import { Player } from './editor/js/Player.js';
+			import { PresentBar } from './editor/js/PresentBar.js';
 			import { Sidebar } from './editor/js/Sidebar.js';
 			import { Menubar } from './editor/js/Menubar.js';
 			import { Resizer } from './editor/js/Resizer.js';
@@ -64,6 +65,31 @@
 
 			window.URL = window.URL || window.webkitURL;
 			window.BlobBuilder = window.BlobBuilder || window.WebKitBlobBuilder || window.MozBlobBuilder;
+
+			// #...&present=true (default false) — a viewer-only mode: menubar, tool
+			// palette and sidebar are hidden (see body.present-mode in main.css) and
+			// replaced with just PresentBar's play/pause/stop + seek bar. Read and
+			// applied before any UI mounts so there's no flash of the full editor
+			// chrome on load.
+			function isPresentMode() {
+
+				const hash = window.location.hash;
+				if ( ! hash ) return false;
+
+				try {
+
+					const params = new URLSearchParams( hash.replace( /^#+/, '' ) );
+					return params.get( 'present' ) === 'true';
+
+				} catch {
+
+					return false;
+
+				}
+
+			}
+
+			if ( isPresentMode() ) document.body.classList.add( 'present-mode' );
 
 			// Function to initialize the editor after all dependencies are loaded
 			async function initializeEditor() {
@@ -95,6 +121,9 @@
 
 				const player = new Player( editor );
 				document.body.appendChild( player.dom );
+
+				const presentBar = new PresentBar( editor );
+				document.body.appendChild( presentBar.dom );
 
 				const sidebar = new Sidebar( editor );
 				document.body.appendChild( sidebar.dom );
