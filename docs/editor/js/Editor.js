@@ -49,7 +49,7 @@ function Editor() {
 		rendererCreated: new Signal(),
 		rendererUpdated: new Signal(),
 		rendererDetectKTX2Support: new Signal(),
-		rendererContextLost: new Signal(),
+		rendererContextLost: new Signal(), // WebGPU device lost (Viewport.js) — Sidebar.Project.Renderer.js falls back to WebGL
 		rendererContextRestored: new Signal(),
 
 		sceneBackgroundChanged: new Signal(),
