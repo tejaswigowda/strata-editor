@@ -239,6 +239,43 @@ async function ghGetSceneJSON( path, token ) {
 
 }
 
+// ── Repo browsing (branches / commits / root scene files) ────────────────────
+// Backs the small "▾" pickers next to Branch/Commit/Scene file in the Git tab.
+// Unlike the automatic scene-load path, these are one-off, user-triggered
+// lookups with no CDN equivalent ("list branches"/"list commits"/"list a
+// directory" aren't single files jsDelivr/raw can serve), so they go straight
+// to the GitHub API — infrequent enough that the anonymous rate limit isn't a
+// concern here the way it was for the hot load path.
+
+export async function listBranches( parsed, token ) {
+
+	const branches = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/branches?per_page=100`, token );
+	return branches.map( b => b.name );
+
+}
+
+export async function listCommits( parsed, ref, path, token ) {
+
+	const q = new URLSearchParams( { sha: ref || 'main', per_page: '30' } );
+	if ( path ) q.set( 'path', path );
+	const commits = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/commits?${ q }`, token );
+	return commits.map( c => ( {
+		sha: c.sha,
+		message: ( c.commit.message || '' ).split( '\n' )[ 0 ],
+		date: c.commit.author && c.commit.author.date,
+	} ) );
+
+}
+
+export async function listRootJsonFiles( parsed, ref, token ) {
+
+	const q = ref ? `?ref=${ encodeURIComponent( ref ) }` : '';
+	const entries = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ q }`, token );
+	if ( ! Array.isArray( entries ) ) return [];
+	return entries.filter( e => e.type === 'file' && e.name.endsWith( '.json' ) ).map( e => e.name );
+
+}
+
 // ── Git Data API (atomic multi-file commit) ───────────────────────────────────
 // A single scene may need scene.json plus dozens of large binary asset blobs.
 // The Contents API only writes one file at a time (and each PUT is a commit),
@@ -445,8 +482,9 @@ async function openGitCompare( editor, strings ) {
 
 		const scenePath = cfg.scenePath || 'scene.json';
 		const branch    = cfg.branch || null; // null -> resolveSceneJSON tries main then master
+		const commitCfg = ( cfg.commit || '' ).trim() || null; // pinned SHA/tag override; empty = "latest" (use branch)
 		const resolved  = await resolveSceneJSON( {
-			owner: parsed.owner, repo: parsed.repo, ref: branch, path: scenePath, mode: 'authoring',
+			owner: parsed.owner, repo: parsed.repo, ref: commitCfg || branch, path: scenePath, mode: 'authoring',
 			apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ apiRef }`, cfg.pat ),
 		} );
 		const remote = resolved.json;
@@ -611,14 +649,15 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 
 	const scenePath = cfg.scenePath || 'scene.json';
 	const branchCfg = cfg.branch || null; // null -> resolveSceneJSON tries main then master
+	const commitCfg = ( cfg.commit || '' ).trim() || null; // pinned SHA/tag override; empty = "latest" (use branchCfg)
 
 	onStatus( 0.15, `Fetching ${ scenePath }…` );
 	const resolved = await resolveSceneJSON( {
-		owner: parsed.owner, repo: parsed.repo, ref: branchCfg, path: scenePath, mode: 'authoring',
+		owner: parsed.owner, repo: parsed.repo, ref: commitCfg || branchCfg, path: scenePath, mode: 'authoring',
 		apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ apiRef }`, cfg.pat ),
 	} );
 	const json   = resolved.json;
-	const branch = resolved.ref; // the ref that actually resolved (branchCfg, or main/master if it was null)
+	const branch = resolved.ref; // the ref that actually resolved (commitCfg/branchCfg, or main/master if both were null)
 
 	onStatus( 0.5, 'Fetching assets…' );
 	await internalizeFromGit( json, parsed, branch, cfg.pat, 'authoring' );
@@ -631,13 +670,19 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 
 	// Record the commit we just loaded so a later startup/compare can skip a
 	// redundant re-download while the local copy stays current. Best-effort —
-	// a failure here doesn't affect the load that already succeeded.
-	try {
+	// a failure here doesn't affect the load that already succeeded. Skipped
+	// when pinned to a specific commit/tag: there is no "heads/<sha>" ref to
+	// look up, and the whole point of a pin is to ignore the branch's HEAD.
+	if ( ! commitCfg ) {
 
-		const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, cfg.pat );
-		setSyncedCommit( parsed, scenePath, branch, ref && ref.object && ref.object.sha );
+		try {
 
-	} catch { /* non-fatal */ }
+			const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, cfg.pat );
+			setSyncedCommit( parsed, scenePath, branch, ref && ref.object && ref.object.sha );
+
+		} catch { /* non-fatal */ }
+
+	}
 
 	onStatus( 1, `✓ Loaded ${ parsed.owner }/${ parsed.repo }` );
 
@@ -713,12 +758,14 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 
 	const scenePath = cfg.scenePath || 'scene.json';
 	const branch    = cfg.branch || 'main';
+	const commitCfg = ( cfg.commit || '' ).trim() || null; // pinned SHA/tag override; empty = "latest" (track branch HEAD)
 
 	// Fast path: ask GitHub only for the branch head (a few hundred bytes). If it
 	// matches the commit our local copy was last synced to — and a local autosave
 	// actually exists — the local scene is already current, so skip downloading
-	// the whole scene (and every asset blob) entirely.
-	if ( opts.hasLocalScene ) {
+	// the whole scene (and every asset blob) entirely. Meaningless (and skipped)
+	// when pinned to a specific commit/tag — there's no moving HEAD to track.
+	if ( opts.hasLocalScene && ! commitCfg ) {
 
 		try {
 
@@ -790,18 +837,21 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 }
 
 // ── Hash-based scene preload ──────────────────────────────────────────────────
-// #repo=<owner>/<repo>[@ref]&file=<path>[&branch=<branch>][&play=true|false]
-// [&present=true|preview=true] in the URL loads that scene from a repo on page
-// load. No token, and (the common case) no GitHub API calls at all — the file
-// and its assets resolve through CDN edges (jsDelivr / raw.githubusercontent.com,
-// see GitResolver.js) so a classroom behind one shared IP, or an embed link
-// under real traffic, never hits the GitHub API's 60 req/hr anonymous cap. The
-// API is only ever used as a last-resort fallback (a CDN miss on a very fresh
-// push, or a CDN outage) — `existingPat`, if any, applies ONLY to that fallback.
+// #repo=<owner>/<repo>[@ref]&file=<path>[&branch=<branch>][&commit=<sha|tag>]
+// [&play=true|false][&present=true|preview=true] in the URL loads that scene
+// from a repo on page load. No token, and (the common case) no GitHub API
+// calls at all — the file and its assets resolve through CDN edges (jsDelivr /
+// raw.githubusercontent.com, see GitResolver.js) so a classroom behind one
+// shared IP, or an embed link under real traffic, never hits the GitHub API's
+// 60 req/hr anonymous cap. The API is only ever used as a last-resort fallback
+// (a CDN miss on a very fresh push, or a CDN outage) — `existingPat`, if any,
+// applies ONLY to that fallback.
 // An optional "@ref" on the repo param (branch/tag/commit SHA) picks a specific
-// version; `&branch=` (if present) always wins over it; with neither, 'main' is
-// tried then 'master'. present=true (or its alias preview=true) prefers jsDelivr
-// first (scale over freshness); otherwise raw is tried first (freshness).
+// version; `&branch=` (if present) wins over it; `&commit=` — a pin to an
+// EXACT commit SHA or tag — wins over both (most specific always wins); with
+// none of the three given, 'main' is tried then 'master'. present=true (or its
+// alias preview=true) prefers jsDelivr first (scale over freshness); otherwise
+// raw is tried first (freshness).
 // The overlay play button (see index.html) shows by default whenever the loaded
 // scene actually has an animation to play — a shareable "watch this" link needs
 // no extra flag. play=true forces it on (e.g. for a scene whose animation lives
@@ -835,7 +885,8 @@ export async function loadSceneFromHash( editor ) {
 
 	const repoParam  = params.get( 'repo' );
 	const file       = params.get( 'file' );
-	const branchParam = params.get( 'branch' ); // explicit &branch= always wins over an "@ref" on the repo param
+	const branchParam = params.get( 'branch' ); // explicit &branch= wins over an "@ref" on the repo param
+	const commitParam = params.get( 'commit' ); // explicit &commit= wins over everything else (most specific pin)
 	const playParam  = params.get( 'play' ); // 'true' | 'false' | null (default: on iff the scene has an animation)
 	const presentMode = params.get( 'present' ) === 'true' || params.get( 'preview' ) === 'true'; // 'preview' is an accepted alias
 
@@ -851,9 +902,10 @@ export async function loadSceneFromHash( editor ) {
 
 	}
 
-	// null -> resolveSceneJSON tries 'main' then 'master'; an explicit branch/ref
-	// (either form) is used exactly as given, with no auto-fallback.
-	const ref  = branchParam || repoRef || null;
+	// null -> resolveSceneJSON tries 'main' then 'master'. Precedence when more
+	// than one is given: &commit= (most specific pin) > &branch= > an "@ref" on
+	// repo= itself > nothing.
+	const ref  = commitParam || branchParam || repoRef || null;
 	const mode = presentMode ? 'present' : 'authoring'; // picks the CDN backend order — see GitResolver.js
 
 	// An existing token (saved from a prior session) is reused if it happens to
@@ -894,10 +946,14 @@ export async function loadSceneFromHash( editor ) {
 
 		localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 
-		// Reflect what was loaded in the Git tab (repo/branch/file) so Compare/
-		// Commit target the same place — WITHOUT touching any saved token; that
-		// keeps working (or keeps being absent) exactly as it already was.
-		saveSettings( { ...loadSettings(), repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch, scenePath: file } );
+		// Reflect what was loaded in the Git tab (repo/branch/commit/file) so
+		// Compare/Commit target the same place — WITHOUT touching any saved
+		// token; that keeps working (or keeps being absent) exactly as it already
+		// was. The Branch field only ever shows an actual branch name — a
+		// &commit= pin lives in its own field, never overwriting Branch with a
+		// raw SHA.
+		const priorSettings = loadSettings();
+		saveSettings( { ...priorSettings, repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch: branchParam || repoRef || priorSettings.branch || 'main', commit: commitParam || '', scenePath: file } );
 		editor.signals.gitSettingsChanged.dispatch();
 
 		// Deliberately NOT recording a synced-commit SHA here (unlike
@@ -1056,4 +1112,4 @@ export function showPlayOverlay( editor ) {
 
 }
 
-export { GitSettingsDialog, openGitCompare, generateCommitMessage };
+export { GitSettingsDialog, openGitCompare, generateCommitMessage, parseRepo };

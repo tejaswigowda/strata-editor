@@ -5,7 +5,7 @@
 // every action button disables while busy so they can't overlap.
 
 import { UIPanel, UIRow, UIText, UIInput, UIButton, UIHorizontalRule } from './libs/ui.js';
-import { loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage, showLoadOverlay, setLoadProgress, hideLoadOverlay } from './Menubar.Git.js';
+import { loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage, showLoadOverlay, setLoadProgress, hideLoadOverlay, parseRepo, listBranches, listCommits, listRootJsonFiles } from './Menubar.Git.js';
 
 const LS_KEY = 'git-settings';
 
@@ -18,6 +18,111 @@ function loadSettings() {
 function saveSettings( s ) {
 
 	localStorage.setItem( LS_KEY, JSON.stringify( s ) );
+
+}
+
+// Small "▾" button next to a settings input that opens a lightweight popup
+// list (branches / commits / root .json files — none of which have a CDN
+// equivalent, so these go straight to the GitHub API on click; see
+// Menubar.Git.js's listBranches/listCommits/listRootJsonFiles). Options are
+// fetched lazily on open, never on mount — this is a manual, occasional
+// lookup, not part of the automatic load path.
+function createPicker( { title, fetchItems, onPick } ) {
+
+	const btn = document.createElement( 'button' );
+	btn.type = 'button';
+	btn.textContent = '▾';
+	btn.title = title;
+	btn.style.cssText = 'width:18px;height:20px;margin-left:4px;padding:0;font-size:10px;line-height:1;cursor:pointer;flex:none;background:rgba(255,255,255,0.08);color:inherit;border:1px solid rgba(255,255,255,0.25);border-radius:3px;';
+
+	const panel = document.createElement( 'div' );
+	panel.style.cssText = 'position:fixed;z-index:200;min-width:160px;max-width:280px;max-height:220px;overflow-y:auto;background:#222;border:1px solid rgba(255,255,255,0.25);border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,0.45);display:none;font-size:12px;';
+	document.body.appendChild( panel );
+
+	function close() {
+
+		panel.style.display = 'none';
+		document.removeEventListener( 'pointerdown', onDocPointerDown, true );
+
+	}
+
+	function onDocPointerDown( e ) {
+
+		if ( e.target !== btn && ! panel.contains( e.target ) ) close();
+
+	}
+
+	function renderMessage( text, color ) {
+
+		panel.innerHTML = '';
+		const el = document.createElement( 'div' );
+		el.style.cssText = `padding:6px 10px;opacity:0.7;${ color ? 'color:' + color + ';' : '' }`;
+		el.textContent = text;
+		panel.appendChild( el );
+
+	}
+
+	async function open() {
+
+		const rect = btn.getBoundingClientRect();
+		panel.style.left = rect.left + 'px';
+		panel.style.top  = ( rect.bottom + 2 ) + 'px';
+		panel.style.display = 'block';
+		renderMessage( 'Loading…' );
+
+		document.addEventListener( 'pointerdown', onDocPointerDown, true );
+
+		let items;
+		try {
+
+			items = await fetchItems();
+
+		} catch ( err ) {
+
+			renderMessage( err.message || 'Failed to load', '#f88' );
+			return;
+
+		}
+
+		if ( panel.style.display === 'none' ) return; // closed while loading
+
+		if ( ! items || ! items.length ) {
+
+			renderMessage( 'None found' );
+			return;
+
+		}
+
+		panel.innerHTML = '';
+
+		items.forEach( item => {
+
+			const row = document.createElement( 'div' );
+			row.style.cssText = 'padding:5px 10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+			row.textContent = item.label;
+			row.title = item.label;
+			row.addEventListener( 'mouseenter', () => row.style.background = 'rgba(255,255,255,0.12)' );
+			row.addEventListener( 'mouseleave', () => row.style.background = '' );
+			row.addEventListener( 'click', () => {
+
+				onPick( item.value );
+				close();
+
+			} );
+			panel.appendChild( row );
+
+		} );
+
+	}
+
+	btn.addEventListener( 'click', ( e ) => {
+
+		e.preventDefault();
+		if ( panel.style.display === 'block' ) close(); else open();
+
+	} );
+
+	return btn;
 
 }
 
@@ -51,7 +156,41 @@ function SidebarGit( editor ) {
 	const branchInput = new UIInput( s.branch || 'main' ).setWidth( '160px' );
 	branchInput.dom.placeholder = 'main';
 	branchRow.add( branchInput );
+	branchRow.dom.appendChild( createPicker( {
+		title: 'Browse branches',
+		fetchItems: async () => {
+
+			const parsed = parseRepo( repoInput.getValue().trim() );
+			if ( ! parsed ) throw new Error( 'Enter a repository above first' );
+			const names = await listBranches( parsed, patInput.getValue().trim() || undefined );
+			return names.map( n => ( { label: n, value: n } ) );
+
+		},
+		onPick: ( value ) => { branchInput.setValue( value ); persist(); },
+	} ) );
 	container.add( branchRow );
+
+	// Commit — optional pin to a specific commit SHA or tag; empty means "latest"
+	// (i.e. use Branch above as-is, tracking its moving HEAD).
+	const commitPinRow = new UIRow();
+	commitPinRow.add( new UIText( strings.getKey( 'menubar/git/settings/commit' ) ).setClass( 'Label' ) );
+	const commitPinInput = new UIInput( s.commit || '' ).setWidth( '160px' );
+	commitPinInput.dom.placeholder = 'latest';
+	commitPinRow.add( commitPinInput );
+	commitPinRow.dom.appendChild( createPicker( {
+		title: 'Browse commits',
+		fetchItems: async () => {
+
+			const parsed = parseRepo( repoInput.getValue().trim() );
+			if ( ! parsed ) throw new Error( 'Enter a repository above first' );
+			const ref = commitPinInput.getValue().trim() || branchInput.getValue().trim() || 'main';
+			const commits = await listCommits( parsed, ref, pathInput.getValue().trim() || undefined, patInput.getValue().trim() || undefined );
+			return commits.map( c => ( { label: `${ c.sha.slice( 0, 7 ) } — ${ c.message }`, value: c.sha } ) );
+
+		},
+		onPick: ( value ) => { commitPinInput.setValue( value ); persist(); },
+	} ) );
+	container.add( commitPinRow );
 
 	// Scene file
 	const pathRow = new UIRow();
@@ -59,6 +198,19 @@ function SidebarGit( editor ) {
 	const pathInput = new UIInput( s.scenePath || 'scene.json' ).setWidth( '160px' );
 	pathInput.dom.placeholder = 'scene.json';
 	pathRow.add( pathInput );
+	pathRow.dom.appendChild( createPicker( {
+		title: 'Browse .json files at repo root',
+		fetchItems: async () => {
+
+			const parsed = parseRepo( repoInput.getValue().trim() );
+			if ( ! parsed ) throw new Error( 'Enter a repository above first' );
+			const ref = commitPinInput.getValue().trim() || branchInput.getValue().trim() || 'main';
+			const files = await listRootJsonFiles( parsed, ref, patInput.getValue().trim() || undefined );
+			return files.map( f => ( { label: f, value: f } ) );
+
+		},
+		onPick: ( value ) => { pathInput.setValue( value ); persist(); },
+	} ) );
 	container.add( pathRow );
 
 	// Access token
@@ -94,6 +246,7 @@ function SidebarGit( editor ) {
 		saveSettings( {
 			repoUrl:   repoInput.getValue().trim(),
 			branch:    branchInput.getValue().trim() || 'main',
+			commit:    commitPinInput.getValue().trim(),
 			scenePath: pathInput.getValue().trim() || 'scene.json',
 			pat:       patInput.getValue().trim(),
 		} );
@@ -101,7 +254,7 @@ function SidebarGit( editor ) {
 	}
 
 	// Auto-save when a field loses focus / changes.
-	[ repoInput, branchInput, pathInput, patInput ].forEach( input => input.onChange( persist ) );
+	[ repoInput, branchInput, commitPinInput, pathInput, patInput ].forEach( input => input.onChange( persist ) );
 
 	// Reflect settings changed elsewhere (e.g. a #repo=...&file=... URL hash
 	// preload on this same page load) without clobbering what the user is
@@ -111,6 +264,7 @@ function SidebarGit( editor ) {
 		const fresh = loadSettings();
 		repoInput.setValue( fresh.repoUrl || '' );
 		branchInput.setValue( fresh.branch || 'main' );
+		commitPinInput.setValue( fresh.commit || '' );
 		pathInput.setValue( fresh.scenePath || 'scene.json' );
 		patInput.setValue( fresh.pat || '' );
 

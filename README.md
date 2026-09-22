@@ -30,7 +30,7 @@ or
 node server.js
 ```
 
-Requires **Chrome 113+** (WebGPU). Verify at [webgpureport.org](https://webgpureport.org).
+The editor and language run in any modern browser (WebGL renderer, no special requirements). **On-device AI** (WebLLM) additionally requires **Chrome 113+** (WebGPU) — verify at [webgpureport.org](https://webgpureport.org). Hand-editing, git, and rendering are unaffected on hardware that can't run the local model; external AI (Ollama, OpenAI, Claude via `fetchAPI`) works everywhere too.
 
 **With external AI models (Ollama, OpenAI, Claude):**
 

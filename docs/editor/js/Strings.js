@@ -579,6 +579,7 @@ function Strings( config ) {
 			'menubar/git/settings/title': 'Git Repository Settings',
 			'menubar/git/settings/repo': 'Repository',
 			'menubar/git/settings/branch': 'Branch',
+			'menubar/git/settings/commit': 'Commit',
 			'menubar/git/settings/path': 'Scene file',
 			'menubar/git/settings/pat': 'Access token',
 			'menubar/git/settings/pat_note': 'Stored in localStorage. Use a token with repo scope.',
