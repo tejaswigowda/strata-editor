@@ -47,9 +47,10 @@ function PresentBar( editor ) {
 	container.dom.appendChild( timeLabel );
 
 	// Remix: drop back into the full editor on the SAME scene — reloads with
-	// `present` stripped from the hash (a hash-only change alone wouldn't
-	// re-run the app's boot-time hash loader, so it's followed by an explicit
-	// reload). Every other param (repo/file/branch/play/...) is left untouched.
+	// `present`/`preview` (an alias — shared links have used both names)
+	// stripped from the hash (a hash-only change alone wouldn't re-run the
+	// app's boot-time hash loader, so it's followed by an explicit reload).
+	// Every other param (repo/file/branch/play/...) is left untouched.
 	const remixButton = document.createElement( 'button' );
 	remixButton.className = 'present-remix';
 	remixButton.textContent = 'Remix';
@@ -58,6 +59,7 @@ function PresentBar( editor ) {
 
 		const params = new URLSearchParams( window.location.hash.replace( /^#+/, '' ) );
 		params.delete( 'present' );
+		params.delete( 'preview' );
 		const rest = params.toString();
 		window.location.hash = rest ? '#' + rest : '';
 		window.location.reload();

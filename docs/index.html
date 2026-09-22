@@ -70,7 +70,8 @@
 			// palette and sidebar are hidden (see body.present-mode in main.css) and
 			// replaced with just PresentBar's play/pause/stop + seek bar. Read and
 			// applied before any UI mounts so there's no flash of the full editor
-			// chrome on load.
+			// chrome on load. `preview=true` is accepted as an alias — shared links
+			// have used both names.
 			function isPresentMode() {
 
 				const hash = window.location.hash;
@@ -79,7 +80,7 @@
 				try {
 
 					const params = new URLSearchParams( hash.replace( /^#+/, '' ) );
-					return params.get( 'present' ) === 'true';
+					return params.get( 'present' ) === 'true' || params.get( 'preview' ) === 'true';
 
 				} catch {
 
