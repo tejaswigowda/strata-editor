@@ -3,11 +3,11 @@ import { UIPanel } from './libs/ui.js';
 // ── PresentBar.js ─────────────────────────────────────────────────────────────
 // The entire chrome shown in Present mode (#...&present=true — see index.html
 // and main.css's body.present-mode rules, which hide the menubar/toolbar/
-// sidebar and let #viewport fill the screen). Just transport controls for the
-// Universal Timeline: play/pause, stop (rewind to 0), and a seek bar — no
-// editing affordances. Talks to Timeline.js purely through signals (play/pause/
-// stop/seek requests out, timelinePlayheadUpdated in) so it never needs to own
-// or duplicate the timeline clock.
+// sidebar and let #viewport fill the screen). Transport controls for the
+// Universal Timeline (play/pause, stop, seek) plus one way back into the full
+// editor (Remix) — no other editing affordances. Talks to Timeline.js purely
+// through signals (play/pause/stop/seek requests out, timelinePlayheadUpdated
+// in) so it never needs to own or duplicate the timeline clock.
 
 function PresentBar( editor ) {
 
@@ -45,6 +45,25 @@ function PresentBar( editor ) {
 	timeLabel.className = 'present-time';
 	timeLabel.textContent = '0.00 / 0.00';
 	container.dom.appendChild( timeLabel );
+
+	// Remix: drop back into the full editor on the SAME scene — reloads with
+	// `present` stripped from the hash (a hash-only change alone wouldn't
+	// re-run the app's boot-time hash loader, so it's followed by an explicit
+	// reload). Every other param (repo/file/branch/play/...) is left untouched.
+	const remixButton = document.createElement( 'button' );
+	remixButton.className = 'present-remix';
+	remixButton.textContent = 'Remix';
+	remixButton.title = 'Open the full editor on this scene';
+	remixButton.addEventListener( 'click', function () {
+
+		const params = new URLSearchParams( window.location.hash.replace( /^#+/, '' ) );
+		params.delete( 'present' );
+		const rest = params.toString();
+		window.location.hash = rest ? '#' + rest : '';
+		window.location.reload();
+
+	} );
+	container.dom.appendChild( remixButton );
 
 	function setPlayingUI( playing ) {
 

@@ -552,6 +552,19 @@ body.present-mode #present-bar {
 		color: #ddd;
 	}
 
+	#present-bar .present-remix {
+		flex-shrink: 0;
+		width: auto;
+		height: 28px;
+		padding: 0 14px;
+		font: bold 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+		background: #08f;
+	}
+
+		#present-bar .present-remix:hover {
+			background: #2a9dff;
+		}
+
 /* ── Sidebar docking position (toggled from the menubar) ─────────────────────
    Default (no body class) keeps the sidebar on the right. */
 
