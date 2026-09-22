@@ -102,6 +102,18 @@ function MenubarStatus( editor ) {
 	} );
 	options.add( fullscreen );
 
+	// About — opens the public /about page in a new tab
+
+	const info = new UIRow();
+	info.setClass( 'option' );
+	setMenuIcon( info, 'info', 'About Strata' );
+	info.onClick( function () {
+
+		window.open( './about/', '_blank' );
+
+	} );
+	options.add( info );
+
 	return container;
 
 }

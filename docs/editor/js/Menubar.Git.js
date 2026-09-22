@@ -745,10 +745,11 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 	}
 
 	const banner = _showBanner( `Loading scene from ${ parsed.owner }/${ parsed.repo }…` );
+	showLoadOverlay();
 
 	try {
 
-		await loadSceneFromRepo( editor, { onStatus: ( _fraction, message ) => { banner.textContent = message; } } );
+		await loadSceneFromRepo( editor, { onStatus: ( fraction, message ) => { banner.textContent = message; setLoadProgress( fraction, message ); } } );
 
 		_showBanner( `✓ Scene loaded from ${ parsed.owner }/${ parsed.repo }`, 2500 );
 
@@ -771,6 +772,7 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 	} finally {
 
 		banner.remove();
+		hideLoadOverlay();
 
 	}
 
@@ -834,14 +836,19 @@ export async function loadSceneFromHash( editor ) {
 	const existingPat = loadSettings().pat || null;
 
 	const banner = _showBanner( `Loading ${ parsed.owner }/${ parsed.repo } from URL…` );
+	showLoadOverlay();
+	setLoadProgress( 0.1, `Loading ${ parsed.owner }/${ parsed.repo }…` );
 
 	try {
 
+		setLoadProgress( 0.15, `Fetching ${ file }…` );
 		const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ file }?ref=${ branch }`;
 		const json    = await ghGetSceneJSON( apiPath, existingPat );
 
+		setLoadProgress( 0.5, 'Fetching assets…' );
 		await internalizeFromGit( json, parsed, branch, existingPat );
 
+		setLoadProgress( 0.85, 'Applying scene…' );
 		editor.clear();
 		await editor.fromJSON( json );
 
@@ -868,6 +875,8 @@ export async function loadSceneFromHash( editor ) {
 
 		} catch { /* non-fatal */ }
 
+		setLoadProgress( 1, `✓ Loaded ${ parsed.owner }/${ parsed.repo }/${ file }` );
+		hideLoadOverlay();
 		banner.remove();
 		const tokenHint = existingPat ? '' : ' — add a token in the Git tab to enable commits';
 		_showBanner( `✓ Loaded ${ parsed.owner }/${ parsed.repo }/${ file } from URL${ tokenHint }`, 4000 );
@@ -876,6 +885,7 @@ export async function loadSceneFromHash( editor ) {
 
 	} catch ( err ) {
 
+		hideLoadOverlay();
 		banner.remove();
 		console.warn( `loadSceneFromHash(): failed to load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ err.message }. Falling back to normal startup.` );
 		return false;
@@ -906,6 +916,60 @@ function _showBanner( text, durationMs = 0 ) {
 	}
 
 	return el;
+
+}
+
+// ── Scene-load viewport overlay ────────────────────────────────────────────────
+// Mirrors Sidebar.Render.js's render-progress overlay (same look, same
+// title/bar/label structure) so loading a scene (URL-hash preload, boot-time
+// git auto-load, or the Git tab's manual Load button) reads as the same kind
+// of "this takes a moment, here's how far along it is" operation as a render —
+// shown over the 3D view itself so it's visible even if the sidebar is
+// scrolled out of sight/collapsed/on a different tab.
+let _loadOverlay = null;
+
+function _ensureLoadOverlay() {
+
+	if ( _loadOverlay ) return _loadOverlay;
+
+	_loadOverlay = document.createElement( 'div' );
+	_loadOverlay.id = 'scene-load-overlay';
+	_loadOverlay.style.cssText = 'position:absolute;inset:0;z-index:90;display:none;' +
+		'flex-direction:column;align-items:center;justify-content:center;gap:12px;' +
+		'background:rgba(20,20,20,0.75);color:#eee;' +
+		'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;' +
+		'text-align:center;padding:24px;box-sizing:border-box;pointer-events:none;';
+	_loadOverlay.innerHTML =
+		'<div style="font-size:14px;font-weight:bold;">Loading Scene\u2026</div>' +
+		'<div style="width:min(320px,70%);height:10px;background:rgba(255,255,255,0.15);border-radius:5px;overflow:hidden;">' +
+			'<div class="bar" style="height:100%;width:0%;background:#08f;transition:width 0.1s linear;"></div>' +
+		'</div>' +
+		'<div class="label" style="font-size:12px;opacity:0.85;max-width:360px;"></div>';
+
+	return _loadOverlay;
+
+}
+
+export function showLoadOverlay() {
+
+	const overlay = _ensureLoadOverlay();
+	const viewport = document.getElementById( 'viewport' );
+	if ( viewport && overlay.parentNode !== viewport ) viewport.appendChild( overlay );
+	overlay.style.display = 'flex';
+
+}
+
+export function setLoadProgress( fraction, message ) {
+
+	const overlay = _ensureLoadOverlay();
+	overlay.querySelector( '.bar' ).style.width = ( Math.max( 0, Math.min( 1, fraction ) ) * 100 ).toFixed( 1 ) + '%';
+	overlay.querySelector( '.label' ).textContent = message || '';
+
+}
+
+export function hideLoadOverlay() {
+
+	if ( _loadOverlay ) _loadOverlay.style.display = 'none';
 
 }
 

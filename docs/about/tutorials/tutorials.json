@@ -1,0 +1,17 @@
+[
+	{
+		"title": "Make a Pythagorean-theorem short",
+		"href": "makeshort.html",
+		"desc": "Build three squares and a right triangle, animate the classic dissection proof, add a background, and end on a living call-card — all with the JS Shell and the Universal Timeline."
+	},
+	{
+		"title": "Build a night scene from scratch",
+		"href": "build-a-scene.html",
+		"desc": "Reusable helper functions, a noise-displaced ground, a grouped structure, night lighting (and the Environment setting that silently undoes it), a moving object, and a static hero camera — the full from-scratch workflow."
+	},
+	{
+		"title": "Add a static hero camera to a render sequence",
+		"href": "render-camera-sequence.html",
+		"desc": "A focused deep-dive on just the Render tab's Camera Sequence feature — add a fixed, non-animated camera and cut it in to showcase one moment your main animated camera doesn't frame well."
+	}
+]

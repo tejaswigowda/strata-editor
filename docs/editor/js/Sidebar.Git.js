@@ -5,7 +5,7 @@
 // every action button disables while busy so they can't overlap.
 
 import { UIPanel, UIRow, UIText, UIInput, UIButton, UIHorizontalRule } from './libs/ui.js';
-import { loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage } from './Menubar.Git.js';
+import { loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage, showLoadOverlay, setLoadProgress, hideLoadOverlay } from './Menubar.Git.js';
 
 const LS_KEY = 'git-settings';
 
@@ -165,10 +165,11 @@ function SidebarGit( editor ) {
 		persist();
 		setBusy( true );
 		setProgress( 0.05, 'Loading…' );
+		showLoadOverlay();
 
 		try {
 
-			await loadSceneFromRepo( editor, { onStatus: setProgress } );
+			await loadSceneFromRepo( editor, { onStatus: ( fraction, message ) => { setProgress( fraction, message ); setLoadProgress( fraction, message ); } } );
 			setTimeout( () => setProgress( null, '' ), 1500 );
 
 		} catch ( err ) {
@@ -178,6 +179,7 @@ function SidebarGit( editor ) {
 		} finally {
 
 			setBusy( false );
+			hideLoadOverlay();
 
 		}
 

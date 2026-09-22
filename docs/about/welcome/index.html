@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome — Strata</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Strata: a deterministic, git-versioned, sovereign, browser-native tool for editing and animating 3D scenes.">
+<!--
+	/about/welcome — the editor's "welcome" overlay content (see
+	docs/editor/js/WelcomeOverlay.js, which embeds this page in an <iframe>,
+	created/loaded only when the overlay is first opened). Also a normal,
+	directly-visitable static page on its own — same "no build step,
+	same-origin only" spirit as the rest of /about. Content is a condensed
+	version of /about/index.html; keep the two in sync in tone.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.6;
+	}
+	main {
+		max-width: 560px;
+		margin: 0 auto;
+		padding: 32px 36px 28px;
+		box-sizing: border-box;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.7rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 1.4em;
+		color: #9aa4b2;
+		font-size: 1rem;
+	}
+	p { color: #c3c9d1; font-size: 0.92rem; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code {
+		background: #1e2127;
+		border-radius: 4px;
+		padding: 0.1em 0.4em;
+		font-size: 0.92em;
+	}
+	h2 {
+		margin: 1.6em 0 0.6em;
+		font-size: 1.05rem;
+		color: #f3f5f8;
+		border-bottom: 1px solid #2a2e36;
+		padding-bottom: 0.4em;
+	}
+	.links {
+		list-style: none;
+		margin: 0 0 1.6em;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.8em;
+	}
+	.links a { font-size: 1.02rem; font-weight: 600; }
+	.links .desc { color: #7d8794; font-size: 0.88rem; margin-top: 0.2em; }
+	.status { color: #7d8794; font-size: 0.9rem; }
+	footer {
+		padding-top: 1em;
+		border-top: 1px solid #2a2e36;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Strata</h1>
+	<p class="tagline">A deterministic, human-readable selector language for editing and versioning 3D scenes. Sovereign, browser-native, no build. Optional AI that stays within bounds.</p>
+	<p>Address parts of a scene with CSS-like selectors (<code>$S('.wheel.front')</code>), change them with a closed set of command-backed ops, and version the result with git — every mutation is undoable, git-tracked, and human-readable. AI is a slim, optional front door on top, never a requirement.</p>
+
+	<h2>Tutorials</h2>
+	<ul class="links" id="tutorial-list">
+		<li class="status">Loading tutorials…</li>
+	</ul>
+
+	<footer>
+		<a href="../" target="_blank" rel="noopener">Full about page →</a>
+	</footer>
+</main>
+
+<script type="module">
+
+	// Tutorial links always target="_blank" — this page is normally rendered
+	// inside the welcome overlay's <iframe>, and a tutorial should open in
+	// its own tab, never navigate inside the frame (or replace the parent
+	// tab, losing whatever scene the editor had open).
+	const list = document.getElementById( 'tutorial-list' );
+
+	fetch( '../tutorials/tutorials.json' )
+		.then( r => r.ok ? r.json() : Promise.reject( new Error( 'HTTP ' + r.status ) ) )
+		.then( tutorials => {
+
+			list.innerHTML = '';
+
+			for ( const t of tutorials ) {
+
+				const item = document.createElement( 'li' );
+
+				const link = document.createElement( 'a' );
+				link.href = '../tutorials/' + t.href;
+				link.target = '_blank';
+				link.rel = 'noopener';
+				link.textContent = t.title + ' →';
+				item.appendChild( link );
+
+				const desc = document.createElement( 'div' );
+				desc.className = 'desc';
+				desc.textContent = t.desc || '';
+				item.appendChild( desc );
+
+				list.appendChild( item );
+
+			}
+
+		} )
+		.catch( () => { list.innerHTML = '<li class="status">Could not load the tutorials list.</li>'; } );
+
+</script>
+</body>
+</html>

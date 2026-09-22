@@ -34,6 +34,7 @@ const ICONS = {
 	'skeletonHelpers': svg( '<circle cx="7" cy="7" r="2.4"/><circle cx="17" cy="17" r="2.4"/><path d="M8.7 8.7l6.6 6.6"/>' ),
 	'fullscreen': svg( '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/>' ),
 	'sidebar': svg( '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>' ),
+	'info': svg( '<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.01"/>' ),
 
 };
 
