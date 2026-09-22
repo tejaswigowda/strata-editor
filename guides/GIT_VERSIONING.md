@@ -13,7 +13,7 @@ Open the **Git** menu to configure a repository and sync scenes. All calls use `
 | **Commit Scene** | The AI writes a diff-aware message (added/removed/modified vs last commit). Editable before commit. |
 | **Auto-load on open** | If a repo is configured, the scene loads from GitHub on page open (after local autosave, so GitHub wins). **File, New** suppresses this once. |
 
-Content is fetched with the GitHub raw media type. It handles files over 1 MB and decodes UTF-8 natively. It is cache-busted so a fresh commit is not served stale.
+Reads (Load Scene, Compare with Remote, and the URL hash preload below) go through a CDN-first resolver, not the GitHub REST API: raw.githubusercontent.com and jsDelivr are tried first (raw first when authoring, for freshness; jsDelivr first in present/preview mode, for scale), and the API is used only as a last-resort fallback if both CDN edges fail. This sidesteps GitHub's 60 req/hr anonymous rate limit — the failure mode that used to hit shared-IP classrooms and widely-shared links hardest. It handles files over 1 MB and decodes UTF-8 natively. Commits (writes) always go through the GitHub API with a token, exactly as before — there is no CDN write path.
 
 ## Merge-conflict viewport
 
@@ -25,16 +25,17 @@ Scenes are diffable JSON. See [scene representation](ARCHITECTURE.md#scene-repre
 
 ## Shareable links (URL hash preload)
 
-Appending `#repo=<owner>/<repo>&file=<path>` to the app URL loads that scene from a repo automatically on page open — before local autosave or the configured `git-settings` repo, so it always wins when present. An optional `&branch=<name>` selects a non-`main` branch.
+Appending `#repo=<owner>/<repo>&file=<path>` to the app URL loads that scene from a repo automatically on page open — before local autosave or the configured `git-settings` repo, so it always wins when present. An optional `&branch=<name>` selects a non-`main` branch, and an optional `@<ref>` suffix directly on `repo=` picks a branch, tag, or commit SHA inline (`&branch=` wins over it if both are given; with neither, `main` is tried then `master`).
 
 ```
 https://your-strata-host/#repo=tejaswigowda/test1&file=scene.json
 https://your-strata-host/#repo=tejaswigowda/test1&file=scene.json&branch=dev
+https://your-strata-host/#repo=tejaswigowda/test1@abc123&file=scene.json
 ```
 
-- **No token required to read a public repo.** The hash loader always tries an anonymous GitHub API request first; a token already saved in the Git tab is reused opportunistically (e.g. to read a private repo) but is never required just to view a public one. Committing back still requires a token, entered in the Git tab as usual.
+- **No token required to read a public repo, and no GitHub API call in the common path.** The hash loader resolves the scene and its assets through CDN edges (jsDelivr, raw.githubusercontent.com) — never the GitHub API — so this link can be shared widely, embedded, or opened from a shared classroom IP without tripping GitHub's 60 req/hr anonymous rate limit. `&present=true` (or its alias `&preview=true`) prefers jsDelivr first (built for scale); otherwise raw.githubusercontent.com is tried first (built for freshness). The GitHub API is only ever used as a last-resort fallback if both CDN edges fail (e.g. a very fresh push jsDelivr hasn't picked up yet, or a CDN outage); a token already saved in the Git tab is reused opportunistically for that fallback (e.g. to read a private repo) but is never required just to view a public one. Committing back still requires a token, entered in the Git tab as usual.
 - The Git tab's Repo/Branch/Path fields update to reflect the loaded scene (without touching a saved token), so **Compare with Remote** and **Commit** immediately target the same place.
-- A missing hash, an unparseable `repo=` value, or any load failure (bad path, rate limit, network error) is logged to the console only — it never throws or shows a blocking dialog — and the editor falls through to its normal boot sequence (local autosave, then the configured-repo auto-load) unchanged.
+- A missing hash, an unparseable `repo=` value, or any load failure is logged to the console only — it never throws or shows a blocking dialog — and the editor falls through to its normal boot sequence (local autosave, then the configured-repo auto-load) unchanged. Failures are classified (not found / rate-limited / network / invalid JSON) so the banner shown reports the real reason instead of always assuming a rate limit.
 
 ---
 

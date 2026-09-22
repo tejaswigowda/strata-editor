@@ -1,6 +1,11 @@
 // ── Menubar.Git.js ────────────────────────────────────────────────────────────
 // Git repository settings and scene sync (load / commit).
-// Uses the GitHub REST API directly via fetch() — no Octokit dependency.
+// READS (scene JSON + assets) resolve through CDN edges (GitResolver.js) —
+// api.github.com is a last resort fallback only, never the common path (see
+// GitResolver.js for why: the API's 60 req/hr anonymous cap breaks a
+// classroom behind one shared IP, or an embed link that gets real traffic).
+// WRITES (commits) still use the GitHub REST API directly via fetch() (no
+// Octokit dependency) — there is no CDN write path, only reads.
 // Settings (repo URL, branch, path, PAT) are persisted in localStorage.
 
 import { UIRow, UIText, UIButton } from './libs/ui.js';
@@ -8,6 +13,7 @@ import { sceneContextString } from './scene/summarize.js';
 import { diffScenes } from './SceneDiff.js';
 import { MergeViewport } from './MergeViewport.js';
 import { externalizeScene, internalizeScene, u8ToBase64 } from './GitAssets.js';
+import { splitRepoRef, resolveSceneJSON, resolveAssetBytes } from './GitResolver.js';
 
 // ── Commit-message generation ─────────────────────────────────────────────────
 // Uses the already-loaded local AI engine (editor.aiEngine) to generate a
@@ -271,15 +277,13 @@ async function ghSend( method, path, body, token ) {
 // are cached in the browser Cache Storage: on a later load only NEW blobs hit the
 // network — unchanged geometry is served locally. Non-asset paths bypass the cache.
 //
-// Fetched from raw.githubusercontent.com (reads straight from git storage) rather
-// than the Contents API — empirically, right after a large multi-file commit (a
-// scene can add 100+ asset blobs in one push) the Contents API's "raw" media type
-// serves STALE content for some paths for a while (confirmed: same path returned
-// consistently-wrong byte length via api.github.com while raw.githubusercontent.com
-// and `git cat-file` agreed on the correct one), corrupting typed-array rehydration.
-// Falls back to the Contents API (which does need a token for private repos) if
-// the raw host ever fails outright.
-async function ghGetBytes( parsed, branch, path, token ) {
+// The network fetch itself goes through GitResolver's CDN-first resolver
+// (raw.githubusercontent.com / jsDelivr, ordered by `mode` — see that module's
+// comment for why), with the GitHub Contents API only as a last resort — the
+// API can also serve stale bytes for a short while right after a large
+// multi-file commit, on top of being rate-limited, so falling back to it is
+// strictly worse than the CDN reads on both counts, not just quota.
+async function ghGetBytes( parsed, branch, path, token, mode ) {
 
 	const immutable = path.startsWith( 'assets/' );
 	const cacheUrl  = `https://strata.local/git-asset/${ parsed.owner }/${ parsed.repo }/${ path }`;
@@ -297,32 +301,29 @@ async function ghGetBytes( parsed, branch, path, token ) {
 
 	}
 
-	const rawUrl = `https://raw.githubusercontent.com/${ parsed.owner }/${ parsed.repo }/${ branch }/${ path.split( '/' ).map( encodeURIComponent ).join( '/' ) }`;
+	const bytes = await resolveAssetBytes( {
+		owner: parsed.owner,
+		repo: parsed.repo,
+		ref: branch,
+		path,
+		mode,
+		apiFetch: async ( apiRef ) => {
 
-	let bytes;
-	try {
+			// Last resort: the Contents API — needs a token for private repos,
+			// works even when both CDN backends are unreachable.
+			const url = `https://api.github.com/repos/${ parsed.owner }/${ parsed.repo }/contents/${ path }?ref=${ apiRef }&_ts=${ Date.now() }`;
 
-		const headers = token ? { Authorization: `Bearer ${ token }` } : undefined;
-		const res = await fetch( rawUrl, { headers, cache: 'no-store' } );
-		if ( ! res.ok ) throw new Error( `raw ${ res.status }` );
-		bytes = new Uint8Array( await res.arrayBuffer() );
+			const res = await fetch( url, {
+				headers: ghHeaders( token, 'application/vnd.github.raw' ),
+				cache: 'no-store',
+			} );
 
-	} catch {
+			if ( ! res.ok ) throw new Error( `GitHub ${ res.status } fetching ${ path }: ${ await res.text() }` );
 
-		// Fallback: the Contents API — slower to reflect very recent pushes, but
-		// works even when raw.githubusercontent.com is unreachable (e.g. blocked).
-		const url = `https://api.github.com/repos/${ parsed.owner }/${ parsed.repo }/contents/${ path }?ref=${ branch }&_ts=${ Date.now() }`;
+			return new Uint8Array( await res.arrayBuffer() );
 
-		const res = await fetch( url, {
-			headers: ghHeaders( token, 'application/vnd.github.raw' ),
-			cache: 'no-store',
-		} );
-
-		if ( ! res.ok ) throw new Error( `GitHub ${ res.status } fetching ${ path }: ${ await res.text() }` );
-
-		bytes = new Uint8Array( await res.arrayBuffer() );
-
-	}
+		},
+	} );
 
 	if ( cache ) { try { await cache.put( cacheUrl, new Response( bytes ) ); } catch { /* cache full — non-fatal */ } }
 
@@ -405,13 +406,14 @@ async function commitFiles( parsed, branch, token, files, message, onProgress ) 
 // Rehydrate a scene fetched from GitHub: replace every { $bin } / { $img }
 // reference with its bytes. Fetches are cached by path so buffers shared across
 // geometries (deduped on commit) are downloaded only once. No-op for legacy
-// inline scenes.
-async function internalizeFromGit( json, parsed, branch, token ) {
+// inline scenes. `mode` ('authoring' | 'present') picks the CDN backend order —
+// see GitResolver.js.
+async function internalizeFromGit( json, parsed, branch, token, mode ) {
 
 	const cache = new Map();
 	const fetchBytes = ( path ) => {
 
-		if ( ! cache.has( path ) ) cache.set( path, ghGetBytes( parsed, branch, path, token ) );
+		if ( ! cache.has( path ) ) cache.set( path, ghGetBytes( parsed, branch, path, token, mode ) );
 		return cache.get( path );
 
 	};
@@ -441,9 +443,14 @@ async function openGitCompare( editor, strings ) {
 
 	try {
 
-		const apiPath  = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ cfg.scenePath || 'scene.json' }?ref=${ cfg.branch || 'main' }`;
-		const remote   = await ghGetSceneJSON( apiPath, cfg.pat );
-		await internalizeFromGit( remote, parsed, cfg.branch || 'main', cfg.pat );
+		const scenePath = cfg.scenePath || 'scene.json';
+		const branch    = cfg.branch || null; // null -> resolveSceneJSON tries main then master
+		const resolved  = await resolveSceneJSON( {
+			owner: parsed.owner, repo: parsed.repo, ref: branch, path: scenePath, mode: 'authoring',
+			apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ apiRef }`, cfg.pat ),
+		} );
+		const remote = resolved.json;
+		await internalizeFromGit( remote, parsed, resolved.ref, cfg.pat, 'authoring' );
 		// ghGetSceneJSON returns the FULL editor.toJSON() wrapper
 		// ({ metadata, project, camera, scene: {...}, ... }) — but `local` below
 		// and diffScenes()/MergeViewport both expect a raw THREE.Scene.toJSON()
@@ -603,14 +610,18 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 	if ( ! parsed ) throw new Error( 'No repository configured' );
 
 	const scenePath = cfg.scenePath || 'scene.json';
-	const branch    = cfg.branch || 'main';
+	const branchCfg = cfg.branch || null; // null -> resolveSceneJSON tries main then master
 
 	onStatus( 0.15, `Fetching ${ scenePath }…` );
-	const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ branch }`;
-	const json    = await ghGetSceneJSON( apiPath, cfg.pat );
+	const resolved = await resolveSceneJSON( {
+		owner: parsed.owner, repo: parsed.repo, ref: branchCfg, path: scenePath, mode: 'authoring',
+		apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ apiRef }`, cfg.pat ),
+	} );
+	const json   = resolved.json;
+	const branch = resolved.ref; // the ref that actually resolved (branchCfg, or main/master if it was null)
 
 	onStatus( 0.5, 'Fetching assets…' );
-	await internalizeFromGit( json, parsed, branch, cfg.pat );
+	await internalizeFromGit( json, parsed, branch, cfg.pat, 'authoring' );
 
 	onStatus( 0.85, 'Applying scene…' );
 	editor.clear();
@@ -779,9 +790,18 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 }
 
 // ── Hash-based scene preload ──────────────────────────────────────────────────
-// #repo=<owner>/<repo>&file=<path>[&branch=<branch>][&play=true|false] in the URL
-// loads that scene from a repo on page load — no token needed for a PUBLIC repo
-// (GitHub allows anonymous reads at a lower, IP-based rate limit; see ghHeaders()).
+// #repo=<owner>/<repo>[@ref]&file=<path>[&branch=<branch>][&play=true|false]
+// [&present=true|preview=true] in the URL loads that scene from a repo on page
+// load. No token, and (the common case) no GitHub API calls at all — the file
+// and its assets resolve through CDN edges (jsDelivr / raw.githubusercontent.com,
+// see GitResolver.js) so a classroom behind one shared IP, or an embed link
+// under real traffic, never hits the GitHub API's 60 req/hr anonymous cap. The
+// API is only ever used as a last-resort fallback (a CDN miss on a very fresh
+// push, or a CDN outage) — `existingPat`, if any, applies ONLY to that fallback.
+// An optional "@ref" on the repo param (branch/tag/commit SHA) picks a specific
+// version; `&branch=` (if present) always wins over it; with neither, 'main' is
+// tried then 'master'. present=true (or its alias preview=true) prefers jsDelivr
+// first (scale over freshness); otherwise raw is tried first (freshness).
 // The overlay play button (see index.html) shows by default whenever the loaded
 // scene actually has an animation to play — a shareable "watch this" link needs
 // no extra flag. play=true forces it on (e.g. for a scene whose animation lives
@@ -813,14 +833,16 @@ export async function loadSceneFromHash( editor ) {
 
 	}
 
-	const repoParam = params.get( 'repo' );
-	const file      = params.get( 'file' );
-	const branch    = params.get( 'branch' ) || 'main';
-	const playParam = params.get( 'play' ); // 'true' | 'false' | null (default: on iff the scene has an animation)
+	const repoParam  = params.get( 'repo' );
+	const file       = params.get( 'file' );
+	const branchParam = params.get( 'branch' ); // explicit &branch= always wins over an "@ref" on the repo param
+	const playParam  = params.get( 'play' ); // 'true' | 'false' | null (default: on iff the scene has an animation)
+	const presentMode = params.get( 'present' ) === 'true' || params.get( 'preview' ) === 'true'; // 'preview' is an accepted alias
 
 	if ( ! repoParam || ! file ) return false;
 
-	const parsed = parseRepo( repoParam );
+	const { base: repoBase, ref: repoRef } = splitRepoRef( repoParam ); // optional "owner/repo@ref" — never required
+	const parsed = parseRepo( repoBase );
 
 	if ( ! parsed ) {
 
@@ -829,10 +851,16 @@ export async function loadSceneFromHash( editor ) {
 
 	}
 
+	// null -> resolveSceneJSON tries 'main' then 'master'; an explicit branch/ref
+	// (either form) is used exactly as given, with no auto-fallback.
+	const ref  = branchParam || repoRef || null;
+	const mode = presentMode ? 'present' : 'authoring'; // picks the CDN backend order — see GitResolver.js
+
 	// An existing token (saved from a prior session) is reused if it happens to
 	// cover this repo — but reading never REQUIRES one for a public repo, so a
 	// missing/wrong token here still degrades to a plain anonymous read rather
-	// than failing outright.
+	// than failing outright. Only ever used for the GitHub-API fallback (the
+	// common path below is CDN-only, no token needed or sent).
 	const existingPat = loadSettings().pat || null;
 
 	const banner = _showBanner( `Loading ${ parsed.owner }/${ parsed.repo } from URL…` );
@@ -842,11 +870,15 @@ export async function loadSceneFromHash( editor ) {
 	try {
 
 		setLoadProgress( 0.15, `Fetching ${ file }…` );
-		const apiPath = `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ file }?ref=${ branch }`;
-		const json    = await ghGetSceneJSON( apiPath, existingPat );
+		const resolved = await resolveSceneJSON( {
+			owner: parsed.owner, repo: parsed.repo, ref, path: file, mode,
+			apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ file }?ref=${ apiRef }`, existingPat ),
+		} );
+		const json   = resolved.json;
+		const branch = resolved.ref; // the ref that actually resolved (ref, or main/master if it was null)
 
 		setLoadProgress( 0.5, 'Fetching assets…' );
-		await internalizeFromGit( json, parsed, branch, existingPat );
+		await internalizeFromGit( json, parsed, branch, existingPat, mode );
 
 		setLoadProgress( 0.85, 'Applying scene…' );
 		editor.clear();
@@ -868,12 +900,12 @@ export async function loadSceneFromHash( editor ) {
 		saveSettings( { ...loadSettings(), repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch, scenePath: file } );
 		editor.signals.gitSettingsChanged.dispatch();
 
-		try {
-
-			const ref = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch }`, existingPat );
-			setSyncedCommit( parsed, file, branch, ref && ref.object && ref.object.sha );
-
-		} catch { /* non-fatal */ }
+		// Deliberately NOT recording a synced-commit SHA here (unlike
+		// loadSceneFromRepo) — that bookkeeping exists purely so a LATER
+		// autoLoadFromGit can skip a redundant re-download, and doing it would
+		// mean an api.github.com ref lookup on every hash-loaded scene. This is
+		// exactly the common/high-traffic path (shared classroom links, embeds)
+		// GitResolver.js exists to keep off the GitHub API entirely.
 
 		setLoadProgress( 1, `✓ Loaded ${ parsed.owner }/${ parsed.repo }/${ file }` );
 		hideLoadOverlay();
@@ -887,7 +919,18 @@ export async function loadSceneFromHash( editor ) {
 
 		hideLoadOverlay();
 		banner.remove();
-		console.warn( `loadSceneFromHash(): failed to load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ err.message }. Falling back to normal startup.` );
+
+		// Accurate, distinct messages per failure kind — a missing file should
+		// never be reported as "rate limited" (SceneFetchError.kind, set by
+		// GitResolver.js; a plain Error from elsewhere just falls to 'network').
+		const kind = err.kind || 'network';
+		const reason = kind === 'not-found' ? `no "${ file }" at ${ parsed.owner }/${ parsed.repo }`
+			: kind === 'rate-limited' ? 'GitHub API rate limit reached (CDN reads also failed)'
+			: kind === 'parse-error' ? 'scene file is not valid JSON'
+			: `network error — ${ err.message }`;
+
+		console.warn( `loadSceneFromHash(): failed to load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ reason }. Falling back to normal startup.` );
+		_showBanner( `Could not load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ reason }`, 5000 );
 		return false;
 
 	}
