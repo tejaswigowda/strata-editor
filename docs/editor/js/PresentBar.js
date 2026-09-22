@@ -50,17 +50,21 @@ function PresentBar( editor ) {
 	// `present`/`preview` (an alias — shared links have used both names)
 	// stripped from the hash (a hash-only change alone wouldn't re-run the
 	// app's boot-time hash loader, so it's followed by an explicit reload).
-	// Every other param (repo/file/branch/play/...) is left untouched.
+	// Every other param (repo/file/branch/play/...) is left untouched — a
+	// plain string filter, NOT a URLSearchParams round-trip, since
+	// re-serializing via URLSearchParams.toString() percent-encodes
+	// characters (e.g. the "/" in "owner/repo") that were never encoded in
+	// the original hash, needlessly mangling it.
 	const remixButton = document.createElement( 'button' );
 	remixButton.className = 'present-remix';
 	remixButton.textContent = 'Remix';
 	remixButton.title = 'Open the full editor on this scene';
 	remixButton.addEventListener( 'click', function () {
 
-		const params = new URLSearchParams( window.location.hash.replace( /^#+/, '' ) );
-		params.delete( 'present' );
-		params.delete( 'preview' );
-		const rest = params.toString();
+		const rest = window.location.hash.replace( /^#+/, '' )
+			.split( '&' )
+			.filter( function ( pair ) { const key = pair.split( '=' )[ 0 ]; return key !== 'present' && key !== 'preview'; } )
+			.join( '&' );
 		window.location.hash = rest ? '#' + rest : '';
 		window.location.reload();
 
