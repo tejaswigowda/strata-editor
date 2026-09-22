@@ -2,12 +2,14 @@
 	{
 		"title": "Make a Pythagorean-theorem short",
 		"href": "makeshort.html",
-		"desc": "Build three squares and a right triangle, animate the classic dissection proof, add a background, and end on a living call-card — all with the JS Shell and the Universal Timeline."
+		"desc": "Build three squares and a right triangle, animate the classic dissection proof, add a background, and end on a living call-card — all with the JS Shell and the Universal Timeline.",
+		"embed": "#repo=tejaswigowda/test1&file=pyth.json&present=true"
 	},
 	{
 		"title": "Build a night scene from scratch",
 		"href": "build-a-scene.html",
-		"desc": "Reusable helper functions, a noise-displaced ground, a grouped structure, night lighting (and the Environment setting that silently undoes it), a moving object, and a static hero camera — the full from-scratch workflow."
+		"desc": "Reusable helper functions, a noise-displaced ground, a grouped structure, night lighting (and the Environment setting that silently undoes it), a moving object, and a static hero camera — the full from-scratch workflow.",
+		"embed": "#repo=tejaswigowda/test1&file=short.json&present=true"
 	},
 	{
 		"title": "Add a static hero camera to a render sequence",
