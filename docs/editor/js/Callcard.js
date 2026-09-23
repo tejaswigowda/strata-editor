@@ -171,7 +171,13 @@ export function refreshCallcard( object ) {
 export function createCallcard( width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT ) {
 
 	const geometry = new THREE.PlaneGeometry( width, height );
-	const material = new THREE.MeshBasicMaterial( { transparent: true, side: THREE.DoubleSide, depthWrite: false } );
+	// opacity 0 (not object.visible = false): `fitCallcardToCamera` places it
+	// filling the CURRENT camera frame immediately, which would otherwise block
+	// the whole viewport the instant it's added — it should stay invisible
+	// until a `.fadeIn()`/FadeIn-recipe reveal (see CALLCARD.md's "cinematic
+	// reveal") brings it into focus. `object.visible` must stay true so that
+	// reveal (which only animates material.opacity, never `.visible`) works.
+	const material = new THREE.MeshBasicMaterial( { transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false } );
 	const object = new THREE.Mesh( geometry, material );
 
 	object.name = 'callcard';

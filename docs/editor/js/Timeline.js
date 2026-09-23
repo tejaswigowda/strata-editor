@@ -27,7 +27,6 @@ function Timeline( editor ) {
 	let currentActions = []; // the per-target actions driving active PLAY (empty while held/stopped)
 	let playhead = 0;               // seconds (the shared clock)
 	let selectedEventId = null;
-	let showCode = false;
 	let followRenderCamera = true; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback (default on)
 	let followedAway = false;       // true once WE switched editor.viewportCamera away from editor.camera, so we know to restore it
 
@@ -101,19 +100,6 @@ function Timeline( editor ) {
 	deleteButton.onClick( function () { deleteSelected(); } );
 	bar.appendChild( deleteButton.dom );
 
-	const codeButton = new UIButton( '</>' );
-	codeButton.dom.title = 'Show the compiled $S/.then() sugar (edit and click Save)';
-	codeButton.dom.style.cssText = 'height:24px;padding:0 8px;border-radius:4px;font-size:11px;';
-	codeButton.onClick( function () {
-
-		showCode = ! showCode;
-		codePanel.style.display = showCode ? 'block' : 'none';
-		codeBtnContainer.style.display = 'none'; // Hide buttons when closing panel
-		if ( showCode ) refreshCode();
-
-	} );
-	bar.appendChild( codeButton.dom );
-
 	// Below the toolbar: the viewport can track whichever camera the Render
 	// tab's Camera Sequence would be using at the current playhead time (or
 	// editor.camera if no sequence is configured) while the timeline plays —
@@ -166,29 +152,70 @@ function Timeline( editor ) {
 		'or select an object and add an event at the playhead.';
 	rows.appendChild( emptyHint );
 
-	// ── Code panel (compiled sugar, now editable) ──────────────────────────────
-	const codePanel = document.createElement( 'textarea' );
-	codePanel.spellcheck = false;
-	codePanel.style.cssText = 'display:none;width:100%;box-sizing:border-box;height:120px;border:none;border-top:1px solid #ccc;font-family:monospace;font-size:11px;padding:8px;resize:vertical;background:#1e1e1e;color:#d4d4d4;';
-	container.dom.appendChild( codePanel );
+	// ── Code panel (compiled sugar, now editable, always visible) ─────────────
+	// A Monaco editor (already loaded globally for Script.js) gives this JS
+	// syntax highlighting. It loads asynchronously via requireJS, so `codePanel`
+	// is a thin shim exposing the same value/style/addEventListener surface the
+	// rest of this file already uses — writes before Monaco is ready are queued.
+	const codePanelWrap = document.createElement( 'div' );
+	codePanelWrap.style.cssText = 'position:relative;display:block;width:100%;box-sizing:border-box;height:160px;border:none;border-top:1px solid #ccc;resize:vertical;overflow:hidden;background:#1e1e1e;';
+	container.dom.appendChild( codePanelWrap );
 
-	// Save/Cancel button container (appears when code is focused). `sticky` so it
-	// stays pinned to the bottom of the (scrollable) sidebar even when many
-	// tracks + an open keyframe panel push the rest of the Timeline tall enough
-	// to need scrolling — otherwise it can end up scrolled out of view with no
-	// obvious way back to it.
+	let monacoCodeEditor = null;
+	let pendingCode = '// timeline is empty';
+	const codeFocusHandlers = [];
+	const codeBlurHandlers = [];
+
+	require( [ 'vs/editor/editor.main' ], function () {
+
+		monacoCodeEditor = monaco.editor.create( codePanelWrap, {
+			value: pendingCode,
+			language: 'javascript',
+			theme: 'vs-dark',
+			minimap: { enabled: false },
+			lineNumbers: 'on',
+			fontSize: 11,
+			fontFamily: 'Consolas, "Courier New", monospace',
+			scrollBeyondLastLine: false,
+			automaticLayout: true,
+			wordWrap: 'on'
+		} );
+
+		monacoCodeEditor.onDidFocusEditorText( function () { for ( const fn of codeFocusHandlers ) fn(); } );
+		monacoCodeEditor.onDidBlurEditorText( function () { for ( const fn of codeBlurHandlers ) fn(); } );
+
+	} );
+
+	const codePanel = {
+		get value() { return monacoCodeEditor ? monacoCodeEditor.getValue() : pendingCode; },
+		set value( v ) { pendingCode = v; if ( monacoCodeEditor ) monacoCodeEditor.setValue( v ); },
+		style: codePanelWrap.style,
+		addEventListener( type, fn ) {
+
+			if ( type === 'focus' ) codeFocusHandlers.push( fn );
+			else if ( type === 'blur' ) codeBlurHandlers.push( fn );
+
+		}
+	};
+
+	// Save/Cancel icon buttons, pinned to the top-right corner of the editor
+	// itself (appear only while the code panel is focused).
 	const codeBtnContainer = document.createElement( 'div' );
-	codeBtnContainer.style.cssText = 'display:none;height:28px;padding:6px 8px;border-top:1px solid #ccc;gap:8px;flex-direction:row;justify-content:flex-end;align-items:center;background:#2a2a2a;position:sticky;bottom:0;z-index:5;';
-	container.dom.appendChild( codeBtnContainer );
+	codeBtnContainer.style.cssText = 'display:none;gap:4px;flex-direction:row;align-items:center;position:absolute;top:6px;right:16px;z-index:6;';
+	codePanelWrap.appendChild( codeBtnContainer );
 
-	const saveBtn = new UIButton( 'Save' );
-	saveBtn.dom.style.cssText = 'height:24px;padding:0 12px;border-radius:4px;font-size:11px;background:#4CAF50;color:white;cursor:pointer;';
+	const saveIcon = '<svg width="13" height="13" viewBox="0 0 14 14"><path d="M2 7.5l3.5 3.5L12 3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+	const cancelIcon = '<svg width="13" height="13" viewBox="0 0 14 14"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+	const saveBtn = new UIButton();
+	saveBtn.dom.innerHTML = saveIcon;
+	saveBtn.dom.title = 'Save (apply the edited code)';
+	saveBtn.dom.style.cssText = 'width:22px;height:22px;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#4CAF50;color:white;cursor:pointer;border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);';
 	saveBtn.onClick( function () {
 
 		const saved = parseAndApplyCode( codePanel.value );
 		if ( ! saved ) return; // keep the panel open so the warning stays visible
 		codeBtnContainer.style.display = 'none';
-		codePanel.style.display = 'none';
 
 		// The save just recompiled the clip (syncTimeline holds+uncaches the OLD
 		// actions), so `currentActions` are stale — resuming THEM would play the
@@ -210,14 +237,15 @@ function Timeline( editor ) {
 	} );
 	codeBtnContainer.appendChild( saveBtn.dom );
 
-	const cancelBtn = new UIButton( 'Cancel' );
-	cancelBtn.dom.style.cssText = 'height:24px;padding:0 12px;border-radius:4px;font-size:11px;background:#666;color:white;cursor:pointer;';
+	const cancelBtn = new UIButton();
+	cancelBtn.dom.innerHTML = cancelIcon;
+	cancelBtn.dom.title = 'Cancel (discard edits)';
+	cancelBtn.dom.style.cssText = 'width:22px;height:22px;padding:0;border-radius:4px;display:flex;align-items:center;justify-content:center;background:#666;color:white;cursor:pointer;border:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);';
 	cancelBtn.onClick( function () {
 
 		refreshCode(); // Revert to saved state
 		clearCodeWarning();
 		codeBtnContainer.style.display = 'none';
-		codePanel.style.display = 'none';
 		if ( playing ) for ( const a of currentActions ) a.play(); // Resume animation (unchanged, no recompile happened)
 
 	} );
@@ -438,7 +466,7 @@ function Timeline( editor ) {
 
 	const codeWarning = document.createElement( 'div' );
 	codeWarning.style.cssText = 'display:none;padding:4px 8px;font-size:10px;color:#ffb4b4;background:#3a1f1f;border-top:1px solid #ccc;';
-	container.dom.insertBefore( codeWarning, codeBtnContainer );
+	container.dom.insertBefore( codeWarning, codePanelWrap );
 
 	function showCodeWarning( message ) {
 
@@ -459,12 +487,10 @@ function Timeline( editor ) {
 	codePanel.addEventListener( 'focus', function () {
 
 		codeBtnContainer.style.display = 'flex';
-		// codeBtnContainer is sticky (see its definition) so it stays pinned once
-		// scrolled into range, but with many tracks + an open keyframe panel it
-		// can start out well below the fold — bring it into view right away
-		// instead of relying on the user to find/scroll the (separately
-		// scrollable) sidebar themselves.
-		codeBtnContainer.scrollIntoView( { block: 'nearest' } );
+		// With many tracks + an open keyframe panel the editor can start out well
+		// below the fold — bring it into view right away instead of relying on
+		// the user to find/scroll the (separately scrollable) sidebar themselves.
+		codePanelWrap.scrollIntoView( { block: 'nearest' } );
 		// Pause animation while editing
 		if ( currentActions.length ) for ( const a of currentActions ) a.paused = true;
 
@@ -484,7 +510,7 @@ function Timeline( editor ) {
 	// rotation keyframes at compile time; the quaternion never surfaces.
 	const keyPanel = document.createElement( 'div' );
 	keyPanel.style.cssText = 'padding:6px 10px;border-top:1px solid #ccc;display:none;flex-direction:column;gap:4px;font-size:11px;flex-shrink:0;';
-	container.dom.insertBefore( keyPanel, codePanel );
+	container.dom.insertBefore( keyPanel, codePanelWrap );
 
 	const keyHeader = document.createElement( 'div' );
 	keyHeader.style.cssText = 'display:flex;align-items:center;gap:8px;';
@@ -1301,7 +1327,7 @@ function Timeline( editor ) {
 	}, true );
 
 	// ── Signals ───────────────────────────────────────────────────────────────
-	signals.timelineChanged.add( function () { render(); if ( showCode ) refreshCode(); } );
+	signals.timelineChanged.add( function () { render(); refreshCode(); } );
 	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );	signals.objectSelected.add( function () { selectedEventId = null; refreshKeyPanel(); } );
 	signals.timelinePlayRequested.add( play ); // external trigger, e.g. the #...&play=true overlay button
 	signals.timelinePauseRequested.add( pause ); // external trigger, e.g. Present mode's transport bar
@@ -1325,6 +1351,7 @@ function Timeline( editor ) {
 	} ).observe( area );
 
 	render();
+	refreshCode();
 
 	return container;
 
