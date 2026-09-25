@@ -731,6 +731,40 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 
 }
 
+// Uploads an exported deliverable (GLB/USDZ/OBJ/PLY/…) as its own commit into
+// `outputs/<scene-basename>.<ext>` in the SAME configured repo — alongside,
+// never instead of, scene.json. Used by the Export tab's per-format "update
+// repo" action. `bytes` must already be a Uint8Array (text formats need
+// TextEncoder-ing by the caller first).
+export async function commitExportToRepo( ext, bytes, message, { onProgress = () => {} } = {} ) {
+
+	const cfg    = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl );
+	if ( ! parsed ) throw new Error( 'No repository configured' );
+	if ( ! cfg.pat ) throw new Error( 'A token is required to commit' );
+
+	const branch    = cfg.branch || 'main';
+	const scenePath = cfg.scenePath || 'scene.json';
+	const base      = ( scenePath.split( '/' ).pop() || 'scene' ).replace( /\.[^./]+$/, '' ) || 'scene';
+	const path      = `outputs/${ base }.${ ext }`;
+	const msg       = ( message || '' ).trim() || `Update ${ path }`;
+
+	onProgress( 0, 'Preparing upload…' );
+
+	const files = [ { path, base64: u8ToBase64( bytes ), immutable: false } ];
+
+	const commit = await commitFiles( parsed, branch, cfg.pat, files, msg, ( done, total ) => {
+
+		onProgress( done / total, `Uploading ${ done }/${ total }…` );
+
+	} );
+
+	onProgress( 1, `✓ Committed ${ path }` );
+
+	return { commit, path };
+
+}
+
 // ── Auto-load on page start ───────────────────────────────────────────────────
 // Called from index.html after editor.storage.get() completes.
 // If a GitHub repo is configured, fetches the scene file and replaces whatever

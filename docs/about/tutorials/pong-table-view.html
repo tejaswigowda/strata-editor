@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build a table-view pong scene — Strata tutorials</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: build a pong scene from scratch with the JS Shell, laid out as a real receding table instead of a flat arcade screen, and frame a camera that stands behind your own paddle.">
+<!--
+	/about/tutorials/pong-table-view.html — a from-scratch, by-hand
+	tutorial. Every snippet is real Strata surface (JS Shell globals,
+	editor.execute commands) — copy/paste each block into the Shell tab
+	in order. Static page, no build step, no third-party calls.
+	Screenshot is a real capture from the scene this tutorial builds.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Build a table-view pong scene</h1>
+	<p class="tagline">A classic arcade Pong is a flat vertical screen — both paddles the same distance from the camera, separated left/right. This tutorial builds the other kind: a physical table you stand at one end of, your own paddle close in the foreground and the opponent's paddle small in the distance. The whole thing is one <code>Group</code> assembled with plain <code>.add()</code> calls and added in a single undo step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<figure>
+		<img src="screenshots/pong-table-view.png" alt="A pong scene viewed from behind the player's blue paddle, looking down a green table toward a small red paddle at the far end, framed by a backdrop and two pillars." loading="lazy">
+		<figcaption>Standing at your own end of the table — the blue Player Paddle fills the foreground, the red Computer Paddle is small at the far end.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Pick your depth axis before you place anything.</strong> The natural mistake is building Pong the arcade way — paddles on <code>+x</code>/<code>-x</code>, walls on <code>+y</code>/<code>-y</code>, camera parked on <code>+z</code> looking straight in — and then trying to fix the camera afterward to make one paddle look "far away." No camera angle can do that: both paddles are equidistant from the camera on that layout, so any attempt to view it obliquely just makes the thin flat parts (walls, table) foreshorten into confusing diagonal slabs. Decide up front which world axis is "the length of the table" and build paddles onto <em>that</em> axis (here, <code>z</code>) — the perspective camera then does the near/far size difference for free.</div>
+
+	<h2><span class="step">1</span> Lay out the table along <code>z</code>, not <code>x</code></h2>
+	<p class="lede">Keep <code>y</code> as true vertical (matches the camera's default up vector) and put the two paddles at opposite ends of <code>z</code> instead of <code>x</code>. Build every part into one <code>Group</code> with <code>.add()</code>, then add the whole group with a single <code>AddObjectCommand</code>:</p>
+	<pre><code>const group = new Group();
+group.name = 'Pong Game';
+
+const tableMat = new MeshStandardMaterial({ color: 0x1c5c3a, roughness: 0.7 });
+const railMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+const playerMat = new MeshStandardMaterial({ color: 0x2e7dff, roughness: 0.4 });
+const compMat = new MeshStandardMaterial({ color: 0xff4444, roughness: 0.4 });
+const ballMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+
+const table = new Mesh(new BoxGeometry(12, 0.4, 24), tableMat);
+table.name = 'Table'; table.position.set(0, -0.2, 0);
+group.add(table);
+
+const railL = new Mesh(new BoxGeometry(0.3, 0.5, 24.4), railMat);
+railL.name = 'Rail Left'; railL.position.set(-6.15, 0.25, 0);
+group.add(railL);
+
+const railR = new Mesh(new BoxGeometry(0.3, 0.5, 24.4), railMat);
+railR.name = 'Rail Right'; railR.position.set(6.15, 0.25, 0);
+group.add(railR);
+
+const centerLine = new Mesh(new BoxGeometry(0.12, 0.02, 24), railMat);
+centerLine.name = 'Center Line'; centerLine.position.set(0, 0.01, 0);
+group.add(centerLine);
+
+// The two paddles are on opposite ends of z — this is the whole trick.
+const playerPaddle = new Mesh(new BoxGeometry(2.2, 0.7, 0.4), playerMat);
+playerPaddle.name = 'Player Paddle'; playerPaddle.position.set(0, 0.35, 10.5);
+group.add(playerPaddle);
+
+const compPaddle = new Mesh(new BoxGeometry(2.2, 0.7, 0.4), compMat);
+compPaddle.name = 'Computer Paddle'; compPaddle.position.set(0, 0.35, -10.5);
+group.add(compPaddle);
+
+const ball = new Mesh(new SphereGeometry(0.35, 24, 24), ballMat);
+ball.name = 'Ball'; ball.position.set(0, 0.35, 0);
+group.add(ball);
+
+editor.execute(new AddObjectCommand(editor, group));</code></pre>
+
+	<h2><span class="step">2</span> Frame the far end</h2>
+	<p class="lede">A backdrop, two pillars, and a scoreboard panel behind the computer's end give the camera something to look <em>at</em> beyond the far paddle — an empty background makes distance harder to read. Same pattern: one group, plain <code>.add()</code>, one command:</p>
+	<pre><code>const scenery = new Group();
+scenery.name = 'Background Scenery';
+
+const floor = new Mesh(new PlaneGeometry(60, 50), new MeshStandardMaterial({ color: 0x333844, roughness: 0.9 }));
+floor.name = 'Floor'; floor.rotation.x = -Math.PI / 2; floor.position.set(0, -0.45, -2);
+scenery.add(floor);
+
+const backdrop = new Mesh(new PlaneGeometry(24, 12), new MeshStandardMaterial({ color: 0x14202c, roughness: 0.85 }));
+backdrop.name = 'Backdrop'; backdrop.position.set(0, 5.5, -14);
+scenery.add(backdrop);
+
+const pillarMat = new MeshStandardMaterial({ color: 0x777f8c, roughness: 0.6 });
+const pillarL = new Mesh(new CylinderGeometry(0.4, 0.4, 12, 16), pillarMat);
+pillarL.name = 'Pillar Left'; pillarL.position.set(-8, 5.5, -14);
+scenery.add(pillarL);
+
+const pillarR = new Mesh(new CylinderGeometry(0.4, 0.4, 12, 16), pillarMat);
+pillarR.name = 'Pillar Right'; pillarR.position.set(8, 5.5, -14);
+scenery.add(pillarR);
+
+const board = new Mesh(new BoxGeometry(6, 1.6, 0.3), new MeshStandardMaterial({ color: 0x101418, roughness: 0.5 }));
+board.name = 'Scoreboard'; board.position.set(0, 10.5, -14);
+scenery.add(board);
+
+editor.execute(new AddObjectCommand(editor, scenery));
+
+editor.execute(new AddObjectCommand(editor, new AmbientLight(0xffffff, 0.5)));
+const dir = new DirectionalLight(0xffffff, 1.2);
+dir.position.set(4, 12, 10);
+editor.execute(new AddObjectCommand(editor, dir));</code></pre>
+
+	<h2><span class="step">3</span> Stand the camera behind your own paddle</h2>
+	<p class="lede">Position it a little further back than the player paddle's <code>z</code>, raised in <code>y</code> for eye height, and <code>lookAt</code> a point near the far end — down and slightly beyond the computer paddle, not the paddle itself, so the whole length of the table stays in frame:</p>
+	<pre><code>const cam = editor.camera;
+cam.position.set(0, 3, 21);
+cam.up.set(0, 1, 0);
+cam.fov = 60;
+cam.lookAt(0, 0.2, -8);
+cam.updateProjectionMatrix();
+editor.controls.center.set(0, 0.2, -8);
+editor.signals.cameraChanged.dispatch(cam);
+editor.signals.objectChanged.dispatch(cam);</code></pre>
+
+	<div class="note"><strong>Verify framing with math, not just eyeballing.</strong> Perspective cameras are easy to misjudge by feel — a <code>z</code> offset that seems modest can put the camera nearly edge-on to a thin flat object (a wall, a table surface), foreshortening it into a huge confusing diagonal slab that looks like a bug but isn't. Before trusting a screenshot, project the key points you care about through the candidate camera and check their normalized device coordinates (both components should stay roughly within <code>-1..1</code> to be on screen):</p>
+	<pre><code>const p = new Vector3(0, 0.35, 10.5).project(editor.camera); // Player Paddle
+console.log(p.x, p.y); // outside -1..1 means it's off-frame</code></pre>
+	<p>Comparing <code>camera.position.distanceTo(...)</code> to the near and far paddle also confirms the perspective ratio you're actually getting (here, roughly 2× — the far paddle is about twice as distant as the near one) before you spend time re-screenshotting.</div>
+
+	<h2><span class="step">4</span> Sanity-check the object count</h2>
+	<p class="lede">Every <code>editor.execute(...)</code> above is undoable and shows up in <code>editor.history.undos</code>. After any batch of Shell edits, especially ones driven by automation rather than typing, compare the scene's object count against what you expect:</p>
+	<pre><code>editor.scene.children.length; // top-level count
+editor.history.undos.length;  // commands issued this session</code></pre>
+	<div class="note"><strong>Why this matters.</strong> A stray keystroke reaching the viewport instead of the Shell input (an unclosed autocomplete dropdown, focus lost between two automated steps) can trigger the app's global keyboard shortcuts — Delete removes whatever's currently selected. It's silent: the Shell shows no error, and the deletion is a normal <code>RemoveObjectCommand</code> sitting in the same undo stack as your real edits. Checking <code>editor.history.undos</code> for command types you didn't intend to run is the fastest way to catch it, and every entry there is individually undoable if something needs reverting.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

@@ -8,6 +8,19 @@ import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { includeCameraForBinding } from './intelligence/timelineController.js';
 import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/textChange.js';
+import { commitExportToRepo } from './Menubar.Git.js';
+
+// Coerces an exporter's raw output (string / ArrayBuffer / Uint8Array) into
+// the Uint8Array commitExportToRepo needs.
+function toBytes( data ) {
+
+	if ( typeof data === 'string' ) return new TextEncoder().encode( data );
+	if ( data instanceof Uint8Array ) return data;
+	return new Uint8Array( data );
+
+}
+
+const REPO_UPDATE_ICON = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-1-7.87A5 5 0 0 1 16 8.5 4 4 0 0 1 17 18H7z"/><path d="M12 12.5v6M9.5 15l2.5-2.5 2.5 2.5"/></svg>';
 
 // Minimal THREE-shaped namespace for lowerChangeEventsForExport (this file
 // imports individual classes rather than `* as THREE`, matching its style).
@@ -141,10 +154,16 @@ function SidebarExport( editor ) {
 	grid.style.padding = '4px 0 12px';
 	container.dom.appendChild( grid );
 
-	function addButton( label, onClick ) {
+	// `repo`, when given, is `{ ext, build }` — `build()` re-runs the same
+	// export pipeline as the download button and resolves to the raw exporter
+	// output (string/ArrayBuffer/Uint8Array), or null if the user cancelled a
+	// confirm() along the way. Adds a small cloud badge that commits the result
+	// to `outputs/<scene-basename>.<ext>` in the configured Git repo.
+	function addButton( label, onClick, repo ) {
 
 		const button = document.createElement( 'div' );
 		button.title = label;
+		button.style.position = 'relative';
 		button.style.display = 'inline-flex';
 		button.style.flexDirection = 'column';
 		button.style.alignItems = 'center';
@@ -157,6 +176,33 @@ function SidebarExport( editor ) {
 		button.style.borderRadius = '4px';
 		button.style.cursor = 'pointer';
 		button.style.userSelect = 'none';
+
+		if ( repo ) {
+
+			// Bigger than it looks: the OUTER element is the click target (22x22,
+			// flush to the corner) so a slightly-off click still lands on it —
+			// a 16x16 badge with no margin was too easy to miss and fall through
+			// to the download button underneath with zero visible feedback.
+			const badge = document.createElement( 'div' );
+			badge.title = `Update outputs/<scene>.${ repo.ext } in the configured Git repo`;
+			badge.style.cssText = 'position:absolute;top:0;right:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;';
+
+			const dot = document.createElement( 'div' );
+			dot.style.cssText = 'width:16px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#08f;color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,0.9);transition:transform 0.1s;';
+			dot.innerHTML = REPO_UPDATE_ICON;
+			badge.appendChild( dot );
+
+			badge.addEventListener( 'mouseenter', function () { dot.style.transform = 'scale(1.15)'; } );
+			badge.addEventListener( 'mouseleave', function () { dot.style.transform = ''; } );
+			badge.addEventListener( 'click', function ( event ) {
+
+				event.stopPropagation();
+				commitExportBuild( repo, label );
+
+			} );
+			button.appendChild( badge );
+
+		}
 
 		const icon = document.createElement( 'span' );
 		icon.innerHTML = EXPORT_ICONS[ label ] || EXPORT_ICON;
@@ -202,6 +248,35 @@ function SidebarExport( editor ) {
 
 	}
 
+	// Runs `repo.build()` then uploads the result to the configured repo,
+	// reusing the progress banner already used by GLB (Opt)'s compression step.
+	async function commitExportBuild( repo, label ) {
+
+		const banner = createProgressBanner( `Building ${ label }…` );
+		banner.indeterminate();
+
+		try {
+
+			const data = await repo.build();
+			if ( data === null || data === undefined ) { banner.remove(); return; } // cancelled a confirm() in build()
+
+			const { path } = await commitExportToRepo( repo.ext, toBytes( data ), `Update ${ label } export`, {
+				onProgress: ( fraction, message ) => { if ( fraction !== null ) banner.update( fraction, 1, message ); }
+
+			} );
+
+			banner.done( `✓ Committed ${ path }` );
+			setTimeout( () => banner.remove(), 1500 );
+
+		} catch ( error ) {
+
+			banner.remove();
+			alert( `Could not update repo: ${ error.message }` );
+
+		}
+
+	}
+
 	// Export DRC
 
 	addButton( 'DRC', async function () {
@@ -237,13 +312,15 @@ function SidebarExport( editor ) {
 
 	// Export GLB
 
-	addButton( 'GLB', async function () {
+	// Shared by the download button and the "update repo" badge. Returns null
+	// if the user cancelled the duplicate-names confirm().
+	async function buildGLB() {
 
 		const scene = editor.scene;
 
 		if ( needsUniqueNames( scene ) ) { // see #25179
 
-			if ( confirm( strings.getKey( 'prompt/file/export/duplicateNames' ) ) === false ) return;
+			if ( confirm( strings.getKey( 'prompt/file/export/duplicateNames' ) ) === false ) return null;
 
 			ensureUniqueNames( scene );
 
@@ -271,19 +348,36 @@ function SidebarExport( editor ) {
 
 		const restoreCamera = includeCameraForExport( exportScene, optimizedAnimations );
 
-		exporter.parse( exportScene, function ( result ) {
+		try {
+
+			return await new Promise( ( resolve, reject ) => {
+
+				exporter.parse( exportScene, resolve, reject, { binary: true, animations: optimizedAnimations } );
+
+			} );
+
+		} finally {
 
 			restoreCamera();
-			saveArrayBuffer( result, 'scene.glb' );
 
-		}, function ( error ) {
+		}
 
-			restoreCamera();
+	}
+
+	addButton( 'GLB', async function () {
+
+		try {
+
+			const result = await buildGLB();
+			if ( result ) saveArrayBuffer( result, 'scene.glb' );
+
+		} catch ( error ) {
+
 			console.error( 'GLB export failed:', error );
 
-		}, { binary: true, animations: optimizedAnimations } );
+		}
 
-	} );
+	}, { ext: 'glb', build: buildGLB } );
 
 	// Export GLB (Optimized) — clones the scene, compresses geometry via the
 	// wizard (weld / simplify / quantize), then writes a binary .glb. The live
@@ -442,14 +536,14 @@ function SidebarExport( editor ) {
 
 	// Export OBJ
 
-	addButton( 'OBJ', async function () {
+	async function buildOBJ() {
 
 		const object = editor.selected;
 
 		if ( object === null ) {
 
 			alert( strings.getKey( 'prompt/file/export/noObjectSelected' ) );
-			return;
+			return null;
 
 		}
 
@@ -457,41 +551,46 @@ function SidebarExport( editor ) {
 
 		const exporter = new OBJExporter();
 
-		saveString( exporter.parse( object ), 'model.obj' );
+		return exporter.parse( object );
 
-	} );
+	}
+
+	addButton( 'OBJ', async function () {
+
+		const result = await buildOBJ();
+		if ( result !== null ) saveString( result, 'model.obj' );
+
+	}, { ext: 'obj', build: buildOBJ } );
 
 	// Export PLY (ASCII)
 
-	addButton( 'PLY', async function () {
+	async function buildPLY( binary ) {
 
 		const { PLYExporter } = await import( 'three/addons/exporters/PLYExporter.js' );
 
 		const exporter = new PLYExporter();
 
-		exporter.parse( editor.scene, function ( result ) {
+		return await new Promise( ( resolve ) => {
 
-			saveArrayBuffer( result, 'model.ply' );
+			exporter.parse( editor.scene, resolve, { binary } );
 
 		} );
 
-	} );
+	}
+
+	addButton( 'PLY', async function () {
+
+		saveArrayBuffer( await buildPLY( false ), 'model.ply' );
+
+	}, { ext: 'ply', build: () => buildPLY( false ) } );
 
 	// Export PLY (BINARY)
 
 	addButton( 'PLY (BINARY)', async function () {
 
-		const { PLYExporter } = await import( 'three/addons/exporters/PLYExporter.js' );
+		saveArrayBuffer( await buildPLY( true ), 'model-binary.ply' );
 
-		const exporter = new PLYExporter();
-
-		exporter.parse( editor.scene, function ( result ) {
-
-			saveArrayBuffer( result, 'model-binary.ply' );
-
-		}, { binary: true } );
-
-	} );
+	}, { ext: 'ply', build: () => buildPLY( true ) } );
 
 	// Export STL (ASCII)
 
@@ -519,7 +618,7 @@ function SidebarExport( editor ) {
 
 	// Export USDZ
 
-	addButton( 'USDZ', async function () {
+	async function buildUSDZ() {
 
 		// Always export a clone baked at the t=0 rest pose (see
 		// cloneSceneAtRestPose) rather than whatever the live scene happens to
@@ -547,7 +646,7 @@ function SidebarExport( editor ) {
 
 		try {
 
-			saveArrayBuffer( await exporter.parseAsync( scene, { animations: optimizedAnimations } ), 'model.usdz' );
+			return await exporter.parseAsync( scene, { animations: optimizedAnimations } );
 
 		} finally {
 
@@ -555,7 +654,13 @@ function SidebarExport( editor ) {
 
 		}
 
-	} );
+	}
+
+	addButton( 'USDZ', async function () {
+
+		saveArrayBuffer( await buildUSDZ(), 'model.usdz' );
+
+	}, { ext: 'usdz', build: buildUSDZ } );
 
 	//
 
