@@ -105,7 +105,7 @@
 <body>
 <main>
 	<h1>Build a table-view pong scene</h1>
-	<p class="tagline">A classic arcade Pong is a flat vertical screen — both paddles the same distance from the camera, separated left/right. This tutorial builds the other kind: a physical table you stand at one end of, your own paddle close in the foreground and the opponent's paddle small in the distance. The whole thing is one <code>Group</code> assembled with plain <code>.add()</code> calls and added in a single undo step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+	<p class="tagline">A classic arcade Pong is a flat vertical screen — both paddles the same distance from the camera, separated left/right. This tutorial builds the other kind: a physical table you stand at one end of, your own paddle close in the foreground and the opponent's paddle small in the distance — then swaps the generic arcade backdrop for a sunset desert without touching the table itself. The whole thing is one <code>Group</code> per section, assembled with plain <code>.add()</code> calls and added in a single undo step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
 	<figure>
 		<img src="screenshots/pong-table-view.png" alt="A pong scene viewed from behind the player's blue paddle, looking down a green table toward a small red paddle at the far end, framed by a backdrop and two pillars." loading="lazy">
@@ -206,7 +206,76 @@ editor.signals.objectChanged.dispatch(cam);</code></pre>
 console.log(p.x, p.y); // outside -1..1 means it's off-frame</code></pre>
 	<p>Comparing <code>camera.position.distanceTo(...)</code> to the near and far paddle also confirms the perspective ratio you're actually getting (here, roughly 2× — the far paddle is about twice as distant as the near one) before you spend time re-screenshotting.</div>
 
-	<h2><span class="step">4</span> Sanity-check the object count</h2>
+	<h2><span class="step">4</span> Swap the arcade backdrop for a desert</h2>
+	<p class="lede">The table itself never has to change — only what surrounds it. Remove the old <code>Background Scenery</code> group (and any stray lights left over from earlier experiments) with <code>RemoveObjectCommand</code>, the exact undo-tracked inverse of the <code>AddObjectCommand</code> that created them, then build a new <code>Desert Scenery</code> group the same way as step 2: a dune-displaced sand ground, a gradient sky plane, distant mesas, and a scatter of rocks and cacti kept clear of the rails:</p>
+	<pre><code>const oldScenery = editor.scene.getObjectByProperty('name', 'Background Scenery');
+if (oldScenery) editor.execute(new RemoveObjectCommand(editor, oldScenery));
+
+const desert = new Group();
+desert.name = 'Desert Scenery';
+
+// Dune-displaced sand, reusing the noise-ground technique from "Build a night
+// scene from scratch" — the further a vertex is from the table, the more relief.
+const sandMat = new MeshStandardMaterial({ color: 0xd9b579, roughness: 0.95 });
+const groundGeo = new PlaneGeometry(90, 90, 48, 48);
+const gp = groundGeo.attributes.position;
+for (let i = 0; i < gp.count; i++) {
+  const x = gp.getX(i), y = gp.getY(i);
+  const d = Math.sqrt(x * x + y * y);
+  gp.setZ(i, Math.sin(x * 0.08 + 1.7) * Math.cos(y * 0.09) * 1.1 + Math.max(0, (d - 14)) * 0.02);
+}
+groundGeo.computeVertexNormals();
+const ground = new Mesh(groundGeo, sandMat);
+ground.name = 'Sand Ground';
+ground.rotation.x = -Math.PI / 2;
+ground.position.set(0, -0.46, -5);
+desert.add(ground);
+
+// A warm gradient painted onto a 4x256 canvas, stretched across a huge far plane —
+// cheaper than a sky dome and plenty convincing behind mesas at this distance.
+const skyCanvas = document.createElement('canvas');
+skyCanvas.width = 4; skyCanvas.height = 256;
+const sctx = skyCanvas.getContext('2d');
+const grad = sctx.createLinearGradient(0, 0, 0, 256);
+grad.addColorStop(0, '#3a3d6b');
+grad.addColorStop(0.45, '#c9704f');
+grad.addColorStop(0.75, '#f2a45c');
+grad.addColorStop(1, '#fbd98b');
+sctx.fillStyle = grad;
+sctx.fillRect(0, 0, 4, 256);
+const sky = new Mesh(new PlaneGeometry(140, 70), new MeshBasicMaterial({ map: new THREE.CanvasTexture(skyCanvas), fog: false }));
+sky.name = 'Sky'; sky.position.set(0, 24, -55);
+desert.add(sky);
+
+const mesaMat = new MeshStandardMaterial({ color: 0x8a4b34, roughness: 0.9 });
+[[-30, 5, -40, 10, 10, 8], [-14, 7, -46, 8, 14, 7], [20, 6, -42, 12, 12, 9], [32, 4.5, -38, 7, 9, 6]]
+  .forEach((s, i) => {
+    const mesa = new Mesh(new BoxGeometry(s[3], s[4], s[5]), mesaMat);
+    mesa.name = 'Mesa ' + (i + 1);
+    mesa.position.set(s[0], s[1], s[2]);
+    mesa.rotation.y = i * 0.37;
+    desert.add(mesa);
+  });
+
+editor.execute(new AddObjectCommand(editor, desert));
+
+// Warm sun replaces the neutral arcade lighting.
+editor.execute(new AddObjectCommand(editor, new AmbientLight(0xffd9a8, 0.55)));
+const sunLight = new DirectionalLight(0xffdca8, 1.4);
+sunLight.name = 'Sun Light'; sunLight.position.set(-18, 30, 10);
+editor.execute(new AddObjectCommand(editor, sunLight));
+
+setFog('FogExp2', '#e2a565', 0, 0, 0.012);
+setBackground('#f2a45c');</code></pre>
+
+	<figure>
+		<img src="screenshots/pong-desert-background.png" alt="The same pong table now surrounded by a sunset desert: sand dunes, distant reddish mesas, cacti, scattered rocks, and a warm gradient sky with a pale sun." loading="lazy">
+		<figcaption>Same table, same rails, same paddles — only <code>Background Scenery</code> was swapped for <code>Desert Scenery</code>.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Rocks, cacti, and mesas all stay outside <code>|x| &gt; 6.15</code></strong> — the rails' own x position — so nothing overlaps the play area or blocks the sightline down the table. Placing scatter props is otherwise the same pattern as step 1/2: a small array of <code>[x, y, z, ...params]</code> tuples and a <code>.forEach</code> that builds one mesh per entry, named with an index so each stays individually addressable (<code>findObject('Rock 3')</code>, <code>$S('#Mesa 1')</code>).</div>
+
+	<h2><span class="step">5</span> Sanity-check the object count</h2>
 	<p class="lede">Every <code>editor.execute(...)</code> above is undoable and shows up in <code>editor.history.undos</code>. After any batch of Shell edits, especially ones driven by automation rather than typing, compare the scene's object count against what you expect:</p>
 	<pre><code>editor.scene.children.length; // top-level count
 editor.history.undos.length;  // commands issued this session</code></pre>

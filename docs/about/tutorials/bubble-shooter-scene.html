@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build a bubble shooter scene — Strata tutorials</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: build a bubble shooter scene from scratch with the JS Shell — a lane, one clonable Bubble template for game logic to reuse, a rainforest background, and a wooden single-score sign.">
+<!--
+	/about/tutorials/bubble-shooter-scene.html — a from-scratch, by-hand
+	tutorial. Every snippet is real Strata surface (JS Shell globals,
+	editor.execute commands) — copy/paste each block into the Shell tab
+	in order. Static page, no build step, no third-party calls.
+	Screenshot is a real capture from the scene this tutorial builds.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Build a bubble shooter scene</h1>
+	<p class="tagline">This scene deliberately stops short of gameplay: it builds a lane, a background, a sign — and exactly <strong>one</strong> bubble. Real bubble-shooter logic clones and recolors bubbles at runtime, so the scene's job is to hand that logic one well-formed, easy-to-find template rather than a whole pre-built grid. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<figure>
+		<img src="screenshots/bubble-shooter-scene.png" alt="A lane bounded by two rails, a single pale translucent bubble resting on it, a wooden SCORE sign at the far end, framed by a rainforest of green trees under a misty canopy sky." loading="lazy">
+		<figcaption>The whole scene: a lane, one clonable Bubble, a wooden score sign, and a rainforest backdrop.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Build the data the logic needs, not the logic itself.</strong> "The game logic (wired later) will clone and color the bubbles" is a spec for the <em>scene</em>, not an invitation to also stub out shooting/matching/popping. One named, class-tagged template object is a complete, correct deliverable — it's exactly what <code>findObject('Bubble')</code> or <code>$S('.bubble')</code> needs to locate and <code>.clone()</code> later. Building a pre-filled grid of 40 bubbles would be guessing at a layout the actual game logic hasn't specified yet.</div>
+
+	<h2><span class="step">1</span> Build the lane</h2>
+	<p class="lede">A flat lane bounded by two rails reuses the exact structure from <a href="pong-table-view.html">the pong table tutorial</a> — a real receding surface, not a flat arcade screen, so the camera can stand at one end and look down its length:</p>
+	<pre><code>const group = new Group();
+group.name = 'Bubble Shooter';
+
+const tableMat = new MeshStandardMaterial({ color: 0x1c5c3a, roughness: 0.7 });
+const railMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+
+const table = new Mesh(new BoxGeometry(12, 0.4, 24), tableMat);
+table.name = 'Table'; table.position.set(0, -0.2, 0);
+group.add(table);
+
+const railL = new Mesh(new BoxGeometry(0.3, 0.5, 24.4), railMat);
+railL.name = 'Rail Left'; railL.position.set(-6.15, 0.25, 0);
+group.add(railL);
+
+const railR = new Mesh(new BoxGeometry(0.3, 0.5, 24.4), railMat);
+railR.name = 'Rail Right'; railR.position.set(6.15, 0.25, 0);
+group.add(railR);
+
+editor.execute(new AddObjectCommand(editor, group));</code></pre>
+
+	<h2><span class="step">2</span> Add exactly one clonable Bubble</h2>
+	<p class="lede">A glossy, slightly translucent white sphere — pure template, no gameplay color yet. Tag it with a class as well as a name: a class survives being cloned N times without every clone colliding on one <code>#id</code>, so later code can do <code>$S('.bubble')</code> across every clone <em>and</em> <code>findObject('Bubble')</code> to find this original:</p>
+	<pre><code>const bubbleMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.05, transparent: true, opacity: 0.88 });
+const bubble = new Mesh(new SphereGeometry(0.45, 24, 24), bubbleMat);
+bubble.name = 'Bubble';
+bubble.position.set(0, 0.45, 9.5);
+editor.execute(new AddObjectCommand(editor, bubble));
+tagClass(bubble, 'bubble');</code></pre>
+	<div class="note"><strong>Cloning a template later, from game logic:</strong> <code>const shot = findObject('Bubble').clone(); shot.material = shot.material.clone(); shot.material.color.set('#e0455a'); editor.execute(new AddObjectCommand(editor, shot));</code> — cloning the <em>material</em> too (not just the mesh) is the part that's easy to skip, and skipping it means recoloring one bubble silently recolors every clone that still shares the original material instance.</div>
+
+	<h2><span class="step">3</span> Frame it with a rainforest</h2>
+	<p class="lede">Same flat-clearing ground technique as the desert version in the pong tutorial — measure distance from the lane's true world center, not the ground mesh's own locally-offset origin, so undergrowth never rises above the lane's own surface. Trees are a trunk cylinder plus a few stacked icosahedra for foliage:</p>
+	<pre><code>const jungle = new Group();
+jungle.name = 'Rainforest Scenery';
+
+const groundMat = new MeshStandardMaterial({ color: 0x2f4f2a, roughness: 0.95 });
+const groundGeo = new PlaneGeometry(90, 90, 64, 64);
+const gp = groundGeo.attributes.position;
+const CLEAR = 15, FADE = 12;
+for (let i = 0; i < gp.count; i++) {
+  const x = gp.getX(i), y = gp.getY(i);
+  const wz = -5 - y; // this ground mesh sits at position.z = -5 — see the note below
+  const d = Math.sqrt(x * x + wz * wz);
+  const t = Math.min(1, Math.max(0, (d - CLEAR) / FADE));
+  gp.setZ(i, Math.sin(x * 0.1 + 2.1) * Math.cos(wz * 0.11) * 0.35 * t);
+}
+groundGeo.computeVertexNormals();
+const ground = new Mesh(groundGeo, groundMat);
+ground.name = 'Moss Ground';
+ground.rotation.x = -Math.PI / 2;
+ground.position.set(0, -0.46, -5);
+jungle.add(ground);
+
+const trunkMat = new MeshStandardMaterial({ color: 0x4a3524, roughness: 0.9 });
+const foliageColors = [0x2f6b32, 0x3a7d3e, 0x275c2b, 0x437f3f];
+function makeTree(x, z, scale) {
+  const t = new Group();
+  t.name = 'Tree';
+  const trunk = new Mesh(new CylinderGeometry(0.22 * scale, 0.3 * scale, 3.2 * scale, 8), trunkMat);
+  trunk.position.set(0, 1.6 * scale, 0);
+  t.add(trunk);
+  for (let i = 0; i < 3; i++) {
+    // (i - x) can go negative — see the note below on JS's % operator.
+    const idx = ((i + Math.round(x)) % foliageColors.length + foliageColors.length) % foliageColors.length;
+    const foliage = new Mesh(new THREE.IcosahedronGeometry((1.1 - i * 0.18) * scale, 0), new MeshStandardMaterial({ color: foliageColors[idx], roughness: 0.85 }));
+    foliage.position.set((i - 1) * 0.35 * scale, (3.1 + i * 0.75) * scale, (i - 1) * 0.2 * scale);
+    t.add(foliage);
+  }
+  t.position.set(x, -0.15, z);
+  return t;
+}
+[[-11, 5, 1.1], [11.5, 8, 0.9], [-13, -8, 1.2], [13, -6, 1.0]].forEach(s => jungle.add(makeTree(s[0], s[1], s[2])));
+
+editor.execute(new AddObjectCommand(editor, jungle));
+editor.execute(new AddObjectCommand(editor, new AmbientLight(0xbfe0a8, 0.5)));
+const canopyLight = new DirectionalLight(0xdfead0, 1.0);
+canopyLight.position.set(-10, 26, 12);
+editor.execute(new AddObjectCommand(editor, canopyLight));
+
+setFog('FogExp2', '#4d6b52', 0, 0, 0.018);
+setBackground('#5f7a63');</code></pre>
+	<div class="note"><strong>Two real bugs from building this scene, both worth checking for.</strong> (1) <code>gp.getY(i)</code> on a ground plane gives coordinates in the <em>plane's own local space</em>, which is offset by wherever you positioned the mesh (<code>position.set(0, -0.46, -5)</code> here) — computing "distance from the lane's center" from raw local coordinates measures from the wrong point unless you correct for that offset first (<code>wz = -5 - y</code> above, derived from the plane's <code>rotation.x = -Math.PI/2</code>). Skipping this correction was exactly how an earlier version of this lane ended up with a sand dune poking up through the table. (2) JavaScript's <code>%</code> can return a <em>negative</em> result for a negative left-hand operand (<code>-9 % 4 === -1</code>, not <code>3</code>) — indexing an array with that silently reads <code>undefined</code> instead of throwing, which surfaces later as a vague <code>THREE.Material: parameter 'color' has value of undefined</code> console warning and unexpectedly white geometry. The <code>((n % m) + m) % m</code> pattern above always lands in range.</div>
+
+	<h2><span class="step">4</span> Add a wooden, single-score sign</h2>
+	<p class="lede">Two posts, a plank frame, and a canvas-textured panel — painted, not glowing, and one score, not two (a bubble shooter is one player against the board, not two paddles):</p>
+	<pre><code>const bezelY = 8.8, bezelH = 2.6;
+const postH = (bezelY - bezelH / 2) - (-0.46);
+const woodMat = new MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.85 });
+const sign = new Group();
+sign.name = 'Wooden Scoreboard';
+
+[-3.1, 3.1].forEach((x, i) => {
+  const post = new Mesh(new CylinderGeometry(0.2, 0.24, postH, 8), woodMat);
+  post.name = i === 0 ? 'Post Left' : 'Post Right';
+  post.position.set(x, -0.46 + postH / 2, -14);
+  sign.add(post);
+});
+
+const frame = new Mesh(new BoxGeometry(7.8, bezelH, 0.4), new MeshStandardMaterial({ color: 0x7a5636, roughness: 0.8 }));
+frame.name = 'Sign Frame';
+frame.position.set(0, bezelY, -14);
+sign.add(frame);
+
+const c = document.createElement('canvas');
+c.width = 512; c.height = 176;
+const ctx = c.getContext('2d');
+const grad = ctx.createLinearGradient(0, 0, 0, 176);
+grad.addColorStop(0, '#a9814f'); grad.addColorStop(1, '#8a6539');
+ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 176);
+ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#2b1c10';
+ctx.font = 'bold 34px Georgia'; ctx.fillText('SCORE', 256, 38);
+ctx.font = 'bold 92px Georgia'; ctx.fillText('000', 256, 122);
+const panel = new Mesh(new PlaneGeometry(7.2, 2.15), new MeshStandardMaterial({ map: new THREE.CanvasTexture(c), roughness: 0.7 }));
+panel.name = 'Sign Panel';
+panel.position.set(0, bezelY, -13.79);
+sign.add(panel);
+
+editor.execute(new AddObjectCommand(editor, sign));</code></pre>
+
+	<h2><span class="step">5</span> Stand the camera at the shooter's end</h2>
+	<p class="lede">Same technique as the pong tutorial — position behind the Bubble, elevate for a 3/4 view, and verify with NDC projection before trusting a screenshot:</p>
+	<pre><code>const cam = editor.camera;
+cam.position.set(0, 4.5, 23);
+cam.fov = 60;
+cam.lookAt(0, 0.5, -10);
+cam.updateProjectionMatrix();
+editor.controls.center.set(0, 0.5, -10);
+editor.signals.cameraChanged.dispatch(cam);
+editor.signals.objectChanged.dispatch(cam);</code></pre>
+
+	<h2><span class="step">6</span> Sanity-check before handing off</h2>
+	<p class="lede">Confirm the one thing later game logic actually depends on — that exactly one addressable, clonable template exists — rather than eyeballing the viewport:</p>
+	<pre><code>$S('.bubble').count();               // 1
+findObject('Bubble').material.transparent; // true — confirms it's the template, not a stray clone
+editor.scene.children.length;        // top-level group count, compare to what you expect
+editor.history.undos.length;         // commands issued this session</code></pre>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="pong-table-view.html">Pong table tutorial</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
