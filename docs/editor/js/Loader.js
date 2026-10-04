@@ -4,6 +4,7 @@ import { TGALoader } from 'three/addons/loaders/TGALoader.js';
 
 import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { SetSceneCommand } from './commands/SetSceneCommand.js';
+import { SetValueCommand } from './commands/SetValueCommand.js';
 
 import { LoaderUtils } from './LoaderUtils.js';
 
@@ -14,6 +15,32 @@ import { runImportPipeline } from './import/pipeline.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 
 import { unzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
+
+// glTF animation tracks address nodes by NAME (e.g. "inner_box.quaternion"); the rest of
+// Strata's animation stack addresses nodes by UUID instead (timelineController.js,
+// RemoveObjectCommand.js), so imported clips are rewritten here to match that convention
+// before they're merged onto editor.scene.animations.
+function retargetClipToUuid( clip, root ) {
+
+	const tracks = clip.tracks.map( function ( track ) {
+
+		const parsed = THREE.PropertyBinding.parseTrackName( track.name );
+		const node = THREE.PropertyBinding.findNode( root, parsed.nodeName ) || root;
+
+		let name = node.uuid;
+		if ( parsed.objectName !== undefined ) name += '.' + parsed.objectName;
+		if ( parsed.objectIndex !== undefined ) name += '[' + parsed.objectIndex + ']';
+		name += '.' + parsed.propertyName;
+		if ( parsed.propertyIndex !== undefined ) name += '[' + parsed.propertyIndex + ']';
+
+		const TrackType = track.constructor;
+		return new TrackType( name, track.times, track.values, track.getInterpolation() );
+
+	} );
+
+	return new THREE.AnimationClip( clip.name, clip.duration, tracks, clip.blendMode );
+
+}
 
 function Loader( editor ) {
 
@@ -64,6 +91,17 @@ function Loader( editor ) {
 
 		}
 
+		// Retarget glTF's name-keyed track bindings to uuid-keyed ones, matching
+		// the convention the rest of the animation stack relies on (see
+		// timelineController.js / RemoveObjectCommand.js). Node names/structure
+		// are final at this point (post-compression), so resolving against
+		// `scene` now is safe for both import modes below.
+		if ( scene.animations.length > 0 ) {
+
+			scene.animations = scene.animations.map( clip => retargetClipToUuid( clip, scene ) );
+
+		}
+
 		if ( options.asScene ) {
 
 			editor.execute( new SetSceneCommand( editor, scene ) );
@@ -71,6 +109,19 @@ function Loader( editor ) {
 		} else {
 
 			editor.execute( new AddObjectCommand( editor, scene ) );
+
+			// Imported as a child (not the root scene) — scene.animations would
+			// otherwise be stranded on this subtree, invisible to the Animations
+			// tab/Render tab/exporter, which only ever read editor.scene.animations.
+			if ( scene.animations.length > 0 ) {
+
+				const retargeted = scene.animations;
+				scene.animations = [];
+				editor.execute( new SetValueCommand( editor, editor.scene, 'animations', [ ...editor.scene.animations, ...retargeted ] ) );
+				editor.signals.animationsChanged.dispatch();
+
+			}
+
 			runImportPipeline( editor, scene, { log: editor.importLog } );
 
 		}
