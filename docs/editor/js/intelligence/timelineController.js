@@ -204,6 +204,50 @@ export function getTimelineTargetActions( editor ) {
 }
 
 /**
+ * Raw clips living on editor.scene.animations that AREN'T the compiled
+ * authored Timeline clip — e.g. an imported glTF/GLB's baked animation. These
+ * never go through the TimelineModel/recipe system (arbitrary per-frame
+ * keyframe data isn't expressible as `.animate()` sugar), but they still need
+ * to ride the SAME one clock for scrub/play/duration to actually be "in" the
+ * Animations tab rather than a disconnected side effect.
+ *
+ * Excludes any clip an authored `play(name)` event already references — once
+ * explicitly scheduled that way, its tracks are spliced straight into the
+ * compiled Timeline clip (see timeline.js's compileTimeline), so treating it
+ * as ALSO a passive, always-auto-playing import here would double-drive the
+ * same nodes.
+ * @returns {THREE.AnimationClip[]}
+ */
+export function getImportedClips( editor ) {
+
+	const claimed = new Set();
+	for ( const track of ( editor.timeline ? editor.timeline.tracks : [] ) ) {
+
+		for ( const event of track.events ) {
+
+			if ( event.op === 'play' && event.args && event.args.name ) claimed.add( event.args.name );
+
+		}
+
+	}
+
+	return ( editor.scene.animations || [] ).filter( c => c && c.duration > 0 && ! ( c.userData && c.userData.isTimeline ) && c.name !== TIMELINE_CLIP_NAME && ! claimed.has( c.name ) );
+
+}
+
+/**
+ * One THREE.AnimationAction per imported clip (see getImportedClips). Clips
+ * keep a stable uuid (their own), so repeated calls hit the mixer's own
+ * (root,clip.uuid) cache instead of leaking a new action each time.
+ * @returns {THREE.AnimationAction[]}
+ */
+export function getImportedClipActions( editor ) {
+
+	return getImportedClips( editor ).map( clip => editor.mixer.clipAction( clip, editor.scene ) );
+
+}
+
+/**
  * Sample the timeline at absolute time `t` and LEAVE the pose applied — every
  * target's action is activated + paused (never stopped), so nothing triggers
  * `restoreOriginalState()`; the written pose stays until the next hold/play/
@@ -218,10 +262,22 @@ export function holdTimelineAt( editor, t ) {
 	applyContentAt( editor, editor.timeline, t );
 
 	const actions = getTimelineTargetActions( editor );
-	if ( actions.length === 0 ) return false;
+	const importedActions = getImportedClipActions( editor );
+	if ( actions.length === 0 && importedActions.length === 0 ) return false;
 	for ( const a of actions ) {
 
 		a.play(); // idempotent activation — does NOT reset time/paused if already active
+		a.enabled = true;
+		a.paused = true;
+		a.time = Math.min( Math.max( 0, t ), a.getClip().duration || 0 );
+
+	}
+	// Imported clips aren't retimed/offset by anything — their own [0, duration]
+	// IS absolute timeline time, clamped (not looped) past their own end, same as
+	// the authored path above.
+	for ( const a of importedActions ) {
+
+		a.play();
 		a.enabled = true;
 		a.paused = true;
 		a.time = Math.min( Math.max( 0, t ), a.getClip().duration || 0 );

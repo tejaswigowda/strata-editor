@@ -139,6 +139,13 @@ export const OP_VOCABULARY = {
 	tada:        { kind: 'anim', args: { rotations: 'number?', scale: 'number?', duration: 'number?' }, summary: 'spin + scale celebration' },
 	wobble:      { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'gentle side-to-side sway' },
 
+	// ── Raw imported clip playback (e.g. an imported glTF/GLB's baked animation) ──
+	// Unlike the other anim ops, this doesn't synthesize new keyframes from the
+	// selected node's live transform — it splices the NAMED clip's own (already
+	// uuid-retargeted, see Loader.js) tracks into the compiled Timeline clip at
+	// this event's absolute time. Defaults to the clip's own natural duration.
+	play:        { kind: 'anim', args: { name: 'string', duration: 'number?' },     summary: 'play a raw imported animation clip by name at this event\'s absolute time' },
+
 	// ── Escape hatch ──
 	raw:         { kind: 'raw',  args: { code: 'string' },                          summary: 'raw JS (loop-protected, UNGUARDED) — last resort' },
 };
@@ -712,6 +719,26 @@ class ChainableSet {
 		const cmds = this.nodes.map( n => new SetLabelCommand( this.editor, n, label ) );
 		this.editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( this.editor, cmds ) );
 		return this;
+	}
+
+	/**
+	 * Schedule a raw imported animation clip (e.g. an imported glTF/GLB's baked
+	 * animation) to play at the current cursor time — splices the NAMED clip's
+	 * own tracks into the compiled Timeline clip rather than synthesizing new
+	 * keyframes. Defaults to the clip's own natural duration; pass `duration`
+	 * (ms) to trim it shorter.
+	 *   $S('#theglb').at(2).play('animation_0')
+	 */
+	play( name, duration ) {
+		const clipName = String( name );
+		let seconds;
+		if ( duration === undefined ) {
+			const found = ( this.editor.scene.animations || [] ).find( c => c.name === clipName );
+			seconds = found ? found.duration : 1;
+		} else {
+			seconds = Math.max( 0, Number( duration ) || 0 ) / 1000; // ms at the surface, matches .animate()'s convention
+		}
+		return this.op( { type: 'play', name: clipName, duration: seconds } );
 	}
 
 	bounce( height = 0.5, duration = 1 )        { return this.op( { type: 'bounce', height, duration } ); }

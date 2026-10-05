@@ -500,6 +500,25 @@ export function spinRecipe( node, params = {} ) {
 }
 
 /**
+ * Splice a raw imported animation clip's own tracks (e.g. an imported glTF/
+ * GLB's baked animation) into the compiled Timeline clip at this event's
+ * absolute time, instead of synthesizing new keyframes from `node`. The
+ * actual clip lookup is deterministic and happens host-side in
+ * compileTimeline (same pattern as moveTo's target-world resolution) and is
+ * handed in as `params.sourceClip` — this just reshapes it into the
+ * {tracks} return shape every other recipe already uses.
+ * Params: {name:'animation_0', sourceClip: THREE.AnimationClip|null}
+ */
+export function playRecipe( node, params = {} ) {
+
+	const source = params.sourceClip;
+	if ( ! source || ! source.tracks || source.tracks.length === 0 ) return null;
+	const THREE = window.THREE;
+	return new THREE.AnimationClip( source.name || 'play', source.duration, source.tracks );
+
+}
+
+/**
  * Bounce recipe: oscillate up and down.
  * Params: {height:0.5, duration:1}
  */

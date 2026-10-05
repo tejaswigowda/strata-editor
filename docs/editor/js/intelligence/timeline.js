@@ -717,6 +717,18 @@ export function compileTimeline( model, ctx ) {
 
 			}
 
+			// play: resolve the named RAW clip (e.g. an imported glTF/GLB's baked
+			// animation, see Loader.js) HOST-SIDE at bake time — deterministic,
+			// same pattern as moveTo's target-world resolution below. Excludes the
+			// compiled Timeline clip itself (can't play itself).
+			if ( event.op === 'play' ) {
+
+				const found = ( editor.scene.animations || [] ).find( c => c.name === params.name && ! ( c.userData && c.userData.isTimeline ) );
+				if ( ! found ) console.warn( `play(): no imported clip named "${ params.name }" found — event skipped.` );
+				params.sourceClip = found || null;
+
+			}
+
 			// moveTo: resolve the target selector to a WORLD position HOST-SIDE at
 			// bake time (compile-time resolution is the whole point — see
 			// ANIMATION.md — it's what makes this a plain, portable position track).
@@ -842,7 +854,13 @@ export function compileTimeline( model, ctx ) {
 
 					const times = event.at === 0 ? t.times : t.times.map( x => x + event.at );
 					rawTracks.push( new t.constructor( t.name, Array.from( times ), Array.from( t.values ) ) );
-					commitFinalPose( node, t );
+					// Almost always `node` itself (every built-in recipe addresses its
+					// OWN tracks by node.uuid) — except 'play', whose spliced-in clip
+					// carries tracks for OTHER nodes too (e.g. a glTF's child bones),
+					// so resolve each track's REAL target before committing its pose.
+					const trackUuid = t.name.slice( 0, t.name.indexOf( '.' ) );
+					const targetNode = trackUuid === node.uuid ? node : ( editor.scene.getObjectByProperty( 'uuid', trackUuid ) || node );
+					commitFinalPose( targetNode, t );
 
 				}
 

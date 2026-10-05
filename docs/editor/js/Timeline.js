@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 import { UIPanel, UIText, UIButton, UISelect, UINumber, UICheckbox } from './libs/ui.js';
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
-import { TimelineModel, TIMELINE_CLIP_NAME } from './intelligence/timeline.js';
-import { holdTimelineAt, getTimelineTargetActions, refreshCameraProjections, activeRenderCameraAt } from './intelligence/timelineController.js';
+import { TimelineModel } from './intelligence/timeline.js';
+import { holdTimelineAt, getTimelineTargetActions, getImportedClips, getImportedClipActions, refreshCameraProjections, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import * as recipes from './intelligence/animationRecipes.js';
 import { applyContentAt } from './intelligence/textChange.js';
@@ -398,6 +398,26 @@ function Timeline( editor ) {
 
 								}
 
+							} else if ( op === 'play' ) {
+
+								// play('animation_0') / play('animation_0', 2000)
+								const strMatch = argsStr.match( /^\s*(['"`])((?:\\.|(?!\1).)*)\1\s*/ );
+								if ( ! strMatch ) throw new Error( 'play() expects a quoted clip name as its first argument' );
+
+								const name = strMatch[ 2 ].replace( /\\(['"`\\])/g, '$1' );
+								const rest = argsStr.slice( strMatch[ 0 ].length ).replace( /^,\s*/, '' ).trim();
+
+								args = { name };
+								const found = ( editor.scene.animations || [] ).find( c => c.name === name );
+								dur = found ? found.duration : 1;
+
+								if ( rest ) {
+
+									const ms = parseFloat( rest );
+									if ( ! isNaN( ms ) ) dur = ms / 1000;
+
+								}
+
 							} else {
 								// Other ops: try numeric first, then object
 								// One time unit everywhere: ms at the surface (matches .animate())
@@ -759,9 +779,19 @@ function Timeline( editor ) {
 	}
 
 	// ── Time <-> pixel mapping ────────────────────────────────────────────────
+	// Total scrub/view range: the authored (sugar-script) timeline AND any
+	// imported clips (e.g. a glTF/GLB's baked animation) ride the SAME clock,
+	// so the longer of the two decides how far the ruler/playhead range reaches.
+	function totalDuration() {
+
+		const authored = editor.timeline ? editor.timeline.duration : 0;
+		return Math.max( authored, ...getImportedClips( editor ).map( c => c.duration || 0 ), 0 );
+
+	}
+
 	function viewDuration() {
 
-		return Math.max( MIN_VIEW, editor.timeline ? editor.timeline.duration : 0 );
+		return Math.max( MIN_VIEW, totalDuration() );
 
 	}
 
@@ -803,7 +833,9 @@ function Timeline( editor ) {
 
 		rows.innerHTML = '';
 
-		if ( model.isEmpty() ) {
+		const imported = getImportedClips( editor );
+
+		if ( model.isEmpty() && imported.length === 0 ) {
 
 			rows.appendChild( emptyHint );
 			updatePlayheadUI();
@@ -811,6 +843,8 @@ function Timeline( editor ) {
 			return;
 
 		}
+
+		for ( const clip of imported ) rows.appendChild( importedClipRow( clip ) );
 
 		for ( const track of model.tracks ) {
 
@@ -820,6 +854,36 @@ function Timeline( editor ) {
 
 		updatePlayheadUI();
 		refreshKeyPanel();
+
+	}
+
+	// A read-only row for an imported clip (e.g. glTF/GLB baked animation) — it
+	// isn't TimelineModel-backed (arbitrary per-frame keyframe data isn't
+	// expressible as `.animate()` sugar), so unlike trackRow() it has no drag/
+	// resize handlers, just a single block spanning the clip's own duration.
+	function importedClipRow( clip ) {
+
+		const row = document.createElement( 'div' );
+		row.style.cssText = 'display:flex;align-items:center;height:26px;border-bottom:1px solid #eee;';
+
+		const label = document.createElement( 'div' );
+		label.style.cssText = `width:${ LABEL_W }px;flex-shrink:0;box-sizing:border-box;padding:0 6px;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;`;
+		label.textContent = clip.name || 'Imported clip';
+		label.title = `Imported animation clip (read-only) — ${ clip.tracks.length } track${ clip.tracks.length === 1 ? '' : 's' }, ${ clip.duration.toFixed( 2 ) }s`;
+		row.appendChild( label );
+
+		const lane = document.createElement( 'div' );
+		lane.style.cssText = 'flex:1;height:100%;position:relative;background:rgba(0,0,0,0.02);';
+		row.appendChild( lane );
+
+		const block = document.createElement( 'div' );
+		block.style.cssText = `position:absolute;left:0px;width:${ Math.max( 6, timeToPx( clip.duration ) ) }px;top:4px;bottom:4px;` +
+			'background:#9c27b0;border-radius:3px;opacity:0.7;font-size:9px;color:#fff;overflow:hidden;white-space:nowrap;padding:2px 4px;box-sizing:border-box;cursor:default;';
+		block.textContent = 'imported: ' + ( clip.name || 'clip' );
+		block.title = label.title;
+		lane.appendChild( block );
+
+		return row;
 
 	}
 
@@ -980,17 +1044,9 @@ function Timeline( editor ) {
 	}
 
 	// ── Playback / scrubbing (the ONE clock) ──────────────────────────────────
-	function getClip() {
-
-		const anims = editor.scene.animations || [];
-		return anims.find( c => c.userData && c.userData.isTimeline ) || anims.find( c => c.name === TIMELINE_CLIP_NAME ) || null;
-
-	}
-
 	function sampleAt( time ) {
 
-		const clip = getClip();
-		if ( ! clip || ! ( clip.duration > 0 ) ) return;
+		if ( ! ( totalDuration() > 0 ) ) return;
 		holdTimelineAt( editor, time ); // paused, never stopped — no restoreOriginalState() snap-back
 		signals.sceneGraphChanged.dispatch();
 
@@ -998,43 +1054,13 @@ function Timeline( editor ) {
 
 	function play() {
 
-		let actions = getTimelineTargetActions( editor );
-		let clip = getClip();
-		
-		// Fallback: if no timeline clip found, play individual clips from scene.animations
-		// This allows recipe animations (fade, fadeIn, etc.) to play even if not in timeline model
-		if ( actions.length === 0 && ( editor.scene.animations || [] ).length > 0 ) {
+		// Authored (TimelineModel) actions AND raw imported clips (e.g. a glTF/
+		// GLB's baked animation) ride the SAME clock, so both play together.
+		const actions = [ ...getTimelineTargetActions( editor ), ...getImportedClipActions( editor ) ];
+		const dur = totalDuration();
 
-			actions = [];
-			const maxDuration = Math.max( 
-				...(editor.scene.animations || []).map( c => c.duration || 0 )
-			);
-			
-			for ( const c of ( editor.scene.animations || [] ) ) {
+		if ( ! ( dur > 0 ) || actions.length === 0 ) return;
 
-				if ( c && c.duration > 0 ) {
-
-					try {
-
-						const action = editor.mixer.clipAction( c, editor.scene );
-						actions.push( action );
-
-					} catch ( e ) {
-
-						console.warn( `Failed to create action for clip "${ c.name }":`, e.message );
-
-					}
-
-				}
-
-			}
-			
-			clip = { duration: Math.max( 1, maxDuration ) };
-
-		}
-
-		if ( ! clip || ! ( clip.duration > 0 ) || actions.length === 0 ) return;
-		
 		for ( const a of actions ) {
 
 			try {
@@ -1045,7 +1071,7 @@ function Timeline( editor ) {
 				a.clampWhenFinished = true;
 				a.enabled = true;
 				a.paused = false;
-				a.time = playhead % clip.duration;
+				a.time = Math.min( playhead, a.getClip().duration || 0 );
 				a.play();
 
 			} catch ( e ) {
@@ -1064,7 +1090,10 @@ function Timeline( editor ) {
 
 		if ( playing && currentActions.length ) {
 
-			playhead = currentActions[ 0 ].time;
+			// Same "longest-running action" logic as tick() — don't trust
+			// currentActions[0] when the merged set mixes clips of different
+			// lengths.
+			playhead = Math.max( 0, ...currentActions.map( a => a.time ) );
 			playing = false;
 			holdTimelineAt( editor, playhead ); // hold, don't stop — pose stays put
 			restoreViewportCamera();
@@ -1119,7 +1148,7 @@ function Timeline( editor ) {
 
 		const vd = viewDuration();
 		playheadEl.style.left = ( LABEL_W + timeToPx( Math.min( playhead, vd ) ) ) + 'px';
-		const dur = editor.timeline ? editor.timeline.duration : 0;
+		const dur = totalDuration();
 		timeReadout.textContent = `${ playhead.toFixed( 2 ) } / ${ dur.toFixed( 2 ) }`;
 		deleteButton.dom.disabled = ! selectedEventId;
 		signals.timelinePlayheadUpdated.dispatch( { time: playhead, duration: dur, playing } );
@@ -1179,6 +1208,14 @@ function Timeline( editor ) {
 
 		}
 
+		// play('clipName', ms) — a raw imported clip's own tracks, not a synthesized recipe.
+		if ( op === 'play' ) {
+
+			const ms = Math.round( ( dur ?? args.duration ?? 0 ) * 1000 );
+			return `${ fmtVal( args.name ?? '' ) }, ${ ms }`;
+
+		}
+
 		const spec = OP_VOCABULARY[ op ] && OP_VOCABULARY[ op ].args ? OP_VOCABULARY[ op ].args : {};
 		const parts = [];
 		for ( const key of Object.keys( spec ) ) {
@@ -1199,24 +1236,38 @@ function Timeline( editor ) {
 	function refreshCode() {
 
 		const model = editor.timeline || new TimelineModel();
-		if ( model.isEmpty() ) { codePanel.value = '// timeline is empty'; return; }
+		const blocks = [];
 
-		const lines = [];
-		for ( const track of model.tracks ) {
+		const imported = getImportedClips( editor );
+		if ( imported.length ) {
 
-			const evs = model.sortedEvents( track );
-			let line = `$S('${ track.target }')`;
-			for ( const e of evs ) {
-
-				line += `\n  .at(${ Math.round( e.at * 1000 ) / 1000 }).${ e.op }(${ argList( e.op, e.args, e.dur ) })`;
-
-			}
-
-			lines.push( line + ';' );
+			blocks.push( imported.map( c => `// Imported animation clip: "${ c.name || 'clip' }" (${ c.duration.toFixed( 2 ) }s, ${ c.tracks.length } track${ c.tracks.length === 1 ? '' : 's' }) — plays automatically on the Timeline, not editable here` ).join( '\n' ) );
 
 		}
 
-		codePanel.value = lines.join( '\n\n' );
+		if ( model.isEmpty() ) {
+
+			if ( blocks.length === 0 ) blocks.push( '// timeline is empty' );
+
+		} else {
+
+			for ( const track of model.tracks ) {
+
+				const evs = model.sortedEvents( track );
+				let line = `$S('${ track.target }')`;
+				for ( const e of evs ) {
+
+					line += `\n  .at(${ Math.round( e.at * 1000 ) / 1000 }).${ e.op }(${ argList( e.op, e.args, e.dur ) })`;
+
+				}
+
+				blocks.push( line + ';' );
+
+			}
+
+		}
+
+		codePanel.value = blocks.join( '\n\n' );
 
 	}
 
@@ -1253,25 +1304,38 @@ function Timeline( editor ) {
 
 	function tick() {
 
-		const clip = getClip();
+		const dur = totalDuration();
 
-		if ( playing && clip && clip.duration > 0 ) {
+		if ( playing && dur > 0 ) {
 
 			if ( currentActions.length ) {
 
 				// LoopOnce + clampWhenFinished (see play()) holds .time at the
 				// clip's duration and self-pauses once it gets there — no % wrap,
-				// no loop back to the start.
-				playhead = Math.min( currentActions[ 0 ].time, clip.duration );
+				// no loop back to the start. Advance using whichever action has
+				// run the LONGEST, not an arbitrary currentActions[0]: the merged
+				// set can mix clips of very different lengths (e.g. two imported
+				// clips, or authored events alongside an imported clip), and the
+				// shortest one self-pausing must not freeze the shared playhead
+				// (or stop playback) while longer ones are still running.
+				let maxTime = 0;
+				let allPaused = true;
+				for ( const a of currentActions ) {
+
+					maxTime = Math.max( maxTime, a.time );
+					if ( ! a.paused ) allPaused = false;
+
+				}
+				playhead = Math.min( maxTime, dur );
 				tickLastTime = null;
-				if ( currentActions[ 0 ].paused ) playing = false; // reached the end on its own
+				if ( allPaused ) playing = false; // every action reached its own end
 
 			} else {
 
 				const now = performance.now();
-				if ( tickLastTime !== null ) playhead = Math.min( playhead + ( now - tickLastTime ) / 1000, clip.duration );
+				if ( tickLastTime !== null ) playhead = Math.min( playhead + ( now - tickLastTime ) / 1000, dur );
 				tickLastTime = now;
-				if ( playhead >= clip.duration ) playing = false; // reached the end — don't loop
+				if ( playhead >= dur ) playing = false; // reached the end — don't loop
 
 			}
 
@@ -1328,6 +1392,10 @@ function Timeline( editor ) {
 
 	// ── Signals ───────────────────────────────────────────────────────────────
 	signals.timelineChanged.add( function () { render(); refreshCode(); } );
+	// Imported clips (e.g. a glTF/GLB import) land on editor.scene.animations
+	// outside the TimelineModel, dispatched via animationsChanged — refresh the
+	// tab so the new clip's row/duration/code comment show up immediately.
+	signals.animationsChanged.add( function () { render(); refreshCode(); } );
 	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );	signals.objectSelected.add( function () { selectedEventId = null; refreshKeyPanel(); } );
 	signals.timelinePlayRequested.add( play ); // external trigger, e.g. the #...&play=true overlay button
 	signals.timelinePauseRequested.add( pause ); // external trigger, e.g. Present mode's transport bar
