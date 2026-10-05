@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js';
 
 import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea } from './libs/ui.js';
-import { holdTimelineAt } from './intelligence/timelineController.js';
+import { holdTimelineAt, getImportedClips } from './intelligence/timelineController.js';
 import { findCallcards, refreshCallcard } from './Callcard.js';
 
 // ── SRT helpers (parse / format / word-wrap for hard-burn) ─────────────────
@@ -263,8 +263,10 @@ function SidebarRender( editor ) {
 
 		const anims = editor.scene.animations || [];
 		const clip = anims.find( c => c.userData && c.userData.isTimeline );
-		if ( clip && clip.duration > 0 ) return clip.duration;
-		return editor.timeline ? editor.timeline.duration : 0;
+		const authored = clip && clip.duration > 0 ? clip.duration : ( editor.timeline ? editor.timeline.duration : 0 );
+
+		// Imported glTF clips ride the same clock (see Timeline.js totalDuration).
+		return Math.max( authored, ...getImportedClips( editor ).map( c => c.duration ) );
 
 	}
 
@@ -347,7 +349,9 @@ function SidebarRender( editor ) {
 		// viewport's own camera switcher's default entry), but it's never a
 		// valid shot camera here — default to whichever scene camera exists
 		// first instead.
-		const firstSceneCamera = Object.keys( editor.cameras ).find( uuid => uuid !== editor.camera.uuid ) || editor.camera.uuid;
+		const sceneCameras = Object.keys( editor.cameras ).filter( uuid => uuid !== editor.camera.uuid );
+		const lastCam = shots.length ? sceneCameras.indexOf( shots[ shots.length - 1 ].camera ) : - 1;
+		const firstSceneCamera = sceneCameras[ ( lastCam + 1 ) % Math.max( 1, sceneCameras.length ) ] || editor.camera.uuid;
 		const shot = {
 			id: 'shot-' + Math.random().toString( 36 ).slice( 2, 9 ),
 			at: Math.max( 0, at ),
@@ -941,6 +945,23 @@ function SidebarRender( editor ) {
 		}
 		resetShadowMaps();
 
+		// WebGL binds a Uint32 skinIndex as an integer attribute, but the skinning
+		// shader declares it as float — the draw call fails (INVALID_OPERATION) and
+		// every skinned mesh silently renders nothing (a blank video). Swap in a
+		// Uint16 copy for the duration of the render; restored in `finally`.
+		const skinFixes = [];
+		editor.scene.traverse( function ( o ) {
+
+			const attr = o.isSkinnedMesh && o.geometry.attributes.skinIndex;
+			if ( attr && attr.array instanceof Uint32Array ) {
+
+				o.geometry.setAttribute( 'skinIndex', new THREE.BufferAttribute( new Uint16Array( attr.array ), attr.itemSize ) );
+				skinFixes.push( () => o.geometry.setAttribute( 'skinIndex', attr ) );
+
+			}
+
+		} );
+
 		// Two canvases: WebGL renders offscreen, a 2D canvas composites (needed
 		// for crossfades: draw shot A, then shot B on top with globalAlpha) and is
 		// the captureStream() source + live preview.
@@ -1240,6 +1261,7 @@ function SidebarRender( editor ) {
 			audioCtx.close();
 
 			for ( const restore of cameraRestores ) restore();
+			for ( const restore of skinFixes ) restore();
 			restoreEnvironment();
 			resetShadowMaps(); // this renderer's WebGL shadow maps are just as invalid for the live WebGPU viewport — force it to regenerate its own
 			holdTimelineAt( editor, 0 );
