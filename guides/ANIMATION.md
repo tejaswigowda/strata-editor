@@ -113,6 +113,42 @@ $S('#4x4-square .cube').at(3).moveToEach('#5x5-square .cellGroupB', 800)   // 16
 
 **Non-goals:** not playback-time following (see `follow()`, unbuilt); not path/spline control (motion follows the timeline's own interpolation/easing, straight or eased — no curved paths); not orientation matching (position only); not a collision solver (movers can pass through each other mid-flight — stage timing or pair sources to their nearest target, by hand, to avoid ugly crossings).
 
+## `.play()` / `.pause()` / `.stop()` / `.seek()` — imported clips in the ONE grammar
+
+An imported glTF/GLB animation clip (mocap, a Mixamo take, an eye/transform sub-clip) is **baked keyframe data**. That data stays read-only: you do not hand-edit 53 mocap channels. What you *author* is **control** — which clip, when it starts, whether it loops, how fast, how strongly it blends — and that control is ordinary grammar on the same clock as `.animate()`:
+
+```js
+$S('#mocap').at(5).play('mocap', { loop: false })        // start the clip at t=5s
+$S('#mocap').at(12).pause()                               // freeze it
+$S('#mocap').at(14).seek(3.5)                             // jump to 3.5s of the clip
+$S('#mocap').at(20).stop()                                // rewind to its first frame
+
+// concurrent clips blend by weight (chained .play() calls share the cursor, they do not queue)
+$S('#char').play('mocap').play('eyeBlink', { weight: 0.5, fade: 300 })
+```
+
+- **Options** — `play(clip?, { at, loop, speed, weight, fade, clampWhenFinished })`. `at` is seconds (like `.at()`); `fade` is milliseconds (like `.animate()` durations) and eases the weight in; negative `speed` plays backward; `clampWhenFinished: false` releases the rig to its rest pose after the clip ends. `clip` omitted means the target's first clip.
+- **Addressing** — a clip plays on the **selected subtree**: `#mocap` resolves the clips whose tracks drive nodes under it. Importing a GLB gives each clip root a stable id from the clip name (`mocap`, `Key`, `grp_eyeLeft`, …); scenes imported earlier are addressable by their rig-root node id (the Animations tab prints the exact selector).
+- **Errors, up front** — a selector that matches nothing, or a clip the target does not have, throws a named error: `no clip "waveX" on #mocap — available: mocap, Key|Take 001|BaseLayer`. A saved scene that references a clip that no longer exists logs the same message and shows it in the script panel; nothing fails silently.
+- **`.stop()` has two meanings.** `.stop('clip')`, or a bare `.stop()` after `.at(t)`, records the clip directive above. A bare `.stop()` with no `.at()` keeps its jQuery meaning (release a Timeline-driven object back to free editing).
+- **Semantics are deterministic**, so scrub order never matters: before its first `play` a clip holds its first frame; `pause` freezes local time until a later `play` restarts it; `stop` rewinds to the first frame and holds; `seek` jumps and keeps the running/paused state.
+
+**Same execution path as every other op.** Each call is a timeline event — `{ at, op:'play'|'pause'|'stop'|'seek', args:{ name, loop, speed, weight, fade, time }, dur }` — recorded through `SetTimelineCommand`, so it is undoable, lives in `scene.userData.timeline`, and versions in git exactly like `.animate()`. The sampler (`clipDirectives.js` → `timelineController.holdTimelineAt`) is the single place that turns those events into a pose, and scrub, seek, live playback and the Render tab all go through it.
+
+**Back-compat.** A clip with **no** directive keeps today's behavior — it auto-plays once from t=0 and holds its last frame — so older scenes load and play unchanged. The Animations tab shows each such clip as the editable statement it is equivalent to:
+
+```js
+$S('#mmhips').at(0).play('mocap');   // 105 baked tracks (read-only data) — plays automatically
+```
+
+Edit `at` or the options and press Save: the control re-executes through the normal binding. The trailing note keeps the data/control boundary visible; the keyframes themselves are not editable here.
+
+**glTF export.** The baked tracks always survive export. A directed clip is exported as the keyframes it actually plays on the shared clock (shifted by `at`, or resampled at 30 fps when loop/speed/pause/seek change the timing); `weight` and `fade` are blend controls, which glTF cannot express, and are not baked.
+
+**AI.** No new model task: "play the mocap at 2s looping" decomposes like any edit — the host resolves the selector, assigns the op (`play`/`pause`/`stop`/`seek` are unambiguous verbs), and the model only fills the args (`clip`, `at`, `loop`, `speed`, `weight`, `fade`, `time`).
+
+**Non-goals:** not editing keyframe tracks; not retargeting a clip onto a different skeleton; not state-machine/transition graphs (compose `.at()` placements and `weight`/`fade` instead).
+
 ## AI-authored animation
 
 The AI authors animation from natural language: "make the box bounce", "spin the wheel 360 over 2 seconds", "fade it out". The emit target is `.animate()` over CSS transforms (the dense prior), plus **named convenience recipes** (`spin`, `bounce`, `pulse`, `fade`, `orbit`, `shake`, and the entrance/exit/attention set below) that compile to the same absolute-time events. The host expands everything into winding-safe tracks on the universal timeline, command-backed. The model never writes keyframe math. Ops are recorded by **selector string** (resolved at compile time), so scene-wide addressables like the camera still record even when the live set is empty.

@@ -26,8 +26,9 @@ import {
 	setLightPropOp, setLightColorOp, setCameraPropOp,
 } from './editOps.js';
 import { executeRecipeOp } from './animationRecipes.js';
-import { TimelineModel } from './timeline.js';
+import { TimelineModel, CLIP_OPS } from './timeline.js';
 import { releaseTimelineObject } from './timelineController.js';
+import { recordClipDirective, clipControlOp } from './clipControl.js';
 import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { SetLabelCommand } from '../commands/SetLabelCommand.js';
@@ -139,12 +140,15 @@ export const OP_VOCABULARY = {
 	tada:        { kind: 'anim', args: { rotations: 'number?', scale: 'number?', duration: 'number?' }, summary: 'spin + scale celebration' },
 	wobble:      { kind: 'anim', args: { angle: 'number?', duration: 'number?' },                      summary: 'gentle side-to-side sway' },
 
-	// ── Raw imported clip playback (e.g. an imported glTF/GLB's baked animation) ──
-	// Unlike the other anim ops, this doesn't synthesize new keyframes from the
-	// selected node's live transform — it splices the NAMED clip's own (already
-	// uuid-retargeted, see Loader.js) tracks into the compiled Timeline clip at
-	// this event's absolute time. Defaults to the clip's own natural duration.
-	play:        { kind: 'anim', args: { name: 'string', duration: 'number?' },     summary: 'play a raw imported animation clip by name at this event\'s absolute time' },
+	// ── Imported clip control (an imported glTF/GLB's baked animation) ──
+	// Control is authored in the grammar; the baked keyframe tracks stay read-only
+	// data. Each is an ordinary timeline event (see clipDirectives.js) recorded
+	// through the same execute()/undo path as .animate(). Unlike anim ops they do
+	// not advance the jQuery queue cursor, so chained .play() calls run together.
+	play:        { kind: 'clip', args: { clip: 'string?', at: 'number?', loop: 'boolean?', speed: 'number?', weight: 'number?', fade: 'number?' }, summary: 'start an imported clip at `at` seconds on the shared clock (loop/speed/weight/fade optional; clip defaults to the target\'s first)' },
+	pause:       { kind: 'clip', args: { clip: 'string?', at: 'number?' },                  summary: 'freeze an imported clip at `at` seconds' },
+	stop:        { kind: 'clip', args: { clip: 'string?', at: 'number?' },                  summary: 'rewind an imported clip to its first frame at `at` seconds' },
+	seek:        { kind: 'clip', args: { time: 'number', clip: 'string?', at: 'number?' }, summary: 'jump an imported clip to clip-local `time` at `at` seconds' },
 
 	// ── Escape hatch ──
 	raw:         { kind: 'raw',  args: { code: 'string' },                          summary: 'raw JS (loop-protected, UNGUARDED) — last resort' },
@@ -294,6 +298,8 @@ export function op( editor, opJSON ) {
 	};
 
 	// ── animation recipe ops ──
+	if ( CLIP_OPS.has( type ) ) return clipControlOp( editor, opJSON );
+
 	if ( ANIM_OPS.has( type ) ) {
 
 		// Flatten {type, selector, ...params} → {recipe, selector, params}.
@@ -722,23 +728,45 @@ class ChainableSet {
 	}
 
 	/**
-	 * Schedule a raw imported animation clip (e.g. an imported glTF/GLB's baked
-	 * animation) to play at the current cursor time — splices the NAMED clip's
-	 * own tracks into the compiled Timeline clip rather than synthesizing new
-	 * keyframes. Defaults to the clip's own natural duration; pass `duration`
-	 * (ms) to trim it shorter.
-	 *   $S('#theglb').at(2).play('animation_0')
+	 * Start an imported clip (e.g. a glTF/GLB's baked mocap) on the shared clock.
+	 * The keyframe tracks stay read-only; this authors CONTROL — which clip, when,
+	 * loop / speed / weight / fade — as a timeline event, so it is undoable,
+	 * versioned and serialized like .animate(). Does not advance the queue cursor:
+	 * chained .play() calls run concurrently and blend by weight.
+	 *
+	 *   $S('#mocap').at(5).play('mocap', { loop: false })
+	 *   $S('#char').play('mocap').play('eyeBlink', { weight: 0.5, fade: 300 })
+	 *
+	 * opts: { at (s), loop, speed, weight, fade (ms), clampWhenFinished }.
+	 * `clip` omitted -> the target's first clip. Throws a named error for an empty
+	 * selector or a clip the target doesn't have.
 	 */
-	play( name, duration ) {
-		const clipName = String( name );
-		let seconds;
-		if ( duration === undefined ) {
-			const found = ( this.editor.scene.animations || [] ).find( c => c.name === clipName );
-			seconds = found ? found.duration : 1;
-		} else {
-			seconds = Math.max( 0, Number( duration ) || 0 ) / 1000; // ms at the surface, matches .animate()'s convention
-		}
-		return this.op( { type: 'play', name: clipName, duration: seconds } );
+	play( clip, opts ) {
+		if ( clip && typeof clip === 'object' ) { opts = clip; clip = undefined; }
+		if ( typeof opts === 'number' ) opts = { duration: opts }; // legacy play(name, ms)
+		return this._clipDirective( 'play', clip, opts || {} );
+	}
+
+	/** Freeze an imported clip at the cursor time (a later .play() restarts it). */
+	pause( clip ) { return this._clipDirective( 'pause', clip ); }
+
+	/** Jump an imported clip to clip-local `time` (seconds) at the cursor time. */
+	seek( time, clip ) { return this._clipDirective( 'seek', clip, {}, time ); }
+
+	/** Record one clip directive at the cursor (or opts.at). Shared by play/pause/stop/seek. */
+	_clipDirective( op, clip, opts = {}, time ) {
+		const { at: optAt, ...rest } = opts;
+		const c = this._ensureChain();
+		this._last = recordClipDirective( this.editor, {
+			selector: this.selector,
+			nodes: this.nodes,
+			op,
+			clip,
+			at: optAt !== undefined ? optAt : c.cursor,
+			opts: rest,
+			time,
+		} );
+		return this;
 	}
 
 	bounce( height = 0.5, duration = 1 )        { return this.op( { type: 'bounce', height, duration } ); }
@@ -798,10 +826,20 @@ class ChainableSet {
 	 * becomes a normal, freely-editable object. Does not touch the authored
 	 * timeline model or any OTHER (non-selected) target; a no-op per-node for
 	 * anything that isn't currently a Timeline target.
+	 *
+	 * Imported-clip directive form: `.stop('clipName')`, or a bare `.stop()` after
+	 * `.at(t)`, records a `stop` event — the clip rewinds to its first frame at t.
+	 * (A bare `.stop()` with no `.at()` keeps the jQuery meaning above.)
 	 */
-	stop( jumpToEnd = false ) {
+	stop( arg = false ) {
 
-		for ( const node of this.nodes ) releaseTimelineObject( this.editor, node, { jumpToEnd } );
+		if ( typeof arg === 'string' || ( arg === false && this._chain ) ) {
+
+			return this._clipDirective( 'stop', typeof arg === 'string' ? arg : undefined );
+
+		}
+
+		for ( const node of this.nodes ) releaseTimelineObject( this.editor, node, { jumpToEnd: arg } );
 		return this;
 
 	}

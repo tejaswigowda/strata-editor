@@ -11,6 +11,7 @@ import { LoaderUtils } from './LoaderUtils.js';
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 
 import { runImportPipeline } from './import/pipeline.js';
+import { labelClipRoots } from './intelligence/clipControl.js';
 
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 
@@ -105,6 +106,7 @@ function Loader( editor ) {
 		if ( options.asScene ) {
 
 			editor.execute( new SetSceneCommand( editor, scene ) );
+			labelClipRoots( editor, editor.scene.animations || [] );
 
 		} else {
 
@@ -119,6 +121,7 @@ function Loader( editor ) {
 				scene.animations = [];
 				editor.execute( new SetValueCommand( editor, editor.scene, 'animations', [ ...editor.scene.animations, ...retargeted ] ) );
 				editor.signals.animationsChanged.dispatch();
+				labelClipRoots( editor, retargeted );
 
 			}
 

@@ -122,7 +122,7 @@ AVAILABLE EDIT OPS:
 Op format: {"op":"<op>", "selector":"<selector>", "args":{...}}
 - op must be one of: ${ops.join(', ')}
 - selector: CSS subset (#id, .class, type, A B, A>B)
-- args: op-specific (e.g., recolor:{color:0xRRGGBB}, scale:{factor:2})
+- args: op-specific (e.g., recolor:{color:0xRRGGBB}, scale:{factor:2}, play:{clip:"mocap",at:2,loop:true}, pause:{clip,at}, stop:{clip,at}, seek:{time,clip,at})
 
 CRITICAL: Respond ONLY with valid JSON op(s), no other text.
 `.trim();

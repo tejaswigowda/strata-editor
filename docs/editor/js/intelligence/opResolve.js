@@ -22,6 +22,12 @@ const OP_VERB_PATTERNS = [
 	{ op: 'rotate', re: /\b(rotate|turn|spin)\b/i },
 	{ op: 'delete', re: /\b(delete|remove|discard|hide)\b/i },
 	{ op: 'duplicate', re: /\b(duplicate|copy|clone)\b/i },
+	// Imported-clip control: the verb alone fixes the op; the model only fills args
+	// (clip, at, loop, speed, weight, fade, time) — selector is host-resolved too.
+	{ op: 'play', re: /\b(play|replay|start)\b/i },
+	{ op: 'pause', re: /\b(pause|freeze)\b/i },
+	{ op: 'stop', re: /\b(stop|rewind)\b/i },
+	{ op: 'seek', re: /\b(seek|scrub|jump to|skip to)\b/i },
 ];
 
 /**

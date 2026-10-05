@@ -3,7 +3,11 @@ import * as THREE from 'three';
 import { UIPanel, UIText, UIButton, UISelect, UINumber, UICheckbox } from './libs/ui.js';
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
 import { TimelineModel } from './intelligence/timeline.js';
-import { holdTimelineAt, getTimelineTargetActions, getImportedClips, getImportedClipActions, refreshCameraProjections, activeRenderCameraAt } from './intelligence/timelineController.js';
+import { holdTimelineAt, getImportedClips, activeRenderCameraAt } from './intelligence/timelineController.js';
+import { CLIP_OPS, importedClipsOf, clipRoot, nodesForTarget } from './intelligence/clipDirectives.js';
+import { buildClipEvent } from './intelligence/clipControl.js';
+import { normalizeClassName } from './intelligence/classDerive.js';
+import * as selectorEngine from './intelligence/selectorEngine.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import * as recipes from './intelligence/animationRecipes.js';
 import { applyContentAt } from './intelligence/textChange.js';
@@ -24,7 +28,6 @@ function Timeline( editor ) {
 	const MIN_VIEW = 4; // seconds — always show at least this span
 
 	let playing = false;
-	let currentActions = []; // the per-target actions driving active PLAY (empty while held/stopped)
 	let playhead = 0;               // seconds (the shared clock)
 	let selectedEventId = null;
 	let followRenderCamera = true; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback (default on)
@@ -217,23 +220,6 @@ function Timeline( editor ) {
 		if ( ! saved ) return; // keep the panel open so the warning stays visible
 		codeBtnContainer.style.display = 'none';
 
-		// The save just recompiled the clip (syncTimeline holds+uncaches the OLD
-		// actions), so `currentActions` are stale — resuming THEM would play the
-		// pre-edit values, not what was just saved. Fetch fresh actions bound to
-		// the new clip before resuming.
-		if ( playing ) {
-
-			currentActions = getTimelineTargetActions( editor );
-			for ( const a of currentActions ) {
-
-				a.setLoop( THREE.LoopOnce, 1 ); // never loop — see play()
-				a.clampWhenFinished = true;
-				a.play();
-
-			}
-
-		}
-
 	} );
 	codeBtnContainer.appendChild( saveBtn.dom );
 
@@ -246,10 +232,43 @@ function Timeline( editor ) {
 		refreshCode(); // Revert to saved state
 		clearCodeWarning();
 		codeBtnContainer.style.display = 'none';
-		if ( playing ) for ( const a of currentActions ) a.play(); // Resume animation (unchanged, no recompile happened)
 
 	} );
 	codeBtnContainer.appendChild( cancelBtn.dom );
+
+	// `.play('clip', { loop: true })` / `.pause('clip')` / `.stop('clip')` / `.seek(3.5, 'clip')`
+	// argument text -> { clip, opts, time }. Throws a readable error on bad input.
+	function parseClipCall( op, argsStr ) {
+
+		const src = argsStr.trim();
+		let list = [];
+
+		if ( src ) {
+
+			try {
+
+				list = Function( `"use strict"; return [ ${ src } ]` )();
+
+			} catch ( e ) {
+
+				throw new Error( `${ op }(): could not read the arguments — ${ e.message }` );
+
+			}
+
+		}
+
+		if ( op === 'seek' ) return { time: list[ 0 ], clip: list[ 1 ], opts: {} };
+
+		if ( op === 'play' ) {
+
+			if ( typeof list[ 0 ] === 'string' ) return { clip: list[ 0 ], opts: list[ 1 ] || {} };
+			return { clip: undefined, opts: ( list[ 0 ] && typeof list[ 0 ] === 'object' ) ? list[ 0 ] : {} };
+
+		}
+
+		return { clip: list[ 0 ], opts: {} };
+
+	}
 
 	// Parse edited code and update timeline model. Returns true if the save
 	// went through, false if it was aborted (see the empty-parse guard below).
@@ -310,6 +329,19 @@ function Timeline( editor ) {
 
 					if ( ! foundEnd ) continue;
 					const argsStr = block.substring( argsStart, argsEnd );
+
+					// Imported-clip control (play/pause/stop/seek): validated against the real
+					// clips here, OUTSIDE the lenient per-op try below, so a bad selector or
+					// clip name surfaces as a code warning instead of a silently dropped event.
+					if ( CLIP_OPS.has( op ) ) {
+
+						const call = parseClipCall( op, argsStr );
+						const built = buildClipEvent( editor, { selector, nodes: nodesForTarget( editor, selector ), op, clip: call.clip, opts: call.opts, time: call.time } );
+						model.addEvent( selector, { at, op, args: built.args, dur: built.dur } );
+						eventCount ++;
+						continue;
+
+					}
 
 					// Parse args: handle animate(obj, dur) vs op(dur) vs op(obj)
 					let args = {};
@@ -390,26 +422,6 @@ function Timeline( editor ) {
 
 								args = { target };
 								dur = 0.4; // matches moveToRecipe's default
-
-								if ( rest ) {
-
-									const ms = parseFloat( rest );
-									if ( ! isNaN( ms ) ) dur = ms / 1000;
-
-								}
-
-							} else if ( op === 'play' ) {
-
-								// play('animation_0') / play('animation_0', 2000)
-								const strMatch = argsStr.match( /^\s*(['"`])((?:\\.|(?!\1).)*)\1\s*/ );
-								if ( ! strMatch ) throw new Error( 'play() expects a quoted clip name as its first argument' );
-
-								const name = strMatch[ 2 ].replace( /\\(['"`\\])/g, '$1' );
-								const rest = argsStr.slice( strMatch[ 0 ].length ).replace( /^,\s*/, '' ).trim();
-
-								args = { name };
-								const found = ( editor.scene.animations || [] ).find( c => c.name === name );
-								dur = found ? found.duration : 1;
 
 								if ( rest ) {
 
@@ -512,7 +524,7 @@ function Timeline( editor ) {
 		// the user to find/scroll the (separately scrollable) sidebar themselves.
 		codePanelWrap.scrollIntoView( { block: 'nearest' } );
 		// Pause animation while editing
-		if ( currentActions.length ) for ( const a of currentActions ) a.paused = true;
+		if ( playing ) pause();
 
 	} );
 	codePanel.addEventListener( 'blur', function () {
@@ -1054,52 +1066,26 @@ function Timeline( editor ) {
 
 	function play() {
 
-		// Authored (TimelineModel) actions AND raw imported clips (e.g. a glTF/
-		// GLB's baked animation) ride the SAME clock, so both play together.
-		const actions = [ ...getTimelineTargetActions( editor ), ...getImportedClipActions( editor ) ];
-		const dur = totalDuration();
+		// ONE sampler drives everything: each tick poses the authored timeline AND
+		// every imported clip (through its play/pause/stop/seek directives) from the
+		// playhead via holdTimelineAt — the same path scrub and the Render tab use,
+		// so live playback cannot drift from what gets exported.
+		if ( ! ( totalDuration() > 0 ) ) return;
 
-		if ( ! ( dur > 0 ) || actions.length === 0 ) return;
-
-		for ( const a of actions ) {
-
-			try {
-
-				a.reset();
-				// Play ONCE and hold the final frame — never loop back to the start.
-				a.setLoop( THREE.LoopOnce, 1 );
-				a.clampWhenFinished = true;
-				a.enabled = true;
-				a.paused = false;
-				a.time = Math.min( playhead, a.getClip().duration || 0 );
-				a.play();
-
-			} catch ( e ) {
-
-				console.warn( `Failed to play action:`, e.message );
-
-			}
-
-		}
-		currentActions = actions;
+		if ( playhead >= totalDuration() ) playhead = 0; // parked at the end: replay from the top
+		tickLastTime = null;
 		playing = true;
 
 	}
 
 	function pause() {
 
-		if ( playing && currentActions.length ) {
+		if ( ! playing ) return;
 
-			// Same "longest-running action" logic as tick() — don't trust
-			// currentActions[0] when the merged set mixes clips of different
-			// lengths.
-			playhead = Math.max( 0, ...currentActions.map( a => a.time ) );
-			playing = false;
-			holdTimelineAt( editor, playhead ); // hold, don't stop — pose stays put
-			restoreViewportCamera();
-			updatePlayheadUI();
-
-		}
+		playing = false;
+		holdTimelineAt( editor, playhead ); // hold, don't stop — pose stays put
+		restoreViewportCamera();
+		updatePlayheadUI();
 
 	}
 
@@ -1208,13 +1194,23 @@ function Timeline( editor ) {
 
 		}
 
-		// play('clipName', ms) — a raw imported clip's own tracks, not a synthesized recipe.
+		// Imported-clip control: .play('clip', { loop, speed, weight, fade }) / .pause('clip')
+		// / .stop('clip') / .seek(time, 'clip'). Control is editable here; the clip's
+		// baked keyframes are not. fade is ms at the surface (like .animate()).
 		if ( op === 'play' ) {
 
-			const ms = Math.round( ( dur ?? args.duration ?? 0 ) * 1000 );
-			return `${ fmtVal( args.name ?? '' ) }, ${ ms }`;
+			const o = [];
+			if ( args.loop !== undefined ) o.push( `loop: ${ args.loop }` );
+			if ( args.speed !== undefined ) o.push( `speed: ${ args.speed }` );
+			if ( args.weight !== undefined ) o.push( `weight: ${ args.weight }` );
+			if ( args.fade !== undefined ) o.push( `fade: ${ Math.round( args.fade * 1000 ) }` );
+			if ( args.clampWhenFinished !== undefined ) o.push( `clampWhenFinished: ${ args.clampWhenFinished }` );
+			return fmtVal( args.name ?? '' ) + ( o.length ? `, { ${ o.join( ', ' ) } }` : '' );
 
 		}
+
+		if ( op === 'pause' || op === 'stop' ) return fmtVal( args.name ?? '' );
+		if ( op === 'seek' ) return `${ args.time ?? 0 }, ${ fmtVal( args.name ?? '' ) }`;
 
 		const spec = OP_VOCABULARY[ op ] && OP_VOCABULARY[ op ].args ? OP_VOCABULARY[ op ].args : {};
 		const parts = [];
@@ -1238,10 +1234,23 @@ function Timeline( editor ) {
 		const model = editor.timeline || new TimelineModel();
 		const blocks = [];
 
+		// Anything the authored directives reference that no longer resolves.
+		for ( const message of editor.clipDirectiveProblems || [] ) blocks.push( `// WARNING: ${ message }` );
+
+		// Imported clips with no directive auto-play (back-compat). Show each as the
+		// editable statement it is equivalent to — control is authorable, the baked
+		// tracks are not. Saving the panel turns the statement into a real directive.
 		const imported = getImportedClips( editor );
 		if ( imported.length ) {
 
-			blocks.push( imported.map( c => `// Imported animation clip: "${ c.name || 'clip' }" (${ c.duration.toFixed( 2 ) }s, ${ c.tracks.length } track${ c.tracks.length === 1 ? '' : 's' }) — plays automatically on the Timeline, not editable here` ).join( '\n' ) );
+			blocks.push( imported.map( c => {
+
+				const selector = clipSelector( c );
+				const note = `${ c.tracks.length } baked track${ c.tracks.length === 1 ? '' : 's' } (read-only data)`;
+				if ( ! selector ) return `// "${ c.name || 'clip' }" (${ c.duration.toFixed( 2 ) }s, ${ note }) — drives no node in this scene`;
+				return `$S('${ selector }').at(0).play(${ fmtVal( c.name || '' ) });   // ${ note } — plays automatically`;
+
+			} ).join( '\n' ) );
 
 		}
 
@@ -1254,20 +1263,47 @@ function Timeline( editor ) {
 			for ( const track of model.tracks ) {
 
 				const evs = model.sortedEvents( track );
-				let line = `$S('${ track.target }')`;
-				for ( const e of evs ) {
+				const chain = evs.map( e => `.at(${ Math.round( e.at * 1000 ) / 1000 }).${ e.op }(${ argList( e.op, e.args, e.dur ) })` );
+				let line = `$S('${ track.target }')` + ( evs.length === 1 ? chain[ 0 ] : chain.map( c => `\n  ${ c }` ).join( '' ) ) + ';';
 
-					line += `\n  .at(${ Math.round( e.at * 1000 ) / 1000 }).${ e.op }(${ argList( e.op, e.args, e.dur ) })`;
+				// Make the data/control boundary visible: control above is editable,
+				// the clip's own keyframes are not.
+				const names = [ ...new Set( evs.filter( e => CLIP_OPS.has( e.op ) && e.args.name ).map( e => e.args.name ) ) ];
+				const notes = names.map( n => {
 
-				}
+					const clip = importedClipsOf( editor ).find( c => c.name === n );
+					return clip ? `${ clip.tracks.length } baked track${ clip.tracks.length === 1 ? '' : 's' } (read-only data)` : null;
 
-				blocks.push( line + ';' );
+				} ).filter( Boolean );
+				if ( notes.length ) line += `   // ${ notes.join( ', ' ) }`;
+
+				blocks.push( line );
 
 			}
 
 		}
 
 		codePanel.value = blocks.join( '\n\n' );
+
+	}
+
+	// A selector that addresses a clip's rig root: the root's id (label, else
+	// name) when that resolves back to it, otherwise its raw uuid.
+	function clipSelector( clip ) {
+
+		const root = clipRoot( editor, clip );
+		if ( ! root ) return null;
+
+		const ids = [ root.userData && root.userData.label, root.name ].filter( Boolean ).map( normalizeClassName ).filter( Boolean );
+		for ( const id of ids ) {
+
+			let hit = [];
+			try { hit = selectorEngine.query( editor.scene, '#' + id ); } catch ( e ) { hit = []; }
+			if ( hit.includes( root ) ) return '#' + id;
+
+		}
+
+		return root.uuid;
 
 	}
 
@@ -1300,7 +1336,7 @@ function Timeline( editor ) {
 	}
 
 	// ── rAF playhead read-out during playback ─────────────────────────────────
-	let tickLastTime = null; // manual wall-clock fallback when there are no transform actions to drive playhead (a purely change()-based timeline)
+	let tickLastTime = null; // wall-clock origin of the previous tick while playing
 
 	function tick() {
 
@@ -1308,44 +1344,17 @@ function Timeline( editor ) {
 
 		if ( playing && dur > 0 ) {
 
-			if ( currentActions.length ) {
+			const now = performance.now();
+			if ( tickLastTime !== null ) playhead = Math.min( playhead + ( now - tickLastTime ) / 1000, dur );
+			tickLastTime = now;
+			if ( playhead >= dur ) playing = false; // reached the end — don't loop
 
-				// LoopOnce + clampWhenFinished (see play()) holds .time at the
-				// clip's duration and self-pauses once it gets there — no % wrap,
-				// no loop back to the start. Advance using whichever action has
-				// run the LONGEST, not an arbitrary currentActions[0]: the merged
-				// set can mix clips of very different lengths (e.g. two imported
-				// clips, or authored events alongside an imported clip), and the
-				// shortest one self-pausing must not freeze the shared playhead
-				// (or stop playback) while longer ones are still running.
-				let maxTime = 0;
-				let allPaused = true;
-				for ( const a of currentActions ) {
-
-					maxTime = Math.max( maxTime, a.time );
-					if ( ! a.paused ) allPaused = false;
-
-				}
-				playhead = Math.min( maxTime, dur );
-				tickLastTime = null;
-				if ( allPaused ) playing = false; // every action reached its own end
-
-			} else {
-
-				const now = performance.now();
-				if ( tickLastTime !== null ) playhead = Math.min( playhead + ( now - tickLastTime ) / 1000, dur );
-				tickLastTime = now;
-				if ( playhead >= dur ) playing = false; // reached the end — don't loop
-
-			}
+			// The same sampler scrub/seek/Render use: poses the authored timeline,
+			// every imported clip (via its directives), camera projections and
+			// content (change()) events for this exact playhead time.
+			holdTimelineAt( editor, playhead );
 
 			updatePlayheadUI();
-
-			// fov tracks write camera.fov but never the projection matrix
-			refreshCameraProjections( editor );
-
-			// content is a step function, not a keyframe track — sample separately
-			applyContentAt( editor, editor.timeline, playhead );
 
 			applyFollowCamera();
 

@@ -24,6 +24,7 @@ import { SetColorCommand } from '../commands/SetColorCommand.js';
 import { AddObjectCommand } from '../commands/AddObjectCommand.js';
 import { RemoveObjectCommand } from '../commands/RemoveObjectCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
+import { clipControlOp } from './clipControl.js';
 
 // ── Op schema (for constrained decoding / vocab injection) ─────────────────────
 
@@ -32,7 +33,7 @@ export const OP_SCHEMA = {
 	properties: {
 		op: {
 			type: 'string',
-			enum: [ 'recolor', 'scale', 'move', 'rotate', 'delete', 'duplicate', 'retexture', 'setMaterial', 'setOpacity', 'setVisible', 'wireframe', 'moveTo', 'rotateTo', 'scaleTo', 'reset', 'lookAt', 'castShadow', 'receiveShadow', 'frustumCulled', 'renderOrder', 'flatShading', 'metalness', 'roughness', 'emissive', 'emissiveIntensity', 'doubleSided', 'intensity', 'lightColor', 'groundColor', 'distance', 'angle', 'penumbra', 'decay', 'fov', 'near', 'far' ],
+			enum: [ 'recolor', 'scale', 'move', 'rotate', 'delete', 'duplicate', 'retexture', 'setMaterial', 'setOpacity', 'setVisible', 'wireframe', 'moveTo', 'rotateTo', 'scaleTo', 'reset', 'lookAt', 'castShadow', 'receiveShadow', 'frustumCulled', 'renderOrder', 'flatShading', 'metalness', 'roughness', 'emissive', 'emissiveIntensity', 'doubleSided', 'intensity', 'lightColor', 'groundColor', 'distance', 'angle', 'penumbra', 'decay', 'fov', 'near', 'far', 'play', 'pause', 'stop', 'seek' ],
 		},
 		selector: { type: 'string' },
 		args: { type: 'object' },
@@ -1435,6 +1436,12 @@ export function executeEditOp( editor, opData ) {
 				return setCameraPropOp( editor, selector, 'near', Number( args.value ) );
 			case 'far':
 				return setCameraPropOp( editor, selector, 'far', Number( args.value ) );
+			// Imported-clip control: same op-JSON args the model fills (clip, at, loop, speed, weight, fade, time).
+			case 'play':
+			case 'pause':
+			case 'stop':
+			case 'seek':
+				return clipControlOp( editor, { type: op, selector, ...args } );
 			default:
 				return { success: false, message: `Unknown op: ${ op }` };
 

@@ -9,6 +9,7 @@ import * as recipes from './animationRecipes.js';
 import * as selectorEngine from './selectorEngine.js';
 import { TimelineModel, compileTimeline, TIMELINE_CLIP_NAME } from './timeline.js';
 import { applyContentAt } from './textChange.js';
+import { importedClipsOf, directivesByClip, sampleClipState, clipDirectiveProblems } from './clipDirectives.js';
 
 /** Remove any previously compiled Timeline clip from scene.animations. */
 function stripTimelineClip( editor ) {
@@ -22,6 +23,31 @@ function stripTimelineClip( editor ) {
 		return ! isTimeline;
 
 	} );
+
+}
+
+/**
+ * Recompute editor.clipDirectiveProblems on the next tick and, only when the
+ * list changed, log it and notify the UI (animationsChanged refreshes the
+ * Animations tab's script panel, which prints the problems).
+ */
+function scheduleDirectiveCheck( editor ) {
+
+	if ( editor.__dirCheckTimer ) return;
+
+	editor.__dirCheckTimer = setTimeout( function () {
+
+		editor.__dirCheckTimer = null;
+
+		const next = clipDirectiveProblems( editor );
+		const changed = JSON.stringify( next ) !== JSON.stringify( editor.clipDirectiveProblems || [] );
+		editor.clipDirectiveProblems = next;
+
+		if ( ! changed ) return;
+		for ( const message of next ) console.error( `Timeline: ${ message }` );
+		editor.signals.animationsChanged.dispatch();
+
+	}, 0 );
 
 }
 
@@ -82,6 +108,11 @@ export function syncTimeline( editor ) {
 	// the LAST compiled event produced, not the rest pose. Snap back to t=0
 	// with the freshly-compiled clip so the visible scene always starts clean.
 	holdTimelineAt( editor, 0 );
+
+	// A scene can reference a clip/selector that no longer exists (older save,
+	// deleted import). Say so loudly instead of silently not playing it. Deferred
+	// a tick: during a scene load this runs before the imported clips are attached.
+	scheduleDirectiveCheck( editor );
 
 	editor.signals.timelineChanged.dispatch( model );
 	editor.signals.animationsChanged.dispatch();
@@ -211,39 +242,52 @@ export function getTimelineTargetActions( editor ) {
  * to ride the SAME one clock for scrub/play/duration to actually be "in" the
  * Animations tab rather than a disconnected side effect.
  *
- * Excludes any clip an authored `play(name)` event already references — once
- * explicitly scheduled that way, its tracks are spliced straight into the
- * compiled Timeline clip (see timeline.js's compileTimeline), so treating it
- * as ALSO a passive, always-auto-playing import here would double-drive the
- * same nodes.
+ * Excludes any clip with an authored directive (`$S().at().play()` and its
+ * pause/stop/seek siblings): its span is already on the clock via the event's
+ * own `at`/`dur`, so counting it here as well would only restate it. Those
+ * clips are still SAMPLED by holdTimelineAt through their directives.
  * @returns {THREE.AnimationClip[]}
  */
 export function getImportedClips( editor ) {
 
-	const claimed = new Set();
-	for ( const track of ( editor.timeline ? editor.timeline.tracks : [] ) ) {
-
-		for ( const event of track.events ) {
-
-			if ( event.op === 'play' && event.args && event.args.name ) claimed.add( event.args.name );
-
-		}
-
-	}
-
-	return ( editor.scene.animations || [] ).filter( c => c && c.duration > 0 && ! ( c.userData && c.userData.isTimeline ) && c.name !== TIMELINE_CLIP_NAME && ! claimed.has( c.name ) );
+	const directed = directivesByClip( editor );
+	return importedClipsOf( editor ).filter( c => ! directed.has( c ) );
 
 }
 
 /**
- * One THREE.AnimationAction per imported clip (see getImportedClips). Clips
- * keep a stable uuid (their own), so repeated calls hit the mixer's own
- * (root,clip.uuid) cache instead of leaking a new action each time.
+ * One THREE.AnimationAction per imported clip (directed or not). Clips keep a
+ * stable uuid (their own), so repeated calls hit the mixer's own (root,clip.uuid)
+ * cache instead of leaking a new action each time.
  * @returns {THREE.AnimationAction[]}
  */
 export function getImportedClipActions( editor ) {
 
-	return getImportedClips( editor ).map( clip => editor.mixer.clipAction( clip, editor.scene ) );
+	return importedClipsOf( editor ).map( clip => editor.mixer.clipAction( clip, editor.scene ) );
+
+}
+
+// Pose every imported clip for global time `t` from its directives (or, with
+// none, today's auto-play: start at 0, play once, hold the last frame).
+function holdImportedClipsAt( editor, t ) {
+
+	const directed = directivesByClip( editor );
+	let any = false;
+
+	for ( const clip of importedClipsOf( editor ) ) {
+
+		const { local, weight } = sampleClipState( clip, directed.get( clip ) || [], t );
+		const a = editor.mixer.clipAction( clip, editor.scene );
+		a.play();
+		a.enabled = true;
+		a.paused = true;
+		a.setEffectiveWeight( weight );
+		a.time = local;
+		any = true;
+
+	}
+
+	return any;
 
 }
 
@@ -262,22 +306,11 @@ export function holdTimelineAt( editor, t ) {
 	applyContentAt( editor, editor.timeline, t );
 
 	const actions = getTimelineTargetActions( editor );
-	const importedActions = getImportedClipActions( editor );
-	if ( actions.length === 0 && importedActions.length === 0 ) return false;
+	const importedAny = holdImportedClipsAt( editor, t );
+	if ( actions.length === 0 && ! importedAny ) return false;
 	for ( const a of actions ) {
 
 		a.play(); // idempotent activation — does NOT reset time/paused if already active
-		a.enabled = true;
-		a.paused = true;
-		a.time = Math.min( Math.max( 0, t ), a.getClip().duration || 0 );
-
-	}
-	// Imported clips aren't retimed/offset by anything — their own [0, duration]
-	// IS absolute timeline time, clamped (not looped) past their own end, same as
-	// the authored path above.
-	for ( const a of importedActions ) {
-
-		a.play();
 		a.enabled = true;
 		a.paused = true;
 		a.time = Math.min( Math.max( 0, t ), a.getClip().duration || 0 );

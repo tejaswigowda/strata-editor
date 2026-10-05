@@ -434,6 +434,11 @@ export class TimeCursor {
 
 const TIMELINE_CLIP_NAME = 'Timeline';
 
+// Clip-control directives (play/pause/stop/seek) drive an imported clip's
+// AnimationAction from the shared clock (see clipDirectives.js); they author
+// control, never keyframes, so compileTimeline skips them.
+export const CLIP_OPS = new Set( [ 'play', 'pause', 'stop', 'seek' ] );
+
 /**
  * Merge tracks that share a name (same node.property animated by several events)
  * by concatenating their keyframes, sorting by time, and dropping near-duplicate
@@ -655,6 +660,8 @@ export function compileTimeline( model, ctx ) {
 		const toReset = new Set();
 		for ( const track of model.tracks ) {
 
+			if ( track.events.every( e => CLIP_OPS.has( e.op ) ) ) continue; // control-only track: nothing compiled onto these nodes
+
 			let trackNodes = [];
 			try { trackNodes = selectorEngine.query( editor.scene, track.target ); } catch ( e ) {}
 			for ( const n of trackNodes ) n.traverse( child => toReset.add( child ) );
@@ -701,6 +708,8 @@ export function compileTimeline( model, ctx ) {
 
 		for ( const event of model.sortedEvents( track ) ) {
 
+			if ( CLIP_OPS.has( event.op ) ) continue;
+
 			const recipeFn = recipes[ event.op + 'Recipe' ];
 			if ( typeof recipeFn !== 'function' ) continue;
 
@@ -714,18 +723,6 @@ export function compileTimeline( model, ctx ) {
 
 				const world = resolveWorldPoint( params.props.lookAt );
 				if ( world ) params.lookAtWorld = world;
-
-			}
-
-			// play: resolve the named RAW clip (e.g. an imported glTF/GLB's baked
-			// animation, see Loader.js) HOST-SIDE at bake time — deterministic,
-			// same pattern as moveTo's target-world resolution below. Excludes the
-			// compiled Timeline clip itself (can't play itself).
-			if ( event.op === 'play' ) {
-
-				const found = ( editor.scene.animations || [] ).find( c => c.name === params.name && ! ( c.userData && c.userData.isTimeline ) );
-				if ( ! found ) console.warn( `play(): no imported clip named "${ params.name }" found — event skipped.` );
-				params.sourceClip = found || null;
 
 			}
 

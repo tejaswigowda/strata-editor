@@ -137,8 +137,15 @@ const recipes = {
 const selectorEngine = {
 	query: ( scene, sel ) => {
 
-		if ( sel === '.a-cube' ) return [ { uuid: 'CUBE' } ];
-		if ( sel === 'camera' ) return [ { uuid: 'CAM' } ];
+		const node = ( uuid ) => ( {
+			uuid,
+			position: { clone: () => ( {} ), copy() {}, set() {} },
+			quaternion: { clone: () => ( {} ), copy() {}, set() {} },
+			scale: { clone: () => ( {} ), copy() {}, set() {} },
+			traverse( fn ) { fn( this ); },
+		} );
+		if ( sel === '.a-cube' ) return [ node( 'CUBE' ) ];
+		if ( sel === 'camera' ) return [ node( 'CAM' ) ];
 		return [];
 
 	},

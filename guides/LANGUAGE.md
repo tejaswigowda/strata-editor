@@ -64,6 +64,9 @@ flash(times?, dur?)  rubberBand(scale?, dur?)  jello(intensity?, dur?)
 heartBeat(scale?, dur?)  tada(rotations?, scale?, dur?)  wobble(angle?, dur?)
 
 op({ type:'raw', selector, code })   // escape hatch: raw JS as one op (loop-protected)
+
+// ── Imported glTF/GLB clips: control is grammar, the baked tracks stay read-only ──
+play(clip?, { at, loop, speed, weight, fade })  pause(clip?)  stop(clip?)  seek(time, clip?)
 ```
 
 The animation ops are documented in full in [ANIMATION.md](ANIMATION.md).

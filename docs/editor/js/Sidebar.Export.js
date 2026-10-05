@@ -7,6 +7,7 @@ import { PropertyBinding, AnimationClip, AnimationMixer, Mesh, BufferGeometry, S
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { includeCameraForBinding } from './intelligence/timelineController.js';
+import { directivesByClip, exportTracksForClip, importedClipsOf } from './intelligence/clipDirectives.js';
 import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/textChange.js';
 import { commitExportToRepo } from './Menubar.Git.js';
 
@@ -689,11 +690,20 @@ function SidebarExport( editor ) {
 
 		const tracks = [ ...extraTracks ];
 
+		// An imported clip under play/pause/stop/seek directives is exported as the
+		// keyframes it actually plays on the shared clock (glTF has no loop/speed/
+		// pause); undirected clips export untouched. Weight/fade are blend controls
+		// and are not baked.
+		const directed = directivesByClip( editor );
+		const total = Math.max( editor.timeline ? editor.timeline.duration : 0, ...importedClipsOf( editor ).map( c => c.duration ) );
+
 		scene.traverse( function ( object ) {
 
 			for ( const clip of object.animations ) {
 
-				for ( const track of clip.tracks ) tracks.push( track );
+				const events = directed.get( clip );
+				const clipTracks = events ? exportTracksForClip( clip, events, total ) : clip.tracks;
+				for ( const track of clipTracks ) tracks.push( track );
 
 			}
 
