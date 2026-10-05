@@ -12,7 +12,7 @@ import { UIRow, UIText, UIButton } from './libs/ui.js';
 import { sceneContextString } from './scene/summarize.js';
 import { diffScenes } from './SceneDiff.js';
 import { MergeViewport } from './MergeViewport.js';
-import { externalizeScene, internalizeScene, u8ToBase64 } from './GitAssets.js';
+import { externalizeScene, internalizeScene, u8ToBase64, chunkSceneFile, partPath } from './GitAssets.js';
 import { splitRepoRef, resolveSceneJSON, resolveAssetBytes } from './GitResolver.js';
 
 // ── Commit-message generation ─────────────────────────────────────────────────
@@ -227,15 +227,42 @@ async function ghGetSceneJSON( path, token ) {
 	const text = await res.text();
 	if ( ! text.trim() ) throw new Error( 'scene file is empty' );
 
+	let json;
 	try {
 
-		return JSON.parse( text );
+		json = JSON.parse( text );
 
 	} catch ( e ) {
 
 		throw new Error( 'scene file is not valid JSON — ' + e.message );
 
 	}
+
+	if ( json && json.$chunked ) return ghGetChunkedSceneJSON( path, json.$chunked.parts, token );
+	return json;
+
+}
+
+// API-fallback twin of GitResolver's chunked-scene read: `path` is a contents-API
+// path with a `?ref=` query; each part lives at the same path + `.partNNNN`.
+async function ghGetChunkedSceneJSON( path, count, token ) {
+
+	const [ base, query ] = path.split( '?' );
+
+	const bufs = await Promise.all( Array.from( { length: count }, async ( _, i ) => {
+
+		const url = `https://api.github.com${ partPath( base, i ) }?${ query || '' }&_ts=${ Date.now() }`;
+		const res = await fetch( url, { headers: ghHeaders( token, 'application/vnd.github.raw' ), cache: 'no-store' } );
+		if ( ! res.ok ) throw new Error( `GitHub ${ res.status } fetching scene part ${ i }: ${ await res.text() }` );
+		return new Uint8Array( await res.arrayBuffer() );
+
+	} ) );
+
+	const joined = new Uint8Array( bufs.reduce( ( n, b ) => n + b.byteLength, 0 ) );
+	let off = 0;
+	for ( const b of bufs ) { joined.set( b, off ); off += b.byteLength; }
+
+	return JSON.parse( new TextDecoder().decode( joined ) );
 
 }
 
@@ -713,7 +740,9 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 
 	const files = [];
 	for ( const [ path, u8 ] of assets ) files.push( { path, base64: u8ToBase64( u8 ), immutable: true } );
-	files.push( { path: scenePath, base64: u8ToBase64( sceneBytes ), immutable: false } );
+
+	// A scene too big for one blob is split into a manifest + parts.
+	for ( const part of chunkSceneFile( scenePath, sceneBytes ) ) files.push( { path: part.path, base64: u8ToBase64( part.bytes ), immutable: false } );
 
 	// One atomic commit for scene.json + all (new) assets.
 	const commit = await commitFiles( parsed, branch, cfg.pat, files, msg, ( done, total ) => {

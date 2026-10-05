@@ -14,6 +14,67 @@
 //   { "$img": "assets/img-<sha1>.<ext>", "mime": "image/png" }
 // internalizeScene() restores the originals on load. Scenes without these
 // markers (legacy inline format) pass through untouched.
+//
+// Chunking: GitHub's blob API rejects very large single uploads, and jsDelivr
+// won't serve files over 20 MB. Any asset or scene file bigger than CHUNK_BYTES
+// is therefore stored as `<path>.partNNNN` pieces; its reference carries
+// `chunks: N` (assets) or the scene file becomes a `{ "$chunked": { parts } }`
+// manifest. Unchunked files and old scenes are read exactly as before.
+
+export const CHUNK_BYTES = 8 * 1024 * 1024;
+
+export function partPath( path, index ) {
+
+	return `${ path }.part${ String( index ).padStart( 4, '0' ) }`;
+
+}
+
+// Splits `u8` into CHUNK_BYTES pieces, or returns null when it already fits.
+function splitBytes( path, u8 ) {
+
+	if ( u8.byteLength <= CHUNK_BYTES ) return null;
+
+	const parts = [];
+	for ( let i = 0, off = 0; off < u8.byteLength; i ++, off += CHUNK_BYTES ) {
+
+		parts.push( { path: partPath( path, i ), bytes: u8.subarray( off, off + CHUNK_BYTES ) } );
+
+	}
+
+	return parts;
+
+}
+
+function joinBytes( parts ) {
+
+	const out = new Uint8Array( parts.reduce( ( n, p ) => n + p.byteLength, 0 ) );
+	let off = 0;
+	for ( const p of parts ) { out.set( p, off ); off += p.byteLength; }
+	return out;
+
+}
+
+// Returns the files to commit for the scene JSON: one file, or a manifest at
+// `path` plus its parts when the encoded scene is too big for a single blob.
+export function chunkSceneFile( path, bytes ) {
+
+	const parts = splitBytes( path, bytes );
+	if ( ! parts ) return [ { path, bytes } ];
+
+	const manifest = new TextEncoder().encode( JSON.stringify( { $chunked: { parts: parts.length, bytes: bytes.byteLength } } ) );
+	return [ { path, bytes: manifest }, ...parts ];
+
+}
+
+// Reads an asset that may be chunked; `chunks` is the reference's chunk count.
+async function readAsset( path, chunks, fetchBytes ) {
+
+	if ( ! chunks ) return fetchBytes( path );
+
+	const parts = await Promise.all( Array.from( { length: chunks }, ( _, i ) => fetchBytes( partPath( path, i ) ) ) );
+	return joinBytes( parts );
+
+}
 
 const TYPED = {
 	Int8Array, Uint8Array, Uint8ClampedArray,
@@ -129,6 +190,15 @@ async function externalizeArray( array, type, assets, prefix ) {
 	const u8 = new Uint8Array( ta.buffer, ta.byteOffset, ta.byteLength );
 	const hash = await sha1Hex( u8 );
 	const path = `assets/${ prefix }-${ hash }.bin`;
+	const parts = splitBytes( path, u8 );
+
+	if ( parts ) {
+
+		for ( const p of parts ) assets.set( p.path, p.bytes );
+		return { $bin: path, dtype: TypedArray.name, length: ta.length, chunks: parts.length };
+
+	}
+
 	assets.set( path, u8 );
 	return { $bin: path, dtype: TypedArray.name, length: ta.length };
 
@@ -147,6 +217,15 @@ async function externalizeImage( img, assets ) {
 		const hash = await sha1Hex( u8 );
 		const ext = MIME_EXT[ mime ] || 'bin';
 		const path = `assets/img-${ hash }.${ ext }`;
+		const parts = splitBytes( path, u8 );
+
+		if ( parts ) {
+
+			for ( const p of parts ) assets.set( p.path, p.bytes );
+			return { $img: path, mime, chunks: parts.length };
+
+		}
+
 		assets.set( path, u8 );
 		return { $img: path, mime };
 
@@ -205,7 +284,7 @@ export async function internalizeScene( json, fetchBytes ) {
 
 async function internalizeArray( ref, fetchBytes ) {
 
-	const u8 = await fetchBytes( ref.$bin );
+	const u8 = await readAsset( ref.$bin, ref.chunks, fetchBytes );
 	const TypedArray = TYPED[ ref.dtype ] || Float32Array;
 	const ta = new TypedArray( bytesToBuffer( u8 ) );
 	return Array.from( ta );
@@ -217,7 +296,7 @@ async function internalizeImage( img, fetchBytes ) {
 	const one = async ( value ) => {
 
 		if ( ! value || ! value.$img ) return value;
-		const u8 = await fetchBytes( value.$img );
+		const u8 = await readAsset( value.$img, value.chunks, fetchBytes );
 		return `data:${ value.mime };base64,${ u8ToBase64( u8 ) }`;
 
 	};

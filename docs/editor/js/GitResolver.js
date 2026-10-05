@@ -26,6 +26,8 @@
 
 const SCENE_CACHE = 'git-scene-v1'; // network-first; this cache is an OFFLINE fallback only, never preferred over a live fetch
 
+import { partPath } from './GitAssets.js';
+
 export class SceneFetchError extends Error {
 
 	constructor( kind, message, status ) {
@@ -136,6 +138,23 @@ function sceneCacheKey( owner, repo, path ) {
 
 }
 
+async function fetchChunkedText( owner, repo, ref, path, count, mode ) {
+
+	const bufs = await Promise.all( Array.from( { length: count }, async ( _, i ) => {
+
+		const { res } = await resolveFirst( owner, repo, [ ref ], partPath( path, i ), mode );
+		return new Uint8Array( await res.arrayBuffer() );
+
+	} ) );
+
+	const joined = new Uint8Array( bufs.reduce( ( n, b ) => n + b.byteLength, 0 ) );
+	let off = 0;
+	for ( const b of bufs ) { joined.set( b, off ); off += b.byteLength; }
+
+	return new TextDecoder().decode( joined );
+
+}
+
 /**
  * Resolve a repo file's scene JSON: CDN first (ordered by `mode`), a cached
  * copy of the LAST successful fetch of this exact file next (offline
@@ -157,12 +176,20 @@ export async function resolveSceneJSON( { owner, repo, ref, path, mode, apiFetch
 	try {
 
 		const { res, ref: resolvedRef } = await resolveFirst( owner, repo, refs, path, mode );
-		const text = await res.text();
+		let text = await res.text();
 
 		if ( ! text.trim() ) throw new SceneFetchError( 'parse-error', 'scene file is empty' );
 
 		let json;
 		try { json = JSON.parse( text ); } catch ( e ) { throw new SceneFetchError( 'parse-error', `scene file is not valid JSON — ${ e.message }` ); }
+
+		// Oversized scenes are committed as a manifest + parts (see GitAssets.chunkSceneFile).
+		if ( json && json.$chunked ) {
+
+			text = await fetchChunkedText( owner, repo, resolvedRef, path, json.$chunked.parts, mode );
+			try { json = JSON.parse( text ); } catch ( e ) { throw new SceneFetchError( 'parse-error', `chunked scene is not valid JSON — ${ e.message }` ); }
+
+		}
 
 		putCache( key, text );
 
