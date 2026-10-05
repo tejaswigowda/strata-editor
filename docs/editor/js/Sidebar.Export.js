@@ -3,7 +3,7 @@
 // live in the File → Export submenu (DRC, GLB, GLTF, OBJ, PLY, STL, USDZ).
 
 import { UIPanel } from './libs/ui.js';
-import { PropertyBinding, AnimationClip, AnimationMixer, Mesh, BufferGeometry, VectorKeyframeTrack, NumberKeyframeTrack } from 'three';
+import { PropertyBinding, AnimationClip, AnimationMixer, Mesh, BufferGeometry, Skeleton, VectorKeyframeTrack, NumberKeyframeTrack } from 'three';
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { includeCameraForBinding } from './intelligence/timelineController.js';
@@ -66,6 +66,21 @@ function cloneSceneForExport( scene ) {
 	const clones = [];
 	clone.traverse( ( o ) => clones.push( o ) );
 	for ( let i = 0; i < originals.length; i ++ ) clones[ i ].uuid = originals[ i ].uuid;
+
+	// Object3D.clone() leaves a SkinnedMesh pointing at the ORIGINAL scene's
+	// skeleton, whose bones aren't in the clone — GLTFExporter then writes
+	// invalid skin.joints indices and Blender rejects the file. Rebind each
+	// skinned clone to the cloned bones (matched by the uuids copied above).
+	const byUuid = new Map( clones.map( ( o ) => [ o.uuid, o ] ) );
+	for ( const mesh of clones ) {
+
+		if ( ! mesh.isSkinnedMesh || ! mesh.skeleton ) continue;
+
+		const { bones, boneInverses } = mesh.skeleton;
+		const cloneBones = bones.map( ( b ) => byUuid.get( b.uuid ) || b );
+		mesh.bind( new Skeleton( cloneBones, boneInverses.map( ( m ) => m.clone() ) ), mesh.bindMatrix );
+
+	}
 
 	clone.traverse( ( child ) => {
 
