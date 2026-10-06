@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { UIPanel, UIText, UIButton, UISelect, UINumber, UICheckbox } from './libs/ui.js';
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
+import { SetValueCommand } from './commands/SetValueCommand.js';
 import { TimelineModel } from './intelligence/timeline.js';
 import { holdTimelineAt, getImportedClips, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { CLIP_OPS, importedClipsOf, clipRoot, nodesForTarget } from './intelligence/clipDirectives.js';
@@ -878,10 +879,13 @@ function Timeline( editor ) {
 		const row = document.createElement( 'div' );
 		row.style.cssText = 'display:flex;align-items:center;height:26px;border-bottom:1px solid #eee;';
 
-		const label = document.createElement( 'div' );
-		label.style.cssText = `width:${ LABEL_W }px;flex-shrink:0;box-sizing:border-box;padding:0 6px;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;`;
-		label.textContent = clip.name || 'Imported clip';
-		label.title = `Imported animation clip (read-only) — ${ clip.tracks.length } track${ clip.tracks.length === 1 ? '' : 's' }, ${ clip.duration.toFixed( 2 ) }s`;
+		const clipTitle = `Imported animation clip (baked tracks are read-only) — ${ clip.tracks.length } track${ clip.tracks.length === 1 ? '' : 's' }, ${ clip.duration.toFixed( 2 ) }s`;
+		const label = rowLabel( clip.name || 'Imported clip', clipTitle, 'Delete this imported clip', function () {
+
+			if ( ! confirm( `Delete the imported clip "${ clip.name || 'clip' }" and its ${ clip.tracks.length } baked track(s)? (Undo restores it.)` ) ) return;
+			deleteImportedClip( clip );
+
+		} );
 		row.appendChild( label );
 
 		const lane = document.createElement( 'div' );
@@ -892,10 +896,59 @@ function Timeline( editor ) {
 		block.style.cssText = `position:absolute;left:0px;width:${ Math.max( 6, timeToPx( clip.duration ) ) }px;top:4px;bottom:4px;` +
 			'background:#9c27b0;border-radius:3px;opacity:0.7;font-size:9px;color:#fff;overflow:hidden;white-space:nowrap;padding:2px 4px;box-sizing:border-box;cursor:default;';
 		block.textContent = 'imported: ' + ( clip.name || 'clip' );
-		block.title = label.title;
+		block.title = clipTitle;
 		lane.appendChild( block );
 
 		return row;
+
+	}
+
+	// Row label with the track name and a delete (×) button on the right.
+	function rowLabel( text, title, deleteTitle, onDelete ) {
+
+		const label = document.createElement( 'div' );
+		label.style.cssText = `width:${ LABEL_W }px;flex-shrink:0;box-sizing:border-box;padding:0 4px 0 6px;font-size:10px;color:#555;display:flex;align-items:center;gap:4px;`;
+		label.title = title;
+
+		const name = document.createElement( 'span' );
+		name.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+		name.textContent = text;
+		label.appendChild( name );
+
+		const del = document.createElement( 'button' );
+		del.textContent = '\u00d7';
+		del.title = deleteTitle;
+		del.style.cssText = 'flex-shrink:0;width:16px;height:16px;padding:0;line-height:14px;border:none;border-radius:3px;background:transparent;color:#999;font-size:13px;cursor:pointer;';
+		del.addEventListener( 'mouseenter', () => { del.style.background = '#e53935'; del.style.color = '#fff'; } );
+		del.addEventListener( 'mouseleave', () => { del.style.background = 'transparent'; del.style.color = '#999'; } );
+		del.addEventListener( 'mousedown', e => e.stopPropagation() ); // don't start a scrub
+		del.addEventListener( 'click', function ( e ) { e.stopPropagation(); onDelete(); } );
+		label.appendChild( del );
+
+		return label;
+
+	}
+
+	// Remove an imported clip from the scene (undoable). Any directives that
+	// reference it stay, and the script panel flags them as pointing at a missing clip.
+	function deleteImportedClip( clip ) {
+
+		editor.mixer.uncacheClip( clip );
+		editor.execute( new SetValueCommand( editor, editor.scene, 'animations', ( editor.scene.animations || [] ).filter( c => c !== clip ) ) );
+		signals.animationsChanged.dispatch();
+
+	}
+
+	function deleteTrack( track ) {
+
+		const target = track.target;
+		selectedEventId = null;
+		commitMutation( m => {
+
+			m.tracks = m.tracks.filter( t => t.target !== target );
+			m.recomputeDuration();
+
+		}, `Delete track ${ target }` );
 
 	}
 
@@ -904,10 +957,7 @@ function Timeline( editor ) {
 		const row = document.createElement( 'div' );
 		row.style.cssText = 'display:flex;align-items:center;height:26px;border-bottom:1px solid #eee;';
 
-		const label = document.createElement( 'div' );
-		label.style.cssText = `width:${ LABEL_W }px;flex-shrink:0;box-sizing:border-box;padding:0 6px;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#555;`;
-		label.textContent = track.target;
-		label.title = track.target;
+		const label = rowLabel( track.target, track.target, 'Delete this track and all its events', () => deleteTrack( track ) );
 		row.appendChild( label );
 
 		const lane = document.createElement( 'div' );
@@ -1405,6 +1455,9 @@ function Timeline( editor ) {
 	// outside the TimelineModel, dispatched via animationsChanged — refresh the
 	// tab so the new clip's row/duration/code comment show up immediately.
 	signals.animationsChanged.add( function () { render(); refreshCode(); } );
+	// Undo/redo of an imported-clip delete swaps scene.animations via SetValueCommand,
+	// which only announces objectChanged.
+	signals.objectChanged.add( function ( object ) { if ( object === editor.scene ) { render(); refreshCode(); } } );
 	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );	signals.objectSelected.add( function () { selectedEventId = null; refreshKeyPanel(); } );
 	signals.timelinePlayRequested.add( play ); // external trigger, e.g. the #...&play=true overlay button
 	signals.timelinePauseRequested.add( pause ); // external trigger, e.g. Present mode's transport bar
