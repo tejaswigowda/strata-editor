@@ -43,6 +43,19 @@ function retargetClipToUuid( clip, root ) {
 
 }
 
+// Active import progress banners, stacked vertically so concurrent imports don't overlap.
+const importBanners = [];
+
+function layoutImportBanners() {
+
+	importBanners.forEach( ( banner, i ) => {
+
+		banner.el.style.top = ( 32 + i * 64 ) + 'px';
+
+	} );
+
+}
+
 function Loader( editor ) {
 
 	const scope = this;
@@ -52,11 +65,14 @@ function Loader( editor ) {
 	// Shared finish step for glTF/GLB imports: shows the import wizard (as-scene +
 	// optional geometry compression), applies compression when requested, then
 	// adds the result to the editor. Rejects when the user cancels the dialog.
-	this.finishGLTFImport = async function ( result, filename ) {
+	this.finishGLTFImport = async function ( result, filename, release ) {
 
 		const scene = result.scene;
 		scene.name = filename;
 		scene.animations.push( ...result.animations );
+
+		// The dialog is interactive, so the import progress bar must not linger behind it.
+		if ( release ) release();
 
 		const dialog = new GLTFImportDialog( editor.strings, scene );
 		const options = await dialog.show(); // throws if cancelled
@@ -277,11 +293,59 @@ function Loader( editor ) {
 		const filename = file.name;
 		const extension = filename.split( '.' ).pop().toLowerCase();
 
+		const banner = createProgressBanner( 'Reading ' + filename + '…' );
+		importBanners.push( banner );
+		layoutImportBanners();
+
+		const release = function () {
+
+			const index = importBanners.indexOf( banner );
+			if ( index !== - 1 ) importBanners.splice( index, 1 );
+			banner.remove();
+			layoutImportBanners();
+
+		};
+
 		const reader = new FileReader();
-		reader.addEventListener( 'progress', function ( event ) {
+
+		// Every format handler below registers a 'load' listener; wrap it so the
+		// banner switches to "Parsing…" and is released once the handler settles.
+		const addListener = reader.addEventListener.bind( reader );
+		reader.addEventListener = function ( type, listener, options ) {
+
+			if ( type !== 'load' ) return addListener( type, listener, options );
+
+			return addListener( type, async function ( event ) {
+
+				banner.indeterminate( 'Parsing ' + filename + '…' );
+
+				try {
+
+					await listener.call( this, event );
+
+				} catch ( e ) {
+
+					console.error( 'Loader: Failed to import "' + filename + '"', e );
+
+				} finally {
+
+					release();
+
+				}
+
+			}, options );
+
+		};
+
+		addListener( 'error', release );
+		addListener( 'abort', release );
+
+		addListener( 'progress', function ( event ) {
 
 			const size = '(' + editor.utils.formatNumber( Math.floor( event.total / 1000 ) ) + ' KB)';
 			const progress = Math.floor( ( event.loaded / event.total ) * 100 ) + '%';
+
+			banner.update( event.loaded, event.total, 'Reading ' + filename + ' ' + size + ' — ' + progress );
 
 			console.log( 'Loading', filename, size, progress );
 
@@ -482,24 +546,7 @@ function Loader( editor ) {
 
 					const loader = await createGLTFLoader();
 
-					loader.parse( contents, '', async function ( result ) {
-
-						try {
-
-							await scope.finishGLTFImport( result, filename );
-
-						} catch ( e ) {
-
-							// Import cancelled
-
-						} finally {
-
-							loader.dracoLoader.dispose();
-							loader.ktx2Loader.dispose();
-
-						}
-
-					} );
+					await parseGLTF( loader, contents, filename, release );
 
 				}, false );
 				reader.readAsArrayBuffer( file );
@@ -518,24 +565,7 @@ function Loader( editor ) {
 
 					const loader = await createGLTFLoader( manager );
 
-					loader.parse( contents, '', async function ( result ) {
-
-						try {
-
-							await scope.finishGLTFImport( result, filename );
-
-						} catch ( e ) {
-
-							// Import cancelled
-
-						} finally {
-
-							loader.dracoLoader.dispose();
-							loader.ktx2Loader.dispose();
-
-						}
-
-					} );
+					await parseGLTF( loader, contents, filename, release );
 
 				}, false );
 				reader.readAsArrayBuffer( file );
@@ -957,9 +987,9 @@ function Loader( editor ) {
 
 			{
 
-				reader.addEventListener( 'load', function ( event ) {
+				reader.addEventListener( 'load', async function ( event ) {
 
-					handleZIP( event.target.result );
+					await handleZIP( event.target.result, release );
 
 				}, false );
 				reader.readAsArrayBuffer( file );
@@ -984,6 +1014,9 @@ function Loader( editor ) {
 				break;
 
 		}
+
+		// Nothing was read for this file (textures, unsupported formats): drop the banner.
+		if ( reader.readyState === FileReader.EMPTY ) release();
 
 	};
 
@@ -1057,7 +1090,7 @@ function Loader( editor ) {
 
 	}
 
-	async function handleZIP( contents ) {
+	async function handleZIP( contents, release ) {
 
 		const zip = unzipSync( new Uint8Array( contents ) );
 
@@ -1137,24 +1170,7 @@ function Loader( editor ) {
 
 					const loader = await createGLTFLoader();
 
-					loader.parse( file.buffer, '', async function ( result ) {
-
-						try {
-
-							await scope.finishGLTFImport( result, path );
-
-						} catch ( e ) {
-
-							// Import cancelled
-
-						} finally {
-
-							loader.dracoLoader.dispose();
-							loader.ktx2Loader.dispose();
-
-						}
-
-					} );
+					await parseGLTF( loader, file.buffer, path, release );
 
 					break;
 
@@ -1166,24 +1182,7 @@ function Loader( editor ) {
 
 					const loader = await createGLTFLoader( manager );
 
-					loader.parse( strFromU8( file ), '', async function ( result ) {
-
-						try {
-
-							await scope.finishGLTFImport( result, path );
-
-						} catch ( e ) {
-
-							// Import cancelled
-
-						} finally {
-
-							loader.dracoLoader.dispose();
-							loader.ktx2Loader.dispose();
-
-						}
-
-					} );
+					await parseGLTF( loader, strFromU8( file ), path, release );
 
 					break;
 
@@ -1192,6 +1191,43 @@ function Loader( editor ) {
 			}
 
 		}
+
+	}
+
+	// Parses glTF/GLB data and runs the import wizard; resolves once the import
+	// finished, was cancelled, or failed.
+	function parseGLTF( loader, data, filename, release ) {
+
+		return new Promise( function ( resolve ) {
+
+			loader.parse( data, '', async function ( result ) {
+
+				try {
+
+					await scope.finishGLTFImport( result, filename, release );
+
+				} catch ( e ) {
+
+					// Import cancelled
+
+				} finally {
+
+					loader.dracoLoader.dispose();
+					loader.ktx2Loader.dispose();
+					resolve();
+
+				}
+
+			}, function ( error ) {
+
+				console.error( 'Loader: Failed to parse "' + filename + '"', error );
+				loader.dracoLoader.dispose();
+				loader.ktx2Loader.dispose();
+				resolve();
+
+			} );
+
+		} );
 
 	}
 
