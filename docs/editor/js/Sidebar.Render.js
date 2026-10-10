@@ -1521,6 +1521,26 @@ function SidebarRender( editor ) {
 			return { mime: m, recorder: rec, chunks, stopped };
 
 		} );
+		// Warm-up: the very first render of a scene compiles every shader and uploads
+		// every texture / skinning buffer to the GPU, which can take several seconds
+		// on a heavy scene. Done after recording starts, that stall freezes the first
+		// frames and (the loop being wall-clock driven) skips the timeline ahead.
+		// Render once through every camera BEFORE the recorders start so the loop's
+		// frames all cost about the same.
+		setProgress( 0, 'Preparing GPU resources\u2026' );
+		await sleep( 30 ); // let the status paint
+		holdTimelineAt( editor, Math.min( duration, skip ) );
+		const warmCameras = new Set( [ fallbackCamera ] );
+		for ( const s of shots ) warmCameras.add( cameraOf( s ) );
+		for ( const cam of warmCameras ) {
+
+			if ( is360 ) renderEquirectFace( cam ); else renderer.render( scene, cam );
+
+		}
+
+		ctx.drawImage( glCanvas, 0, 0 );
+		await sleep( 0 );
+
 		for ( const r of recorders ) r.recorder.start();
 
 		const totalFrames = Math.max( 1, Math.round( renderLength * fps ) );
@@ -1535,6 +1555,7 @@ function SidebarRender( editor ) {
 			// OUTPUT video time; content time is offset by `skip` and clamped to
 			// `duration` so the tail seconds hold the last frame frozen.
 			const startWall = performance.now();
+			let frameIndex = 0;
 
 			while ( true ) {
 
@@ -1587,7 +1608,12 @@ function SidebarRender( editor ) {
 
 				if ( outT >= renderLength ) break;
 
-				await sleep( frameMs );
+				// Pace against the absolute frame schedule, not "render time + frameMs":
+				// sleeping a full frame after the work made every frame cost
+				// render + frameMs, so the real rate fell below `fps` and the
+				// recording stuttered.
+				frameIndex = Math.max( frameIndex + 1, Math.ceil( ( performance.now() - startWall ) / frameMs ) ); // skip, don't burst, if we fell behind
+				await sleep( Math.max( 0, startWall + frameIndex * frameMs - performance.now() ) );
 
 			}
 

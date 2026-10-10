@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dance in the Construct — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: get Remy from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both with bodyrig-webCLI, turn Bruce into Morpheus, and stage the two dancers in a white Construct with an orbiting camera.">
+<!--
+	/about/tutorials/dance-in-the-construct.html — a from-scratch, by-hand
+	tutorial. The GLBs are made outside Strata with bodyrig-webCLI (a static,
+	zero-egress page); everything after that is real Strata surface (the
+	Import dialog, JS Shell globals, $S clip directives, the Render tab).
+	Paste each Shell block in order. Static page, no build step. The only
+	third-party calls are ones the reader makes: the Mixamo download and the
+	Bruce GLB fetch from creategamecharacters.github.io.
+	Screenshot is a real capture from the scene this tutorial builds.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Dance in the Construct</h1>
+	<p class="tagline">Two dancers, one white void. <strong>Morpheus</strong> starts a dance; <strong>Remy</strong> picks it up three seconds later and copies it move for move, while a camera swings around so you see their faces for most of it. The characters are rigged and animated outside Strata with <a href="https://github.com/tejaswigowda/bodyrig-webCLI">bodyrig-webCLI</a> — it retargets one motion onto any skeleton and writes a single GLB with the animation baked in — then Strata dresses, stages and renders them. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<figure>
+		<img src="screenshots/dance-in-the-construct.png" alt="Two characters mid-dance on a white floor: Remy in a grey T-shirt and cargo shorts on the left, Morpheus in black leather and sunglasses on the right." loading="lazy">
+		<figcaption>The result of this tutorial — Remy (left) and Morpheus (right) dancing in the Construct, seen from the orbit camera.</figcaption>
+	</figure>
+
+	<div class="note"><strong>What you'll need.</strong> A free <a href="https://www.mixamo.com">Mixamo</a> account (an Adobe ID) for Remy, a browser for <a href="http://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a> (it runs entirely in the page — nothing is uploaded), and Bruce, a MetaHuman exported by <a href="https://github.com/creategamecharacters/metahuman-to-glb">creategamecharacters/metahuman-to-glb</a> (see <a href="make-your-own-metahuman.html">Make your own MetaHuman</a> for what that project is). The pieces are free, but the characters keep their own terms: Mixamo's characters belong to Adobe and are not meant to be re-hosted, so this tutorial never asks you to commit the Remy file anywhere public.</div>
+
+	<h2><span class="step">1</span> Download Remy from Mixamo</h2>
+	<p class="lede">Remy is a stock Mixamo character, so he comes with the standard <code>mixamorig</code> skeleton that bodyrig-webCLI already knows how to map.</p>
+	<ol class="steps">
+		<li>Go to <a href="https://www.mixamo.com">mixamo.com</a> and sign in with your Adobe ID (free).</li>
+		<li>Open the <strong>Characters</strong> tab and pick <strong>Remy</strong>.</li>
+		<li>Press <strong>Download</strong>. Choose format <strong>FBX Binary (.fbx)</strong> and pose <strong>T-pose</strong>, then download and save the file as <code>remy.fbx</code>.</li>
+	</ol>
+	<p>Mixamo's menus change from time to time, so the labels above may read a little differently — what matters is a rigged Remy as an <code>.fbx</code> in a T-pose.</p>
+	<div class="note"><strong>Want a different dance?</strong> You don't have to use Mixamo's motions. bodyrig-webCLI accepts BVH, FBX or GLB for the animation, and it ships a 33-second sample, <a href="http://tejaswigowda.com/bodyrig-webCLI/samples/mocap-33s.bvh">mocap-33s.bvh</a>, that this tutorial uses. If you'd rather pick one from Mixamo, open its <strong>Animations</strong> tab, choose a dance, and download it as FBX with skin set to <strong>Without Skin</strong>; the tool reads animation-only FBX files too.</div>
+
+	<h2><span class="step">2</span> Get Bruce</h2>
+	<p class="lede">Bruce is already a GLB, hosted by the metahuman-to-glb demo. Save it from your browser or with <code>curl</code> (it is about 80 MB):</p>
+	<pre><code>curl -L -o bruce.glb https://creategamecharacters.github.io/metahuman-to-glb/5.7/characters/bruce/bruce.glb</code></pre>
+
+	<h2><span class="step">3</span> Bake the dance onto both with bodyrig-webCLI</h2>
+	<p class="lede">Open <a href="http://tejaswigowda.com/bodyrig-webCLI/">tejaswigowda.com/bodyrig-webCLI</a> (or clone <a href="https://github.com/tejaswigowda/bodyrig-webCLI">the repo</a> and run <code>npm start</code> for a local copy at <code>http://127.0.0.1:8010</code>). It is a static page: the badge in the header reads <em>100% local · zero egress</em>, and you can confirm in DevTools' Network tab that your files never leave the machine.</p>
+	<ol class="steps">
+		<li>Drop <code>remy.fbx</code> on the <strong>Character</strong> zone, and <code>mocap-33s.bvh</code> on <strong>Animation tracks</strong>. Both appear as chips (the motion reports its joint count and duration).</li>
+		<li>The page bakes as soon as it has a character and a motion; the status bar ends with <em>Done: remy_mocap-33s.glb</em> and a live preview plays. To re-bake after changing an option, press <strong>Bake &amp; export GLB</strong>.</li>
+		<li>Press <strong>Download GLB</strong> to save <code>remy_mocap-33s.glb</code>.</li>
+		<li>Swap the character: click the <strong>×</strong> on its chip, drop <code>bruce.glb</code> instead (leave the same motion loaded), and download <code>bruce_mocap-33s.glb</code> the same way.</li>
+	</ol>
+	<figure>
+		<img src="screenshots/bodyrig-bruce.png" alt="bodyrig-webCLI with bruce.glb loaded as the character and mocap-33s as the animation track, the status bar reading Done: bruce_mocap-33s.glb, and Bruce dancing in the preview." loading="lazy">
+		<figcaption>bodyrig-webCLI after baking Bruce: character and motion chips on the left, the finished GLB playing in the preview on the right.</figcaption>
+	</figure>
+
+	<p>Because both characters were baked from the same motion file, the animation clip in each GLB has the same name, <code>mocap-33s</code>, and the same 33.1-second length — which is exactly what lets Remy copy Morpheus later with a plain time offset.</p>
+	<div class="note"><strong>It's a CLI in a page.</strong> Every control is just a command in the box under <em>Command</em>: after dropping the files, <code>bake --fps 30</code> is what the button runs. Useful flags are <code>--foot-lock</code> (pin planted feet with IK), <code>--loop</code> (close the cycle), <code>--in-place</code> and <code>--trim 2:20</code> (seconds). Run <code>help</code> to see them all. For a MetaHuman, leave <strong>Align reference pose</strong> ticked — it is what makes the A-pose Bruce and the T-pose Remy follow the same motion.</div>
+	<div class="note"><strong>Skip the dragging for Bruce.</strong> The tool also reads a deep link, so you can bake him straight from his URL: <code>http://tejaswigowda.com/bodyrig-webCLI/?character=&lt;bruce URL&gt;&amp;motion=&lt;motion URL&gt;&amp;run=bake</code> (URL-encode the two values). Add <code>--hide Outfits</code> to the command to leave the clothes out of the bake if you only want the bare body.</div>
+	<p>The GLBs are <a href="https://github.com/zeux/meshoptimizer">meshopt</a>-compressed to keep them small (Bruce comes out near 39 MB, down from about 80 MB). Strata's loader already includes the meshopt decoder, so nothing extra is needed; tick off <strong>Meshopt compress</strong> only if you plan to open the file in a tool that lacks it.</p>
+
+	<h2><span class="step">4</span> Import both into Strata</h2>
+	<p class="lede">Use <strong>File → Import</strong> (or drag both files onto the editor window). A progress banner tracks each file while it is read and parsed. When the <strong>Import glTF</strong> dialog appears, leave the compression options off — Strata skips mesh simplification on skinned and morph-target meshes anyway, and rigged characters don't benefit from it — and press <strong>OK</strong>.</p>
+	<p>Then check what arrived in the Shell:</p>
+	<pre><code>scene.children.map(o => o.name);        // ['bruce_mocap-33s.glb', 'remy_mocap-33s.glb']
+scene.animations.map(a => a.name);      // ['mocap-33s', 'mocap-33s']</code></pre>
+	<p>Give them short names to address them by, and measure each character so you know whether the scale is sane — Mixamo exports are in centimetres, so Remy may come in tiny or huge depending on how the FBX was read:</p>
+	<pre><code>const bruce = scene.children.find(o => o.name.startsWith('bruce'));
+const remy  = scene.children.find(o => o.name.startsWith('remy'));
+relabel(bruce, 'morpheus');            // Bruce becomes #morpheus
+relabel(remy, 'remy');                 // Remy becomes #remy
+
+for (const [n, o] of [['morpheus', bruce], ['remy', remy]]) {
+  const h = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y;
+  console.log(n, 'is', h.toFixed(2), 'm tall');   // aim for roughly 1.7–1.9
+}</code></pre>
+	<p>If Remy is off, scale his group so he stands about as tall as Bruce — one command, undoable:</p>
+	<pre><code>const k = 1.8 / new THREE.Box3().setFromObject(remy).getSize(new THREE.Vector3()).y;
+editor.execute(new SetScaleCommand(editor, remy, remy.scale.clone().multiplyScalar(k)));</code></pre>
+
+	<h2><span class="step">5</span> Turn Bruce into Morpheus</h2>
+	<p class="lede">Strata ships a <em>Morpheus</em> preset for MetaHuman-style characters. It finds the body, face, hair and outfit parts by mesh and material name (so it works on Bruce, and on the other metahuman-to-glb characters, Ada and Bo), then restyles them:</p>
+	<ul>
+		<li>takes off the hair, beard and moustache (a bald, clean-shaven head) and retints the skin a warm brown;</li>
+		<li>recolours the jacket, trousers and shoes to black leather (building trousers and shoes where a rig only ships shorts);</li>
+		<li>adds small black sunglasses, bound to the head so they follow every turn;</li>
+		<li>flattens the belly and pelvis where the body sticks out past the chest;</li>
+		<li>smooths the outfit's skin weights so the neck and shoulders stay covered when motion capture moves the arms (cloth-simulation weights shred under skinning otherwise);</li>
+		<li>tags each part with classes (<code>.head</code>, <code>.skin</code>, <code>.jacket</code>, <code>.trousers</code>, …) so you can address them with <code>$S()</code>.</li>
+	</ul>
+	<pre><code>const { applyMorpheus } = await import(new URL('./editor/js/presets/morpheus.js', document.baseURI).href);
+await applyMorpheus(editor);</code></pre>
+	<p>It takes a few seconds (the weight smoothing runs over every outfit vertex). Orbit the viewport to inspect him; running it again replaces the props it added rather than doubling them.</p>
+	<div class="note"><strong>Do this after the bake, not before.</strong> The preset edits the imported meshes in Strata. bodyrig-webCLI only needs the skeleton, so the order doesn't matter to the tool — but if you re-bake Bruce later, import the new GLB and run the preset on it again.</div>
+
+	<h2><span class="step">6</span> Stage the two dancers</h2>
+	<p class="lede">Both characters were baked at the origin, so they would dance inside each other. Slide Remy 2.8 m to the side:</p>
+	<pre><code>editor.execute(new SetPositionCommand(editor, remy, new THREE.Vector3(2.8, 0, 0)));</code></pre>
+
+	<h2><span class="step">7</span> Build the Construct</h2>
+	<p class="lede">The Construct is a featureless white void: a white background that the floor fades into, light fog to soften the horizon, a glossy white floor for a faint reflection, and two lights.</p>
+	<pre><code>scene.background = new THREE.Color(0xffffff);
+scene.fog = new THREE.Fog(0xffffff, 14, 55);
+
+const floor = new Mesh(new PlaneGeometry(200, 200),
+  new MeshStandardMaterial({ color: 0xffffff, roughness: 0.12, metalness: 0.1 }));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+floor.name = 'Floor';
+editor.execute(new AddObjectCommand(editor, floor));
+
+const sky = new THREE.HemisphereLight(0xffffff, 0xdddddd, 1.6);
+sky.name = 'Sky';
+editor.execute(new AddObjectCommand(editor, sky));
+
+const key = new DirectionalLight(0xffffff, 2.2);
+key.position.set(4, 8, 5);
+key.castShadow = true;
+key.name = 'Key';
+editor.execute(new AddObjectCommand(editor, key));</code></pre>
+	<div class="note"><strong>The environment setting.</strong> If the void looks grey rather than white, check the Scene tab: <em>Background</em> and <em>Environment</em> can override what you set in code (see <a href="build-a-scene.html">Build a night scene from scratch</a> for the same trap).</div>
+
+	<h2><span class="step">8</span> Play the dance: Morpheus leads, Remy follows</h2>
+	<p class="lede">Each imported clip is bound to its own character, so two clips can share a name without clashing — the selector decides whose clip plays. Put Morpheus's on the Universal Timeline at 0 s and Remy's at 3 s:</p>
+	<pre><code>$S('#morpheus').at(0).play('mocap-33s');
+$S('#remy').at(3).play('mocap-33s');</code></pre>
+	<p>Open the <strong>Animations</strong> tab and scrub: Morpheus starts moving at once, Remy begins three seconds in and repeats the same moves. The whole timeline is 36.1 seconds — the 33.1-second dance plus Remy's 3-second head start.</p>
+	<div class="note"><strong>Why bake the same motion twice?</strong> You could retarget live in the page, but a baked clip is plain keyframe data: it is versioned with the scene, selectable by <code>$S</code>, and rendered identically every time. Retargeting <em>per character</em> is the part that needs a tool; sequencing and staging is what Strata is for.</div>
+
+	<h2><span class="step">9</span> Add a camera that orbits the dancers</h2>
+	<p class="lede">A static shot from the wrong side shows the back of both heads for most of the song. First, find which way the dance faces: at the playhead around 10 s, orbit the viewport until you see their faces. For the sample motion they face about 150° away from +Z, toward −Z and slightly +X. Build a camera clip that stays on that side and drifts ±35° around it with a slow push-in, keyed every half second:</p>
+	<pre><code>const cam = new PerspectiveCamera(35, 16 / 9, 0.1, 200);
+cam.name = 'Construct Camera';
+editor.execute(new AddObjectCommand(editor, cam));
+relabel(cam, 'construct-camera');
+
+// A camera helper that does the aiming for us. Object3D.lookAt points +Z at the
+// target; a camera looks down -Z, so use a camera, not a bare Object3D.
+const rig = new PerspectiveCamera();
+const center = new THREE.Vector3(1.7, 1.0, 0.7);     // between the two dancers
+const times = [], pos = [], quat = [];
+for (let t = 0; t &lt;= 33; t += 0.5) {
+  const az = THREE.MathUtils.degToRad(150 + 35 * Math.sin(2 * Math.PI * t / 33));
+  const r  = 8.5 - Math.sin(Math.PI * t / 33);        // push in, then ease out
+  rig.position.set(center.x + r * Math.sin(az), 1.45, center.z + r * Math.cos(az));
+  rig.lookAt(center);
+  times.push(t);
+  pos.push(...rig.position.toArray());
+  quat.push(...rig.quaternion.toArray());
+}
+
+addClip(scene, new THREE.AnimationClip('camera-orbit', 33, [
+  new THREE.VectorKeyframeTrack(cam.uuid + '.position', times, pos),
+  new THREE.QuaternionKeyframeTrack(cam.uuid + '.quaternion', times, quat),
+]));
+$S('#construct-camera').at(0).play('camera-orbit');</code></pre>
+	<p>Track names must be <code>&lt;object uuid&gt;.&lt;property&gt;</code>, which is why the clip is built from <code>cam.uuid</code>. If your dancers face another way, change the <code>150</code> (degrees from +Z) and check a few frames with <code>holdTimelineAt</code>:</p>
+	<pre><code>const { holdTimelineAt } = await import('./editor/js/intelligence/timelineController.js');
+holdTimelineAt(editor, 16);            // jump the whole scene to t = 16 s
+editor.viewportCamera = cam;           // look through the new camera
+editor.signals.viewportCameraChanged.dispatch();</code></pre>
+
+	<h2><span class="step">10</span> Render it</h2>
+	<ol class="steps">
+		<li>Open the <strong>Render</strong> tab. The <strong>Snapshot</strong> section saves the scene exactly as it is right now, with no grid or gizmos: hold the timeline at a moment you like (<code>holdTimelineAt(editor, 16)</code>), pick <strong>Construct Camera</strong> and a size, and press <strong>Take Snapshot</strong>.</li>
+		<li>For the video, scroll to <strong>Video Render</strong>. With no Camera Sequence shots, the render uses the viewport camera, so add one shot at 0 s pointing at <strong>Construct Camera</strong> (<em>+ Add Shot</em>, then choose the camera). Pick 1280 × 720 at 30 fps and press <strong>Render &amp; Export</strong>. The whole 36.1-second timeline renders; expect it to take about as long as the clip itself.</li>
+		<li>Keep the tab in the foreground while it renders — browsers throttle hidden tabs, which makes frames stall.</li>
+	</ol>
+	<p>To keep the scene, set your repository and token in the <strong>Git</strong> tab and use <strong>Commit Scene</strong>. The characters and their baked clips are stored as binary asset files next to a small scene JSON, so the commit is large but not unmanageable (a few dozen megabytes for this scene).</p>
+	<pre><code>// Sanity-check what you're about to commit
+$S('#morpheus').count();               // 1
+$S('.skin').count();                   // the skin parts the preset tagged
+editor.timeline.toJSON().tracks.map(t => t.target);   // ['#morpheus', '#remy', '#construct-camera']</code></pre>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="https://github.com/tejaswigowda/bodyrig-webCLI">bodyrig-webCLI on GitHub</a> · <a href="https://www.mixamo.com">Mixamo</a> · <a href="https://github.com/creategamecharacters/metahuman-to-glb">metahuman-to-glb on GitHub</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

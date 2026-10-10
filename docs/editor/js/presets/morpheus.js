@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { flattenBelly } from './bodyShape.js';
 import { findParts } from './rigParts.js';
@@ -86,6 +87,106 @@ function makeLeather( name ) {
 
 }
 
+// Rigidly skin the glasses to the head bone of the face skeleton, as a
+// SkinnedMesh next to the face mesh. A plain child of the bone goes through a
+// different transform path than the skinned head and can drift off it under
+// animation; a skinned mesh follows exactly the same bone matrices. Each part is
+// a child mesh, so they are merged per material.
+// Eyebrow (and other card) meshes ship as plain meshes, so they stay behind when
+// the head moves. Re-create one as a SkinnedMesh rigidly bound to the head bone,
+// keeping its material and morph targets.
+// Rigid offset between where the head bone sits in the scene right now and
+// where the skin's inverse bind matrix expects it. It is the identity for a
+// rig imported as-is, but a baked clip can leave the skeleton in a frame that
+// differs from the mesh's bind space (bodyrig-webCLI output does), so geometry
+// placed from world positions must be pulled back through it to follow the head.
+function headBindOffset( faceMesh, headIndex ) {
+
+	const bone = faceMesh.skeleton.bones[ headIndex ];
+	bone.updateWorldMatrix( true, false );
+	const d = new THREE.Matrix4().multiplyMatrices( bone.matrixWorld, faceMesh.skeleton.boneInverses[ headIndex ] );
+	return new THREE.Matrix4().multiplyMatrices( faceMesh.bindMatrix.clone().invert(), d.invert() ).multiply( faceMesh.bindMatrix );
+
+}
+
+export function skinCardToHead( mesh, faceMesh ) {
+
+	const headIndex = faceMesh.skeleton.bones.findIndex( b => /^head(_\d+)?$/i.test( b.name ) );
+	if ( headIndex < 0 || mesh.isSkinnedMesh ) return mesh;
+
+	mesh.updateWorldMatrix( true, false );
+	faceMesh.updateMatrixWorld( true );
+
+	const toFace = new THREE.Matrix4().multiplyMatrices( headBindOffset( faceMesh, headIndex ), faceMesh.matrixWorld.clone().invert() );
+	const geo = mesh.geometry.clone().applyMatrix4( new THREE.Matrix4().multiplyMatrices( toFace, mesh.matrixWorld ) );
+	const n = geo.attributes.position.count;
+	geo.setAttribute( 'skinIndex', new THREE.Uint16BufferAttribute( new Uint16Array( n * 4 ).map( ( _, i ) => i % 4 === 0 ? headIndex : 0 ), 4 ) );
+	geo.setAttribute( 'skinWeight', new THREE.Float32BufferAttribute( new Float32Array( n * 4 ).map( ( _, i ) => i % 4 === 0 ? 1 : 0 ), 4 ) );
+
+	const skinned = new THREE.SkinnedMesh( geo, mesh.material );
+	skinned.name = mesh.name;
+	skinned.userData = mesh.userData;
+	skinned.visible = mesh.visible;
+	skinned.frustumCulled = false;
+	skinned.morphTargetDictionary = mesh.morphTargetDictionary;
+	skinned.morphTargetInfluences = mesh.morphTargetInfluences;
+	skinned.bind( faceMesh.skeleton, faceMesh.bindMatrix );
+
+	mesh.parent.add( skinned );
+	mesh.removeFromParent();
+	return skinned;
+
+}
+
+export function skinToHead( root, glasses, faceMesh ) {
+
+	const headIndex = faceMesh.skeleton.bones.findIndex( b => /^head(_\d+)?$/i.test( b.name ) );
+	if ( headIndex < 0 ) return glasses;
+
+	glasses.updateMatrixWorld( true );
+	faceMesh.updateMatrixWorld( true );
+
+	// Glasses were modelled in world space at rest; express them in face-mesh space
+	const toFace = new THREE.Matrix4().multiplyMatrices( headBindOffset( faceMesh, headIndex ), faceMesh.matrixWorld.clone().invert() );
+	const group = new THREE.Group();
+	group.name = 'Sunglasses';
+
+	const byMaterial = new Map();
+	glasses.children.forEach( part => {
+
+		const geo = part.geometry.clone().applyMatrix4( new THREE.Matrix4().multiplyMatrices( toFace, part.matrix ) );
+		const list = byMaterial.get( part.material ) || [];
+		list.push( geo.toNonIndexed ? geo.toNonIndexed() : geo );
+		byMaterial.set( part.material, list );
+
+	} );
+
+	for ( const [ material, geos ] of byMaterial ) {
+
+		const geo = BufferGeometryUtils.mergeGeometries( geos.map( g => {
+
+			g.deleteAttribute( 'uv' );
+			return g;
+
+		} ) );
+
+		const n = geo.attributes.position.count;
+		geo.setAttribute( 'skinIndex', new THREE.Uint16BufferAttribute( new Uint16Array( n * 4 ).map( ( _, i ) => i % 4 === 0 ? headIndex : 0 ), 4 ) );
+		geo.setAttribute( 'skinWeight', new THREE.Float32BufferAttribute( new Float32Array( n * 4 ).map( ( _, i ) => i % 4 === 0 ? 1 : 0 ), 4 ) );
+
+		const skinned = new THREE.SkinnedMesh( geo, material );
+		skinned.name = material.name === 'sunglasses_lens' ? 'Lens' : 'Frame';
+		skinned.frustumCulled = false;
+		skinned.bind( faceMesh.skeleton, faceMesh.bindMatrix );
+		group.add( skinned );
+
+	}
+
+	faceMesh.parent.add( group );
+	return group;
+
+}
+
 function makeSunglasses( root, faceMesh, eyeL, eyeR ) {
 
 	const boxL = new THREE.Box3().setFromObject( eyeL );
@@ -133,9 +234,7 @@ function makeSunglasses( root, faceMesh, eyeL, eyeR ) {
 	bar( 0.004, 0.004, armLen, edge, lensY + lensH * 0.17, lensZ + depth / 2 - armLen / 2, 'Arm R' );
 	bar( 0.004, 0.004, armLen, - edge, lensY + lensH * 0.17, lensZ + depth / 2 - armLen / 2, 'Arm L' );
 
-	attachToBone( root, glasses, findBone( faceMesh.skeleton, /^head(_\d+)?$/i ) );
-
-	return glasses;
+	return skinToHead( root, glasses, faceMesh );
 
 }
 
@@ -294,7 +393,7 @@ export function applyMorpheus( editor ) {
 	} );
 	old.forEach( o => o.removeFromParent() );
 
-	const { shirt, bottom, shoes: shoesMesh, body, face, eyeL, eyeR, teeth, hair, brows, facialHair } = findParts( root );
+	let { shirt, bottom, shoes: shoesMesh, body, face, eyeL, eyeR, teeth, hair, brows, facialHair } = findParts( root );
 	const character = root.children[ 0 ];
 
 	// Black leather: drop the textures, keep a glossy solid colour
@@ -350,6 +449,7 @@ export function applyMorpheus( editor ) {
 
 	} );
 	eachMaterial( brows, m => m.color.set( 0x1a120d ) );
+	if ( brows && face ) brows = skinCardToHead( brows, face );
 
 	// Props
 	const glasses = face && eyeL && eyeR ? makeSunglasses( root, face, eyeL, eyeR ) : null;
