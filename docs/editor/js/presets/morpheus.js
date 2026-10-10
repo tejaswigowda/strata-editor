@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { flattenBelly } from './bodyShape.js';
 import { findParts } from './rigParts.js';
+import { smoothOutfitWeights } from './smoothSkinWeights.js';
 
 // ── Morpheus look ─────────────────────────────────────────────────────────────
 // Restyles a loaded humanoid (Epic MetaHuman-style rigs such as bo.glb, ada.glb
@@ -9,8 +10,9 @@ import { findParts } from './rigParts.js';
 // skin, black leather jacket / trousers / shoes, small black sunglasses, plus
 // semantic classes (.head, .skin, .jacket, .trousers, ...) so the parts can be
 // addressed by selector, and a flatter belly where there is one (bodyShape.js).
-// Parts that are not found are skipped, and re-running replaces the props it
-// added earlier.
+// Outfit skin weights are smoothed so the cloth stays closed under motion capture
+// (smoothSkinWeights.js). Parts that are not found are skipped, and re-running
+// replaces the props it added earlier.
 //
 // Usage (console): ( await import( './editor/js/presets/morpheus.js' ) ).applyMorpheus( editor );
 
@@ -379,6 +381,7 @@ export function applyMorpheus( editor ) {
 	legProps.forEach( ( { mesh, kind } ) => addClasses( editor, mesh, kind === 'shoes' ? [ 'shoes', 'clothing', 'black' ] : [ 'trousers', 'clothing', 'leather', 'black' ] ) );
 
 	flattenBelly( editor );
+	smoothOutfitWeights( root ); // keeps the cloth over the neck and shoulders under motion capture
 
 	editor.signals.sceneGraphChanged.dispatch();
 
