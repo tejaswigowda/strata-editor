@@ -441,6 +441,17 @@ export function applyMorpheus( editor ) {
 
 	} ) );
 
+	// The body lies under the clothes and the jacket/trousers hug it, so the two
+	// surfaces are nearly coplanar and flicker (z-fighting) as the mocap moves.
+	// Pushing the body slightly back in depth makes the clothes always win.
+	if ( body ) eachMaterial( body, m => {
+
+		m.polygonOffset = true;
+		m.polygonOffsetFactor = 2;
+		m.polygonOffsetUnits = 4;
+
+	} );
+
 	// Bald, with dark brows
 	if ( hair ) hair.visible = false;
 	facialHair.forEach( m => {
