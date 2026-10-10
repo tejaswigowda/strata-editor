@@ -4,6 +4,7 @@ import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { flattenBelly } from './bodyShape.js';
 import { findParts } from './rigParts.js';
 import { smoothOutfitWeights } from './smoothSkinWeights.js';
+import { removeCoveredBody } from './coveredBody.js';
 
 // ── Morpheus look ─────────────────────────────────────────────────────────────
 // Restyles a loaded humanoid (Epic MetaHuman-style rigs such as bo.glb, ada.glb
@@ -14,6 +15,9 @@ import { smoothOutfitWeights } from './smoothSkinWeights.js';
 // Outfit skin weights are smoothed so the cloth stays closed under motion capture
 // (smoothSkinWeights.js). Parts that are not found are skipped, and re-running
 // replaces the props it added earlier.
+//
+// The clothes are skinned rigidly to the body by default (no cloth swing); pass
+// { rigid: false } to keep the smoothed cloth-sim weights instead.
 //
 // Usage (console): ( await import( './editor/js/presets/morpheus.js' ) ).applyMorpheus( editor );
 
@@ -379,7 +383,7 @@ function makeTrousersAndShoes( root, body, material ) {
 
 }
 
-export function applyMorpheus( editor ) {
+export function applyMorpheus( editor, { rigid = true } = {} ) {
 
 	const root = editor.scene;
 	root.updateMatrixWorld( true );
@@ -492,7 +496,10 @@ export function applyMorpheus( editor ) {
 	legProps.forEach( ( { mesh, kind } ) => addClasses( editor, mesh, kind === 'shoes' ? [ 'shoes', 'clothing', 'black' ] : [ 'trousers', 'clothing', 'leather', 'black' ] ) );
 
 	flattenBelly( editor );
-	smoothOutfitWeights( root ); // keeps the cloth over the neck and shoulders under motion capture
+	smoothOutfitWeights( root, { rigid } ); // cloth moves with the body, so it stays closed (and layers stay apart) under motion capture
+
+	// The skin under the clothes can't be seen, only flicker through them
+	removeCoveredBody( body, [ shirt, bottom, shoesMesh, ...legProps.map( p => p.mesh ) ] );
 
 	editor.signals.sceneGraphChanged.dispatch();
 

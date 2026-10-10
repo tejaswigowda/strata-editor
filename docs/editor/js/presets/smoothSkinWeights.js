@@ -21,11 +21,15 @@ import { findParts } from './rigParts.js';
 // cloth hugging the skin follows it exactly, loose cloth keeps a soft swing. Idempotent: a flag on the geometry
 // stops it being applied twice. Run it at rest pose, before applying a clip.
 //
+// Pass { rigid: true } when the cloth does not need to swing: every outfit vertex then
+// copies its nearest skin vertex's weights outright.
+//
 // Usage (console): ( await import( './editor/js/presets/smoothSkinWeights.js' ) ).smoothOutfitWeights( editor.scene );
 
 const MAX_INFLUENCES = 4;
 const NEAR_BODY = 0.025; // m — fully follows the body
 const FAR_BODY = 0.07; // m — beyond this, smoothed cloth weights only
+const RIGID_RANGE = 0.35; // m — how far a vertex may be from the skin and still copy it (rigid mode)
 
 function restPositions( mesh ) {
 
@@ -135,7 +139,12 @@ function buildGraph( geometry ) {
 
 }
 
-export function smoothMeshWeights( mesh, { iterations = 24, strength = 0.7, references = [] } = {} ) {
+// rigid: the cloth does not need to flow, so every vertex copies the weights of the
+// nearest skin vertex (within RIGID_RANGE) instead of keeping its own cloth-sim
+// weights. Layers that lie close together (jacket over trousers over shoes) then
+// move exactly like the body underneath and like each other, so they stop
+// crossing each other (z-fighting / poke-through) at certain frames of a clip.
+export function smoothMeshWeights( mesh, { iterations = 24, strength = 0.7, references = [], rigid = false } = {} ) {
 
 	const geo = mesh.geometry;
 	if ( geo.userData.weightsSmoothed || ! geo.index ) return false;
@@ -160,6 +169,77 @@ export function smoothMeshWeights( mesh, { iterations = 24, strength = 0.7, refe
 		}
 
 		current[ node ] = m;
+
+	}
+
+	const newIndex = new Uint16Array( n * 4 );
+	const newWeight = new Float32Array( n * 4 );
+
+	// Pin vertices that lie on the skin (body, and the head mesh whose neck the
+	// collar sits on) to that skin's weights
+	let pinned = null;
+	const skins = ( references || [] ).filter( r => r && r.isSkinnedMesh );
+
+	if ( skins.length > 0 ) {
+
+		mesh.updateMatrixWorld( true );
+		const outPos = restPositions( mesh );
+		const outBones = new Map( mesh.skeleton.bones.map( ( b, i ) => [ boneKey( b.name ), i ] ) );
+		const headBone = outBones.get( 'head' ) ?? 0;
+
+		const sources = skins.map( skin => {
+
+			skin.updateMatrixWorld( true );
+			// skin bone index → outfit bone index (facial rig bones fold into the head)
+			const remap = skin.skeleton.bones.map( b => outBones.get( boneKey( b.name ) ) ?? headBone );
+			return { skin, remap, nearest: nearestBodyVertex( restPositions( skin ), rigid ? RIGID_RANGE / 3 : FAR_BODY ) };
+
+		} );
+
+		pinned = new Array( n );
+
+		for ( let i = 0; i < n; i ++ ) {
+
+			let best = null;
+
+			for ( const src of sources ) {
+
+				const hit = src.nearest( outPos[ i * 3 ], outPos[ i * 3 + 1 ], outPos[ i * 3 + 2 ], rigid ? RIGID_RANGE : FAR_BODY );
+				if ( hit && ( ! best || hit.distance < best.hit.distance ) ) best = { hit, src };
+
+			}
+
+			if ( ! best ) continue;
+
+			const { hit, src } = best;
+			const t = rigid || hit.distance <= NEAR_BODY ? 1 : 1 - ( hit.distance - NEAR_BODY ) / ( FAR_BODY - NEAR_BODY );
+			const sIdx = src.skin.geometry.attributes.skinIndex, sWgt = src.skin.geometry.attributes.skinWeight;
+			const m = new Map();
+
+			for ( let k = 0; k < 4; k ++ ) {
+
+				const w = sWgt.getComponent( hit.index, k );
+				if ( w > 0 ) {
+
+					const bone = src.remap[ sIdx.getComponent( hit.index, k ) ];
+					m.set( bone, ( m.get( bone ) || 0 ) + w );
+
+				}
+
+			}
+
+			pinned[ i ] = { t, m };
+
+		}
+
+	}
+
+	// Rigid cloth starts from the skin's weights, then the smoothing below spreads
+	// them so neighbouring vertices that sit near different limbs (sleeve against
+	// torso) do not tear apart
+	if ( rigid && pinned ) {
+
+		for ( let i = 0; i < n; i ++ ) if ( pinned[ i ] ) current[ nodeOf[ i ] ] = pinned[ i ].m;
 
 	}
 
@@ -195,72 +275,10 @@ export function smoothMeshWeights( mesh, { iterations = 24, strength = 0.7, refe
 
 	}
 
-	const newIndex = new Uint16Array( n * 4 );
-	const newWeight = new Float32Array( n * 4 );
-
-	// Pin vertices that lie on the skin (body, and the head mesh whose neck the
-	// collar sits on) to that skin's weights
-	let pinned = null;
-	const skins = ( references || [] ).filter( r => r && r.isSkinnedMesh );
-
-	if ( skins.length > 0 ) {
-
-		mesh.updateMatrixWorld( true );
-		const outPos = restPositions( mesh );
-		const outBones = new Map( mesh.skeleton.bones.map( ( b, i ) => [ boneKey( b.name ), i ] ) );
-		const headBone = outBones.get( 'head' ) ?? 0;
-
-		const sources = skins.map( skin => {
-
-			skin.updateMatrixWorld( true );
-			// skin bone index → outfit bone index (facial rig bones fold into the head)
-			const remap = skin.skeleton.bones.map( b => outBones.get( boneKey( b.name ) ) ?? headBone );
-			return { skin, remap, nearest: nearestBodyVertex( restPositions( skin ), FAR_BODY ) };
-
-		} );
-
-		pinned = new Array( n );
-
-		for ( let i = 0; i < n; i ++ ) {
-
-			let best = null;
-
-			for ( const src of sources ) {
-
-				const hit = src.nearest( outPos[ i * 3 ], outPos[ i * 3 + 1 ], outPos[ i * 3 + 2 ], FAR_BODY );
-				if ( hit && ( ! best || hit.distance < best.hit.distance ) ) best = { hit, src };
-
-			}
-
-			if ( ! best ) continue;
-
-			const { hit, src } = best;
-			const t = hit.distance <= NEAR_BODY ? 1 : 1 - ( hit.distance - NEAR_BODY ) / ( FAR_BODY - NEAR_BODY );
-			const sIdx = src.skin.geometry.attributes.skinIndex, sWgt = src.skin.geometry.attributes.skinWeight;
-			const m = new Map();
-
-			for ( let k = 0; k < 4; k ++ ) {
-
-				const w = sWgt.getComponent( hit.index, k );
-				if ( w > 0 ) {
-
-					const bone = src.remap[ sIdx.getComponent( hit.index, k ) ];
-					m.set( bone, ( m.get( bone ) || 0 ) + w );
-
-				}
-
-			}
-
-			pinned[ i ] = { t, m };
-
-		}
-
-	}
-
 	for ( let i = 0; i < n; i ++ ) {
 
 		let weights = current[ nodeOf[ i ] ];
-		const pin = pinned && pinned[ i ];
+		const pin = ! rigid && pinned && pinned[ i ];
 
 		if ( pin ) {
 

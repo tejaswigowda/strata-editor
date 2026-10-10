@@ -176,7 +176,8 @@ editor.execute(new SetScaleCommand(editor, remy, remy.scale.clone().multiplyScal
 		<li>recolours the jacket, trousers and shoes to black leather (building trousers and shoes where a rig only ships shorts);</li>
 		<li>adds small black sunglasses, bound to the head so they follow every turn;</li>
 		<li>flattens the belly and pelvis where the body sticks out past the chest;</li>
-		<li>smooths the outfit's skin weights so the neck and shoulders stay covered when motion capture moves the arms (cloth-simulation weights shred under skinning otherwise);</li>
+		<li>skins the clothes rigidly to the body — each outfit vertex copies its nearest skin vertex's weights, then they are smoothed — so the cloth moves with the body instead of swinging, and the neck and shoulders stay covered under motion capture (the shipped cloth-simulation weights shred under plain skinning);</li>
+		<li>deletes the body triangles hidden under the clothes (about 14% of Bruce's body), since that skin can't be seen and only flickers through the cloth;</li>
 		<li>tags each part with classes (<code>.head</code>, <code>.skin</code>, <code>.jacket</code>, <code>.trousers</code>, …) so you can address them with <code>$S()</code>.</li>
 	</ul>
 	<pre><code>const { applyMorpheus } = await import(new URL('./editor/js/presets/morpheus.js', document.baseURI).href);
@@ -251,7 +252,7 @@ holdTimelineAt(editor, 16);            // jump the whole scene to t = 16 s
 editor.viewportCamera = cam;           // look through the new camera
 editor.signals.viewportCameraChanged.dispatch();</code></pre>
 
-	<div class="note"><strong>Flickering clothes (z-fighting).</strong> A garment that hugs the body sits almost exactly on the skin under it, and for some frames of the dance the two surfaces tie in the depth buffer, so patches of skin show through the cloth. Two fixes, both already in this tutorial: keep the camera's near/far range tight (<code>0.5</code>–<code>60</code> above, not <code>0.01</code>–<code>1000</code> — depth precision is spent mostly near the camera, and the ratio far/near is what matters), and push the layer underneath slightly back with a polygon offset. The Morpheus preset already does that for Bruce's body; for Remy, whose T-shirt and shorts lie on his body mesh, do it yourself:
+	<div class="note"><strong>Flickering clothes (z-fighting).</strong> A garment that hugs the body sits almost exactly on the skin under it, and for some frames of the dance the two surfaces tie in the depth buffer, so patches of skin show through the cloth. Two fixes, both already in this tutorial: keep the camera's near/far range tight (<code>0.5</code>–<code>60</code> above, not <code>0.01</code>–<code>1000</code> — depth precision is spent mostly near the camera, and the ratio far/near is what matters), and push the layer underneath slightly back with a polygon offset. The Morpheus preset already removes the hidden skin under Bruce's clothes and pushes the rest of his body back; for Remy, whose T-shirt and shorts lie on his body mesh, do it yourself:
 	<pre><code>const body = remy.getObjectByName('Body');
 body.material = body.material.clone();          // never edit a material that has already rendered
 Object.assign(body.material, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });</code></pre>
