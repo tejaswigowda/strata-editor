@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Make your own MetaHuman — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: import a MetaHuman exported to GLB straight from a URL, then make it your own with the JS Shell — hide the hair, change skin and clothes, pose the 51 ARKit face shapes, tag parts with classes, and take a snapshot.">
+<!--
+	/about/tutorials/make-your-own-metahuman.html — a from-scratch, by-hand
+	tutorial. Every snippet is real Strata surface (JS Shell globals,
+	editor.execute commands, the Render tab's Take Snapshot) — copy/paste
+	each block into the Shell tab in order. Static page, no build step.
+	The only third-party call is the one the reader makes themselves: the
+	GLB fetch from creategamecharacters.github.io (CORS-enabled).
+	Screenshot is a real Take Snapshot capture from the scene this
+	tutorial builds.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Make your own MetaHuman</h1>
+	<p class="tagline">A <a href="https://www.unrealengine.com/metahuman">MetaHuman</a> is a photoreal rigged character — and <a href="https://github.com/creategamecharacters/metahuman-to-glb">metahuman-to-glb</a> is an open-source (MIT) pipeline that exports one from Unreal Engine 5.7 as a single web-ready <code>.glb</code> with all 51 ARKit face blendshapes. This tutorial loads one of its sample characters, Bruce, straight from the project's GitHub Pages URL, then makes him yours: no hair, a new skin tone and outfit, a smile posed from the blendshapes, selector-friendly classes on every part, and a still image from the Render tab. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<figure>
+		<img src="screenshots/make-your-own-metahuman.png" alt="A bald man with a slight smile in a glossy blue jacket, shown from the chest up against a grey background." loading="lazy">
+		<figcaption>The result of this tutorial, captured with the Render tab's Take Snapshot — Bruce, bald, in a blue leather jacket, smiling.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Where the character comes from.</strong> <a href="https://github.com/creategamecharacters/metahuman-to-glb">creategamecharacters/metahuman-to-glb</a> is a five-stage pipeline (Unreal assemble → Sequencer ARKit bake → Blender shape keys → Draco GLB → three.js viewer). Its <a href="https://creategamecharacters.github.io/metahuman-to-glb/">live demo</a> hosts the finished characters, so you can import one with a plain <code>fetch</code> — no download, no account. To bring in <em>your own</em> MetaHuman, run that pipeline on it and fetch (or drag in) the resulting GLB exactly the same way. The sample files are about 80 MB, so the first load takes a moment.</div>
+
+	<h2><span class="step">1</span> Import Bruce straight from the URL</h2>
+	<p class="lede">The host sends <code>Access-Control-Allow-Origin: *</code>, so the browser can fetch the GLB directly. Wrapping the bytes in a <code>File</code> and handing it to the editor's own loader is the same path as <em>File → Import</em> or dragging a file onto the page — Draco and every other glTF extension are already handled:</p>
+	<pre><code>const url = 'https://creategamecharacters.github.io/metahuman-to-glb/5.7/characters/bruce/bruce.glb';
+const blob = await (await fetch(url)).blob();
+editor.loader.loadFiles([new File([blob], 'bruce.glb', { type: 'model/gltf-binary' })]);</code></pre>
+	<p>A progress banner shows reading, then parsing, and then the <strong>Import glTF</strong> dialog appears. Leave the defaults and click <strong>OK</strong> — geometry compression is for later, and see the note in step 7 before you turn it on for a rigged character.</p>
+
+	<div class="note"><strong>Use <code>fetch</code>, not <code>fetchAPI</code>, for binary files.</strong> <code>fetchAPI</code> returns parsed JSON or text, which is right for APIs and wrong for a 80 MB model. Plain <code>fetch(...).blob()</code> keeps the bytes intact.</div>
+
+	<h2><span class="step">2</span> See what you imported</h2>
+	<p class="lede">A MetaHuman GLB is a skinned body plus a pile of separate meshes. List them before touching anything — the names are how you'll address each part:</p>
+	<pre><code>const rig = [];
+scene.traverse(o => { if (o.isMesh) rig.push(o.name + (o.isSkinnedMesh ? '  (skinned)' : '  (hair card)')); });
+rig;</code></pre>
+	<p>You'll see the skinned <code>SKM_Bruce_FaceMesh_1…8</code> (skin, teeth, eyes, lashes), <code>SKM_Bruce_BodyMesh001</code>, the outfit pieces <code>Bruce_Outfits_1/2/3</code> (jacket, pants, shoes), and flat card meshes for <code>Hair_</code>, <code>Beard_</code>, <code>Mustache_</code> and <code>Eyebrows_</code>. The face also carries the 51 ARKit blendshapes:</p>
+	<pre><code>const face = scene.getObjectByName('SKM_Bruce_FaceMesh_1');
+Object.keys(face.morphTargetDictionary).length;   // 51
+Object.keys(face.morphTargetDictionary).slice(0, 5);
+// ['eyeBlinkLeft', 'eyeLookDownLeft', 'eyeLookInLeft', 'eyeLookOutLeft', 'eyeLookUpLeft']</code></pre>
+
+	<h2><span class="step">3</span> Take the hair off</h2>
+	<p class="lede">Hair, beard and moustache are separate card meshes, so removing them is just hiding three objects. The eyebrows are also cards, and stay:</p>
+	<pre><code>['Hair_S_Casual_CardsMesh_Group0_LOD0',
+ 'Beard_M_MuttonChops_CardMesh_Group0_LOD0',
+ 'Mustache_S_Horseshoe_CardMesh_Group0_LOD0'
+].forEach(n => { scene.getObjectByName(n).visible = false; });</code></pre>
+	<div class="note"><strong>Not every character has the same part names.</strong> Ada, for example, has <code>Eyebrows_M_Thin…</code> and no beard, and her outfit meshes are named differently. If you'd rather not type names, the repo's <code>presets/rigParts.js</code> classifies the parts by mesh and material name: <code>const p = findParts(scene)</code> gives you <code>p.hair</code>, <code>p.face</code>, <code>p.shirt</code>, <code>p.shoes</code>… for any MetaHuman export.</div>
+
+	<h2><span class="step">4</span> Change the skin and the clothes</h2>
+	<p class="lede">Skin keeps its texture and is only <em>tinted</em> (the colour multiplies the map), so pores and detail survive. Clothes drop their texture for a flat colour. Both go through a small helper that edits a <strong>clone</strong> of the material and swaps it in — changing a material that has already been drawn can leave the WebGPU renderer with a stale uniform buffer, and a fresh material avoids that:</p>
+	<pre><code>const restyle = (mesh, fn) => {
+  const edit = old => { const m = old.clone(); fn(m); old.dispose(); return m; };
+  mesh.material = Array.isArray(mesh.material) ? mesh.material.map(edit) : edit(mesh.material);
+};
+
+// Skin: tint only, keep the texture
+for (const n of ['SKM_Bruce_FaceMesh_1', 'SKM_Bruce_BodyMesh001']) {
+  restyle(scene.getObjectByName(n), m => m.color.set(0xb98a6c));
+}
+
+// Clothes: flat colour, no texture
+restyle(scene.getObjectByName('Bruce_Outfits_1'), m => { m.map = null; m.color.set(0x1b3a6b); m.roughness = 0.6; });  // jacket
+restyle(scene.getObjectByName('Bruce_Outfits_2'), m => { m.map = null; m.color.set(0x202428); m.roughness = 0.7; });  // pants
+restyle(scene.getObjectByName('Bruce_Outfits_3'), m => { m.map = null; m.color.set(0xf2f2f2); m.roughness = 0.5; });  // shoes</code></pre>
+	<p>Change the hex values to change the person. Skin is the one to tune by eye: lighter tints read warmer under the default environment than they look as swatches.</p>
+
+	<h2><span class="step">5</span> Pose the face with the ARKit blendshapes</h2>
+	<p class="lede">Each of the 51 shapes is a morph target with an influence from 0 to 1. The same shape names exist on the face, the eyebrow cards, and (here) the beard and moustache cards, so one helper sets a shape everywhere it exists:</p>
+	<pre><code>const express = (shape, value) => scene.traverse(o => {
+  const i = o.morphTargetDictionary?.[shape];
+  if (i !== undefined) o.morphTargetInfluences[i] = value;
+});
+
+express('mouthSmileLeft', 0.8);
+express('mouthSmileRight', 0.8);
+express('cheekSquintLeft', 0.4);
+express('cheekSquintRight', 0.4);
+express('browInnerUp', 0.3);</code></pre>
+	<p>Other useful ones: <code>jawOpen</code>, <code>eyeBlinkLeft</code>/<code>eyeBlinkRight</code>, <code>mouthPucker</code>, <code>browDownLeft</code>, <code>eyeLookUpLeft</code>. Because they're ordinary morph target influences, the Universal Timeline can keyframe them like any other number — a blink or a talking mouth is just a short clip.</p>
+
+	<h2><span class="step">6</span> Tag the parts with classes</h2>
+	<p class="lede">The auto-derived classes on an imported rig are mostly material-name noise (<code>.mifaceskinbakedlod0skmbrucefacemesh</code>). Add a few meaningful ones with <code>tagClass</code> — it's a command, so it's undoable and travels with the scene — and the parts become addressable by selector:</p>
+	<pre><code>tagClass(scene.getObjectByName('SKM_Bruce_FaceMesh_1'), 'head');
+tagClass(scene.getObjectByName('SKM_Bruce_FaceMesh_1'), 'skin');
+tagClass(scene.getObjectByName('SKM_Bruce_BodyMesh001'), 'skin');
+tagClass(scene.getObjectByName('Bruce_Outfits_1'), 'jacket');
+tagClass(scene.getObjectByName('Bruce_Outfits_2'), 'trousers');
+tagClass(scene.getObjectByName('Bruce_Outfits_3'), 'shoes');
+
+$S('.skin').count();   // 2 — head and body, both retinted together by one selector</code></pre>
+
+	<h2><span class="step">7</span> Frame the shot and take a snapshot</h2>
+	<p class="lede">Move the viewport camera to a head-and-shoulders view and project nothing by guesswork — set the position and look-at target, and tell the orbit controls the same target so the next mouse drag pivots around his face:</p>
+	<pre><code>const cam = editor.camera;
+cam.position.set(0.35, 1.68, 1.15);
+cam.lookAt(0, 1.52, 0);
+editor.controls.center.set(0, 1.52, 0);
+editor.signals.cameraChanged.dispatch(cam);</code></pre>
+	<p>Now open the <strong>Render</strong> tab. The <strong>Snapshot</strong> section at the top renders the scene once, offscreen, with no grid, gizmos or skeleton lines: pick <strong>Current view</strong>, a size (1280 × 720 for the picture above), <strong>PNG</strong>, and press <strong>Take Snapshot</strong>. It downloads the file and leaves a preview with <em>Download again</em> and <em>Copy to clipboard</em> buttons under it. Tick <strong>Transparent</strong> for a cut-out with no background.</p>
+
+	<div class="note"><strong>Don't compress a rigged character on import.</strong> The Import glTF dialog's geometry options include <em>Simplify mesh</em>. Strata skips that step for skinned meshes and ones with morph targets (it would otherwise strip the skin weights and blendshapes), so on a MetaHuman it does nothing useful — and quantizing normals only helps non-skinned meshes. Leave compression off here.</div>
+
+	<h2><span class="step">8</span> Save it</h2>
+	<p class="lede">Everything above is ordinary scene state — geometry, materials, classes, blendshape influences — so a normal commit captures it. Set your repository and token in the <strong>Git</strong> tab, then use <strong>Commit Scene</strong>. Expect a big commit for a MetaHuman: the face alone carries 51 full copies of its vertices per mesh, so the scene is stored as roughly a hundred megabytes of binary asset files plus a small <code>scene.json</code> that references them.</p>
+	<pre><code>// Sanity-check what you're about to commit
+$S('.skin').count();                                   // 2
+scene.getObjectByName('Hair_S_Casual_CardsMesh_Group0_LOD0').visible;   // false
+editor.history.undos.length;                           // commands issued this session</code></pre>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="https://github.com/creategamecharacters/metahuman-to-glb">metahuman-to-glb on GitHub</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

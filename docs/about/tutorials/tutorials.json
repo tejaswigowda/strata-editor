@@ -25,5 +25,10 @@
 		"title": "Build a bubble shooter scene",
 		"href": "bubble-shooter-scene.html",
 		"desc": "Build the scene, not the game: a lane, exactly one class-tagged Bubble template for runtime logic to clone and recolor, a rainforest background, and a wooden single-score sign — plus two real bugs (a local-space distance offset, and JavaScript's negative modulo) worth checking for."
+	},
+	{
+		"title": "Make your own MetaHuman",
+		"href": "make-your-own-metahuman.html",
+		"desc": "Import a MetaHuman GLB straight from the metahuman-to-glb project's URL, then make it yours with the JS Shell: hide the hair, retint the skin and swap the outfit, pose the 51 ARKit face blendshapes, tag parts with classes, and capture a still with the Render tab's Take Snapshot."
 	}
 ]
