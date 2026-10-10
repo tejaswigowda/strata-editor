@@ -84,6 +84,10 @@ function quantizeSignedAttribute( attribute ) {
 	if ( ! attribute || attribute.isInterleavedBufferAttribute ) return attribute;
 	if ( ! ( attribute.array instanceof Float32Array ) ) return attribute; // already quantized
 
+	// WebGPU needs every vertex stream's stride to be a multiple of 4 bytes, and
+	// 3 x Int16 (normals) is 6 — the pipeline fails and the mesh never renders.
+	if ( attribute.itemSize % 2 !== 0 ) return attribute;
+
 	const src = attribute.array;
 	const dst = new Int16Array( src.length );
 
@@ -122,6 +126,24 @@ function quantizeUVAttribute( attribute ) {
 
 // ── Per-geometry optimization ─────────────────────────────────────────────────
 
+// SimplifyModifier rebuilds the geometry from position/normal/tangent/uv/color
+// only: it silently drops skinIndex/skinWeight (which breaks skinned meshes and
+// crashes bounding-box/raycast code), secondary UV/color sets and morph targets.
+// Such geometries are welded/quantized but never decimated.
+const SIMPLIFIABLE_ATTRIBUTES = new Set( [ 'position', 'normal', 'tangent', 'uv', 'color' ] );
+
+function canSimplify( geometry ) {
+
+	for ( const name in geometry.attributes ) {
+
+		if ( ! SIMPLIFIABLE_ATTRIBUTES.has( name ) ) return false;
+
+	}
+
+	return Object.keys( geometry.morphAttributes ).length === 0;
+
+}
+
 function optimizeGeometry( geometry, options ) {
 
 	let geo = geometry;
@@ -136,7 +158,7 @@ function optimizeGeometry( geometry, options ) {
 
 	}
 
-	if ( options.simplify && options.simplifyRatio > 0 ) {
+	if ( options.simplify && options.simplifyRatio > 0 && canSimplify( geo ) ) {
 
 		const position = geo.attributes.position;
 		const count = Math.floor( position.count * Math.min( 0.95, options.simplifyRatio ) );
@@ -188,7 +210,8 @@ export async function optimizeObject( object, options, onProgress ) {
 
 	// Let the browser paint any progress UI (which the caller has just shown)
 	// before we start the heavy, synchronous measure/weld/simplify work.
-	if ( onProgress ) {
+	// (requestAnimationFrame never fires in a hidden tab, which would stall the import forever.)
+	if ( onProgress && ! document.hidden ) {
 
 		await new Promise( ( r ) => requestAnimationFrame( () => requestAnimationFrame( r ) ) );
 

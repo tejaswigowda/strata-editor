@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { Config } from './Config.js';
 import { Loader } from './Loader.js';
+import { normalizeSkinIndices } from './mesh/skinIndices.js';
 import { History as _History } from './History.js';
 import { Strings } from './Strings.js';
 import { Storage as _Storage } from './Storage.js';
@@ -12,23 +13,6 @@ import { findSharedMaterials } from './intelligence/editOps.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 
-// A Uint32/Int32 skinIndex (the WebGPU backend widens it in place, and it then
-// gets saved) is bound as an integer attribute by WebGL, but the WebGL skinning
-// shader declares it float — the draw fails and skinned meshes vanish (only the
-// skeleton helper shows, e.g. in Firefox). Store it as Uint16 instead.
-function normalizeSkinIndices( root ) {
-
-	root.traverse( function ( o ) {
-
-		const attr = o.isSkinnedMesh && o.geometry.attributes.skinIndex;
-		if ( ! attr || attr.isInterleavedBufferAttribute ) return;
-		if ( ! ( attr.array instanceof Uint32Array || attr.array instanceof Int32Array ) ) return;
-
-		o.geometry.setAttribute( 'skinIndex', new THREE.BufferAttribute( new Uint16Array( attr.array ), attr.itemSize ) );
-
-	} );
-
-}
 _DEFAULT_CAMERA.name = 'Edit Camera'; // the built-in nav camera — never added to editor.cameras, so it can never appear in the Render tab's camera sequencer
 _DEFAULT_CAMERA.position.set( 0, 5, 10 );
 _DEFAULT_CAMERA.lookAt( new THREE.Vector3() );

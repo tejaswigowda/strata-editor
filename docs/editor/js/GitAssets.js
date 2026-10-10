@@ -20,8 +20,15 @@
 // is therefore stored as `<path>.partNNNN` pieces; its reference carries
 // `chunks: N` (assets) or the scene file becomes a `{ "$chunked": { parts } }`
 // manifest. Unchunked files and old scenes are read exactly as before.
+//
+// Packing: a rigged face carries dozens of tiny morph-target buffers, and one
+// GitHub blob upload per buffer trips the API's content-creation rate limit.
+// Buffers under PACK_MIN_BYTES are therefore appended to shared pack files
+// (assets/pack-<sha1>.bin, up to CHUNK_BYTES each); their reference adds
+// `offset` / `bytes` locating the slice inside the pack.
 
 export const CHUNK_BYTES = 8 * 1024 * 1024;
+const PACK_MIN_BYTES = 1024 * 1024;
 
 export function partPath( path, index ) {
 
@@ -134,6 +141,22 @@ function bytesToBuffer( u8 ) {
 
 }
 
+// Every serialized buffer attribute of a geometry: the vertex attributes plus
+// each morph target (data.morphAttributes[ name ] is an array of attributes).
+function dataAttributes( data ) {
+
+	const list = Object.values( data.attributes || {} );
+
+	for ( const targets of Object.values( data.morphAttributes || {} ) ) {
+
+		if ( Array.isArray( targets ) ) list.push( ...targets );
+
+	}
+
+	return list;
+
+}
+
 // ── Externalize (commit side) ─────────────────────────────────────────────────
 // Mutates `json` in place, replacing big buffers with references. Returns a Map
 // of path → Uint8Array for the caller to commit. Safe: `json` is a fresh
@@ -145,21 +168,20 @@ export async function externalizeScene( json ) {
 	const scene = json && json.scene;
 	if ( ! scene ) return { json, assets };
 
+	const packer = createPacker( assets );
+
 	for ( const geo of scene.geometries || [] ) {
 
 		const data = geo && geo.data;
 		if ( ! data ) continue;
 
-		if ( data.attributes ) {
+		// Vertex attributes and morph targets (a face rig carries dozens of full
+		// copies of position/normal) all go out as binary blobs.
+		for ( const attr of dataAttributes( data ) ) {
 
-			for ( const name of Object.keys( data.attributes ) ) {
+			if ( attr && Array.isArray( attr.array ) ) {
 
-				const attr = data.attributes[ name ];
-				if ( attr && Array.isArray( attr.array ) ) {
-
-					attr.array = await externalizeArray( attr.array, attr.type, assets, 'geo' );
-
-				}
+				attr.array = await externalizeArray( attr.array, attr.type, assets, 'geo', packer );
 
 			}
 
@@ -167,11 +189,13 @@ export async function externalizeScene( json ) {
 
 		if ( data.index && Array.isArray( data.index.array ) ) {
 
-			data.index.array = await externalizeArray( data.index.array, data.index.type, assets, 'idx' );
+			data.index.array = await externalizeArray( data.index.array, data.index.type, assets, 'idx', packer );
 
 		}
 
 	}
+
+	await packer.flush();
 
 	for ( const img of scene.images || [] ) {
 
@@ -183,11 +207,62 @@ export async function externalizeScene( json ) {
 
 }
 
-async function externalizeArray( array, type, assets, prefix ) {
+// Collects small buffers into shared pack files. A reference's `$bin` path is only
+// known once its pack is full (the path is the hash of the pack's bytes), so the
+// pending references are patched in flush().
+function createPacker( assets ) {
+
+	let pending = []; // { ref, u8 }
+	let size = 0;
+
+	const flush = async () => {
+
+		if ( pending.length === 0 ) return;
+
+		const pack = new Uint8Array( size );
+		for ( const item of pending ) pack.set( item.u8, item.ref.offset );
+
+		const path = `assets/pack-${ await sha1Hex( pack ) }.bin`;
+		assets.set( path, pack );
+		for ( const item of pending ) item.ref.$bin = path;
+
+		pending = [];
+		size = 0;
+
+	};
+
+	const add = async ( u8, ref ) => {
+
+		if ( size + u8.byteLength > CHUNK_BYTES ) await flush();
+
+		// 8-byte align so a typed-array view over the pack stays valid
+		const pad = ( 8 - size % 8 ) % 8;
+		size += pad;
+		ref.offset = size;
+		ref.bytes = u8.byteLength;
+		pending.push( { ref, u8 } );
+		size += u8.byteLength;
+
+	};
+
+	return { add, flush };
+
+}
+
+async function externalizeArray( array, type, assets, prefix, packer ) {
 
 	const TypedArray = TYPED[ type ] || Float32Array;
 	const ta = new TypedArray( array );
 	const u8 = new Uint8Array( ta.buffer, ta.byteOffset, ta.byteLength );
+
+	if ( packer && u8.byteLength < PACK_MIN_BYTES ) {
+
+		const ref = { $bin: '', dtype: TypedArray.name, length: ta.length };
+		await packer.add( u8, ref );
+		return ref;
+
+	}
+
 	const hash = await sha1Hex( u8 );
 	const path = `assets/${ prefix }-${ hash }.bin`;
 	const parts = splitBytes( path, u8 );
@@ -249,16 +324,11 @@ export async function internalizeScene( json, fetchBytes ) {
 		const data = geo && geo.data;
 		if ( ! data ) continue;
 
-		if ( data.attributes ) {
+		for ( const attr of dataAttributes( data ) ) {
 
-			for ( const name of Object.keys( data.attributes ) ) {
+			if ( attr && attr.array && attr.array.$bin ) {
 
-				const attr = data.attributes[ name ];
-				if ( attr && attr.array && attr.array.$bin ) {
-
-					attr.array = await internalizeArray( attr.array, fetchBytes );
-
-				}
+				attr.array = await internalizeArray( attr.array, fetchBytes );
 
 			}
 
@@ -284,7 +354,8 @@ export async function internalizeScene( json, fetchBytes ) {
 
 async function internalizeArray( ref, fetchBytes ) {
 
-	const u8 = await readAsset( ref.$bin, ref.chunks, fetchBytes );
+	let u8 = await readAsset( ref.$bin, ref.chunks, fetchBytes );
+	if ( ref.offset !== undefined ) u8 = u8.subarray( ref.offset, ref.offset + ref.bytes ); // slice of a pack
 	const TypedArray = TYPED[ ref.dtype ] || Float32Array;
 	const ta = new TypedArray( bytesToBuffer( u8 ) );
 	return Array.from( ta );
@@ -316,13 +387,9 @@ export function sceneHasExternalAssets( json ) {
 		const data = geo && geo.data;
 		if ( ! data ) continue;
 		if ( data.index && data.index.array && data.index.array.$bin ) return true;
-		if ( data.attributes ) {
+		for ( const attr of dataAttributes( data ) ) {
 
-			for ( const name of Object.keys( data.attributes ) ) {
-
-				if ( data.attributes[ name ] && data.attributes[ name ].array && data.attributes[ name ].array.$bin ) return true;
-
-			}
+			if ( attr && attr.array && attr.array.$bin ) return true;
 
 		}
 

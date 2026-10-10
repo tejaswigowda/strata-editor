@@ -397,6 +397,31 @@ async function ghGetBytes( parsed, branch, path, token, mode ) {
 
 // files: [ { path, base64, immutable } ]. `immutable` files (content-addressed
 // assets) are skipped when a blob already lives at that path in the base tree.
+// GitHub throttles content creation ("secondary rate limit": HTTP 403/429).
+// Wait it out and retry the same request instead of failing the whole commit.
+async function withRateLimitRetry( request, onWait ) {
+
+	for ( let attempt = 0; ; attempt ++ ) {
+
+		try {
+
+			return await request();
+
+		} catch ( err ) {
+
+			const limited = ( err.status === 403 || err.status === 429 ) && /rate limit/i.test( err.message );
+			if ( ! limited || attempt >= 4 ) throw err;
+
+			const seconds = 70 * ( attempt + 1 );
+			if ( onWait ) onWait( seconds );
+			await new Promise( r => setTimeout( r, seconds * 1000 ) );
+
+		}
+
+	}
+
+}
+
 async function commitFiles( parsed, branch, token, files, message, onProgress ) {
 
 	const base = `/repos/${ parsed.owner }/${ parsed.repo }`;
@@ -444,7 +469,7 @@ async function commitFiles( parsed, branch, token, files, message, onProgress ) 
 
 		if ( f.immutable && existing && existing.has( f.path ) ) { done ++; continue; }
 
-		const blob = await ghSend( 'POST', `${ base }/git/blobs`, { content: f.base64, encoding: 'base64' }, token );
+		const blob = await withRateLimitRetry( () => ghSend( 'POST', `${ base }/git/blobs`, { content: f.base64, encoding: 'base64' }, token ), onProgress ? ( s ) => onProgress( done, files.length, s ) : null );
 		treeItems.push( { path: f.path, mode: '100644', type: 'blob', sha: blob.sha } );
 
 		done ++;
@@ -745,9 +770,9 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 	for ( const part of chunkSceneFile( scenePath, sceneBytes ) ) files.push( { path: part.path, base64: u8ToBase64( part.bytes ), immutable: false } );
 
 	// One atomic commit for scene.json + all (new) assets.
-	const commit = await commitFiles( parsed, branch, cfg.pat, files, msg, ( done, total ) => {
+	const commit = await commitFiles( parsed, branch, cfg.pat, files, msg, ( done, total, waitSeconds ) => {
 
-		onProgress( done / total, `Uploading ${ done }/${ total }…` );
+		onProgress( done / total, waitSeconds ? `GitHub rate limit — retrying in ${ waitSeconds }s (${ done }/${ total })…` : `Uploading ${ done }/${ total }…` );
 
 	} );
 

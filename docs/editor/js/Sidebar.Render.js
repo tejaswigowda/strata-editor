@@ -199,6 +199,83 @@ function SidebarRender( editor ) {
 	// rule as the Shell tab: tab id must differ from the panel's own id).
 	container.setId( 'render-panel' );
 
+	// ── Snapshot (still image of the current scene state) ─────────────────────
+
+	const snapHeader = new UIRow();
+	snapHeader.add( new UIText( 'Snapshot' ).setFontWeight( 'bold' ) );
+	container.add( snapHeader );
+
+	const snapHelp = new UIText( 'Saves a still image of the scene as it is right now (no timeline playback), rendered offscreen without the editor grid or gizmos.' );
+	snapHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
+	container.add( snapHelp );
+
+	const snapCameraRow = new UIRow();
+	snapCameraRow.add( new UIText( 'Camera' ).setClass( 'Label' ) );
+	const snapCameraSelect = new UISelect().setWidth( '160px' );
+	snapCameraRow.add( snapCameraSelect );
+	container.add( snapCameraRow );
+
+	const snapSizeRow = new UIRow();
+	snapSizeRow.add( new UIText( 'Size' ).setClass( 'Label' ) );
+	const snapSizeSelect = new UISelect().setWidth( '160px' );
+	snapSizeSelect.setOptions( {
+		'viewport': 'Viewport size',
+		'viewport2x': 'Viewport \u00d7 2',
+		'1280x720': '1280 \u00d7 720 (720p)',
+		'1920x1080': '1920 \u00d7 1080 (1080p)',
+		'3840x2160': '3840 \u00d7 2160 (4K)',
+		'1080x1080': '1080 \u00d7 1080 (square)',
+	} );
+	snapSizeSelect.setValue( 'viewport2x' );
+	snapSizeRow.add( snapSizeSelect );
+	container.add( snapSizeRow );
+
+	const snapFormatRow = new UIRow();
+	snapFormatRow.add( new UIText( 'Format' ).setClass( 'Label' ) );
+	const snapFormatSelect = new UISelect().setWidth( '160px' );
+	snapFormatSelect.setOptions( { 'png': 'PNG', 'jpeg': 'JPEG', 'webp': 'WebP' } );
+	snapFormatSelect.setValue( 'png' );
+	snapFormatRow.add( snapFormatSelect );
+	container.add( snapFormatRow );
+
+	const snapTransparentRow = new UIRow();
+	snapTransparentRow.add( new UIText( 'Transparent' ).setClass( 'Label' ) );
+	const snapTransparentCheckbox = new UICheckbox( false );
+	snapTransparentRow.add( snapTransparentCheckbox );
+	snapTransparentRow.add( new UIText( 'background (PNG / WebP)' ).setMarginLeft( '6px' ) );
+	container.add( snapTransparentRow );
+
+	const snapButtonRow = new UIRow();
+	const snapshotButton = new UIButton( '\ud83d\udcf7 Take Snapshot' );
+	snapshotButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;';
+	snapshotButton.onClick( function () { takeSnapshot(); } );
+	snapButtonRow.add( snapshotButton );
+	container.add( snapButtonRow );
+
+	function refreshSnapshotCameras() {
+
+		const options = { 'viewport': 'Current view' };
+		for ( const uuid in editor.cameras ) {
+
+			if ( uuid === editor.camera.uuid ) continue;
+			options[ uuid ] = editor.cameras[ uuid ].name || 'Camera';
+
+		}
+
+		const previous = snapCameraSelect.getValue();
+		snapCameraSelect.setOptions( options );
+		snapCameraSelect.setValue( options[ previous ] ? previous : 'viewport' );
+
+	}
+
+	refreshSnapshotCameras();
+	signals.sceneGraphChanged.add( refreshSnapshotCameras );
+	signals.viewportCameraChanged.add( refreshSnapshotCameras );
+
+	const snapSeparator = document.createElement( 'hr' );
+	snapSeparator.style.cssText = 'margin:12px 0;border:0;border-top:1px solid rgba(128,128,128,0.35);';
+	container.dom.appendChild( snapSeparator );
+
 	// ── Header ────────────────────────────────────────────────────────────────
 
 	const header = new UIRow();
@@ -871,6 +948,268 @@ function SidebarRender( editor ) {
 		a.download = filename;
 		a.click();
 		setTimeout( () => URL.revokeObjectURL( url ), 5000 );
+
+	}
+
+	// ── Snapshot ──────────────────────────────────────────────────────────────
+
+	let snapshotUrl = null; // object URL of the last preview image
+
+	// Renders the scene once through `camera` on a throwaway WebGL renderer and
+	// returns the canvas. Applies the same workarounds as the video render (the
+	// live viewport may be a WebGPU renderer): its shadow maps and PMREM
+	// environment are bound to its own context, and a Uint32 skinIndex breaks
+	// the WebGL skinning shader. Everything is restored afterwards.
+	function renderStill( camera, width, height, transparent ) {
+
+		const scene = editor.scene;
+
+		signals.pauseViewportRendering.dispatch();
+
+		const restores = [];
+
+		try {
+
+			const shadowLights = [];
+			scene.traverse( function ( o ) { if ( o.isLight && o.castShadow ) shadowLights.push( o ); } );
+
+			const resetShadowMaps = function () {
+
+				for ( const light of shadowLights ) {
+
+					if ( light.shadow && light.shadow.map ) {
+
+						if ( typeof light.shadow.map.dispose === 'function' ) light.shadow.map.dispose();
+						light.shadow.map = null;
+
+					}
+
+					if ( light.shadow ) light.shadow.needsUpdate = true;
+
+				}
+
+			};
+
+			resetShadowMaps();
+			restores.push( resetShadowMaps );
+
+			scene.traverse( function ( o ) {
+
+				const attr = o.isSkinnedMesh && o.geometry.attributes.skinIndex;
+				if ( attr && attr.array instanceof Uint32Array ) {
+
+					o.geometry.setAttribute( 'skinIndex', new THREE.BufferAttribute( new Uint16Array( attr.array ), attr.itemSize ) );
+					restores.push( () => o.geometry.setAttribute( 'skinIndex', attr ) );
+
+				}
+
+			} );
+
+			const glCanvas = document.createElement( 'canvas' );
+			glCanvas.width = width;
+			glCanvas.height = height;
+
+			const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true } );
+			restores.push( () => renderer.dispose() );
+			renderer.setPixelRatio( 1 );
+			renderer.setSize( width, height, false );
+			renderer.setClearColor( transparent ? 0x000000 : 0xaaaaaa, transparent ? 0 : 1 );
+
+			const config = editor.config;
+			renderer.shadowMap.enabled = config.getKey( 'project/renderer/shadows' ) !== false;
+			renderer.shadowMap.type = parseFloat( config.getKey( 'project/renderer/shadowType' ) ) || THREE.PCFShadowMap;
+			renderer.toneMapping = parseFloat( config.getKey( 'project/renderer/toneMapping' ) ) || THREE.NoToneMapping;
+			renderer.toneMappingExposure = parseFloat( config.getKey( 'project/renderer/toneMappingExposure' ) ) || 1;
+
+			if ( scene.environment && scene.environment.isRenderTargetTexture ) {
+
+				const pmrem = new THREE.PMREMGenerator( renderer );
+				const envScene = ( scene.background && scene.background.isColor )
+					? new ColorEnvironment( scene.background )
+					: new RoomEnvironment();
+				const envRT = pmrem.fromScene( envScene, 0.04 );
+				const prevEnv = scene.environment;
+				scene.environment = envRT.texture;
+				restores.push( () => { scene.environment = prevEnv; envRT.dispose(); pmrem.dispose(); } );
+
+			}
+
+			if ( transparent && scene.background ) {
+
+				const prevBackground = scene.background;
+				scene.background = null;
+				restores.push( () => { scene.background = prevBackground; } );
+
+			}
+
+			const aspect = width / height;
+
+			if ( camera.isPerspectiveCamera ) {
+
+				const prevAspect = camera.aspect;
+				camera.aspect = aspect;
+				camera.updateProjectionMatrix();
+				restores.push( () => { camera.aspect = prevAspect; camera.updateProjectionMatrix(); } );
+
+			} else if ( camera.isOrthographicCamera ) {
+
+				const prev = { left: camera.left, right: camera.right };
+				camera.left = - aspect;
+				camera.right = aspect;
+				camera.updateProjectionMatrix();
+				restores.push( () => { camera.left = prev.left; camera.right = prev.right; camera.updateProjectionMatrix(); } );
+
+			}
+
+			renderer.render( scene, camera );
+
+			return glCanvas;
+
+		} finally {
+
+			for ( const restore of restores.reverse() ) {
+
+				try { restore(); } catch ( e ) { console.warn( 'Snapshot cleanup failed', e ); }
+
+			}
+
+			signals.resumeViewportRendering.dispatch();
+			signals.cameraChanged.dispatch( editor.viewportCamera );
+
+		}
+
+	}
+
+	function snapshotMessage( text ) {
+
+		progressOuter.style.display = 'none';
+		statusText.textContent = text;
+
+	}
+
+	async function takeSnapshot() {
+
+		if ( rendering ) return;
+
+		const viewportEl = document.getElementById( 'viewport' );
+		const sizeValue = snapSizeSelect.getValue();
+		let width, height;
+
+		if ( sizeValue.startsWith( 'viewport' ) ) {
+
+			const k = sizeValue === 'viewport2x' ? 2 : 1;
+			width = Math.round( ( viewportEl ? viewportEl.clientWidth : 1280 ) * k );
+			height = Math.round( ( viewportEl ? viewportEl.clientHeight : 720 ) * k );
+
+		} else {
+
+			[ width, height ] = sizeValue.split( 'x' ).map( Number );
+
+		}
+
+		if ( ! ( width > 0 && height > 0 ) ) {
+
+			snapshotMessage( 'Viewport has no size \u2014 cannot take a snapshot.' );
+			return;
+
+		}
+
+		const camValue = snapCameraSelect.getValue();
+		const camera = camValue === 'viewport' ? editor.viewportCamera : ( editor.cameras[ camValue ] || editor.viewportCamera );
+		const format = snapFormatSelect.getValue();
+		const mime = 'image/' + format;
+		const transparent = snapTransparentCheckbox.getValue() && format !== 'jpeg';
+
+		rendering = true;
+		snapshotButton.dom.disabled = true;
+		snapshotMessage( 'Taking snapshot\u2026' );
+		await sleep( 30 ); // let the status paint before the synchronous render
+
+		try {
+
+			const glCanvas = renderStill( camera, width, height, transparent );
+
+			// JPEG has no alpha: composite onto white. Going through a 2D canvas
+			// also keeps toBlob independent of the WebGL drawing buffer.
+			const out = document.createElement( 'canvas' );
+			out.width = width;
+			out.height = height;
+			const ctx = out.getContext( '2d' );
+			if ( format === 'jpeg' ) {
+
+				ctx.fillStyle = '#ffffff';
+				ctx.fillRect( 0, 0, width, height );
+
+			}
+
+			ctx.drawImage( glCanvas, 0, 0 );
+
+			const blob = await new Promise( resolve => out.toBlob( resolve, mime, 0.92 ) );
+			if ( ! blob ) throw new Error( 'The browser could not encode a ' + format.toUpperCase() + ' image' );
+
+			const sceneName = ( editor.scene.children[ 0 ] && editor.scene.children[ 0 ].name || 'scene' ).replace( /[^\w\-]+/g, '_' );
+			const camName = ( camera.name || 'camera' ).replace( /[^\w\-]+/g, '_' );
+			const stamp = new Date().toISOString().replace( /[-:]/g, '' ).replace( /\..*/, '' ).replace( 'T', '-' );
+			const ext = format === 'jpeg' ? 'jpg' : format;
+			const filename = `snapshot-${ sceneName }-${ camName }-${ width }x${ height }-${ stamp }.${ ext }`;
+
+			downloadBlob( blob, filename );
+
+			// Preview + follow-up actions
+			if ( snapshotUrl ) URL.revokeObjectURL( snapshotUrl );
+			snapshotUrl = URL.createObjectURL( blob );
+
+			const img = document.createElement( 'img' );
+			img.src = snapshotUrl;
+			img.style.cssText = 'width:100%;height:auto;display:block;' + ( transparent ? 'background:repeating-conic-gradient(#888 0% 25%, #bbb 0% 50%) 50% / 16px 16px;' : '' );
+			previewWrap.innerHTML = '';
+			previewWrap.appendChild( img );
+			previewWrap.style.display = '';
+
+			postRenderActions.innerHTML = '';
+
+			const saveAgain = new UIButton( '\u2b07 Download again' );
+			saveAgain.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;margin-right:6px;';
+			saveAgain.onClick( function () { downloadBlob( blob, filename ); } );
+			postRenderActions.appendChild( saveAgain.dom );
+
+			if ( window.ClipboardItem && navigator.clipboard && navigator.clipboard.write ) {
+
+				const copyButton = new UIButton( 'Copy to clipboard' );
+				copyButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+				copyButton.onClick( async function () {
+
+					try {
+
+						// Clipboard images must be PNG
+						const png = format === 'png' ? blob : await new Promise( resolve => out.toBlob( resolve, 'image/png' ) );
+						await navigator.clipboard.write( [ new ClipboardItem( { 'image/png': png } ) ] );
+						snapshotMessage( 'Snapshot copied to the clipboard.' );
+
+					} catch ( e ) {
+
+						snapshotMessage( 'Could not copy: ' + ( e && e.message ? e.message : e ) );
+
+					}
+
+				} );
+				postRenderActions.appendChild( copyButton.dom );
+
+			}
+
+			snapshotMessage( `Saved ${ filename } (${ width } \u00d7 ${ height }, ${ ( blob.size / 1024 ).toFixed( 0 ) } KB).` );
+
+		} catch ( e ) {
+
+			console.error( 'Snapshot failed', e );
+			snapshotMessage( 'Snapshot failed: ' + ( e && e.message ? e.message : e ) );
+
+		} finally {
+
+			rendering = false;
+			snapshotButton.dom.disabled = false;
+
+		}
 
 	}
 

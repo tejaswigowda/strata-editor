@@ -9,6 +9,7 @@ import { SetValueCommand } from './commands/SetValueCommand.js';
 import { LoaderUtils } from './LoaderUtils.js';
 
 import { GLTFImportDialog } from './GLTFImportDialog.js';
+import { normalizeSkinIndices } from './mesh/skinIndices.js';
 
 import { runImportPipeline } from './import/pipeline.js';
 import { labelClipRoots } from './intelligence/clipControl.js';
@@ -69,6 +70,7 @@ function Loader( editor ) {
 
 		const scene = result.scene;
 		scene.name = filename;
+		normalizeSkinIndices( scene );
 		scene.animations.push( ...result.animations );
 
 		// The dialog is interactive, so the import progress bar must not linger behind it.
