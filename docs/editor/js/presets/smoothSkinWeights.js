@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { findParts } from './rigParts.js';
+import { findParts, boneKey } from './rigParts.js';
 
 // ── Smooth outfit skin weights ────────────────────────────────────────────────
 // MetaHuman outfits ship with skin weights meant for cloth simulation and
@@ -96,14 +96,6 @@ function nearestBodyVertex( points, cell ) {
 
 }
 
-// Bones are matched across skeletons by name, ignoring case and the "_N" suffix
-// the editor adds to make duplicate bone names unique.
-function boneKey( name ) {
-
-	return name.replace( /_\d+$/, '' ).toLowerCase();
-
-}
-
 // Merge vertices that share a position, and build the node adjacency.
 function buildGraph( geometry ) {
 
@@ -139,12 +131,15 @@ function buildGraph( geometry ) {
 
 }
 
+// positions: world-space position of every vertex as it is rendered now (a new garment has no
+// meaningful skin yet, so the caller supplies where it sits).
+//
 // rigid: the cloth does not need to flow, so every vertex copies the weights of the
 // nearest skin vertex (within RIGID_RANGE) instead of keeping its own cloth-sim
 // weights. Layers that lie close together (jacket over trousers over shoes) then
 // move exactly like the body underneath and like each other, so they stop
 // crossing each other (z-fighting / poke-through) at certain frames of a clip.
-export function smoothMeshWeights( mesh, { iterations = 24, strength = 0.7, references = [], rigid = false } = {} ) {
+export function smoothMeshWeights( mesh, { iterations = 24, strength = 0.7, references = [], rigid = false, positions = null } = {} ) {
 
 	const geo = mesh.geometry;
 	if ( geo.userData.weightsSmoothed || ! geo.index ) return false;
@@ -183,7 +178,7 @@ export function smoothMeshWeights( mesh, { iterations = 24, strength = 0.7, refe
 	if ( skins.length > 0 ) {
 
 		mesh.updateMatrixWorld( true );
-		const outPos = restPositions( mesh );
+		const outPos = positions || restPositions( mesh ); // positions: rendered world coords per vertex, when the mesh's own skin is not meaningful yet
 		const outBones = new Map( mesh.skeleton.bones.map( ( b, i ) => [ boneKey( b.name ), i ] ) );
 		const headBone = outBones.get( 'head' ) ?? 0;
 

@@ -5,6 +5,7 @@ import { flattenBelly } from './bodyShape.js';
 import { findParts } from './rigParts.js';
 import { smoothOutfitWeights } from './smoothSkinWeights.js';
 import { removeCoveredBody } from './coveredBody.js';
+import { buildSunglasses } from '../customize/props.js';
 
 // ── Morpheus look ─────────────────────────────────────────────────────────────
 // Restyles a loaded humanoid (Epic MetaHuman-style rigs such as bo.glb, ada.glb
@@ -18,6 +19,12 @@ import { removeCoveredBody } from './coveredBody.js';
 //
 // The clothes are skinned rigidly to the body by default (no cloth swing); pass
 // { rigid: false } to keep the smoothed cloth-sim weights instead.
+//
+// This is a RIG STEP, not a customize op (customize/customizeOps.js): it flattens the belly,
+// builds trousers and shoes, re-weights the outfit and deletes hidden body triangles, so it
+// changes the vertex set and skin weights. Run it before baking with bodyrig / facerig, then
+// re-bake. For a look that leaves the rig alone (tint, hide hair, recolor, expression, a
+// bone-attached prop) use the Customize tab or the headless `customize` stage.
 //
 // Usage (console): ( await import( './editor/js/presets/morpheus.js' ) ).applyMorpheus( editor );
 
@@ -50,22 +57,6 @@ function findBone( skeleton, pattern ) {
 
 }
 
-function roundedRect( w, h, r ) {
-
-	const s = new THREE.Shape();
-	const x = - w / 2, y = - h / 2;
-	s.moveTo( x + r, y );
-	s.lineTo( x + w - r, y );
-	s.quadraticCurveTo( x + w, y, x + w, y + r );
-	s.lineTo( x + w, y + h - r );
-	s.quadraticCurveTo( x + w, y + h, x + w - r, y + h );
-	s.lineTo( x + r, y + h );
-	s.quadraticCurveTo( x, y + h, x, y + h - r );
-	s.lineTo( x, y + r );
-	s.quadraticCurveTo( x, y, x + r, y );
-	return s;
-
-}
 
 // Attach `object` to `bone` keeping its current world transform.
 function attachToBone( root, object, bone ) {
@@ -193,52 +184,7 @@ export function skinToHead( root, glasses, faceMesh ) {
 
 function makeSunglasses( root, faceMesh, eyeL, eyeR ) {
 
-	const boxL = new THREE.Box3().setFromObject( eyeL );
-	const boxR = new THREE.Box3().setFromObject( eyeR );
-	const cL = boxL.getCenter( new THREE.Vector3() );
-	const cR = boxR.getCenter( new THREE.Vector3() );
-
-	// Proportions come from the eye spacing so the glasses fit any head size.
-	const ipd = Math.abs( cL.x - cR.x );
-	const lensW = ipd * 0.885, lensH = ipd * 0.56, depth = ipd * 0.1;
-
-	const lensGeo = new THREE.ExtrudeGeometry( roundedRect( lensW, lensH, lensH * 0.32 ), {
-		depth, bevelEnabled: true, bevelThickness: 0.0015, bevelSize: 0.0015, bevelSegments: 2, curveSegments: 10
-	} );
-	const lensMat = new THREE.MeshPhysicalMaterial( { name: 'sunglasses_lens', color: 0x030303, roughness: 0.04, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.02 } );
-	const frameMat = new THREE.MeshStandardMaterial( { name: 'sunglasses_frame', color: 0x050505, roughness: 0.3, metalness: 0.6 } );
-
-	const glasses = new THREE.Group();
-	glasses.name = 'Sunglasses';
-
-	const lensZ = Math.max( boxL.max.z, boxR.max.z ) + ipd * 0.13;
-	const lensY = ( cL.y + cR.y ) / 2 + ipd * 0.03;
-
-	[ [ cL.x, 'Lens L' ], [ cR.x, 'Lens R' ] ].forEach( ( [ cx, name ] ) => {
-
-		const lens = new THREE.Mesh( lensGeo, lensMat );
-		lens.name = name;
-		lens.position.set( cx, lensY, lensZ );
-		glasses.add( lens );
-
-	} );
-
-	const bar = ( w, h, d, x, y, z, name ) => {
-
-		const b = new THREE.Mesh( new THREE.BoxGeometry( w, h, d ), frameMat );
-		b.name = name;
-		b.position.set( x, y, z );
-		glasses.add( b );
-
-	};
-
-	const edge = Math.max( cL.x, cR.x ) + lensW / 2;
-	const armLen = ipd * 1.8;
-	bar( ipd - lensW + 0.004, 0.004, 0.005, 0, lensY + lensH * 0.2, lensZ + depth / 2, 'Bridge' );
-	bar( 0.004, 0.004, armLen, edge, lensY + lensH * 0.17, lensZ + depth / 2 - armLen / 2, 'Arm R' );
-	bar( 0.004, 0.004, armLen, - edge, lensY + lensH * 0.17, lensZ + depth / 2 - armLen / 2, 'Arm L' );
-
-	return skinToHead( root, glasses, faceMesh );
+	return skinToHead( root, buildSunglasses( eyeL, eyeR ), faceMesh );
 
 }
 

@@ -200,7 +200,22 @@ editor.signals.cameraChanged.dispatch(cam);</code></pre>
 
 	<div class="note"><strong>Don't compress a rigged character on import.</strong> The Import glTF dialog's geometry options include <em>Simplify mesh</em>. Strata skips that step for skinned meshes and ones with morph targets (it would otherwise strip the skin weights and blendshapes), so on a MetaHuman it does nothing useful — and quantizing normals only helps non-skinned meshes. Leave compression off here.</div>
 
-	<h2><span class="step">8</span> Save it</h2>
+	<h2><span class="step">8</span> The same edits from the Customize tab, or as a spec</h2>
+	<p class="lede">Steps 3–6 are a <em>customizer</em>: they change how an existing rigged character looks and what its face is doing, and nothing else. The <strong>Customize</strong> tab runs exactly those edits from a panel (skin tint, hair and beard toggles, clothing recolor, expression sliders, a bone-attached prop), and the same edits can be written as a list of ops that replays deterministically — on this Bruce, on Ada, or on any other rigged GLB:</p>
+	<pre class="customize-spec"><code>{ "customize": [ { "ops": [
+  { "op": "hide",       "target": "part:hair",    "optional": true },
+  { "op": "hide",       "target": "part:beard",   "optional": true },
+  { "op": "tint",       "target": "part:skin",    "color": "#b98a6c" },
+  { "op": "recolor",    "target": "part:shirt",   "color": "#1b3a6b", "roughness": 0.6 },
+  { "op": "recolor",    "target": "part:bottom",  "color": "#202428", "roughness": 0.7 },
+  { "op": "recolor",    "target": "part:shoes",   "color": "#f2f2f2", "roughness": 0.5 },
+  { "op": "blendshape", "shapes": { "mouthSmileLeft": 0.8, "mouthSmileRight": 0.8, "cheekSquintLeft": 0.4, "cheekSquintRight": 0.4, "browInnerUp": 0.3 } },
+  { "op": "tag",        "target": "part:skin",    "classes": ["skin"] }
+] } ] }</code></pre>
+	<p>Paste it into the Customize tab's <strong>Spec</strong> box and press <strong>Apply spec</strong>, or hand it to <code>runCustomizeStage(scene, spec)</code> from <code>customize/customizeOps.js</code>. <code>"optional": true</code> skips an op when the character has no such part (Ada has no beard), so one spec serves both.</p>
+	<div class="note"><strong>Why it can only do these things.</strong> Every op here leaves the vertex set, the skin weights and the skeleton alone, which is what keeps the body skeleton and the 51 face morph targets working: the customized character still bakes and animates exactly as before (the tab shows a fingerprint of the rig and refuses to finish a run that changed it). Geometry edits, bone edits, swapping the body mesh, and <em>adding</em> a jacket or dress are therefore not customize ops — the spec validator rejects them. A rigid accessory such as sunglasses is allowed because it is parented to a bone; a new deformable garment must be skinned to the body first (the tab's <em>Skin selected garment to body</em> rig step), otherwise it z-fights and stays put when the character moves. Recoloring the clothing the character already has is the cheap, safe wardrobe.</div>
+
+	<h2><span class="step">9</span> Save it</h2>
 	<p class="lede">Everything above is ordinary scene state — geometry, materials, classes, blendshape influences — so a normal commit captures it. Set your repository and token in the <strong>Git</strong> tab, then use <strong>Commit Scene</strong>. Expect a big commit for a MetaHuman: the face alone carries 51 full copies of its vertices per mesh, so the scene is stored as roughly a hundred megabytes of binary asset files plus a small <code>scene.json</code> that references them.</p>
 	<pre><code>// Sanity-check what you're about to commit
 $S('.skin').count();                                   // 2

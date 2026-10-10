@@ -1,6 +1,7 @@
 export { AddAnimationClipCommand } from './AddAnimationClipCommand.js';
 export { AddObjectCommand } from './AddObjectCommand.js';
 export { AddScriptCommand } from './AddScriptCommand.js';
+export { CustomizeCommand, SkinGarmentCommand } from './CustomizeCommand.js';
 export { MoveObjectCommand } from './MoveObjectCommand.js';
 export { MultiCmdsCommand } from './MultiCmdsCommand.js';
 export { GroupObjectsCommand } from './GroupObjectsCommand.js';
