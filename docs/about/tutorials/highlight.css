@@ -1,0 +1,16 @@
+/* Syntax colours for tutorial code blocks (see highlight.js). Dark theme, VS Code Dark+-style palette. */
+.tok-comment  { color: #7a9a6b; font-style: italic; }
+.tok-string   { color: #ce9178; }
+.tok-regex    { color: #d16969; }
+.tok-number   { color: #b5cea8; }
+.tok-keyword  { color: #c586c0; }
+.tok-literal  { color: #569cd6; }
+.tok-function { color: #dcdcaa; }
+.tok-class    { color: #4ec9b0; }
+.tok-property { color: #9cdcfe; }
+.tok-global   { color: #7fb8ff; }
+
+/* shell one-liners */
+.tok-command  { color: #dcdcaa; font-weight: 600; }
+.tok-flag     { color: #9cdcfe; }
+.tok-url      { color: #7db2ff; }
