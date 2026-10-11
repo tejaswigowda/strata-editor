@@ -71,6 +71,14 @@ function Loader( editor ) {
 		const scene = result.scene;
 		scene.name = filename;
 		normalizeSkinIndices( scene );
+
+		// VRM 0.x avatars face -Z; flip them to face +Z like VRM 1.0 / the editor camera.
+		if ( result.parser && result.parser.json.extensions && result.parser.json.extensions.VRM ) {
+
+			scene.rotation.y = Math.PI;
+
+		}
+
 		scene.animations.push( ...result.animations );
 
 		// The dialog is interactive, so the import progress bar must not linger behind it.
@@ -539,6 +547,7 @@ function Loader( editor ) {
 			}
 
 			case 'glb':
+			case 'vrm':
 
 			{
 
@@ -1167,6 +1176,7 @@ function Loader( editor ) {
 				}
 
 				case 'glb':
+				case 'vrm':
 
 				{
 
