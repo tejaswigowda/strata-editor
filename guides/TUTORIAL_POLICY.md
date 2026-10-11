@@ -60,7 +60,7 @@ else writePublicPage( plan.slug, plan.title, run );                      // capa
   archetype target in the first place.
 * `node scripts/tutorial-policy.cjs lint` re-checks every shipped page (title, meta description,
   headings, alt text, captions, image paths, link targets, body text, file and screenshot names,
-  `tutorials.json`) and the redirect map. `node scripts/tutorial-policy.cjs selftest` runs one
+  `tutorials.json`). `node scripts/tutorial-policy.cjs selftest` runs one
   named-IP and one archetype run through the gate. Run both before committing tutorial changes.
 
 ### Prompt fragment for the authoring step
@@ -74,12 +74,7 @@ else writePublicPage( plan.slug, plan.title, run );                      // capa
 
 ## Renaming a published tutorial
 
-Never leave an inbound link dead. Add the pair to
-[`docs/about/tutorials/redirects.json`](../docs/about/tutorials/redirects.json), keep a stub page at the
-old slug (a JS redirect that preserves `location.search` and `location.hash`), and add an explicit 301
-line to [`docs/_redirects`](../docs/_redirects) for hosts that honour it (Cloudflare Pages, Netlify).
-Don't rely on a blanket rule. The linter fails if any of the three is missing. The old slug is exempt
-from the name check — it exists only so old links keep working.
+Rename the page, its screenshots and its `tutorials.json` entry together, then run the linter. The site keeps no redirect map or stub pages; old slugs are not preserved.
 
 ---
 

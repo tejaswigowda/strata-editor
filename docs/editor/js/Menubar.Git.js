@@ -962,6 +962,14 @@ function hashFromSettings( cfg, existingHash ) {
 
 }
 
+/** A link that opens the scene the given Git settings describe, or '' if no valid repo is set. */
+export function shareUrlFromSettings( cfg ) {
+
+	const hash = hashFromSettings( cfg, '' );
+	return hash ? window.location.origin + window.location.pathname + hash : '';
+
+}
+
 /** Point the URL hash at the scene the Git settings describe (no reload, no history entry). */
 export function syncHashFromSettings() {
 

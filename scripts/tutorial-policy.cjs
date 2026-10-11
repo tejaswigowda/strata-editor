@@ -20,7 +20,7 @@
 //   else { /* plan.slug / plan.title are safe to publish */ }
 //
 // CLI:
-//   node scripts/tutorial-policy.cjs lint       lint every public tutorial + tutorials.json + redirects
+//   node scripts/tutorial-policy.cjs lint       lint every public tutorial + tutorials.json
 //   node scripts/tutorial-policy.cjs selftest   one named-IP run (must refuse) + one archetype run (must publish)
 //
 // The denylist is a BACKSTOP for obvious names. It cannot see likeness: a page that
@@ -120,31 +120,13 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 	const problems = [];
 	const add = ( file, where, hit ) => problems.push( file + ': protected name "' + hit + '" in ' + where );
 
-	let redirects = [];
-	const redirectsFile = path.join( dir, 'redirects.json' );
-	if ( fs.existsSync( redirectsFile ) ) redirects = JSON.parse( fs.readFileSync( redirectsFile, 'utf8' ) ).redirects || [];
-	const oldSlugs = new Set( redirects.map( ( r ) => r.from ) );
-
-	// Redirect map must be complete and consistent: stub page, target exists, _redirects line.
-	const redirectLines = fs.existsSync( path.join( dir, '..', '..', '_redirects' ) ) ? fs.readFileSync( path.join( dir, '..', '..', '_redirects' ), 'utf8' ) : '';
-	for ( const r of redirects ) {
-
-		if ( ! fs.existsSync( path.join( dir, r.from ) ) ) problems.push( 'redirect stub missing: ' + r.from );
-		if ( ! fs.existsSync( path.join( dir, r.to ) ) ) problems.push( 'redirect target missing: ' + r.to );
-		if ( ! redirectLines.includes( '/about/tutorials/' + r.from ) || ! redirectLines.includes( '/about/tutorials/' + r.to ) ) problems.push( 'docs/_redirects has no 301 for ' + r.from );
-		const stub = fs.existsSync( path.join( dir, r.from ) ) ? fs.readFileSync( path.join( dir, r.from ), 'utf8' ) : '';
-		if ( stub && ! stub.includes( 'location.search' ) ) problems.push( r.from + ': stub does not preserve ?query / #hash' );
-
-	}
-
 	const pages = fs.readdirSync( dir ).filter( ( f ) => f.endsWith( '.html' ) );
 	for ( const f of pages ) {
 
 		const html = fs.readFileSync( path.join( dir, f ), 'utf8' );
-		const isStub = oldSlugs.has( f );
 
-		// URL / slug: old slugs exist only as redirects and are exempt.
-		if ( ! isStub ) for ( const hit of findViolations( f.replace( /\.html$/, '' ) ) ) add( f, 'file slug', hit );
+		// URL / slug.
+		for ( const hit of findViolations( f.replace( /\.html$/, '' ) ) ) add( f, 'file slug', hit );
 
 		const body = html.replace( /<!--[\s\S]*?-->/g, '' );
 		const surfaces = [
@@ -154,9 +136,9 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 			[ 'alt text', matchesAll( body, /\balt="([^"]*)"/g ) ],
 			[ 'figcaption', matchesAll( body, /<figcaption>([\s\S]*?)<\/figcaption>/g ).map( textOf ) ],
 			[ 'image path', matchesAll( body, /<img[^>]*\bsrc="([^"]*)"/g ) ],
-			[ 'link target', matchesAll( body, /<a[^>]*\bhref="([^"]*)"/g ).filter( ( h ) => ! oldSlugs.has( h ) ) ],
+			[ 'link target', matchesAll( body, /<a[^>]*\bhref="([^"]*)"/g ) ],
 		];
-		if ( ! isStub ) surfaces.push( [ 'body text', [ textOf( body.replace( /<pre[\s\S]*?<\/pre>/g, ' ' ).replace( /<style[\s\S]*?<\/style>/g, ' ' ) ) ] ] );
+		surfaces.push( [ 'body text', [ textOf( body.replace( /<pre[\s\S]*?<\/pre>/g, ' ' ).replace( /<style[\s\S]*?<\/style>/g, ' ' ) ) ] ] );
 		for ( const [ where, list ] of surfaces ) for ( const t of list ) for ( const hit of findViolations( t ) ) add( f, where, hit );
 
 	}

@@ -5,7 +5,7 @@
 // every action button disables while busy so they can't overlap.
 
 import { UIPanel, UIRow, UIText, UIInput, UIButton, UIHorizontalRule } from './libs/ui.js';
-import { loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage, showLoadOverlay, setLoadProgress, hideLoadOverlay, parseRepo, listBranches, listCommits, listRootJsonFiles } from './Menubar.Git.js';
+import { shareUrlFromSettings, loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage, showLoadOverlay, setLoadProgress, hideLoadOverlay, parseRepo, listBranches, listCommits, listRootJsonFiles } from './Menubar.Git.js';
 
 const LS_KEY = 'git-settings';
 
@@ -241,8 +241,70 @@ function SidebarGit( editor ) {
 	tokenHintRow.add( tokenHint );
 	container.add( tokenHintRow );
 
+	// Share link: opens the scene these settings point at; recomputed live as fields change.
+	const shareRow = new UIRow();
+	shareRow.add( new UIText( 'Share URL' ).setClass( 'Label' ) );
+	const shareInput = new UIInput( '' ).setWidth( '130px' );
+	shareInput.dom.readOnly = true;
+	shareInput.dom.placeholder = 'Set a repository to get a link';
+	shareInput.dom.addEventListener( 'focus', () => shareInput.dom.select() );
+	shareRow.add( shareInput );
+
+	const copyButton = document.createElement( 'button' );
+	copyButton.type = 'button';
+	copyButton.title = 'Copy share URL to clipboard';
+	copyButton.setAttribute( 'aria-label', 'Copy share URL to clipboard' );
+	copyButton.style.cssText = 'margin-left:4px;padding:2px 4px;cursor:pointer;background:transparent;border:1px solid rgba(128,128,128,0.4);border-radius:3px;color:inherit;line-height:0;vertical-align:middle;';
+	const COPY_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+	const CHECK_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+	copyButton.innerHTML = COPY_ICON;
+	copyButton.addEventListener( 'click', async () => {
+
+		const url = shareInput.getValue();
+		if ( ! url ) return;
+
+		try {
+
+			await navigator.clipboard.writeText( url );
+
+		} catch ( e ) {
+
+			// clipboard API unavailable (insecure context / denied): fall back to a selection copy
+			shareInput.dom.select();
+			document.execCommand( 'copy' );
+
+		}
+
+		copyButton.innerHTML = CHECK_ICON;
+		setTimeout( () => { copyButton.innerHTML = COPY_ICON; }, 1200 );
+
+	} );
+	shareRow.dom.appendChild( copyButton );
+	container.add( shareRow );
+
+	function currentSettings() {
+
+		return {
+			repoUrl:   repoInput.getValue().trim(),
+			branch:    branchInput.getValue().trim() || 'main',
+			commit:    commitPinInput.getValue().trim(),
+			scenePath: pathInput.getValue().trim() || 'scene.json',
+		};
+
+	}
+
+	function refreshShareUrl() {
+
+		shareInput.setValue( shareUrlFromSettings( currentSettings() ) );
+
+	}
+
+	[ repoInput, branchInput, commitPinInput, pathInput ].forEach( input => input.dom.addEventListener( 'input', refreshShareUrl ) );
+	refreshShareUrl();
+
 	function persist() {
 
+		refreshShareUrl();
 		saveSettings( {
 			repoUrl:   repoInput.getValue().trim(),
 			branch:    branchInput.getValue().trim() || 'main',
@@ -267,6 +329,7 @@ function SidebarGit( editor ) {
 		commitPinInput.setValue( fresh.commit || '' );
 		pathInput.setValue( fresh.scenePath || 'scene.json' );
 		patInput.setValue( fresh.pat || '' );
+		refreshShareUrl();
 
 	} );
 

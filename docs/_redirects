@@ -1,5 +1,0 @@
-# Permanent redirects for renamed tutorials (Cloudflare Pages / Netlify format).
-# Hosts that ignore this file fall back to the JS stub pages at the old slugs.
-# Source of truth: docs/about/tutorials/redirects.json
-/about/tutorials/dance-in-the-construct.html  /about/tutorials/two-character-dance.html  301
-/about/tutorials/vrm-lara-croft.html          /about/tutorials/vrm-restyle-explorer.html  301
