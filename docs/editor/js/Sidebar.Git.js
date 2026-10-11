@@ -33,7 +33,7 @@ function createPicker( { title, fetchItems, onPick } ) {
 	btn.type = 'button';
 	btn.textContent = '▾';
 	btn.title = title;
-	btn.style.cssText = 'width:18px;height:20px;margin-left:4px;padding:0;font-size:10px;line-height:1;cursor:pointer;flex:none;background:rgba(255,255,255,0.08);color:inherit;border:1px solid rgba(255,255,255,0.25);border-radius:3px;';
+	btn.style.cssText = 'width:18px;height:20px;margin-right:4px;padding:0;font-size:10px;line-height:1;cursor:pointer;flex:none;background:rgba(255,255,255,0.08);color:inherit;border:1px solid rgba(255,255,255,0.25);border-radius:3px;';
 
 	const panel = document.createElement( 'div' );
 	panel.style.cssText = 'position:fixed;z-index:200;min-width:160px;max-width:280px;max-height:220px;overflow-y:auto;background:#222;border:1px solid rgba(255,255,255,0.25);border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,0.45);display:none;font-size:12px;';
@@ -153,9 +153,8 @@ function SidebarGit( editor ) {
 	// Branch
 	const branchRow = new UIRow();
 	branchRow.add( new UIText( strings.getKey( 'menubar/git/settings/branch' ) ).setClass( 'Label' ) );
-	const branchInput = new UIInput( s.branch || 'main' ).setWidth( '160px' );
+	const branchInput = new UIInput( s.branch || 'main' ).setWidth( '138px' );
 	branchInput.dom.placeholder = 'main';
-	branchRow.add( branchInput );
 	branchRow.dom.appendChild( createPicker( {
 		title: 'Browse branches',
 		fetchItems: async () => {
@@ -168,15 +167,15 @@ function SidebarGit( editor ) {
 		},
 		onPick: ( value ) => { branchInput.setValue( value ); persist(); },
 	} ) );
+	branchRow.add( branchInput );
 	container.add( branchRow );
 
 	// Commit — optional pin to a specific commit SHA or tag; empty means "latest"
 	// (i.e. use Branch above as-is, tracking its moving HEAD).
 	const commitPinRow = new UIRow();
 	commitPinRow.add( new UIText( strings.getKey( 'menubar/git/settings/commit' ) ).setClass( 'Label' ) );
-	const commitPinInput = new UIInput( s.commit || '' ).setWidth( '160px' );
+	const commitPinInput = new UIInput( s.commit || '' ).setWidth( '138px' );
 	commitPinInput.dom.placeholder = 'latest';
-	commitPinRow.add( commitPinInput );
 	commitPinRow.dom.appendChild( createPicker( {
 		title: 'Browse commits',
 		fetchItems: async () => {
@@ -190,14 +189,14 @@ function SidebarGit( editor ) {
 		},
 		onPick: ( value ) => { commitPinInput.setValue( value ); persist(); },
 	} ) );
+	commitPinRow.add( commitPinInput );
 	container.add( commitPinRow );
 
 	// Scene file
 	const pathRow = new UIRow();
 	pathRow.add( new UIText( strings.getKey( 'menubar/git/settings/path' ) ).setClass( 'Label' ) );
-	const pathInput = new UIInput( s.scenePath || 'scene.json' ).setWidth( '160px' );
+	const pathInput = new UIInput( s.scenePath || 'scene.json' ).setWidth( '138px' );
 	pathInput.dom.placeholder = 'scene.json';
-	pathRow.add( pathInput );
 	pathRow.dom.appendChild( createPicker( {
 		title: 'Browse .json files at repo root',
 		fetchItems: async () => {
@@ -211,6 +210,7 @@ function SidebarGit( editor ) {
 		},
 		onPick: ( value ) => { pathInput.setValue( value ); persist(); },
 	} ) );
+	pathRow.add( pathInput );
 	container.add( pathRow );
 
 	// Access token
