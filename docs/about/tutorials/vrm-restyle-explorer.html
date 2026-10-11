@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Restyle a VRM into an explorer with the JS Shell — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: import a VRoid .vrm into Strata and restyle it into a generic ruins-exploring adventurer in the JS Shell — retint the hair and skin, cut the clothes into a crop top and shorts, attach a belt, satchel and headband to the skeleton, lower the arms, and pose a smirk with the ARKit blendshapes.">
+<!--
+	/about/tutorials/vrm-restyle-explorer.html — a from-scratch, by-hand tutorial.
+	The target is an original, generic expedition-explorer archetype — never a
+	specific named character (see guides/TUTORIAL_POLICY.md).
+	Every snippet is real Strata surface (JS Shell globals, editor.execute
+	commands, the Render tab's Take Snapshot) — copy/paste each block into the
+	Shell tab in order. Static page, no build step, no third-party calls: the
+	reader downloads the VRM themselves and imports it with File → Import.
+	Each shell command runs in its own scope, so state shared between blocks
+	lives on window.* (R, B, tint, cutBelow, prop, express).
+	Screenshot is a real capture of the viewport after running every block.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		max-width: 100%;
+		max-height: 70vh;
+		margin: 0 auto;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Restyle a VRM into an explorer with the JS Shell</h1>
+	<p class="tagline">A <code>.vrm</code> is a glTF binary with a humanoid skeleton and a set of facial blendshapes — which means Strata imports it like any other rigged GLB. This tutorial takes the free female base model from <a href="https://github.com/hinzka/52blendshapes-for-VRoid-face">hinzka/52blendshapes-for-VRoid-face</a> and restyles it as a generic ruins-exploring expedition explorer using nothing but the JS Shell: auburn hair and a tan, a sage-green crop top and sand shorts cut out of the existing clothes, a belt, a satchel, a canteen, wristbands and a headband attached to the skeleton, lowered arms and a smirk. The target is an original archetype, not a particular character — the same steps restyle the base model into anything you can describe. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<figure>
+		<img src="screenshots/vrm-explorer.png" alt="An anime-style character with auburn hair and a red headband, a sage-green crop top, sand-coloured shorts, a belt, a satchel on one hip and a canteen on the other, standing with arms at her sides." loading="lazy">
+		<figcaption>The result of this tutorial — the VRoid base model after every block below, with the skeleton helpers hidden.</figcaption>
+	</figure>
+
+	<div class="note"><strong>About the model.</strong> The repository's README says the VRM files may be used freely, personal or commercial, redistributed or sold, with no credit required. The female model is <code>VRoid_V110_Female_v1.1.3.vrm</code> (about 23 MB); the male one sits next to it. These steps use the female model's measurements — heights in metres, taken from its skeleton — so they won't line up on the male one without adjusting the numbers.</div>
+
+	<h2><span class="step">1</span> Download and import the VRM</h2>
+	<p class="lede">Open the repository, download <code>VRoid_V110_Female_v1.1.3.vrm</code> (use the <em>Download raw file</em> button on its page, or clone the repo), then bring it into the editor either way:</p>
+	<ol class="steps">
+		<li>Press the <strong>Import</strong> icon in the top bar and choose the <code>.vrm</code> file, <em>or</em> drag the file onto the editor window.</li>
+		<li>A progress banner shows reading, then parsing, and then the <strong>Import glTF</strong> dialog appears. Leave the defaults and click <strong>OK</strong>. Don't turn on geometry compression for a rigged character: Strata skips mesh simplification for skinned meshes and ones with morph targets, so it would do nothing useful here.</li>
+	</ol>
+	<div class="note"><strong>Which way does she face?</strong> VRM 0.x models are authored facing −Z, the opposite of the editor's front view. Strata turns a 0.x VRM 180° around Y on import so the model faces the front camera; you'll see <code>Rotation Y = 180°</code> on the imported group in the Object panel. Everything below is written in world coordinates, so that turn doesn't change any of the numbers.</div>
+
+	<h2><span class="step">2</span> See what you imported</h2>
+	<p class="lede">The shell runs every command in its own scope, so a <code>const</code> from one block is gone in the next. Anything you want to keep goes on <code>window</code>. Start with two handles: <code>R</code>, the imported model, and <code>B</code>, which finds one of the VRM humanoid bones by its short name (<code>C_Hips</code>, <code>L_Hand</code>, <code>R_UpperLeg</code>…). Then list the material names — they are how you'll address each part:</p>
+	<pre><code>window.R = scene.children.find(o =&gt; o.name.endsWith('.vrm'));
+window.B = name =&gt; R.getObjectByName('J_Bip_' + name);
+const mats = new Set();
+R.traverse(o =&gt; { if (o.isMesh) [].concat(o.material).forEach(m =&gt; mats.add(m.name)); });
+[...mats]</code></pre>
+	<p>Fourteen materials come back — <code>…Face_00_SKIN</code>, <code>…Body_00_SKIN</code>, <code>…EyeIris_00_EYE</code>, <code>…FaceBrow_00_FACE</code>, <code>…HairBack_00_HAIR</code>, <code>…Hair_00_HAIR</code>, and the three clothing pieces <code>…Tops_01_CLOTH</code>, <code>…Bottoms_01_CLOTH</code> and <code>…Shoes_01_CLOTH</code>. The face meshes carry the blendshapes:</p>
+	<pre><code>const face = R.getObjectByName('Face').children.find(o =&gt; o.morphTargetDictionary);
+const shapes = Object.keys(face.morphTargetDictionary);
+shapes.length + ' shapes, ' + shapes.filter(n =&gt; /^[a-z]/.test(n)).length + ' of them ARKit (' + shapes.find(n =&gt; /^[a-z]/.test(n)) + '…)'</code></pre>
+	<p>That prints <code>124 shapes, 52 of them ARKit (browInnerUp…)</code>: the VRM <code>Fcl_…</code> presets first, then the 52 ARKit shapes this model is known for (<code>browInnerUp</code>, <code>jawOpen</code>, <code>mouthSmileLeft</code>…), then a few underscore-prefixed helper shapes.</p>
+
+	<h2><span class="step">3</span> Recolor hair, skin and clothes</h2>
+	<p class="lede">These materials are textured, so setting a color <em>tints</em> the texture (the color multiplies the map) rather than replacing it. That's what you want for skin and hair — the shading and the face detail survive. A tiny helper applies a color to every material whose name matches a pattern:</p>
+	<pre><code>window.tint = (re, hex) =&gt; R.traverse(o =&gt; {
+  if (o.isMesh) [].concat(o.material).forEach(m =&gt; { if (re.test(m.name)) m.color.set(hex); });
+});
+tint(/HAIR/, 0x6e3216);        // auburn hair
+tint(/SKIN/, 0xeabf9c);        // warm tan, face and body together
+tint(/Tops/, 0x5f7f5a);        // sage green
+tint(/Shoes/, 0x4a3320);       // brown boots
+tint(/EyeIris/, 0x6a4a2a);     // brown eyes
+tint(/Brow|Eyelash|Eyeline/, 0x3a1d0f);
+'tinted'</code></pre>
+	<p>The viewport redraws on demand, so if nothing seems to change, move the mouse over it or orbit a little. The original hair is pale grey and the original shirt is white, so both pick up the new colors cleanly; the black trousers can't be tinted at all, which is why the next step replaces their texture.</p>
+
+	<h2><span class="step">4</span> Cut a crop top and shorts</h2>
+	<p class="lede">The clothes are one mesh per garment, so a new silhouette is a matter of deleting the triangles you don't want. <code>cutBelow(mesh, y)</code> keeps only the triangles whose centre is above a world height, then pushes any vertices still below that height up onto it so the hem is flat. It uses <code>applyBoneTransform</code> to find where each vertex really is on the posed skeleton, and it works on a <strong>clone</strong> of the geometry so nothing else sharing the original is touched:</p>
+	<pre><code>window.cutBelow = (mesh, y) =&gt; {
+  mesh.updateMatrixWorld(true);
+  const g = mesh.geometry.clone(), pos = g.attributes.position, idx = g.index.array;
+  const wy = new Float32Array(pos.count), v = new THREE.Vector3();
+  for (let i = 0; i &lt; pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    mesh.applyBoneTransform(i, v);                // where the skinned vertex really is
+    wy[i] = v.applyMatrix4(mesh.matrixWorld).y;
+  }
+  const keep = [];
+  for (let i = 0; i &lt; idx.length; i += 3)
+    if ((wy[idx[i]] + wy[idx[i + 1]] + wy[idx[i + 2]]) / 3 &gt;= y) keep.push(idx[i], idx[i + 1], idx[i + 2]);
+  for (let i = 0; i &lt; pos.count; i++) if (wy[i] &lt; y) pos.setY(i, pos.getY(i) + y - wy[i]);   // flatten the hem
+  g.setIndex(keep);
+  g.computeBoundingSphere();
+  mesh.geometry = g;
+};
+R.traverse(o =&gt; {
+  if (!o.isMesh) return;
+  const m = [].concat(o.material)[0];
+  if (/Bottoms/.test(m.name)) { cutBelow(o, 0.7); m.map = null; m.alphaTest = 0; m.color.set(0xb9a273); }
+  if (/Tops/.test(m.name)) cutBelow(o, 1.03);
+});
+'cut'</code></pre>
+	<p>Heights are in metres from the floor: <code>0.7</code> is the upper thigh, <code>1.03</code> is under the ribs. The trousers get a flat brown color instead of the tint, because the original texture is dark and a dark texture times brown is still dark — and its transparency cut-out (<code>alphaTest</code>) was what made them capri length, so that goes too.</p>
+	<div class="note"><strong>Two honest limitations.</strong> The hems come out a little ragged, because the triangles are big and a straight cut through them can't be perfectly clean; the belt in the next step hides the top edge of the shorts, but the bottom hem stays rough. And the base model has no torso under its clothes — the area is a black patch in the texture — so the next step adds a skin-colored band to stand in for the bare midriff.</div>
+
+	<h2><span class="step">5</span> Strap on the gear</h2>
+	<p class="lede">The gear is plain three.js primitives parented to bones, so it follows the skeleton when the character moves. <code>prop</code> builds a mesh, places it using <em>world</em> coordinates, then calls <code>bone.attach(mesh)</code>, which re-parents it while keeping that world placement. Every position below comes from the bone positions of this model — hips at y ≈ 0.91, hands at x ≈ ±0.54:</p>
+	<pre><code>window.prop = (bone, geo, hex, pos, o = {}) =&gt; {
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: hex, roughness: o.rough ?? 0.7, metalness: o.metal ?? 0, side: THREE.DoubleSide }));
+  m.name = o.name; m.position.set(...pos);
+  if (o.rot) m.rotation.set(...o.rot);
+  if (o.scale) m.scale.set(...o.scale);
+  scene.add(m);                    // place it in world coordinates…
+  scene.updateMatrixWorld(true);
+  B(bone).attach(m);               // …then parent it to the bone, keeping that placement
+  return m;
+};
+'prop helper ready'</code></pre>
+	<p>Now the gear itself: a skin-colored midriff band, a belt with a buckle, a satchel on the left hip and a canteen on the right, a leather wristband on each arm, and a red headband. The <code>for</code> loop runs once for each arm by flipping the sign of x:</p>
+	<pre><code>const leather = 0x2a1b10, tan = 0x8b6a3e, steel = 0x8b8f94, skin = 0xeabf9c;
+prop('C_Spine', new THREE.CylinderGeometry(0.104, 0.108, 0.13, 28, 1, true), skin, [0, 0.99, 0.07], { scale: [1, 1, 0.8], name: 'midriff' });
+prop('C_Hips', new THREE.CylinderGeometry(0.15, 0.15, 0.04, 28, 1, true), leather, [0, 0.935, 0.035], { scale: [1, 1, 0.78], name: 'belt' });
+prop('C_Hips', new THREE.BoxGeometry(0.05, 0.035, 0.02), steel, [0, 0.935, 0.155], { metal: 0.8, rough: 0.35, name: 'buckle' });
+prop('C_Hips', new THREE.BoxGeometry(0.06, 0.12, 0.14), tan, [0.18, 0.84, 0.03], { name: 'satchel' });
+prop('C_Hips', new THREE.BoxGeometry(0.065, 0.03, 0.15), leather, [0.18, 0.9, 0.03], { name: 'satchel-flap' });
+prop('C_Hips', new THREE.CylinderGeometry(0.04, 0.04, 0.11, 20), 0x4f6b4a, [-0.18, 0.84, 0.03], { rough: 0.5, name: 'canteen' });
+for (const s of [1, -1])
+  prop((s &gt; 0 ? 'L' : 'R') + '_LowerArm', new THREE.CylinderGeometry(0.03, 0.03, 0.04, 16, 1, true), leather, [s * 0.5, 1.262, 0.013], { rot: [0, 0, Math.PI / 2], name: 'wristband' });
+prop('C_Head', new THREE.TorusGeometry(0.1, 0.011, 8, 36), 0xa63d2a, [0, 1.47, 0], { rot: [Math.PI / 2, 0, 0], scale: [1, 1.15, 1], name: 'headband' });
+'gear on'</code></pre>
+	<p>The model faces <code>+Z</code> in world space, so positive z is the front of the body (the buckle) and negative z is the back. <code>L_</code> bones are on the character's left, which is world <code>+X</code> from the front — so the satchel is on her left hip and the canteen on her right.</p>
+
+	<h2><span class="step">6</span> Lower the arms and pose a smirk</h2>
+	<p class="lede">VRM models import in a T-pose. Rotating the two upper-arm bones about their local Z lowers the arms — the signs are opposite because the left and right bones mirror each other:</p>
+	<pre><code>B('L_UpperArm').rotation.z = 1.2;
+B('R_UpperArm').rotation.z = -1.2;
+'arms down'</code></pre>
+	<p>For the face, a helper sets a blendshape on every mesh that has it (the face is split across nine meshes that share the same shape list), by name:</p>
+	<pre><code>window.express = (shape, value) =&gt; R.traverse(o =&gt; {
+  const i = o.morphTargetDictionary?.[shape];
+  if (i !== undefined) o.morphTargetInfluences[i] = value;
+});
+express('mouthSmileLeft', 0.45);
+express('mouthSmileRight', 0.45);
+express('browInnerUp', 0.15);
+'smirk'</code></pre>
+	<p>Other shapes worth trying: <code>jawOpen</code>, <code>eyeBlinkLeft</code> / <code>eyeBlinkRight</code>, <code>mouthPucker</code>, <code>browDownLeft</code>, <code>eyeLookUpLeft</code>, or the VRM presets <code>Fcl_ALL_Joy</code> and <code>Fcl_ALL_Surprised</code>. They're ordinary morph target influences, so the Universal Timeline can keyframe them like any other number.</p>
+
+	<h2><span class="step">7</span> Frame the shot and take a snapshot</h2>
+	<p class="lede">Move the viewport camera to a full-length view, and tell the orbit controls the same target so the next mouse drag pivots around her waist:</p>
+	<pre><code>camera.position.set(0.5, 1.0, 2.2);
+camera.lookAt(0, 0.85, 0);
+editor.controls.center.set(0, 0.85, 0);
+editor.signals.cameraChanged.dispatch(camera);
+'framed'</code></pre>
+	<p>Click the skeleton icon in the top bar (<em>Hide Skeleton Helpers</em>) to turn off the green bone lines, then open the <strong>Render</strong> tab. The <strong>Snapshot</strong> section renders the scene once, offscreen, with no grid, gizmos or helpers: pick <strong>Current view</strong>, a size, <strong>PNG</strong>, and press <strong>Take Snapshot</strong>. Tick <strong>Transparent</strong> for a cut-out with no background.</p>
+
+	<div class="note"><strong>Why this isn't a Customize-tab job.</strong> The <strong>Customize</strong> tab guarantees that a look change never touches the rig: no vertex, skin-weight or skeleton edits. The crop top and shorts here delete triangles and move vertices, and the arm pose rotates bones, so those steps are deliberately outside that guarantee — they are hand edits. The rest (tinting, bone-attached accessories, blendshape poses) is the kind of change the Customize tab does itself; see <a href="make-your-own-metahuman.html">Make your own MetaHuman</a>.</div>
+
+	<h2><span class="step">8</span> Save it</h2>
+	<p class="lede">Everything above is ordinary scene state — geometry, materials, bone rotations, parented props, morph influences — so a normal commit captures it. Set your repository and token in the <strong>Git</strong> tab, then use <strong>Commit Scene</strong>. A quick sanity check before you commit:</p>
+	<pre><code>[R.getObjectByName('belt') !== undefined, B('L_UpperArm').rotation.z, scene.getObjectByName('headband').parent.name]</code></pre>
+	<p>That should print <code>[true, 1.2, "J_Bip_C_Head"]</code> — the belt exists, the arm is lowered, and the headband is parented to the head bone.</p>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="https://github.com/hinzka/52blendshapes-for-VRoid-face">52blendshapes-for-VRoid-face on GitHub</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

@@ -32,13 +32,13 @@
 		"desc": "Import a MetaHuman GLB straight from the metahuman-to-glb project's URL, then make it yours with the JS Shell: hide the hair, retint the skin and swap the outfit, pose the 51 ARKit face blendshapes, tag parts with classes, and capture a still with the Render tab's Take Snapshot."
 	},
 	{
-		"title": "Dance in the Construct",
-		"href": "dance-in-the-construct.html",
-		"desc": "Download Remy from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both with bodyrig-webCLI, turn Bruce into Morpheus, then stage them in a white Construct: Morpheus leads, Remy copies three seconds later, and an orbiting camera keeps their faces in frame."
+		"title": "One dance, two characters",
+		"href": "two-character-dance.html",
+		"desc": "Retarget one motion onto two rigs: download Remy from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both with bodyrig-webCLI, then stage them on a blank white stage: Bruce leads, Remy copies three seconds later, and an orbiting camera keeps their faces in frame."
 	},
 	{
-		"title": "Turn a VRoid VRM into Lara Croft",
-		"href": "vrm-lara-croft.html",
-		"desc": "Download the free VRoid base model from 52blendshapes-for-VRoid-face, import the .vrm, and restyle it with the JS Shell: retint hair and skin, cut the clothes into a crop top and shorts, attach a belt, holsters and gloves to the skeleton, lower the arms, and pose a smirk with the ARKit blendshapes."
+		"title": "Restyle a VRM into an explorer with the JS Shell",
+		"href": "vrm-restyle-explorer.html",
+		"desc": "Download the free VRoid base model from 52blendshapes-for-VRoid-face, import the .vrm, and restyle it into a generic expedition explorer with the JS Shell: retint hair and skin, cut the clothes into a crop top and shorts, attach a belt, satchel and headband to the skeleton, lower the arms, and pose a smirk with the ARKit blendshapes."
 	}
 ]

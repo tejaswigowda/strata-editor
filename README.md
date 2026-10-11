@@ -64,6 +64,7 @@ This README is the landing page and the thesis. The reference material is split 
 | [**Git versioning**](guides/GIT_VERSIONING.md) | Repository sync, the merge-conflict viewport, access-token scope, and `#repo=owner/repo&file=path` URL hash preload. |
 | [**The call card**](guides/CALLCARD.md) | The `/about` page and the living `/about/callcard` end-card every short can embed — living vs. baked, the trust boundary, and how to add it to a scene. |
 | [**Roadmap**](guides/ROADMAP.md) | Done / next / then. |
+| [**Tutorial & demo policy**](guides/TUTORIAL_POLICY.md) | Name and frame public tutorials after the capability, never the character; named or protected IP is a private-lane capability test only; the publication gate every tutorial generator must call. |
 | [**Dev Mode API**](guides/DEV_MODE_API.md) | Server-side external-model proxy and its security model. |
 | Mesh editing | [Quick start](guides/MESH_EDITING_QUICK_START.md) · [Guide](guides/MESH_EDITING_GUIDE.md) · [Technical](guides/MESH_EDITING_TECHNICAL.md) · [Status](guides/IMPLEMENTATION_STATUS.md) |
 

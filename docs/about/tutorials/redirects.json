@@ -1,0 +1,7 @@
+{
+	"_comment": "Explicit old-slug -> new-slug map for renamed tutorials. Each entry needs (1) a stub page at the old slug (JS redirect that keeps ?query and #hash), and (2) a matching 301 line in docs/_redirects for hosts that honour it. `node scripts/tutorial-policy.cjs lint` checks all three agree. Old slugs listed here are exempt from the protected-name check (they exist only so inbound links keep working).",
+	"redirects": [
+		{ "from": "dance-in-the-construct.html", "to": "two-character-dance.html" },
+		{ "from": "vrm-lara-croft.html", "to": "vrm-restyle-explorer.html" }
+	]
+}

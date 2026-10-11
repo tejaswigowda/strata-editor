@@ -74,6 +74,10 @@ THEN
   Scene-wide timeline: add CAPTURED PERFORMANCE to the axis (objects + camera already ship on one clock)
   Optional vision layer (precise nouns, OCR). Separate spec, needs a model
   Packaging: one PWA, with an optional Electron desktop wrapper
+
+POLICY (reception)
+  Named / protected IP -> private lane only. Public = original, archetype or public-domain,
+    framed by capability (see TUTORIAL_POLICY.md). Tutorial generators go through scripts/tutorial-policy.cjs
 ```
 
 ---
