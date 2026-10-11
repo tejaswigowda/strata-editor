@@ -64,7 +64,7 @@
 			import { Sidebar } from './editor/js/Sidebar.js';
 			import { Menubar } from './editor/js/Menubar.js';
 			import { Resizer } from './editor/js/Resizer.js';
-			import { autoLoadFromGit, loadSceneFromHash, showPlayOverlay } from './editor/js/Menubar.Git.js';
+			import { autoLoadFromGit, loadSceneFromHash, showPlayOverlay, watchHashChanges } from './editor/js/Menubar.Git.js';
 
 			import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
@@ -159,6 +159,9 @@
 				const hashResult = await loadSceneFromHash( editor );
 				const hashScenePreloaded = !! hashResult;
 				if ( hashResult && hashResult.play ) showPlayOverlay( editor );
+
+				// Keep the Git tab in step with later hash edits (address bar, back / forward, pasted links).
+				watchHashChanges( editor, result => { if ( result.play ) showPlayOverlay( editor ); } );
 
 				editor.storage.init( function () {
 

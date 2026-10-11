@@ -720,6 +720,12 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 
 	localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 
+	// A scene loaded from GitHub is identified by the URL hash; keep it in step with the Git tab.
+	// Record what actually resolved (a blank branch resolved to main or master).
+	if ( ! cfg.branch && ! commitCfg ) saveSettings( { ...loadSettings(), branch } );
+	syncHashFromSettings();
+	editor.signals.gitSettingsChanged.dispatch();
+
 	// Record the commit we just loaded so a later startup/compare can skip a
 	// redundant re-download while the local copy stays current. Best-effort —
 	// a failure here doesn't affect the load that already succeeded. Skipped
@@ -778,6 +784,7 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 
 	setSyncedCommit( parsed, scenePath, branch, commit && commit.sha );
 	localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+	syncHashFromSettings(); // the committed scene is now the one the hash should name
 
 	onProgress( 1, '✓ Committed' );
 
@@ -872,6 +879,8 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 				const localChanged = baseline === null
 					|| diffContextStrings( baseline, sceneContextString( editor ) ) !== null;
 
+				syncHashFromSettings(); // the local scene is this repo's scene; the hash should say so
+
 				if ( localChanged ) {
 
 					_showBanner( `Local scene has uncommitted changes — ${ parsed.owner }/${ parsed.repo } is unchanged`, 3500 );
@@ -921,6 +930,76 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 		hideLoadOverlay();
 
 	}
+
+}
+
+// ── URL hash ⇄ Git tab sync ───────────────────────────────────────────────────
+// The hash identifies the scene that is loaded: #repo=owner/repo&file=path&branch=b[&commit=sha].
+//   • a scene loaded from GitHub (Git tab Load, boot auto-load) → the hash is rewritten to match,
+//   • a hash that is loaded (page load, or edited / back-forward later) → the Git tab is updated.
+// The hash is written with history.replaceState, which fires no hashchange, so the two directions
+// cannot loop. play / present / preview in an existing hash are preserved.
+
+const KEPT_HASH_PARAMS = [ 'play', 'present', 'preview' ];
+let appliedHash = null; // the hash we last wrote or loaded; a hashchange to it is a no-op
+
+function hashFromSettings( cfg, existingHash ) {
+
+	const parsed = parseRepo( cfg.repoUrl || '' );
+	if ( ! parsed ) return null;
+
+	const p = new URLSearchParams();
+	p.set( 'repo', `${ parsed.owner }/${ parsed.repo }` );
+	p.set( 'file', cfg.scenePath || 'scene.json' );
+	if ( cfg.branch ) p.set( 'branch', cfg.branch );
+	if ( ( cfg.commit || '' ).trim() ) p.set( 'commit', cfg.commit.trim() );
+
+	const old = new URLSearchParams( ( existingHash || '' ).replace( /^#+/, '' ) );
+	for ( const k of KEPT_HASH_PARAMS ) if ( old.has( k ) ) p.set( k, old.get( k ) );
+
+	// keep "owner/repo" and the path readable rather than percent-encoded
+	return '#' + p.toString().replace( /%2F/gi, '/' );
+
+}
+
+/** Point the URL hash at the scene the Git settings describe (no reload, no history entry). */
+export function syncHashFromSettings() {
+
+	const next = hashFromSettings( loadSettings(), window.location.hash );
+	if ( ! next ) return false;
+
+	appliedHash = next;
+	if ( window.location.hash !== next ) window.history.replaceState( window.history.state, '', window.location.pathname + window.location.search + next );
+	return true;
+
+}
+
+/**
+ * Load the scene named by the hash whenever the hash changes after startup (typed in the address bar,
+ * back / forward, a pasted link). loadSceneFromHash updates the Git tab. onLoaded gets its result.
+ */
+export function watchHashChanges( editor, onLoaded = () => {} ) {
+
+	let busy = false;
+
+	window.addEventListener( 'hashchange', async function () {
+
+		const hash = window.location.hash;
+		if ( hash.indexOf( 'repo=' ) === - 1 || hash === appliedHash || busy ) return;
+
+		busy = true;
+		try {
+
+			const result = await loadSceneFromHash( editor );
+			if ( result ) onLoaded( result );
+
+		} finally {
+
+			busy = false;
+
+		}
+
+	} );
 
 }
 
@@ -1041,8 +1120,12 @@ export async function loadSceneFromHash( editor ) {
 		// &commit= pin lives in its own field, never overwriting Branch with a
 		// raw SHA.
 		const priorSettings = loadSettings();
-		saveSettings( { ...priorSettings, repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch: branchParam || repoRef || priorSettings.branch || 'main', commit: commitParam || '', scenePath: file } );
+		// Branch: explicit &branch= / @ref, else the ref that actually resolved (main or master) — so the Git tab
+		// and the hash agree. A &commit= pin leaves the branch field as it was.
+		const shownBranch = branchParam || repoRef || ( commitParam ? ( priorSettings.branch || 'main' ) : ( resolved.ref || priorSettings.branch || 'main' ) );
+		saveSettings( { ...priorSettings, repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch: shownBranch, commit: commitParam || '', scenePath: file } );
 		editor.signals.gitSettingsChanged.dispatch();
+		appliedHash = window.location.hash; // this hash is what was just loaded
 
 		// Deliberately NOT recording a synced-commit SHA here (unlike
 		// loadSceneFromRepo) — that bookkeeping exists purely so a LATER
