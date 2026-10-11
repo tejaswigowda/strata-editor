@@ -76,6 +76,11 @@ function Shell( editor ) {
 
 	const signals = editor.signals;
 
+	// The toon module (WebGPU MToon) is loaded in the background so toon() / toonMaterial() are
+	// synchronous for the shell; a failure leaves the rest of the shell untouched.
+	let toonLook = null;
+	import( './toon/ToonLook.js' ).then( m => { toonLook = m; } ).catch( e => console.warn( 'Shell: toon look unavailable', e ) );
+
 	const container = new UIPanel();
 	container.setId( 'shell' );
 	container.setDisplay( '' );
@@ -551,6 +556,7 @@ function Shell( editor ) {
 
 		// ── Misc ──
 		{ w: 'fetchAPI', k: 'fn' }, { w: 'askScene', k: 'fn' },
+		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' },
 		{ w: 'evalAI', k: 'fn' }, { w: 'evalEditMatrix', k: 'fn' },
 		{ w: 'saveEvalRows', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
 		{ w: 'askExternal', k: 'fn' }, { w: 'checkApiHealth', k: 'fn' },
@@ -2369,6 +2375,25 @@ function Shell( editor ) {
 
 					}
 					return group;
+
+				},
+
+				// ── Toon look (WebGPU MToon; see guides/TOON_LOOK.md) ─────────────────
+				//   toon(object, spec?)   make a character / prop toon: light-responsive banded
+				//                         shading + rim + outlines. spec: { shade, bands, toony,
+				//                         shift, rim:{color,power,lift,mix}, outline:{width,color,mode,mix} }
+				//                         toon(obj, { look: 'native' }) reverts. Materials only.
+				//   toonMaterial(color, spec?)   a standalone toon material for a new Mesh
+				toon: function ( object, spec = { look: 'toon' } ) {
+
+					if ( ! toonLook ) throw new Error( 'toon: the toon module is still loading (or failed to load; see the console) — try again in a moment' );
+					return toonLook.applyToonLook( object, spec.look === undefined && spec.mode === undefined ? { look: 'toon', ...spec } : spec );
+
+				},
+				toonMaterial: function ( color, spec ) {
+
+					if ( ! toonLook ) throw new Error( 'toonMaterial: the toon module is still loading (or failed to load; see the console) — try again in a moment' );
+					return toonLook.toonMaterial( color, spec );
 
 				},
 

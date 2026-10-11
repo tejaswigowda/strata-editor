@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Config } from './Config.js';
 import { Loader } from './Loader.js';
 import { normalizeSkinIndices } from './mesh/skinIndices.js';
+import { sceneHasToon } from './toon/toonSpec.js';
 import { History as _History } from './History.js';
 import { Strings } from './Strings.js';
 import { Storage as _Storage } from './Storage.js';
@@ -785,6 +786,22 @@ Editor.prototype = {
 
 		const scene = await loader.parseAsync( json.scene );
 		normalizeSkinIndices( scene );
+
+		// Toon materials serialise as standard-material twins (see toon/ToonLook.js);
+		// rebuild the MToon materials before the scene goes live.
+		if ( sceneHasToon( scene ) ) {
+
+			try {
+
+				( await import( './toon/ToonLook.js' ) ).restoreLooks( scene );
+
+			} catch ( e ) {
+
+				console.warn( 'Editor: toon materials could not be restored; the scene keeps its standard-material twins', e );
+
+			}
+
+		}
 
 		// Reattach animation clips (saved separately in toJSON) to their owners by
 		// uuid, before setScene() moves the objects into the live scene.

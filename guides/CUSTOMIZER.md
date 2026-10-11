@@ -35,6 +35,7 @@ Everything in the customize op set is of the first kind. `customize/rigSafety.js
 | `tag` | semantic classes (`.skin`, `.jacket`) | `userData` |
 | `attachProp` | a **rigid** accessory (`sunglasses`, a primitive, or an outside object) parented to a bone | no skinning; follows the bone exactly |
 | `frame` | adds / updates a camera framing a part | a camera |
+| `look` | render mode: `"toon"` (light-responsive banded toon + rim + outlines, honouring a VRM's MToon values) or `"native"`; props added under a toon character are toon too. See [Toon look](TOON_LOOK.md) | swaps materials and adds outline draw groups only; vertices, weights, morphs and skeleton are untouched |
 
 Targets: `"part:skin"` (`hair`, `beard`, `brows`, `body`, `face`, `eyes`, `shirt`, `bottom`, `shoes`,
 `clothing`, `cards`), `"name:/regex/i"`, or any Strata selector. `"optional": true` on an op skips it

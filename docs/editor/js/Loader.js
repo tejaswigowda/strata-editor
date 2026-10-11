@@ -9,6 +9,7 @@ import { SetValueCommand } from './commands/SetValueCommand.js';
 import { LoaderUtils } from './LoaderUtils.js';
 
 import { GLTFImportDialog } from './GLTFImportDialog.js';
+import { isVRMSource } from './toon/toonSpec.js';
 import { normalizeSkinIndices } from './mesh/skinIndices.js';
 
 import { runImportPipeline } from './import/pipeline.js';
@@ -1207,8 +1208,28 @@ function Loader( editor ) {
 	}
 
 	// Parses glTF/GLB data and runs the import wizard; resolves once the import
-	// finished, was cancelled, or failed.
-	function parseGLTF( loader, data, filename, release ) {
+	// finished, was cancelled, or failed. A VRM gets the MToon material plugins so
+	// the file's toon parameters render (WebGPU node material) instead of being
+	// dropped for unlit MeshBasicMaterial — materials only, nothing rig-related.
+	async function parseGLTF( loader, data, filename, release ) {
+
+		let toon = null;
+
+		if ( isVRMSource( data ) ) {
+
+			try {
+
+				toon = await import( './toon/ToonLook.js' );
+				toon.registerToonPlugins( loader );
+
+			} catch ( e ) {
+
+				console.warn( 'Loader: MToon materials unavailable, loading "' + filename + '" with stock materials', e );
+				toon = null;
+
+			}
+
+		}
 
 		return new Promise( function ( resolve ) {
 
@@ -1216,6 +1237,7 @@ function Loader( editor ) {
 
 				try {
 
+					if ( toon ) toon.adoptLoadedToon( result.scene );
 					await scope.finishGLTFImport( result, filename, release );
 
 				} catch ( e ) {

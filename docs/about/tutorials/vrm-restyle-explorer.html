@@ -212,6 +212,7 @@ for (const s of [1, -1])
 prop('C_Head', new THREE.TorusGeometry(0.1, 0.011, 8, 36), 0xa63d2a, [0, 1.47, 0], { rot: [Math.PI / 2, 0, 0], scale: [1, 1.15, 1], name: 'headband' });
 'gear on'</code></pre>
 	<p>The model faces <code>+Z</code> in world space, so positive z is the front of the body (the buckle) and negative z is the back. <code>L_</code> bones are on the character's left, which is world <code>+X</code> from the front — so the satchel is on her left hip and the canteen on her right.</p>
+	<div class="note"><strong>Lit character, lit props.</strong> A VRM imports with its own toon (MToon) materials, so it responds to the scene's lights in hard bands, while the props above are ordinary PBR. To make everything use one shading model, run <code>toon(R)</code> in the Shell: it turns the props toon as well and adds outlines. See the <a href="https://github.com/tejaswigowda/threejs.editor.enhanced/blob/main/guides/TOON_LOOK.md">toon look guide</a> for the options (shade colour, rim, outline width).</div>
 
 	<h2><span class="step">6</span> Lower the arms and pose a smirk</h2>
 	<p class="lede">VRM models import in a T-pose. Rotating the two upper-arm bones about their local Z lowers the arms — the signs are opposite because the left and right bones mirror each other:</p>

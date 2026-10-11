@@ -32,6 +32,7 @@ import { normalizeClassName, toClassSet } from '../intelligence/classDerive.js';
 import { findParts, boneKey } from '../presets/rigParts.js';
 import { rigFingerprint, sameRig, auditRig, unsafeOp, RIG_UNSAFE, GARMENT_KINDS } from './rigSafety.js';
 import { buildSunglasses, buildPrimitive, PRIMITIVE_KINDS } from './props.js';
+import { normalizeLook, applyLookSpec, applyLookToProp } from '../toon/toonSpec.js';
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ export const CUSTOMIZE_OPS = {
 	tag: { summary: 'add semantic classes so the part is addressable as .class', args: 'target, classes' },
 	attachProp: { summary: 'parent a RIGID accessory (sunglasses, primitive, or an outside object) to a bone', args: 'prop{kind,size?,color?,name?,source?}, bone?, offset?, rotation?' },
 	frame: { summary: 'add / update a camera that frames a part (camera framing)', args: 'name?, framing?, target?, fov?, azimuth?, padding?' },
+	look: { summary: 'render mode: light-responsive banded toon + rim + outlines (WebGPU MToon) for the character AND its props; materials only', args: 'mode: "toon"|"native", shade?, bands?, toony?, shift?, rim?{color,power,lift,mix}, outline?{width,color,mode,mix}' },
 };
 
 export const OP_NAMES = Object.keys( CUSTOMIZE_OPS );
@@ -168,6 +170,14 @@ function validateOp( op, i ) {
 			if ( op.fov !== undefined && ( ! isNumber( op.fov ) || op.fov <= 1 || op.fov >= 120 ) ) err( 'BAD_ARGS', 'frame: "fov" must be a number in (1, 120)' );
 			if ( op.framing !== undefined && ! [ 'head', 'full', 'fit' ].includes( op.framing ) ) err( 'BAD_ARGS', 'frame: "framing" must be head, full or fit' );
 			break;
+
+		case 'look': {
+
+			const n = normalizeLook( op );
+			n.errors.forEach( m => err( 'BAD_ARGS', m ) );
+			break;
+
+		}
 
 	}
 
@@ -554,7 +564,19 @@ function opAttachProp( root, op, rec, ctx ) {
 	prop.userData.customClasses = [ 'prop', normalizeClassName( spec.kind ) ];
 	rec.add( bone, prop );
 	prop.updateMatrixWorld( true );
+	applyLookToProp( prop ); // a prop under a toon character is toon too: one shading model per frame
 
+	return 1;
+
+}
+
+// look: render mode, materials only. Recorded through the same undo as every other op; the
+// rig fingerprint (vertices, weights, morphs, skeleton) is checked after the run and does not move.
+function opLook( root, op, rec ) {
+
+	const n = normalizeLook( op );
+	rec.set( root.userData, 'look', n.spec.look === 'native' ? undefined : n.spec );
+	applyLookSpec( root, n.spec, { swap: ( mesh, mat ) => rec.set( mesh, 'material', mat ) } );
 	return 1;
 
 }
@@ -614,6 +636,7 @@ const RUNNERS = {
 	tag: opTag,
 	attachProp: opAttachProp,
 	frame: opFrame,
+	look: opLook,
 };
 
 // ── Look fingerprint: a canonical, uuid-free description of what customize owns ─
