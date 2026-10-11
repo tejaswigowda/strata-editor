@@ -576,7 +576,7 @@ function opLook( root, op, rec ) {
 
 	const n = normalizeLook( op );
 	rec.set( root.userData, 'look', n.spec.look === 'native' ? undefined : n.spec );
-	applyLookSpec( root, n.spec, { swap: ( mesh, mat ) => rec.set( mesh, 'material', mat ) } );
+	applyLookSpec( root, n.spec, { swap: ( mesh, mat ) => rec.set( mesh, 'material', mat ), addLight: ( scene, light ) => rec.add( scene, light ) } );
 	return 1;
 
 }

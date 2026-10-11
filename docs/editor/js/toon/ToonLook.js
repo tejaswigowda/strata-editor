@@ -74,16 +74,46 @@ export function registerToonPlugins( loader ) {
 }
 
 /**
- * Called on a freshly loaded VRM scene: marks the toon materials (so they
- * serialise / restore), and records the character's look so props added later
- * follow it.
+ * Called on a freshly loaded VRM. The file's MToon materials are turned back into
+ * the unlit MeshBasicMaterial a stock load would give (so an import looks exactly as
+ * it always did, with or without lights), and the MToon values are kept on each
+ * material (userData.mtoonParams, plain JSON). toon() / the "look" op rebuilds the MToon
+ * material from them, so the file's shade colour, rim and outline are honoured when
+ * toon is switched on. The MToon plugin's outline draw groups are removed here.
  */
 export function adoptLoadedToon( scene ) {
 
 	let count = 0;
-	scene.traverse( o => { if ( o.isMesh ) for ( const m of [].concat( o.material ) ) if ( isToon( m ) ) { install( m ); count ++; } } );
-	if ( count > 0 ) { scene.userData = scene.userData || {}; if ( ! scene.userData.look ) scene.userData.look = { look: 'toon' }; }
+
+	scene.traverse( mesh => {
+
+		if ( ! mesh.isMesh ) return;
+		const mats = [].concat( mesh.material );
+		if ( ! mats.some( isToon ) ) return;
+
+		const hadOutline = mats.some( m => m.isOutline );
+		const unlit = mats.filter( m => ! m.isOutline ).map( m => ( isToon( m ) ? toUnlit( m ) : m ) );
+		if ( hadOutline ) mesh.geometry.clearGroups();
+		mesh.material = Array.isArray( mesh.material ) && unlit.length > 1 ? unlit : unlit[ 0 ];
+		count += unlit.length;
+
+	} );
+
 	return count;
+
+}
+
+function toUnlit( m ) {
+
+	const b = new THREE.MeshBasicMaterial();
+	b.name = m.name;
+	b.color.copy( m.color ); b.map = m.map || null;
+	if ( m.alphaMap ) b.alphaMap = m.alphaMap;
+	b.side = m.side; b.transparent = m.transparent; b.opacity = m.opacity; b.alphaTest = m.alphaTest;
+	b.depthWrite = m.depthWrite; b.depthTest = m.depthTest; b.blending = m.blending; b.visible = m.visible;
+	b.userData = { ...( m.userData || {} ), mtoonParams: snapshot( m ) };
+	delete b.userData.toon;
+	return b;
 
 }
 
@@ -199,12 +229,24 @@ function toToon( old ) {
 	m.side = old.side; m.transparent = old.transparent; m.opacity = old.opacity; m.alphaTest = old.alphaTest;
 	m.depthWrite = old.depthWrite; m.depthTest = old.depthTest; m.visible = old.visible;
 
-	m.shadeColorFactor.copy( shadeFrom( m.color, !! m.map ) );
-	if ( m.map ) m.shadeMultiplyTexture = m.map;
-	m.shadingShiftFactor = DEFAULTS.shift;
-	m.shadingToonyFactor = DEFAULTS.toony;
-	m.rimLightingMixFactor = 0;
+	const file = old.userData && old.userData.mtoonParams;
+	if ( file ) {
+
+		// the VRM file's own MToon values (kept at import): shade colour, shift/toony, rim, outline
+		restoreParams( m, file );
+
+	} else {
+
+		m.shadeColorFactor.copy( shadeFrom( m.color, !! m.map ) );
+		if ( m.map ) m.shadeMultiplyTexture = m.map;
+		m.shadingShiftFactor = DEFAULTS.shift;
+		m.shadingToonyFactor = DEFAULTS.toony;
+		m.rimLightingMixFactor = 0;
+
+	}
+
 	m.userData = { ...( old.userData || {} ) };
+	delete m.userData.mtoonParams;
 	return install( m );
 
 }
@@ -265,7 +307,9 @@ function ensureOutlines( mesh, outlineSpec ) {
 		o.name = ( s.name || 'toon' ) + ' (Outline)';
 		o.isOutline = true;
 		o.side = THREE.BackSide;
-		applyParams( o, { outline: { ...DEFAULTS.outline, ...( outlineSpec || {} ) } } );
+		// a surface that already carries outline values (a VRM's) keeps them; others get the defaults
+		const own = s.outlineWidthMode !== 'none' && s.outlineWidthFactor > 0;
+		applyParams( o, { outline: own ? ( outlineSpec || {} ) : { ...DEFAULTS.outline, ...( outlineSpec || {} ) } } );
 		return o;
 
 	} );
@@ -277,6 +321,37 @@ function ensureOutlines( mesh, outlineSpec ) {
 
 	// the caller assigns mesh.material (so a recorder can undo it); only the draw groups change here
 	return [ ...surfaces, ...outlines ];
+
+}
+
+// ── Default lights ────────────────────────────────────────────────────────────
+// Toon is lit: with no lights it is black (the editor starts with none, and MToon ignores the
+// default environment). Switching toon on in a scene that has no light adds a key + sky light, once.
+// options.addLight(scene, light) lets the caller route it through an undoable command.
+
+function ensureLights( root, options = {} ) {
+
+	let top = root;
+	while ( top.parent ) top = top.parent;
+	if ( ! top.isScene ) return false;
+
+	let has = false;
+	top.traverse( o => { if ( o.isLight ) has = true; } );
+	if ( has ) return false;
+
+	const key = new THREE.DirectionalLight( 0xffffff, 2.5 );
+	key.position.set( 2, 4, 3 ); key.name = 'Toon Key';
+	const sky = new THREE.HemisphereLight( 0xffffff, 0x8888a0, 0.8 );
+	sky.name = 'Toon Sky';
+
+	for ( const l of [ key, sky ] ) {
+
+		l.userData.autoToonLight = true;
+		if ( options.addLight ) options.addLight( top, l ); else top.add( l );
+
+	}
+
+	return true;
 
 }
 
@@ -298,6 +373,7 @@ export function applyToonLook( root, input, options = {} ) {
 
 	root.userData = root.userData || {};
 	root.userData.look = spec;
+	ensureLights( root, options );
 
 	root.traverse( mesh => {
 
@@ -314,12 +390,16 @@ export function applyToonLook( root, input, options = {} ) {
 
 		}
 
-		// outlines: a converted material gets one by default; a VRM already has the file's own;
-		// outline.width = 0 switches them off (the draw group stays, the pass is hidden)
-		const outlinesWanted = ! ( spec.outline && spec.outline.width === 0 );
+		// outlines: a plain converted material gets one by default; a VRM mesh gets one only where the
+		// file asks for it (eyes etc. have none); outline.width 0 switches them off (draw group stays, pass hidden)
+		const specWidth = spec.outline ? spec.outline.width : undefined;
+		const outlinesWanted = specWidth !== 0;
 		const hasOutline = [].concat( mesh.material ).some( m => m.isOutline );
+		const fromFile = before.some( m => m.userData && m.userData.mtoonParams );
+		const fileOutline = [].concat( mesh.material ).some( m => ! m.isOutline && m.outlineWidthMode !== 'none' && m.outlineWidthFactor > 0 );
+		const wantNew = specWidth > 0 || ( changed && ( fromFile ? fileOutline : true ) );
 
-		if ( ! hasOutline && outlinesWanted && ! mesh.isPoints && ! mesh.isLine && ( changed || ( spec.outline && spec.outline.width > 0 ) ) ) {
+		if ( ! hasOutline && outlinesWanted && ! mesh.isPoints && ! mesh.isLine && wantNew ) {
 
 			swap( mesh, ensureOutlines( mesh, spec.outline ) );
 

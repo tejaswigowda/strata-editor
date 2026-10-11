@@ -16,10 +16,16 @@ shading shift / toony, rim, outline) is read by nothing. Props the customizer ad
 
 ## What it does now
 
-* **VRM import honours MToon.** A VRM 0.x file is converted to the MToon 1.0 form (`VRMMaterialsV0CompatPlugin`)
-  and each material becomes an `MToonNodeMaterial` (WebGPU / TSL) with the file's own shade colour,
-  shading shift and toony, rim, and outline width + colour. Outlines are MToon's own inverted-hull pass.
+* **A VRM imports exactly as before** (unlit, so it looks the same with or without lights). Toon is
+  **opt-in**: `toon(character)` or the `look` op. The file's MToon values are kept on each material at
+  import (`userData.mtoonParams`, via `VRMMaterialsV0CompatPlugin` + `MToonNodeMaterial`), and switching
+  toon on builds the MToon material from them: the file's shade colour, shading shift and toony, rim, and
+  outline width + colour. Outlines are MToon's inverted-hull pass, added only where the file asks for one.
   Other glTFs are untouched.
+* **Toon is lit, so it adds lights when there are none.** The editor starts with no lights and MToon
+  ignores the default environment, so toon in an empty scene would be black. Switching it on in a scene
+  with no light adds a `Toon Key` directional and a `Toon Sky` hemisphere light (through the undoable
+  command path). A scene that already has lights is left alone.
 * **Scene lights drive it.** Directional, point and spot lights all contribute to the lit / shade
   decision, so coloured lights rake the character in hard bands.
 * **One shading model per frame.** `look` also converts the character's other materials and every prop the
@@ -90,8 +96,8 @@ tool that doesn't know Strata sees plain lit PBR.
 ## Limits
 
 * **Not shared with other renderers.** The look lives in Strata's WebGPU path.
-* **`native` on a VRM is the lit-PBR twin**, not the original unlit `MeshBasicMaterial`. Reloading the file
-  gives the unlit original back.
+* **`native` on a VRM restores the unlit materials** it had at import. In a scene saved with toon on and
+  reloaded, `native` gives the lit-PBR twin instead (the unlit original isn't stored).
 * MToon extras not wired to the spec: matcap, UV animation, and per-pixel shading-shift texture are read
   from the file and rendered, but have no override fields.
 * Bloom, grain and the neon sign geometry are scene content, not part of this change.
@@ -99,7 +105,8 @@ tool that doesn't know Strata sees plain lit PBR.
 ## Verifying
 
 `node docs/editor/js/toon/__tests__/toonSpec.test.mjs` covers the spec. The renderer-side checks are done in
-the editor: import a VRM, add two coloured point lights, call `toon(character)` and look at the face.
+the editor: import a VRM, call `toon(character)` (it adds the default lights), or add two coloured point
+lights first and look at the face.
 To prove the file's parameters are honoured, edit `_ShadeColor`, `_OutlineWidth`, `_OutlineColor` or
 `_RimColor` of a material in the `.vrm` and re-import: the render changes.
 

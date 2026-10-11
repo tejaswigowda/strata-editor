@@ -2382,12 +2382,13 @@ function Shell( editor ) {
 				//   toon(object, spec?)   make a character / prop toon: light-responsive banded
 				//                         shading + rim + outlines. spec: { shade, bands, toony,
 				//                         shift, rim:{color,power,lift,mix}, outline:{width,color,mode,mix} }
-				//                         toon(obj, { look: 'native' }) reverts. Materials only.
+				//                         toon(obj, { look: 'native' }) reverts. Materials only (a scene with
+				//                         no light gets a key + sky light, since toon is lit).
 				//   toonMaterial(color, spec?)   a standalone toon material for a new Mesh
 				toon: function ( object, spec = { look: 'toon' } ) {
 
 					if ( ! toonLook ) throw new Error( 'toon: the toon module is still loading (or failed to load; see the console) — try again in a moment' );
-					return toonLook.applyToonLook( object, spec.look === undefined && spec.mode === undefined ? { look: 'toon', ...spec } : spec );
+					return toonLook.applyToonLook( object, spec.look === undefined && spec.mode === undefined ? { look: 'toon', ...spec } : spec, { addLight: ( scene, light ) => editor.execute( new AddObjectCommand( editor, light ) ) } );
 
 				},
 				toonMaterial: function ( color, spec ) {
