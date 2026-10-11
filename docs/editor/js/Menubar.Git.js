@@ -983,6 +983,22 @@ export function syncHashFromSettings() {
 }
 
 /**
+ * File → New: the editor no longer holds a scene from the repo, so drop the hash (a reload would
+ * otherwise bring the old scene back) and point the Git tab at a fresh target — the scene file and
+ * commit pin reset, while repo, branch and token stay, so the new scene can be committed under a new name
+ * without overwriting the one that was loaded.
+ */
+export function syncToNewScene( editor ) {
+
+	appliedHash = null;
+	if ( window.location.hash ) window.history.replaceState( window.history.state, '', window.location.pathname + window.location.search );
+
+	saveSettings( { ...loadSettings(), scenePath: 'scene.json', commit: '' } );
+	editor.signals.gitSettingsChanged.dispatch();
+
+}
+
+/**
  * Load the scene named by the hash whenever the hash changes after startup (typed in the address bar,
  * back / forward, a pasted link). loadSceneFromHash updates the Git tab. onLoaded gets its result.
  */

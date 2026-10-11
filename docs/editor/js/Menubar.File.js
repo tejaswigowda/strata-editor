@@ -1,6 +1,7 @@
 import { UIPanel, UIRow, UIHorizontalRule } from './libs/ui.js';
 import { FileLoader } from 'three';
 import { setMenuIcon } from './Menubar.Icons.js';
+import { syncToNewScene } from './Menubar.Git.js';
 
 function MenubarFile( editor ) {
 
@@ -28,6 +29,7 @@ function MenubarFile( editor ) {
 
 			editor.clear();
 			localStorage.setItem( 'git-skip-autoload', '1' );
+			syncToNewScene( editor );
 
 		}
 
