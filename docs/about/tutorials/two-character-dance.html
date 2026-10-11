@@ -5,7 +5,7 @@
 <title>One dance, two characters — Strata tutorials</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: retarget one motion onto two different rigs. Get Remy from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both with bodyrig-webCLI, then stage the two dancers on a blank white stage in Strata with an orbiting camera.">
+<meta name="description" content="Step-by-step tutorial: two different sources — a Mixamo FBX and a MetaHuman GLB — mapped natively into Strata by bodyrig-webCLI. Get The Boss from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both, then stage the two dancers on a blank white stage in Strata with an orbiting camera.">
 <!--
 	/about/tutorials/two-character-dance.html — a from-scratch, by-hand
 	tutorial. The GLBs are made outside Strata with bodyrig-webCLI (a static,
@@ -110,19 +110,21 @@
 <main>
 	<h1>One dance, two characters</h1>
 
-	<img src="./screenshots/1dance.gif" alt="Two characters dancing on a white stage">
-	<p class="tagline">Two dancers on a blank white stage — a construct, if you like. <strong>Bruce</strong> starts a dance; <strong>Remy</strong> picks it up three seconds later and copies it move for move, while a camera swings around so you see their faces for most of it. The characters are rigged and animated outside Strata with <a href="https://github.com/tejaswigowda/bodyrig-webCLI">bodyrig-webCLI</a> — it retargets one motion onto any skeleton and writes a single GLB with the animation baked in — then Strata stages and renders them. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+	<img width='100%' src="./screenshots/1dance.gif" alt="Two characters dancing on a white stage">
+	<p class="tagline">Two dancers on a blank white stage — a construct, if you like. <strong>Bruce</strong> starts a dance; <strong>The Boss</strong> picks it up three seconds later and copies it move for move, while a camera swings around so you see their faces for most of it. The characters are rigged and animated outside Strata with <a href="https://github.com/tejaswigowda/bodyrig-webCLI">bodyrig-webCLI</a> — it retargets one motion onto any skeleton and writes a single GLB with the animation baked in — then Strata stages and renders them. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
-	<div class="note"><strong>What you'll need.</strong> A free <a href="https://www.mixamo.com">Mixamo</a> account (an Adobe ID) for Remy, a browser for <a href="http://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a> (it runs entirely in the page — nothing is uploaded), and Bruce, a MetaHuman exported by <a href="https://github.com/creategamecharacters/metahuman-to-glb">creategamecharacters/metahuman-to-glb</a> (see <a href="make-your-own-metahuman.html">Make your own MetaHuman</a> for what that project is). The pieces are free, but the characters keep their own terms: Mixamo's characters belong to Adobe and are not meant to be re-hosted, so this tutorial never asks you to commit the Remy file anywhere public.</div>
+	<div class="note"><strong>Two different sources, one pipeline.</strong> The two dancers come from completely different places: <strong>The Boss</strong> is a Mixamo <code>.fbx</code> (a <code>mixamorig</code> skeleton in centimetres, T-pose), and <strong>Bruce</strong> is a MetaHuman <code>.glb</code> (a ~1,200-bone rig in metres, A-pose, with 51 face blendshapes). <a href="https://github.com/tejaswigowda/bodyrig-webCLI">bodyrig-webCLI</a> maps one motion file onto <em>both</em> skeletons and writes a plain GLB for each, so Strata imports them <strong>natively</strong> — through the ordinary <strong>Import</strong> dialog, with no plug-in, converter or per-character setup — and they arrive with the same clip name and length, ready for the same <code>$S()</code> timeline grammar.</div>
 
-	<h2><span class="step">1</span> Download Remy from Mixamo</h2>
-	<p class="lede">Remy is a stock Mixamo character, so he comes with the standard <code>mixamorig</code> skeleton that bodyrig-webCLI already knows how to map.</p>
+	<div class="note"><strong>What you'll need.</strong> A free <a href="https://www.mixamo.com">Mixamo</a> account (an Adobe ID) for The Boss, a browser for <a href="http://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a> (it runs entirely in the page — nothing is uploaded), and Bruce, a MetaHuman exported by <a href="https://github.com/creategamecharacters/metahuman-to-glb">creategamecharacters/metahuman-to-glb</a> (see <a href="make-your-own-metahuman.html">Make your own MetaHuman</a> for what that project is). The pieces are free, but the characters keep their own terms: Mixamo's characters belong to Adobe and are not meant to be re-hosted, so this tutorial never asks you to commit the Boss file anywhere public.</div>
+
+	<h2><span class="step">1</span> Download The Boss from Mixamo</h2>
+	<p class="lede">The Boss is a stock Mixamo character, so he comes with the standard <code>mixamorig</code> skeleton that bodyrig-webCLI already knows how to map.</p>
 	<ol class="steps">
 		<li>Go to <a href="https://www.mixamo.com">mixamo.com</a> and sign in with your Adobe ID (free).</li>
-		<li>Open the <strong>Characters</strong> tab and pick <strong>Remy</strong>.</li>
-		<li>Press <strong>Download</strong>. Choose format <strong>FBX Binary (.fbx)</strong> and pose <strong>T-pose</strong>, then download and save the file as <code>remy.fbx</code>.</li>
+		<li>Open the <strong>Characters</strong> tab and pick <strong>The Boss</strong>.</li>
+		<li>Press <strong>Download</strong>. Choose format <strong>FBX Binary (.fbx)</strong> and pose <strong>T-pose</strong>, then download and save the file as <code>boss.fbx</code>.</li>
 	</ol>
-	<p>Mixamo's menus change from time to time, so the labels above may read a little differently — what matters is a rigged Remy as an <code>.fbx</code> in a T-pose.</p>
+	<p>Mixamo's menus change from time to time, so the labels above may read a little differently — what matters is the character as a rigged <code>.fbx</code> in a T-pose.</p>
 	<div class="note"><strong>Want a different dance?</strong> You don't have to use Mixamo's motions. bodyrig-webCLI accepts BVH, FBX or GLB for the animation, and it ships a 33-second sample, <a href="http://tejaswigowda.com/bodyrig-webCLI/samples/mocap-33s.bvh">mocap-33s.bvh</a>, that this tutorial uses. If you'd rather pick one from Mixamo, open its <strong>Animations</strong> tab, choose a dance, and download it as FBX with skin set to <strong>Without Skin</strong>; the tool reads animation-only FBX files too.</div>
 
 	<h2><span class="step">2</span> Get Bruce</h2>
@@ -132,9 +134,9 @@
 	<h2><span class="step">3</span> Bake the dance onto both with bodyrig-webCLI</h2>
 	<p class="lede">Open <a href="http://tejaswigowda.com/bodyrig-webCLI/">tejaswigowda.com/bodyrig-webCLI</a> (or clone <a href="https://github.com/tejaswigowda/bodyrig-webCLI">the repo</a> and run <code>npm start</code> for a local copy at <code>http://127.0.0.1:8010</code>). It is a static page: the badge in the header reads <em>100% local · zero egress</em>, and you can confirm in DevTools' Network tab that your files never leave the machine.</p>
 	<ol class="steps">
-		<li>Drop <code>remy.fbx</code> on the <strong>Character</strong> zone, and <code>mocap-33s.bvh</code> on <strong>Animation tracks</strong>. Both appear as chips (the motion reports its joint count and duration).</li>
-		<li>The page bakes as soon as it has a character and a motion; the status bar ends with <em>Done: remy_mocap-33s.glb</em> and a live preview plays. To re-bake after changing an option, press <strong>Bake &amp; export GLB</strong>.</li>
-		<li>Press <strong>Download GLB</strong> to save <code>remy_mocap-33s.glb</code>.</li>
+		<li>Drop <code>boss.fbx</code> on the <strong>Character</strong> zone, and <code>mocap-33s.bvh</code> on <strong>Animation tracks</strong>. Both appear as chips (the motion reports its joint count and duration).</li>
+		<li>The page bakes as soon as it has a character and a motion; the status bar ends with <em>Done: boss_mocap-33s.glb</em> and a live preview plays. To re-bake after changing an option, press <strong>Bake &amp; export GLB</strong>.</li>
+		<li>Press <strong>Download GLB</strong> to save <code>boss_mocap-33s.glb</code>.</li>
 		<li>Swap the character: click the <strong>×</strong> on its chip, drop <code>bruce.glb</code> instead (leave the same motion loaded), and download <code>bruce_mocap-33s.glb</code> the same way.</li>
 	</ol>
 	<figure>
@@ -142,33 +144,33 @@
 		<figcaption>bodyrig-webCLI after baking Bruce: character and motion chips on the left, the finished GLB playing in the preview on the right.</figcaption>
 	</figure>
 
-	<p>Because both characters were baked from the same motion file, the animation clip in each GLB has the same name, <code>mocap-33s</code>, and the same 33.1-second length — which is exactly what lets Remy copy Bruce later with a plain time offset.</p>
-	<div class="note"><strong>It's a CLI in a page.</strong> Every control is just a command in the box under <em>Command</em>: after dropping the files, <code>bake --fps 30</code> is what the button runs. Useful flags are <code>--foot-lock</code> (pin planted feet with IK), <code>--loop</code> (close the cycle), <code>--in-place</code> and <code>--trim 2:20</code> (seconds). Run <code>help</code> to see them all. For a MetaHuman, leave <strong>Align reference pose</strong> ticked — it is what makes the A-pose Bruce and the T-pose Remy follow the same motion.</div>
+	<p>Because both characters were baked from the same motion file, they are <strong>two different sources mapped natively into Strata</strong> by one tool: the animation clip in each GLB has the same name, <code>mocap-33s</code>, and the same 33.1-second length — which is exactly what lets The Boss copy Bruce later with a plain time offset.</p>
+	<div class="note"><strong>It's a CLI in a page.</strong> Every control is just a command in the box under <em>Command</em>: after dropping the files, <code>bake --fps 30</code> is what the button runs. Useful flags are <code>--foot-lock</code> (pin planted feet with IK), <code>--loop</code> (close the cycle), <code>--in-place</code> and <code>--trim 2:20</code> (seconds). Run <code>help</code> to see them all. For a MetaHuman, leave <strong>Align reference pose</strong> ticked — it is what makes the A-pose Bruce and the T-pose Boss follow the same motion.</div>
 	<div class="note"><strong>Skip the dragging for Bruce.</strong> The tool also reads a deep link, so you can bake him straight from his URL: <code>http://tejaswigowda.com/bodyrig-webCLI/?character=&lt;bruce URL&gt;&amp;motion=&lt;motion URL&gt;&amp;run=bake</code> (URL-encode the two values). Add <code>--hide Outfits</code> to the command to leave the clothes out of the bake if you only want the bare body.</div>
 	<p>The GLBs are <a href="https://github.com/zeux/meshoptimizer">meshopt</a>-compressed to keep them small (Bruce comes out near 39 MB, down from about 80 MB). Strata's loader already includes the meshopt decoder, so nothing extra is needed; tick off <strong>Meshopt compress</strong> only if you plan to open the file in a tool that lacks it.</p>
 
 	<h2><span class="step">4</span> Import both into Strata</h2>
 	<p class="lede">Use <strong>File → Import</strong> (or drag both files onto the editor window). A progress banner tracks each file while it is read and parsed. When the <strong>Import glTF</strong> dialog appears, leave the compression options off — Strata skips mesh simplification on skinned and morph-target meshes anyway, and rigged characters don't benefit from it — and press <strong>OK</strong>.</p>
 	<p>Then check what arrived in the Shell:</p>
-	<pre><code>scene.children.map(o => o.name);        // ['bruce_mocap-33s.glb', 'remy_mocap-33s.glb']
-scene.animations.map(a => a.name);      // ['mocap-33s', 'mocap-33s']</code></pre>
-	<p>Give them short names to address them by, and measure each character so you know whether the scale is sane — Mixamo exports are in centimetres, so Remy may come in tiny or huge depending on how the FBX was read:</p>
-	<pre><code>const bruce = scene.children.find(o => o.name.startsWith('bruce'));
-const remy  = scene.children.find(o => o.name.startsWith('remy'));
+	<pre><code>scene.children.map(o =&gt; o.name);        // ['bruce_mocap-33s.glb', 'boss_mocap-33s.glb']
+scene.animations.map(a =&gt; a.name);      // ['mocap-33s', 'mocap-33s']</code></pre>
+	<p>Give them short names to address them by, and measure each character so you know whether the scale is sane. Strata normalizes each import (it centres and grounds the model, and rescales a centimetre-unit Mixamo rig by ×0.01), so both should come in close to 2 m. Each shell command runs in its own scope, so look the characters up again in every block that needs them:</p>
+	<pre><code>const bruce = scene.children.find(o =&gt; o.name.startsWith('bruce'));
+const boss  = scene.children.find(o =&gt; o.name.startsWith('boss'));
 relabel(bruce, 'bruce');               // Bruce becomes #bruce
-relabel(remy, 'remy');                 // Remy becomes #remy
+relabel(boss, 'boss');                 // The Boss becomes #boss
 
-for (const [n, o] of [['bruce', bruce], ['remy', remy]]) {
-  const h = new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y;
-  console.log(n, 'is', h.toFixed(2), 'm tall');   // aim for roughly 1.7–1.9
-}</code></pre>
-	<p>If Remy is off, scale his group so he stands about as tall as Bruce — one command, undoable:</p>
-	<pre><code>const k = 1.8 / new THREE.Box3().setFromObject(remy).getSize(new THREE.Vector3()).y;
-editor.execute(new SetScaleCommand(editor, remy, remy.scale.clone().multiplyScalar(k)));</code></pre>
+const height = o =&gt; new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y;
+[height(bruce).toFixed(2), height(boss).toFixed(2)]   // about 2 m each</code></pre>
+	<p>If one is off, scale his group so he stands about as tall as Bruce — one command, undoable:</p>
+	<pre><code>const boss = scene.children.find(o =&gt; o.name.startsWith('boss'));
+const k = 1.8 / new THREE.Box3().setFromObject(boss).getSize(new THREE.Vector3()).y;
+editor.execute(new SetScaleCommand(editor, boss, boss.scale.clone().multiplyScalar(k)));</code></pre>
 
 	<h2><span class="step">5</span> Stage the two dancers</h2>
-	<p class="lede">Both characters were baked at the origin, so they would dance inside each other. Slide Remy 2.8 m to the side:</p>
-	<pre><code>editor.execute(new SetPositionCommand(editor, remy, new THREE.Vector3(2.8, 0, 0)));</code></pre>
+	<p class="lede">Both characters were baked at the origin, so they would dance inside each other. Slide The Boss 2.8 m to the side:</p>
+	<pre><code>const boss = scene.children.find(o =&gt; o.name.startsWith('boss'));
+editor.execute(new SetPositionCommand(editor, boss, new THREE.Vector3(2.8, 0, 0)));</code></pre>
 
 	<h2><span class="step">6</span> Build a blank white stage</h2>
 	<p class="lede">The stage is a featureless white void: a white background that the floor fades into, light fog to soften the horizon, a glossy white floor for a faint reflection, and two lights.</p>
@@ -193,11 +195,11 @@ key.name = 'Key';
 editor.execute(new AddObjectCommand(editor, key));</code></pre>
 	<div class="note"><strong>The environment setting.</strong> If the void looks grey rather than white, check the Scene tab: <em>Background</em> and <em>Environment</em> can override what you set in code (see <a href="build-a-scene.html">Build a night scene from scratch</a> for the same trap).</div>
 
-	<h2><span class="step">7</span> Play the dance: Bruce leads, Remy follows</h2>
-	<p class="lede">Each imported clip is bound to its own character, so two clips can share a name without clashing — the selector decides whose clip plays. Put Bruce's on the Universal Timeline at 0 s and Remy's at 3 s:</p>
+	<h2><span class="step">7</span> Play the dance: Bruce leads, The Boss follows</h2>
+	<p class="lede">Each imported clip is bound to its own character, so two clips can share a name without clashing — the selector decides whose clip plays. Put Bruce's on the Universal Timeline at 0 s and the Boss's at 3 s:</p>
 	<pre><code>$S('#bruce').at(0).play('mocap-33s');
-$S('#remy').at(3).play('mocap-33s');</code></pre>
-	<p>Open the <strong>Animations</strong> tab and scrub: Bruce starts moving at once, Remy begins three seconds in and repeats the same moves. The whole timeline is 36.1 seconds — the 33.1-second dance plus Remy's 3-second head start.</p>
+$S('#boss').at(3).play('mocap-33s');</code></pre>
+	<p>Open the <strong>Animations</strong> tab and scrub: Bruce starts moving at once, The Boss begins three seconds in and repeats the same moves. The whole timeline is 36.1 seconds — the 33.1-second dance plus the Boss's 3-second head start.</p>
 	<div class="note"><strong>Why bake the same motion twice?</strong> You could retarget live in the page, but a baked clip is plain keyframe data: it is versioned with the scene, selectable by <code>$S</code>, and rendered identically every time. Retargeting <em>per character</em> is the part that needs a tool; sequencing and staging is what Strata is for.</div>
 
 	<h2><span class="step">8</span> Add a camera that orbits the dancers</h2>
@@ -233,10 +235,15 @@ holdTimelineAt(editor, 16);            // jump the whole scene to t = 16 s
 editor.viewportCamera = cam;           // look through the new camera
 editor.signals.viewportCameraChanged.dispatch();</code></pre>
 
-	<div class="note"><strong>Flickering clothes (z-fighting).</strong> A garment that hugs the body sits almost exactly on the skin under it, and for some frames of the dance the two surfaces tie in the depth buffer, so patches of skin show through the cloth. Two fixes, both already in this tutorial: keep the camera's near/far range tight (<code>0.5</code>–<code>60</code> above, not <code>0.01</code>–<code>1000</code> — depth precision is spent mostly near the camera, and the ratio far/near is what matters), and push the layer underneath slightly back with a polygon offset. Bruce's outfit sits on his body mesh the same way, so if you see flicker on him, apply the same offset to his body mesh; for Remy, whose T-shirt and shorts lie on his body mesh, it looks like this:
-	<pre><code>const body = remy.getObjectByName('Body');
-body.material = body.material.clone();          // never edit a material that has already rendered
-Object.assign(body.material, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });</code></pre>
+	<div class="note"><strong>Flickering clothes (z-fighting).</strong> A garment that hugs the body sits almost exactly on the skin under it, and for some frames of the dance the two surfaces tie in the depth buffer, so patches of skin show through the cloth. Two fixes, both already in this tutorial: keep the camera's near/far range tight (<code>0.5</code>–<code>60</code> above, not <code>0.01</code>–<code>1000</code> — depth precision is spent mostly near the camera, and the ratio far/near is what matters), and push the layer underneath slightly back with a polygon offset. Bruce's outfit sits on his body mesh the same way, so if you see flicker on him, apply the same offset to his body mesh. The Boss's clothes are separate meshes (jacket, pants, shoes…), so list his meshes first, then offset whichever one is showing through:
+	<pre><code>const boss = scene.children.find(o =&gt; o.name.startsWith('boss'));
+const names = [];
+boss.traverse(o =&gt; { if (o.isMesh) names.push(o.name); });
+names;                                          // pick the mesh that is poking through
+
+const mesh = boss.getObjectByName(names[0]);    // replace names[0] with that name
+mesh.material = mesh.material.clone();          // never edit a material that has already rendered
+Object.assign(mesh.material, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 });</code></pre>
 	If a gap remains, raise the factor; if skin starts to poke <em>through</em> a layer that should be under it, you pushed the wrong one.</div>
 
 	<h2><span class="step">9</span> Render it</h2>
@@ -248,7 +255,7 @@ Object.assign(body.material, { polygonOffset: true, polygonOffsetFactor: 2, poly
 	<p>To keep the scene, set your repository and token in the <strong>Git</strong> tab and use <strong>Commit Scene</strong>. The characters and their baked clips are stored as binary asset files next to a small scene JSON, so the commit is large but not unmanageable (a few dozen megabytes for this scene).</p>
 	<pre><code>// Sanity-check what you're about to commit
 $S('#bruce').count();                  // 1
-editor.timeline.toJSON().tracks.map(t => t.target);   // ['#bruce', '#remy', '#orbit-camera']</code></pre>
+editor.timeline.toJSON().tracks.map(t => t.target);   // ['#bruce', '#boss', '#orbit-camera']</code></pre>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="https://github.com/tejaswigowda/bodyrig-webCLI">bodyrig-webCLI on GitHub</a> · <a href="https://www.mixamo.com">Mixamo</a> · <a href="https://github.com/creategamecharacters/metahuman-to-glb">metahuman-to-glb on GitHub</a> · <a href="../">About</a>

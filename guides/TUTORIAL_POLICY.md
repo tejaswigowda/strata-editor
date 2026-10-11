@@ -26,7 +26,7 @@ public-domain** target.
 
 | `targetKind` | Public? | Example |
 |---|---|---|
-| `original` | yes | an invented character, or a stock rig left un-restyled (Bruce, Remy) |
+| `original` | yes | an invented character, or a stock rig left un-restyled (Bruce, The Boss) |
 | `archetype` | yes | "expedition explorer", "knight", "astronaut" — generic roles, no signature design |
 | `public-domain` | yes | Sherlock Holmes (original stories), Dracula, Alice (Carroll text), classical figures |
 | `named-ip` | **no — private lane only** | any character or franchise someone owns |
