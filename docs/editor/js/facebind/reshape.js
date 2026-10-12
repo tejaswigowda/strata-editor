@@ -336,7 +336,8 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 /** Throws unless every byte of the binary chunk outside `ranges` is identical. */
 export function assertBinOnlyChanged( before, after, ranges ) {
 
-	if ( before.length !== after.length ) throw new GLBError( 'RIG_UNSAFE', 'refusing to write: the binary chunk changed size' );
+	// the chunk may only grow at the end (an appended texture); nothing before its old end may change except the face and hair vertex data
+	if ( after.length < before.length ) throw new GLBError( 'RIG_UNSAFE', 'refusing to write: the binary chunk got smaller' );
 	const allowed = new Uint8Array( before.length );
 	for ( const r of ranges ) allowed.fill( 1, r.start, r.end );
 	for ( let i = 0; i < before.length; i ++ ) if ( before[ i ] !== after[ i ] && ! allowed[ i ] ) throw new GLBError( 'RIG_UNSAFE', `refusing to write: byte ${ i } outside the face / hair vertex data changed` );

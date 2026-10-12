@@ -1,7 +1,8 @@
+import { paintFacialHair } from '../editor/js/facebind/facialHair.js';
 import { bindVRM, lookTexturesOf, SCOPE } from '../editor/js/facebind/bind.js';
 
 // ── pure transform: (base VRM = url | local file, face GLB = LOCAL file only) -> bound VRM ──
-// window.__facebind.run({ vrm, image | face, look, shape, hairShape, hairStyle })  -> window.__webcli_result
+// window.__facebind.run({ vrm, image | face, look, shape, hairShape, hairStyle, facialHair })  -> window.__webcli_result
 // The starting point is a photo: image -> on-device face landmarks -> face-blendshape GLB -> bind.
 // `face` (an existing face GLB) skips the photo step.
 // ?vrm=male|female|<url>&run=1   auto-runs as soon as a photo (or face GLB) is supplied from local disk.
@@ -57,7 +58,27 @@ async function meanOpaqueRGB( bytes, mime ) {
 
 }
 
-async function run( { vrm, image, face, look, shape, hairShape, hairStyle, names } ) {
+// decode a texture on this device into RGBA, and encode RGBA back to PNG bytes
+async function decodeRGBA( bytes, mime ) {
+
+	const bmp = await createImageBitmap( new Blob( [ bytes ], { type: mime } ) );
+	const c = document.createElement( 'canvas' ); c.width = bmp.width; c.height = bmp.height;
+	const ctx = c.getContext( '2d', { willReadFrequently: true } );
+	ctx.drawImage( bmp, 0, 0 );
+	return ctx.getImageData( 0, 0, c.width, c.height );
+
+}
+
+async function encodePNG( rgba, width, height ) {
+
+	const c = document.createElement( 'canvas' ); c.width = width; c.height = height;
+	c.getContext( '2d' ).putImageData( new ImageData( rgba, width, height ), 0, 0 );
+	const blob = await new Promise( ( resolve, reject ) => c.toBlob( b => b ? resolve( b ) : reject( new Error( 'PNG encoding failed' ) ), 'image/png' ) );
+	return new Uint8Array( await blob.arrayBuffer() );
+
+}
+
+async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facialHair, names } ) {
 
 	try {
 
@@ -86,11 +107,12 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, names
 			vrmBytes = new Uint8Array( await res.arrayBuffer() ); vrmName = fileBase( new URL( vrm, location.href ).pathname );
 
 		} else { vrmBytes = await readBytes( vrm, 'base VRM' ); vrmName = fileBase( vrm.name ); }
-		let faceBytes, faceGlbUrl = null, expression = null;
+		let faceBytes, faceGlbUrl = null, expression = null, photoRead = null;
 		if ( image ) {
 
 			say( 'Reading the face on this device…' );
-			const { glb, blendshapes, hairMask } = await ( await autorig ).faceGLBFromImage( image );
+			const { glb, blendshapes, hairMask, facialHair: facialHairRead, hair: hairRead } = await ( await autorig ).faceGLBFromImage( image );
+			photoRead = { facialHair: facialHairRead, hairColor: hairRead ? hairRead.color : null };
 			showHairMask( image, hairMask );
 			faceBytes = glb; expression = blendshapes;
 			faceGlbUrl = makeUrl( new Blob( [ glb ], { type: 'model/gltf-binary' } ) );
@@ -102,12 +124,26 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, names
 		if ( shape ) opts.shape = { strength: shape.strength };
 		if ( hairShape ) opts.hairShape = { strength: hairShape.strength };
 		if ( hairStyle ) opts.hairStyle = hairStyle;
-		if ( look && ( look.skin || look.hair || look.iris || look.brow ) ) {
+		if ( look && ( look.skin || look.hair || look.iris || look.brow || look.top ) ) {
 
 			// decode the VRM's skin / hair textures here, on device, and pass each one's mean color to the bind
 			const textureMeans = {};
 			for ( const t of lookTexturesOf( vrmBytes ) ) if ( look[ t.role ] ) textureMeans[ t.index ] = await meanOpaqueRGB( t.bytes, t.mime );
-			opts.look = { skin: !! look.skin, hair: !! look.hair, iris: !! look.iris, brow: !! look.brow, strength: look.strength, textureMeans };
+			opts.look = { skin: !! look.skin, hair: !! look.hair, iris: !! look.iris, brow: !! look.brow, top: !! look.top, strength: look.strength, textureMeans };
+
+		}
+		// facial hair: painted into the face SKIN texture (a texture edit, no geometry), only when the photo shows some
+		if ( facialHair && photoRead && photoRead.facialHair ) {
+
+			const faceTex = lookTexturesOf( vrmBytes ).find( t => /Face_00_SKIN/.test( t.name ) );
+			if ( faceTex ) {
+
+				const img = await decodeRGBA( faceTex.bytes, faceTex.mime );
+				const painted = paintFacialHair( img.data, img.width, img.height, photoRead.facialHair, photoRead.hairColor );
+				const f = photoRead.facialHair;
+				opts.textures = [ { materialIndex: faceTex.index, png: await encodePNG( painted, img.width, img.height ), label: `facial hair painted on the face texture (mustache ${ f.mustache }, chin ${ f.chin }, jaw ${ f.jaw })` } ];
+
+			}
 
 		}
 		const { bytes, bind, report } = bindVRM( vrmBytes, faceBytes, opts );
@@ -173,6 +209,7 @@ function render( report ) {
 		<h3>Not driven: VRM ARKit shapes the face GLB has no morph for</h3>${ list( report.undriven, n => esc( n ) ) }
 		${ report.warnings.length ? `<h3>Warnings</h3>${ list( report.warnings, w => esc( w ) ) }` : '' }
 		${ report.shape ? `<h3>Face shape <span class="muted">(approximate; the face's base positions moved by up to ${ report.shape.maxMoveMm } mm)</span></h3>` : '' }
+		${ report.textures && report.textures.length ? `<h3>Texture edit <span class="muted">(approximate; a painted copy of the face texture, no geometry)</span></h3>${ list( report.textures, l => esc( l ) ) }` : '' }
 		${ report.hairStyle && ( report.hairStyle.texture !== 'straight' || report.hairStyle.cut !== 'photo' ) ? `<h3>Hair style <span class="muted">(approximate; each lock of the VRM's own hair cards is re-laid, nothing is added)</span></h3>${ list( [ `cut: ${ report.hairStyle.cut }`, `texture: ${ report.hairStyle.texture } (${ report.hairStyle.textureSource })`, ...( report.hairStyle.cards ? [ `${ report.hairStyle.cards } hair locks re-laid` ] : [] ) ], l => esc( l ) ) }` : '' }
 		${ report.hairShape ? `<h3>Hair shape <span class="muted">(approximate; the existing hairstyle scaled and shifted to the photo's hair silhouette, by up to ${ report.hairShape.maxMoveMm } mm)</span></h3>${ list( describeHair( report.hairShape.applied ), l => esc( l ) ) }` : '' }
 		${ report.look ? `<h3>Look transfer <span class="muted">(approximate; material tint only)</span></h3>${ list( report.look.applied, a => `${ esc( a.role ) }: ${ esc( a.material ) } → rgb(${ a.target.map( esc ).join( ', ' ) })${ a.reached ? '' : ' (not fully reachable)' }` ) }` : '' }`;
@@ -253,11 +290,11 @@ function updateExpressionNote() {
 
 let vrmFile = null, faceFile = null, imageFile = null;
 const ready = () => !! ( imageFile || faceFile );
-const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked, strength: Number( $( 'lookStrength' ).value ) / 100 } );
+const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked, top: $( 'lookTop' ).checked, strength: Number( $( 'lookStrength' ).value ) / 100 } );
 const shapeOptions = () => $( 'shapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
 const hairShapeOptions = () => $( 'hairShapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
 const hairStyleOptions = () => ( { cut: $( 'hairCut' ).value, texture: $( 'hairTexture' ).value } );
-const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions(), hairShape: hairShapeOptions(), hairStyle: hairStyleOptions() } ).then( showNetwork );
+const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions(), hairShape: hairShapeOptions(), hairStyle: hairStyleOptions(), facialHair: $( 'facialHairOn' ).checked } ).then( showNetwork );
 
 function setImage( f ) {
 

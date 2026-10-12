@@ -16,6 +16,8 @@ import { hairColorFromMask } from '../hair.js';
 import { faceProportions } from '../proportions.js';
 import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID } from '../hairShape.js';
 import { cardsOf, relayCards, widenCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
+import { facialHairFromPhoto, paintFacialHair } from '../facialHair.js';
+import { shirtColorFromPhoto } from '../clothing.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -464,6 +466,63 @@ test( 'widen cards: the ribbon gets wider across the strand, its length is uncha
 
 } );
 
+test( 'facial hair: a darker lower face than the cheeks reads as a beard, a clean face as none, tiny or dark pictures as unreadable', () => {
+
+	const W = 400, H = 400, lm = Array.from( { length: 478 }, () => ( { x: 0.5, y: 0.5 } ) );
+	const set = ( i, x, y ) => { lm[ i ] = { x: x / W, y: y / H }; };
+	set( 234, 100, 200 ); set( 454, 300, 200 ); set( 2, 200, 240 ); set( 0, 200, 262 ); set( 17, 200, 285 ); set( 152, 200, 340 ); set( 61, 175, 275 ); set( 291, 225, 275 );
+	set( 58, 130, 320 ); set( 288, 270, 320 ); set( 205, 140, 230 ); set( 425, 260, 230 );
+	const photo = ( beard ) => { const d = new Uint8ClampedArray( W * H * 4 ); for ( let y = 0; y < H; y ++ ) for ( let x = 0; x < W; x ++ ) { const i = ( y * W + x ) * 4, dark = beard && y > 240 && y < 350 && x > 130 && x < 270; d[ i ] = dark ? 90 : 200; d[ i + 1 ] = dark ? 80 : 160; d[ i + 2 ] = dark ? 75 : 140; d[ i + 3 ] = 255; } return d; };
+	const full = facialHairFromPhoto( photo( true ), { width: W, height: H }, lm );
+	ok( full && full.mustache > 0.8 && full.chin > 0.8 && full.jaw > 0.5, JSON.stringify( full ) );
+	eq( facialHairFromPhoto( photo( false ), { width: W, height: H }, lm ), null );
+	eq( facialHairFromPhoto( photo( true ), { width: W, height: H }, null ), null );
+	const dim = photo( true ); for ( let i = 0; i < dim.length; i += 4 ) { dim[ i ] = dim[ i + 1 ] = dim[ i + 2 ] = 20; }
+	eq( facialHairFromPhoto( dim, { width: W, height: H }, lm ), null, 'a dark picture cannot be compared' );
+
+} );
+
+test( 'facial hair painting: dots in the mustache, chin and jaw zones only, the lips stay clear, deterministic, same size, nothing without hair', () => {
+
+	const w = 256, h = 256, skin = new Uint8ClampedArray( w * h * 4 ).fill( 235 );
+	for ( let i = 3; i < skin.length; i += 4 ) skin[ i ] = 255;
+	const a = paintFacialHair( skin, w, h, { mustache: 1, chin: 1, jaw: 0.6 }, { r: 0.1, g: 0.1, b: 0.1 } );
+	eq( a.length, skin.length );
+	ok( same( a, paintFacialHair( skin, w, h, { mustache: 1, chin: 1, jaw: 0.6 }, { r: 0.1, g: 0.1, b: 0.1 } ) ), 'not deterministic' );
+	let changed = 0, outside = 0, onLip = 0;
+	for ( let y = 0; y < h; y ++ ) for ( let x = 0; x < w; x ++ ) {
+
+		const i = ( y * w + x ) * 4;
+		if ( a[ i ] === skin[ i ] ) continue;
+		changed ++;
+		const u = ( x + 0.5 ) / w, v = ( y + 0.5 ) / h;
+		if ( v < 0.6 || v > 0.92 || Math.abs( u - 0.5 ) > 0.26 ) outside ++;
+		if ( Math.abs( v - 0.757 ) < 0.004 && Math.abs( u - 0.5 ) < 0.03 ) onLip ++;
+		ok( a[ i ] < skin[ i ] && a[ i + 3 ] === 255, 'a dot must darken and keep alpha' );
+
+	}
+	ok( changed > 600, 'barely painted: ' + changed ); eq( outside, 0 ); eq( onLip, 0 );
+	eq( same( paintFacialHair( skin, w, h, { mustache: 0, chin: 0, jaw: 0 } ), skin ), true );
+	ok( paintFacialHair( skin, w, h, { mustache: 1, chin: 0, jaw: 0 } ).some( ( v, i ) => v !== skin[ i ] ) );
+
+} );
+
+test( 'shirt color: the chest below the chin, cleaned of skin and background; none when the picture stops at the chin or the strip is all skin', () => {
+
+	const W = 400, H = 600, lm = Array.from( { length: 478 }, () => ( { x: 0.5, y: 0.5 } ) );
+	const set = ( i, x, y ) => { lm[ i ] = { x: x / W, y: y / H }; };
+	set( 234, 150, 200 ); set( 454, 250, 200 ); set( 152, 200, 300 ); // ear to ear 100 px, chin at y 300
+	const skin = { r: 0.8, g: 0.6, b: 0.5 };
+	const photo = ( shirt ) => { const d = new Uint8ClampedArray( W * H * 4 ); for ( let y = 0; y < H; y ++ ) for ( let x = 0; x < W; x ++ ) { const i = ( y * W + x ) * 4, inBody = x > 120 && x < 280 && y > 340; const c = inBody ? ( shirt || [ 204, 153, 128 ] ) : [ 235, 235, 235 ]; d[ i ] = c[ 0 ]; d[ i + 1 ] = c[ 1 ]; d[ i + 2 ] = c[ 2 ]; d[ i + 3 ] = 255; } return d; };
+	const maroon = shirtColorFromPhoto( photo( [ 110, 30, 55 ] ), { width: W, height: H }, lm, skin );
+	ok( maroon && Math.abs( maroon.r - 110 / 255 ) < 0.01 && Math.abs( maroon.g - 30 / 255 ) < 0.01 && maroon.share > 0.6, JSON.stringify( maroon ) );
+	eq( shirtColorFromPhoto( photo( null ), { width: W, height: H }, lm, skin ), null, 'a chest of skin is not a shirt' );
+	set( 152, 200, 560 ); // the chin near the bottom of the picture: nothing below it
+	eq( shirtColorFromPhoto( photo( [ 110, 30, 55 ] ), { width: W, height: H }, lm, skin ), null );
+	eq( shirtColorFromPhoto( photo( [ 110, 30, 55 ] ), { width: W, height: H }, null, skin ), null );
+
+} );
+
 test( 'carryNormal: unit length kept and the rotation takes the old direction to the new one', () => {
 
 	const n = carryNormal( [ 0, 0, 1 ], [ 0, - 1, 0 ], [ 1, 0, 0 ] );
@@ -726,6 +785,46 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( same( parseGLB( flat.bytes ).chunks[ 0 ].data, a.chunks[ 0 ].data ), 'keep + straight must not touch the binary chunk' );
 		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { cut: 'mullet' } } ), 'BAD_HAIR_STYLE' );
 		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { texture: 'frizzy' } } ), 'BAD_HAIR_STYLE' );
+
+	} );
+	test( 'texture edit on the real VRM: the new image is appended, nothing else moves, the audit passes, it is deterministic, bad bytes are refused', () => {
+
+		// a 1x1 PNG
+		const png = Uint8Array.from( atob( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' ), c => c.charCodeAt( 0 ) );
+		const a = parseGLB( vrmBytes ), faceMat = a.json.materials.findIndex( m => /Face_00_SKIN/.test( m.name ) );
+		ok( faceMat >= 0 );
+		const out = bindVRM( vrmBytes, faceBytes, { textures: [ { materialIndex: faceMat, png, label: 'facial hair' } ] } );
+		const b = parseGLB( out.bytes );
+		const before = a.chunks[ 0 ].data, after = b.chunks[ 0 ].data;
+		ok( after.length > before.length && same( after.subarray( 0, before.length ), before ), 'the original bytes must be untouched' );
+		const tex = a.json.materials[ faceMat ].pbrMetallicRoughness.baseColorTexture, src = a.json.textures[ tex.index ].source;
+		const bv = b.json.bufferViews[ b.json.images[ src ].bufferView ];
+		ok( same( after.subarray( bv.byteOffset, bv.byteOffset + bv.byteLength ), png ), 'the image must read back as the new PNG' );
+		eq( b.json.images[ src ].mimeType, 'image/png' ); eq( b.json.buffers[ 0 ].byteLength, after.length );
+		eq( b.json.images.length, a.json.images.length ); eq( b.json.textures, a.json.textures );
+		eq( out.report.textures, [ 'facial hair' ] );
+		ok( same( bindVRM( vrmBytes, faceBytes, { textures: [ { materialIndex: faceMat, png } ] } ).bytes, bindVRM( vrmBytes, faceBytes, { textures: [ { materialIndex: faceMat, png } ] } ).bytes ), 'not deterministic' );
+		throws( () => bindVRM( vrmBytes, faceBytes, { textures: [ { materialIndex: faceMat, png: Uint8Array.from( [ 1, 2, 3 ] ) } ] } ), 'BAD_TEXTURE' );
+		ok( bindVRM( vrmBytes, faceBytes, { textures: [ { materialIndex: 9999, png } ] } ).report.warnings.some( w => /Texture edit skipped/.test( w ) ) );
+		// together with a reshape and a look
+		const all = bindVRM( vrmBytes, photoFace(), { shape: { strength: 1 }, textures: [ { materialIndex: faceMat, png } ] } );
+		ok( all.report.shape && all.report.shape.maxMoveMm > 0.5, 'the reshape still runs with a texture edit' );
+
+	} );
+	test( 'shirt color: the Tops material is tinted toward the photo\'s shirt, nothing else about the file changes but that material color', () => {
+
+		const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) );
+		j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, topColor: { r: 0.45, g: 0.12, b: 0.2 } };
+		const face = writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } );
+		const a = parseGLB( vrmBytes ), top = a.json.materials.findIndex( m => /_Tops_/.test( m.name ) );
+		ok( top >= 0, 'the base has a Tops material' );
+		const out = bindVRM( vrmBytes, face, { look: { top: true, strength: 1, textureMeans: { [ top ]: [ 240, 240, 240 ] } } } );
+		const b = parseGLB( out.bytes );
+		ok( out.report.look.applied.some( x => x.role === 'top' ), 'no top tint reported' );
+		const f = b.json.materials[ top ].pbrMetallicRoughness.baseColorFactor;
+		ok( f[ 0 ] > f[ 1 ] && f[ 0 ] > f[ 2 ], 'the shirt should be reddish: ' + f );
+		ok( same( b.chunks[ 0 ].data, a.chunks[ 0 ].data ), 'a tint must not touch the binary chunk' );
+		ok( bindVRM( vrmBytes, faceBytes, { look: { top: true, textureMeans: { [ top ]: [ 240, 240, 240 ] } } } ).report.warnings.some( w => /Shirt color skipped/.test( w ) ), 'no shirt in the face GLB should warn' );
 
 	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {

@@ -100,7 +100,7 @@ export function buildBinding( source, vrmJson ) {
 
 // ── optional look transfer (rig-safe material tints) ────────────────────────
 
-const ROLES = { skin: /_SKIN$/, hair: /_HAIR$/, iris: /_EyeIris_/, brow: /_FaceBrow_/ };
+const ROLES = { skin: /_SKIN$/, hair: /_HAIR$/, iris: /_EyeIris_/, brow: /_FaceBrow_/, top: /_Tops_/ };
 
 function materialIndices( json, role ) {
 
@@ -187,11 +187,11 @@ function applyLook( json, source, look, report ) {
 		else jobs.push( [ 'hair', [ source.hair.color.r, source.hair.color.g, source.hair.color.b ].map( v => v * 255 ) ] );
 
 	}
-	for ( const [ role, color, label ] of [ [ 'iris', source.irisColor, 'Eye color' ], [ 'brow', source.browColor, 'Brow color' ] ] ) {
+	for ( const [ role, color, label ] of [ [ 'iris', source.irisColor, 'Eye color' ], [ 'brow', source.browColor, 'Brow color' ], [ 'top', source.topColor, 'Shirt color' ] ] ) {
 
 		if ( ! look[ role ] ) continue;
 		if ( color ) jobs.push( [ role, [ color.r, color.g, color.b ].map( v => v * 255 ) ] );
-		else report.warnings.push( `${ label } skipped: the face GLB has no ${ role } color hint (it was not made from a photo).` );
+		else report.warnings.push( `${ label } skipped: the face GLB has no ${ role } color hint (it was not made from a photo, or the photo shows no shirt below the chin).` );
 
 	}
 
@@ -211,6 +211,50 @@ function applyLook( json, source, look, report ) {
 	}
 	report.look = applied.length ? { approximate: true, strength, applied } : null;
 	if ( applied.some( a => ! a.reached ) ) report.warnings.push( 'Some colors could not be fully reached: a tint can only darken the texture, so a lighter color than the texture is as close as it gets.' );
+
+}
+
+// ── optional texture edits (the painted facial hair, a hair texture fix) ───────
+
+const PNG_SIGNATURE = [ 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a ];
+
+/**
+ * Swaps the image behind a material's base-color texture for new PNG bytes. The new bytes are appended to the end of the binary
+ * chunk and the image points at them, so no existing byte moves (the old image stays, unused). Nothing but images[i].bufferView,
+ * a new bufferView entry and the buffer length changes, which the rig audit allows for exactly these images.
+ * @param {{ materialIndex:number, png:Uint8Array, label?:string }[]} textures
+ * @returns {{ images:number[], firstNewBufferView:number }}
+ */
+function replaceImages( vrm, textures, report ) {
+
+	const json = vrm.json, bin = vrm.chunks.find( c => c.type === 0x004e4942 );
+	if ( ! bin ) throw new BindError( 'NO_BIN', 'the VRM has no binary chunk to put a texture in' );
+	const firstNewBufferView = json.bufferViews.length, images = [], parts = [];
+	let offset = Math.ceil( bin.data.length / 4 ) * 4;
+	const start = offset;
+	for ( const t of textures ) {
+
+		const mat = json.materials && json.materials[ t.materialIndex ];
+		const tex = mat && mat.pbrMetallicRoughness && mat.pbrMetallicRoughness.baseColorTexture;
+		const src = tex && json.textures && ( json.textures[ tex.index ] || {} ).source;
+		if ( src === undefined || ! json.images[ src ] ) { report.warnings.push( `Texture edit skipped for material ${ t.materialIndex }: it has no base-color image.` ); continue; }
+		if ( ! ( t.png instanceof Uint8Array ) || PNG_SIGNATURE.some( ( v, i ) => t.png[ i ] !== v ) ) throw new BindError( 'BAD_TEXTURE', 'a texture edit must be PNG bytes' );
+		if ( images.includes( src ) ) continue;
+		json.bufferViews.push( { buffer: 0, byteOffset: offset, byteLength: t.png.length } );
+		json.images[ src ].bufferView = json.bufferViews.length - 1;
+		json.images[ src ].mimeType = 'image/png';
+		parts.push( [ offset, t.png ] );
+		images.push( src );
+		offset += Math.ceil( t.png.length / 4 ) * 4;
+
+	}
+	if ( ! parts.length ) return { images, firstNewBufferView };
+	const grown = new Uint8Array( offset );
+	grown.set( bin.data );
+	for ( const [ at, bytes ] of parts ) grown.set( bytes, at );
+	bin.data = grown;
+	if ( json.buffers && json.buffers[ 0 ] ) json.buffers[ 0 ].byteLength = offset;
+	return { images, firstNewBufferView, appendedFrom: start };
 
 }
 
@@ -236,11 +280,20 @@ const ALLOWED_CHANGE = [
 /**
  * Throws unless the only differences are the bind block, extensionsUsed, look-transfer material colors and
  * (when the face was reshaped) the bounds of the face POSITION accessors.
- * @param {{ accessors?: number[] }} [shape] position accessors that a reshape rewrote
+ * @param {{ accessors?: number[], textures?: { images: number[], firstNewBufferView: number } }} [shape] position accessors that a reshape rewrote, and the images a texture edit replaced
  */
 export function assertRigSafe( before, after, shape = {} ) {
 
 	const allowed = [ ...ALLOWED_CHANGE, ...( shape.accessors || [] ).map( i => new RegExp( `^/accessors/${ i }/(min|max)($|/)` ) ) ];
+	// a texture edit: the edited images point at new bufferViews appended after the old ones, and the buffer grew
+	const tex = shape.textures;
+	if ( tex && tex.images.length ) {
+
+		for ( const i of tex.images ) allowed.push( new RegExp( `^/images/${ i }/(bufferView|mimeType)$` ) );
+		for ( let k = tex.firstNewBufferView; k < tex.firstNewBufferView + tex.images.length; k ++ ) allowed.push( new RegExp( `^/bufferViews/${ k }($|/)` ) );
+		allowed.push( /^\/buffers\/0\/byteLength$/ );
+
+	}
 	const bad = diffPaths( before, after ).filter( p => ! allowed.some( re => re.test( p ) ) );
 	if ( bad.length ) throw new BindError( 'RIG_UNSAFE', `refusing to write: the bind would change ${ bad.slice( 0, 5 ).join( ', ' ) }` );
 
@@ -249,7 +302,7 @@ export function assertRigSafe( before, after, shape = {} ) {
 /**
  * @param {ArrayBuffer|Uint8Array} vrmInput base VRM bytes
  * @param {ArrayBuffer|Uint8Array} faceInput LOCAL face-blendshape GLB bytes (never a URL)
- * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, reference?: object }, hairStyle?: { cut?: 'photo'|'keep'|'crop'|'bob'|'long'|'afro', texture?: 'auto'|'straight'|'wavy'|'curly'|'coily' }, look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
+ * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, reference?: object }, hairStyle?: { cut?: 'photo'|'keep'|'crop'|'bob'|'long'|'afro', texture?: 'auto'|'straight'|'wavy'|'curly'|'coily' }, textures?: { materialIndex: number, png: Uint8Array, label?: string }[], look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
  *   look = optional, approximate material tints (skin / hair color). textureMeans[materialIndex] = the mean sRGB color (0–255)
  *   of that material's base texture, from lookTexturesOf().
  */
@@ -272,6 +325,7 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		shape: null,
 		hairShape: null,
 		hairStyle: null,
+		textures: null,
 		normals: null,
 		egress: 'none: the face GLB was read from local bytes only; nothing derived from it left this process',
 	};
@@ -351,8 +405,15 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 	vrm.json.extensionsUsed = [ ...new Set( [ ...( vrm.json.extensionsUsed || [] ), BIND_EXTENSION ] ) ];
 	if ( opts.look ) applyLook( vrm.json, source, opts.look, report );
 
-	assertRigSafe( before, vrm.json, reshaped || {} );
-	if ( reshaped ) assertBinOnlyChanged( origBin, vrm.chunks.find( c => c.type === 0x004e4942 ).data, reshaped.ranges );
+	let textures = null;
+	if ( opts.textures && opts.textures.length ) {
+
+		textures = replaceImages( vrm, opts.textures, report );
+		report.textures = opts.textures.filter( t => t.label ).map( t => t.label );
+
+	}
+	assertRigSafe( before, vrm.json, { ...( reshaped || {} ), textures } );
+	if ( reshaped || textures ) assertBinOnlyChanged( origBin, vrm.chunks.find( c => c.type === 0x004e4942 ).data, reshaped ? reshaped.ranges : [] );
 	return { bytes: writeGLB( vrm ), bind, report };
 
 }

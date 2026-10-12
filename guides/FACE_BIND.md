@@ -170,6 +170,8 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | **Hair color** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
 | **Eye color** | a disc inside each iris | iris material |
 | **Brow color** | the darker half of the brow polygons | brow material |
+| **Shirt color** | the strip of chest just below the chin, cleaned of skin and plain background (trimmed mean) | the Tops material (the MToon shade color follows). Skipped when the photo stops at the chin or shows no shirt |
+| **Facial hair** | how much darker the area above the lip, the chin and the jaws are than the cheeks of the same face (three amounts, 0 to 1) | **dots painted into the face SKIN texture**, see [Facial hair](#facial-hair-painted-on-the-face-texture). Nothing is painted for a clean-shaven face |
 
 ### How the length and fringe are moved (lifting, not folding)
 
@@ -215,6 +217,41 @@ Limits, stated plainly:
 - All of it is on-device geometry math on the bytes already in the page; it adds no network request and no new data
   leaves the device.
 
+### Facial hair (painted on the face texture)
+
+A mustache, beard or stubble is not geometry on a VRoid base, it is texture. When the photo's lower face is clearly darker than its cheeks
+(zones above the lip, on the chin and along the jaws; each gives an amount from 0 to 1) the page decodes the base's face SKIN texture on
+the device, paints dark dots into the mustache, chin and jaw areas, and passes the PNG to the bind as a texture edit. The dots thin out toward the
+edge of each zone and keep the lips and mouth line clear; the VRoid face texture has the same layout on every base, so the zones are fixed
+texture coordinates. The dots use a darker version of the photo's hair color and a hash of the pixel position, so the same inputs paint the
+same texture. Turn it off with the "Facial hair" checkbox (`facialHair: false` for agents).
+
+It is an estimate: a shadow or a dark lip corner can read as hair, light stubble on dark skin can read as none, and a clean-shaven face
+in dim light may paint a little. It only paints where the lower face is darker than the cheeks.
+
+### Texture edits and the rig audit
+
+A texture edit swaps the image behind one material's base-color texture. The new PNG is **appended to the end of the binary chunk** and
+the image points at it, so no existing byte moves (the old image stays in the file, unused, about 0.4 MB for the face texture). The audit allows exactly
+this: `images[i].bufferView` and `mimeType` for the replaced images, the new bufferView entries and the buffer length. Everything else, including
+every byte of the old binary chunk outside the face and hair vertex data, must be identical or the bind refuses to write (`RIG_UNSAFE`).
+`opts.textures = [ { materialIndex, png, label } ]` in `bindVRM`; the PNG must start with the PNG signature (`BAD_TEXTURE` otherwise).
+
+### What was and was not taken from the hand-made restyle
+
+A hand-made restyle of a VRoid base (the reference scene, a male base matched to a photo by a person in the editor) used these techniques.
+The tool now copies the ones that stay rig-safe and automatic:
+
+| Technique in the reference | In the tool |
+|---|---|
+| Hair lifted a few centimeters, lower part squeezed, front lifted more (no folding) | yes: [lifting](#how-the-length-and-fringe-are-moved-lifting-not-folding) |
+| Hair, skin, iris and brow colors from the photo | yes (material tints) |
+| Eye openness and mouth width nudged a few millimeters to a centimeter | yes (face shape warp) |
+| Mustache and beard painted into the face texture | yes ([facial hair](#facial-hair-painted-on-the-face-texture)) |
+| Shirt recolored to the photo's shirt | yes (Tops material tint) |
+| A collar mesh added to the shirt, trousers recolored black and the body texture cut for them, shirt and shorts cut from the clothes | **no**: it adds or removes geometry or edits garments, which the rig-safe rule forbids, and a headshot does not show trousers |
+| Transparent texels of the back hair texture turned black | no effect worth the extra edit; it was a side effect of re-saving the texture through a canvas |
+
 Notes:
 
 - **Morph-delta fidelity.** The morph targets are deltas tuned to the original base, and they are not rescaled. A reshape
@@ -231,7 +268,8 @@ Notes:
 - Strength is 0–1 for shape and for color (default 70%).
 - **Not used: the photo's texture itself.** The face GLB carries a UV-mapped crop of the photo. Painting it onto the
   VRM's face texture would put a photographic face under the anime eyes, brows and mouth (which are separate meshes),
-  so it would not help; the useful parts of that texture (skin, iris and brow color) are taken as colors instead.
+  so it would not help; the useful parts of that texture (skin, iris and brow color) are taken as colors instead, and facial hair is painted
+  in as dots (see above).
 - Depth from a single photo is a rough estimate; a turned head (> 25°) skips profile depth.
 - Re-binding an already reshaped VRM measures it again and moves it further: bind from the base.
 

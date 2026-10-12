@@ -16,6 +16,8 @@ import { TextureMapper } from './texture-mapper.js';
 import { hairColorFromMask, trimmedMeanColor } from '../../editor/js/facebind/hair.js';
 import { hairShapeFromMask } from '../../editor/js/facebind/hairShape.js';
 import { classifyHairTexture } from '../../editor/js/facebind/hairStyle.js';
+import { facialHairFromPhoto } from '../../editor/js/facebind/facialHair.js';
+import { shirtColorFromPhoto } from '../../editor/js/facebind/clothing.js';
 import { faceProportions } from '../../editor/js/facebind/proportions.js';
 
 const VENDOR = new URL( '../vendor/mediapipe/', import.meta.url ).href;
@@ -80,6 +82,19 @@ export function loadHairSegmenter() {
 
 	}
 	return segmenter;
+
+}
+
+// The photo's pixels at up to 1024 px, for the facial hair and shirt readings.
+function photoPixels( bitmap ) {
+
+	const scale = Math.min( 1, 1024 / Math.max( bitmap.width, bitmap.height ) );
+	const width = Math.round( bitmap.width * scale ), height = Math.round( bitmap.height * scale );
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = width; canvas.height = height;
+	const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+	ctx.drawImage( bitmap, 0, 0, width, height );
+	return { rgba: ctx.getImageData( 0, 0, width, height ).data, size: { width, height } };
 
 }
 
@@ -194,6 +209,8 @@ export async function faceGLBFromImage( image ) {
 	const blendshapes = new ARKitBlendshapeMapper().mapMediaPipeToARKit( categories, landmarks );
 	const transform = results.facialTransformationMatrixes && results.facialTransformationMatrixes[ 0 ];
 
+	let facialHair = null, pixels = null;
+	try { pixels = photoPixels( bitmap ); facialHair = facialHairFromPhoto( pixels.rgba, pixels.size, landmarks ); } catch ( e ) { console.warn( 'facebind: facial hair not read', e ); }
 	let hair = null;
 	try { hair = await readHair( bitmap, landmarks ); } catch ( e ) { console.warn( 'facebind: hair segmentation unavailable', e ); }
 
@@ -207,6 +224,10 @@ export async function faceGLBFromImage( image ) {
 	mesh.name = 'faceMesh';
 	// travels in the face GLB's node extras next to skinColor, so the bind reads it from the GLB like everything else
 	if ( hair ) { mesh.userData.hairColor = hair.color; mesh.userData.hairCoverage = hair.coverage; if ( hair.shape ) mesh.userData.hairShape = hair.shape; if ( hair.texture ) mesh.userData.hairTexture = hair.texture; }
+	if ( facialHair ) mesh.userData.facialHair = facialHair;
+	let topColor = null;
+	try { topColor = pixels ? shirtColorFromPhoto( pixels.rgba, pixels.size, landmarks, generator.skinColor ) : null; } catch ( e ) { console.warn( 'facebind: shirt color not read', e ); }
+	if ( topColor ) mesh.userData.topColor = topColor;
 	if ( eyeBrow.iris ) mesh.userData.irisColor = eyeBrow.iris;
 	if ( eyeBrow.brow ) mesh.userData.browColor = eyeBrow.brow;
 	if ( proportions ) mesh.userData.faceProportions = proportions;
@@ -222,6 +243,6 @@ export async function faceGLBFromImage( image ) {
 
 	mesh.geometry.dispose(); mesh.material.map.dispose(); mesh.material.dispose();
 	if ( bitmap.close && image !== bitmap ) bitmap.close();
-	return { glb, blendshapes, skinColor: generator.skinColor, hair, hairMask: hair ? hair.mask : null, iris: eyeBrow.iris, brow: eyeBrow.brow, proportions };
+	return { glb, blendshapes, skinColor: generator.skinColor, hair, hairMask: hair ? hair.mask : null, iris: eyeBrow.iris, brow: eyeBrow.brow, proportions, facialHair, topColor };
 
 }
