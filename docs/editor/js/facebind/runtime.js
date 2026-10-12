@@ -55,3 +55,17 @@ export function applyFaceWeights( root, weights, opts = {} ) {
 	return { applied, skipped };
 
 }
+
+/**
+ * Split expression scores (ARKit name -> 0..1, e.g. read from a photo) into the ones the bind map drives (the face
+ * GLB's morphs) and the extra ARKit shapes the VRM has but the face GLB does not.
+ * @returns {{ mapped: Object<string, number>, extra: Object<string, number> }}
+ */
+export function splitExpression( scores, bind ) {
+
+	const driven = new Set( bind.map.map( m => m.name ) );
+	const mapped = {}, extra = {};
+	for ( const [ name, v ] of Object.entries( scores ) ) if ( typeof v === 'number' && ! Number.isNaN( v ) ) ( driven.has( name ) ? mapped : extra )[ name ] = v;
+	return { mapped, extra };
+
+}

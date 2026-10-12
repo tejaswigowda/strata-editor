@@ -87,6 +87,12 @@
 		<label><input type="radio" name="view" id="view_bound" checked> Bound (reshaped, recolored)</label>
 		<label><input type="radio" name="view" id="view_base"> Base VRM</label>
 		<div id="preview3d"></div>
+		<div>
+			<strong>Expression</strong>
+			<label><input type="radio" name="expr" id="expr_photo"> From the photo</label>
+			<label><input type="radio" name="expr" id="expr_neutral"> Neutral</label>
+			<label><input type="radio" name="expr" id="expr_manual"> Sliders</label>
+		</div>
 		<p id="previewNote" class="muted"></p>
 		<div class="sliders">
 			<label>Jaw open <input type="range" id="x_jawOpen" min="0" max="100" value="0"></label>
@@ -95,7 +101,7 @@
 			<label>Brows up <input type="range" id="x_browsUp" min="0" max="100" value="0"></label>
 			<button id="xReset" type="button">Reset expression</button>
 		</div>
-		<p class="muted">The sliders move the VRM through the bind map (face morph to VRM expression). The preview is drawn on this device from the bytes in this page.</p>
+		<p class="muted">The expression is mapped through the bind map (face morph to VRM expression). The preview is drawn on this device from the bytes in this page.</p>
 	</div>
 	<div id="report"></div>
 

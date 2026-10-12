@@ -86,12 +86,12 @@ async function run( { vrm, image, face, look, shape, hairShape, names } ) {
 			vrmBytes = new Uint8Array( await res.arrayBuffer() ); vrmName = fileBase( new URL( vrm, location.href ).pathname );
 
 		} else { vrmBytes = await readBytes( vrm, 'base VRM' ); vrmName = fileBase( vrm.name ); }
-		let faceBytes, faceGlbUrl = null;
+		let faceBytes, faceGlbUrl = null, expression = null;
 		if ( image ) {
 
 			say( 'Reading the face on this device…' );
-			const { glb } = await ( await autorig ).faceGLBFromImage( image );
-			faceBytes = glb;
+			const { glb, blendshapes } = await ( await autorig ).faceGLBFromImage( image );
+			faceBytes = glb; expression = blendshapes;
 			faceGlbUrl = makeUrl( new Blob( [ glb ], { type: 'model/gltf-binary' } ) );
 			const f = $( 'faceGlbLink' ); f.href = faceGlbUrl; f.download = 'face-model-blendshapes.glb'; f.hidden = false;
 
@@ -116,8 +116,8 @@ async function run( { vrm, image, face, look, shape, hairShape, names } ) {
 		const a = $( 'download' ); a.href = url; a.download = filename; a.hidden = false; a.textContent = `Download ${ filename } (${ ( bytes.length / 1048576 ).toFixed( 1 ) } MB)`;
 
 		render( report );
-		showPreview( vrmBytes, bytes, bind );
-		window.__webcli_result = { ok: true, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, faceGlb: image ? faceBytes : null, bytes, bind, report, scope: SCOPE };
+		showPreview( vrmBytes, bytes, bind, expression );
+		window.__webcli_result = { ok: true, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, faceGlb: image ? faceBytes : null, expression, bytes, bind, report, scope: SCOPE };
 		say( `Bound ${ report.mapped } of ${ report.sourceMorphs } face morphs. ${ SCOPE }.`, 'ok' );
 		if ( params.has( 'run' ) && params.get( 'download' ) !== '0' ) a.click();
 		return window.__webcli_result;
@@ -159,20 +159,39 @@ function showNetwork() {
 
 // 3D preview (three.js, on device); loaded on first use
 let preview = null;
-async function showPreview( base, bound, bind ) {
+let currentExpression = null;
+const topShapes = scores => Object.entries( scores ).filter( ( [ , v ] ) => v > 0.1 ).sort( ( a, b ) => b[ 1 ] - a[ 1 ] ).slice( 0, 5 ).map( ( [ n, v ] ) => `${ n } ${ v.toFixed( 2 ) }` );
+
+async function showPreview( base, bound, bind, expression ) {
 
 	try {
 
 		$( 'previewBox' ).hidden = false;
 		if ( ! preview ) preview = ( await previewModule ).createPreview( $( 'preview3d' ) );
-		await preview.show( { base, bound, bind } );
-		$( 'previewNote' ).textContent = 'Flat preview (no MToon shading). Drag to rotate, scroll to zoom.';
+		currentExpression = expression;
+		await preview.show( { base, bound, bind, expression } );
+		const has = !! expression;
+		$( 'expr_photo' ).disabled = ! has;
+		$( has ? 'expr_photo' : 'expr_manual' ).checked = true;
+		for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).value = 0;
+		updateExpressionNote();
 
 	} catch ( e ) {
 
 		$( 'previewNote' ).textContent = 'The preview is unavailable here (' + e.message + '). The download is not affected.';
 
 	}
+
+}
+
+function updateExpressionNote() {
+
+	if ( ! preview ) return;
+	const { mapped, extra } = preview.info, mode = preview.expressionMode;
+	const top = currentExpression ? topShapes( currentExpression ) : [];
+	$( 'previewNote' ).textContent = 'Flat preview (no MToon shading). Drag to rotate, scroll to zoom. ' + ( mode === 'photo'
+		? `Expression read from your photo: ${ top.length ? top.join( ', ' ) : 'neutral' }. ${ mapped } shapes go through the bind map${ extra ? `, ${ extra } more ARKit shapes the VRM has are applied by name` : '' }.`
+		: mode === 'manual' ? 'Expression: the sliders.' : 'Expression: neutral.' );
 
 }
 
@@ -221,9 +240,10 @@ if ( params.has( 'vrm' ) ) {
 }
 if ( params.has( 'face' ) || params.has( 'image' ) ) say( 'Ignoring ?image= / ?face=: the photo and the face GLB are local-only and are never loaded from a URL.', 'err' );
 
-for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).addEventListener( 'input', e => preview && preview.setExpression( id, Number( e.target.value ) / 100 ) );
+for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).addEventListener( 'input', e => { if ( ! preview ) return; $( 'expr_manual' ).checked = true; preview.setExpression( id, Number( e.target.value ) / 100 ); updateExpressionNote(); } );
+for ( const m of [ 'photo', 'neutral', 'manual' ] ) $( 'expr_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) { preview.setExpressionMode( m ); updateExpressionNote(); } } );
 for ( const v of [ 'bound', 'base' ] ) $( 'view_' + v ).addEventListener( 'change', e => e.target.checked && preview && preview.setView( v ) );
-$( 'xReset' ).addEventListener( 'click', () => { for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).value = 0; preview && preview.resetExpressions(); } );
+$( 'xReset' ).addEventListener( 'click', () => { for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).value = 0; if ( preview ) { preview.resetExpressions(); $( 'expr_neutral' ).checked = true; updateExpressionNote(); } } );
 
 $( 'lookStrength' ).addEventListener( 'input', e => { $( 'lookStrengthValue' ).textContent = e.target.value + '%'; } );
 $( 'shapeStrength' ).addEventListener( 'input', e => { $( 'shapeStrengthValue' ).textContent = e.target.value + '%'; } );
@@ -233,5 +253,5 @@ const model = $( 'model' );
 const preload = async () => { model.textContent = 'loading…'; try { const a = await autorig; await Promise.all( [ a.loadLandmarker(), a.loadHairSegmenter() ] ); model.textContent = 'ready (runs on this device)'; return true; } catch ( e ) { model.textContent = 'unavailable: ' + e.message; return false; } };
 const preloaded = preload();
 
-window.__facebind = { run, preload: () => preloaded, network: () => window.__facebind_net };
+window.__facebind = { run, preview: () => preview, preload: () => preloaded, network: () => window.__facebind_net };
 window.__webcli_result = null;

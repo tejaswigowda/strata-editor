@@ -15,7 +15,7 @@ import { bindVRM, buildBinding, assertRigSafe, ARKIT_52 } from '../bind.js';
 import { hairColorFromMask } from '../hair.js';
 import { faceProportions } from '../proportions.js';
 import { hairShapeFromMask, measureHair, planHair, warpHairPoint } from '../hairShape.js';
-import { applyFaceWeights } from '../runtime.js';
+import { applyFaceWeights, splitExpression } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
 const test = ( name, fn ) => { try { fn(); passed ++; console.log( '  ✓ ' + name ); } catch ( e ) { failed ++; console.log( '  ✗ ' + name + '\n      ' + e.message ); } };
@@ -158,6 +158,17 @@ test( 'runtime: face weights drive the VRM morphs by name, clamped; unknown entr
 	eq( mesh.morphTargetInfluences, [ 0.4, 1 ] ); eq( r.applied, 2 );
 	applyFaceWeights( root, { jawOpen: 0.25 }, { bind } );
 	eq( mesh.morphTargetInfluences, [ 0.4, 0.25 ] );
+
+} );
+
+test( 'expression from a photo: scores split into the bind-mapped morphs and the extra ARKit shapes the VRM has', () => {
+
+	const { bind } = bindVRM( glb( vrmJson() ), glb( faceJson( [ 'eyeBlinkLeft', 'jawOpen' ] ) ) );
+	const { mapped, extra } = splitExpression( { jawOpen: 0.6, eyeBlinkLeft: 0.2, mouthRollLower: 0.4, browInnerUp: 'x', cheekPuff: NaN }, bind );
+	eq( mapped, { jawOpen: 0.6, eyeBlinkLeft: 0.2 } ); eq( extra, { mouthRollLower: 0.4 } );
+	const mesh = { morphTargetDictionary: { eyeBlinkLeft: 0, jawOpen: 1 }, morphTargetInfluences: [ 0, 0 ] };
+	applyFaceWeights( { traverse: f => f( mesh ), userData: {} }, mapped, { bind } );
+	eq( mesh.morphTargetInfluences, [ 0.2, 0.6 ] );
 
 } );
 

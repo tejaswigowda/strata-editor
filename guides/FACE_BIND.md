@@ -85,10 +85,26 @@ panel. A desktop (Electron) shell has no such sandbox, so there it is policy plu
 ## Preview
 
 After a bind, the page shows a 3D preview (three.js, drawn on this device from the bytes in the page). Switch
-between the **bound** VRM and the **base** to compare, drag to rotate, and use the sliders (jaw open, smile, blink,
-brows up) to drive the VRM through the bind map. The preview is flat (the VRM's unlit materials, no MToon shading).
-The preview reads the in-memory VRM through `GLTFLoader.parse`; its textures are `blob:` URLs of in-memory data,
-which is why the CSP's `connect-src` includes `blob:`.
+between the **bound** VRM and the **base** to compare, and drag to rotate.
+
+**Expression.** From a photo, the preview starts with the **expression in the photo**: MediaPipe's 52 face
+blendshape scores for the photo (jaw open, smile, squint, brow raise, gaze and so on) are mapped to ARKit names and
+applied to the VRM. The 42 shapes the face GLB has go **through the bind map**, and the other ARKit shapes the VRM
+has but the face GLB does not (for example `mouthPress*` and `mouthRoll*`) are applied by name, so the preview is as
+close to the photo's expression as the VRM allows. The note under the preview lists the strongest shapes. Switch to
+**Neutral**, or to **Sliders** (jaw open, smile, blink, brows up) to pose it yourself; moving a slider switches to
+Sliders. With a face GLB instead of a photo there is no expression to read, so it starts on Sliders.
+
+The scores are a model's estimate from one image, so small or noisy values are normal for a neutral photo. The
+expression is also in `window.__webcli_result.expression` (name to 0..1) for agents.
+
+The preview is flat (the VRM's unlit materials, no MToon shading). It reads the in-memory VRM through
+`GLTFLoader.parse`; its textures are `blob:` URLs of in-memory data, which is why the CSP's `connect-src` includes
+`blob:`.
+
+Note: the vendored autorigger writes the photo's expression into the face GLB's morph weights by array position
+rather than by name (its 52-name order differs from its 42 morph order), so those weights are not the photo's
+expression. The page does not use them; it uses the named scores directly.
 
 ## The binding
 

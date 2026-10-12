@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { applyFaceWeights } from '../editor/js/facebind/runtime.js';
+import { applyFaceWeights, splitExpression } from '../editor/js/facebind/runtime.js';
 
 // slider id -> the ARKit morphs it drives (names as in the face GLB / VRM)
 export const EXPRESSIONS = {
@@ -33,6 +33,7 @@ export function createPreview( container ) {
 
 	const models = { base: null, bound: null };
 	let view = 'bound', bind = null, weights = {}, disposed = false, raf = 0;
+	let mode = 'manual', photo = null, touched = new Set(), info = { mapped: 0, extra: 0 };
 
 	const render = () => { raf = 0; if ( ! disposed ) renderer.render( scene, camera ); };
 	const request = () => { if ( ! raf && ! disposed ) raf = requestAnimationFrame( render ); };
@@ -86,11 +87,25 @@ export function createPreview( container ) {
 
 	}
 
+	// mode 'photo': the expression read from the input photo; 'neutral': none; 'manual': the sliders
 	function applyWeights() {
 
 		const named = {};
-		for ( const [ k, v ] of Object.entries( weights ) ) for ( const n of EXPRESSIONS[ k ] || [] ) named[ n ] = v;
-		if ( models.bound && bind ) applyFaceWeights( models.bound, named, { bind } ); // through the bind map
+		if ( mode === 'photo' && photo ) Object.assign( named, photo );
+		else if ( mode === 'manual' ) for ( const [ k, v ] of Object.entries( weights ) ) for ( const n of EXPRESSIONS[ k ] || [] ) named[ n ] = v;
+
+		for ( const n of touched ) { if ( models.bound ) setNamed( models.bound, n, 0 ); if ( models.base ) setNamed( models.base, n, 0 ); }
+		touched = new Set( Object.keys( named ) );
+
+		info = { mapped: 0, extra: 0 };
+		if ( models.bound && bind ) {
+
+			const { mapped, extra } = splitExpression( named, bind );
+			applyFaceWeights( models.bound, mapped, { bind } ); // through the bind map
+			for ( const [ n, v ] of Object.entries( extra ) ) setNamed( models.bound, n, v ); // ARKit shapes the VRM has but the face GLB does not
+			info = { mapped: Object.keys( mapped ).length, extra: Object.keys( extra ).length };
+
+		}
 		if ( models.base ) for ( const [ n, v ] of Object.entries( named ) ) setNamed( models.base, n, v );
 		request();
 
@@ -113,12 +128,15 @@ export function createPreview( container ) {
 
 	return {
 
-		/** @param {{ base: Uint8Array, bound: Uint8Array, bind: object }} args */
-		async show( { base, bound, bind: b } ) {
+		/** @param {{ base: Uint8Array, bound: Uint8Array, bind: object, expression?: Object<string, number> }} args */
+		async show( { base, bound, bind: b, expression } ) {
 
 			disposeModel( models.base ); disposeModel( models.bound );
 			models.base = await load( base ); models.bound = await load( bound );
 			bind = b;
+			photo = expression || null;
+			mode = photo ? 'photo' : 'manual';
+			touched = new Set();
 			scene.add( models.base, models.bound );
 			this.setView( view );
 			frame( models.bound );
@@ -135,15 +153,16 @@ export function createPreview( container ) {
 
 		},
 
-		setExpression( key, value ) { weights[ key ] = value; applyWeights(); },
+		/** 'photo' | 'neutral' | 'manual' */
+		setExpressionMode( m ) { mode = m; applyWeights(); return info; },
 
-		resetExpressions() {
+		get expressionMode() { return mode; },
 
-			weights = {};
-			for ( const names of Object.values( EXPRESSIONS ) ) for ( const n of names ) { if ( models.bound ) setNamed( models.bound, n, 0 ); if ( models.base ) setNamed( models.base, n, 0 ); }
-			request();
+		get info() { return info; },
 
-		},
+		setExpression( key, value ) { weights[ key ] = value; mode = 'manual'; applyWeights(); },
+
+		resetExpressions() { weights = {}; mode = 'neutral'; applyWeights(); },
 
 		dispose() {
 
