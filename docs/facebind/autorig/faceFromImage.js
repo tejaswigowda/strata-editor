@@ -14,7 +14,7 @@ import { ARKitBlendshapeMapper } from './arkit-mapper.js';
 import { FaceMeshGenerator } from './face-mesh-generator.js';
 import { TextureMapper } from './texture-mapper.js';
 import { hairColorFromMask, trimmedMeanColor } from '../../editor/js/facebind/hair.js';
-import { hairShapeFromMask, hairOccupancy } from '../../editor/js/facebind/hairShape.js';
+import { hairShapeFromMask } from '../../editor/js/facebind/hairShape.js';
 import { classifyHairTexture } from '../../editor/js/facebind/hairStyle.js';
 import { faceProportions } from '../../editor/js/facebind/proportions.js';
 
@@ -107,9 +107,7 @@ async function readHair( bitmap, landmarks ) {
 		const data = mask.getAsUint8Array();
 		const pixels = ctx.getImageData( 0, 0, width, height ).data;
 		const stats = hairColorFromMask( pixels, data, { width, height, hairValue, faceArea } );
-		const shape = hairShapeFromMask( landmarks, data, { width, height, hairValue } );
-		if ( shape ) { const occupancy = hairOccupancy( landmarks, data, { width, height, hairValue } ); if ( occupancy ) shape.occupancy = occupancy; }
-		return stats && { ...stats, shape, texture: classifyHairTexture( pixels, data, { width, height, hairValue } ), mask: { width, height, hairValue, data: data.slice() } };
+		return stats && { ...stats, shape: hairShapeFromMask( landmarks, data, { width, height, hairValue } ), texture: classifyHairTexture( pixels, data, { width, height, hairValue } ), mask: { width, height, hairValue, data: data.slice() } };
 
 	} finally {
 

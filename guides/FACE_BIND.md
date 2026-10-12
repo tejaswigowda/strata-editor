@@ -165,28 +165,27 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | What | Measured from the photo | Applied to the VRM |
 |---|---|---|
 | **Face shape** | eye spacing, eye width and openness, mouth width, jaw width, nose-tip / lip / chin depth (all as ratios of head width, so photo size drops out) | a smooth local warp of the face's base positions (`FaceRefine.js`); eyes, mouth, jaw and the nose / lips / chin profile. Limited (jaw ≤ ±12%, eyes ±25–30%, depth clamped to human ranges) and faded out before the head outline, so hair, ears and neck still meet the face |
-| **Hair shape** | the **silhouette of the hair mask** in head units: how far the hair reaches out on the image-right and image-left at each height (18 bands), how high it reaches over each sideways band (12 columns), and where its lower edge sits over the forehead per column (the fringe), plus a scalar summary | a smooth warp of the VRM's existing hair vertices toward that silhouette: each side's reach (ratio 0.94 to 1.2 per height: the hair sits only a centimeter or two outside the skull, which does not move, so it cannot shrink much), crown height per column (0.92 to 1.25), length below the ears per side (0.6 to 1.6), and the fringe edge per column (up to 0.35 E), each move capped at 5 cm. Hair longer than the photo's (the fringe, the sides) is **trimmed**: the strands below the photo's edge are folded up onto it, so the edge follows the photo's hairline and length. The same silhouette is measured on the VRM's hair mesh, so the warp is the difference between the two. Bands the photo crops, bands with only a few hair pixels, and hair not connected to the head (a collar the segmenter called hair) are skipped, and a measurement fades back to "no change" away from where it was taken. Without a profile the scalar summary is used |
+| **Hair shape** | the **silhouette of the hair mask** in head units: how far the hair reaches out on the image-right and image-left at each height (18 bands), how high it reaches over each sideways band (12 columns), and where its lower edge sits over the forehead per column (the fringe), plus a scalar summary | a smooth warp of the VRM's existing hair vertices toward that silhouette: each side's reach (ratio 0.94 to 1.2 per height: the hair sits only a centimeter or two outside the skull, which does not move, so it cannot shrink much), crown height per column (0.92 to 1.25), length below the ears per side (0.6 to 1.6), and the fringe edge per column (up to 0.35 E), each move capped at 13 cm. Hair longer than the photo's is **pulled up** and a lower fringe is **lifted**, smoothly and without folding (see below). The same silhouette is measured on the VRM's hair mesh, so the warp is the difference between the two. Bands the photo crops, bands with only a few hair pixels, and hair not connected to the head (a collar the segmenter called hair) are skipped, and a measurement fades back to "no change" away from where it was taken. Without a profile the scalar summary is used |
 | **Skin tone** | average of five patches of the face | skin materials (face and body share one tint) |
 | **Hair color** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
 | **Eye color** | a disc inside each iris | iris material |
 | **Brow color** | the darker half of the brow polygons | brow material |
 
-### Cutting the hair back to the photo
+### How the length and fringe are moved (lifting, not folding)
 
-The silhouette fit above works on outlines (reach per height band, crown, fringe edge). It cannot see inside the outline, so the
-VRM's hair could still cover an ear, a cheek or the forehead where the photo shows skin. The page now also keeps a **hair
-occupancy grid** of the photo: 40 by 80 cells in the same head frame (sideways in head widths, up in eye-to-chin heights),
-each marked hair, not hair, or unknown (outside the picture). It is derived from the segmenter mask and rides in the face
-GLB's node extras (`hairShape.occupancy`), so it is as local as the rest.
+Hair that is longer than the photo's is **pulled up**, and a fringe that sits lower than the photo's hairline is **lifted**. It is a
+smooth vertical remap of the VRM's own hair, the same idea as a hand-made "swept up" restyle of a VRoid base (the whole hair
+lifted a few centimeters, the lower part squeezed, the front lifted a little more):
 
-On the VRM side, each hair vertex that the photo could see is looked up in the grid. Where the photo shows no hair, the vertex is
-moved toward the nearest hair of the photo (a smoothed field, capped at 6 cm, and only below the crown). "Could see" means the
-front of the head and the hair beyond the head's width at the sides; hair behind the head is hidden in a front photo, so it is
-left alone. Cells next to hair are not cut (the mask edge is ragged). Presets and photos without a grid skip this step. The
-report says how many vertices were cut back (`hairShape.carved`).
-
-What this is not: it cannot see behind the head, so the length of the hair at the back and the sides behind the ears still
-follows the silhouette fit. If the segmenter calls skin or a collar "hair", or misses hair, the cut follows the mistake.
+- **Length.** Everything below the ear line moves up, more the lower it is. The hair is squeezed to **no less than half** of its length
+  below the ear line, so a photo with much shorter hair gets a shorter cut but not the full cut; the strands never fold.
+- **Fringe.** The front is lifted as one piece by the amount the photo's hairline is higher than the VRM's (the median over the
+  middle of the forehead), fading out smoothly above, so the VRM's own fringe shape is kept. The lifted front also moves back a
+  little (17 percent of the lift) to follow the head's surface.
+- Lifting replaces an earlier approach that folded strands onto a line and cut hair back wherever the photo's mask showed skin.
+  Both left bald patches at the temples and tore gaps between neighboring strands; lifting keeps every card whole.
+- Limits: the hair is never squeezed below half, so the lowest hair of a very short photo cut stays longer than the photo's; a photo
+  cannot show the hair behind the head, so the back follows the same length lift as the sides.
 
 ### Hair style
 

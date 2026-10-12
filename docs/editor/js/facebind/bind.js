@@ -341,7 +341,7 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 			if ( reshaped.face ) report.shape = { approximate: true, strength: what.face.strength, maxMoveMm: +( reshaped.face.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.face.measured, photo: what.face.reference };
 			report.normals = reshaped.normals;
 			if ( reshaped.hair && report.hairStyle ) report.hairStyle.cards = reshaped.hair.style.cards;
-			if ( reshaped.hair && what.hair.reference && cutName === 'photo' ) report.hairShape = { approximate: true, strength: what.hair.strength, maxMoveMm: +( reshaped.hair.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.hair.measured, photo: what.hair.reference, applied: reshaped.hair.plan, carved: reshaped.hair.style.carved };
+			if ( reshaped.hair && what.hair.reference && cutName === 'photo' ) report.hairShape = { approximate: true, strength: what.hair.strength, maxMoveMm: +( reshaped.hair.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.hair.measured, photo: what.hair.reference, applied: reshaped.hair.plan };
 
 		}
 

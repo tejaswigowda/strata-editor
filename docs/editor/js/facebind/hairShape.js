@@ -136,139 +136,6 @@ export function hairShapeFromMask( landmarks, mask, { width, height, hairValue =
 
 }
 
-// ── where the photo has hair, cell by cell ──────────────────────────────────
-
-export const OCC = { u0: - 1.0, du: 0.05, nu: 40, v0: - 2.0, dv: 0.05, nv: 80 };
-
-/**
- * Hair occupancy of the photo in the head frame: for every cell of a fixed (u, v) grid, 1 = the hair segmenter found hair
- * there, 0 = it found something else (skin, ear, background), 2 = outside the picture (unknown). Same units as the silhouette.
- * This is what lets the VRM's hair be cut back where the photo shows a face, an ear or a neck.
- * @returns {{ u0:number, du:number, nu:number, v0:number, dv:number, nv:number, cells:string }|null}
- */
-export function hairOccupancy( landmarks, mask, { width, height, hairValue = 1 } ) {
-
-	if ( ! landmarks || landmarks.length < 468 ) return null;
-	// the same frame as hairShapeFromMask (y up), so a cell means the same thing on the photo and on the VRM
-	const P = i => [ landmarks[ i ].x * width, - landmarks[ i ].y * height ];
-	const mid = ( ...ids ) => { const p = ids.map( P ); return [ p.reduce( ( s, a ) => s + a[ 0 ], 0 ) / p.length, p.reduce( ( s, a ) => s + a[ 1 ], 0 ) / p.length ]; };
-	const [ ex, ey ] = mid( 33, 133, 263, 362 );
-	const roll = Math.atan2( P( 263 )[ 1 ] - P( 33 )[ 1 ], P( 263 )[ 0 ] - P( 33 )[ 0 ] );
-	const c = Math.cos( roll ), s = Math.sin( roll );
-	const rot = ( x, y ) => [ ( x - ex ) * c + ( y - ey ) * s, - ( x - ex ) * s + ( y - ey ) * c ];
-	const earR = rot( ...P( 234 ) ), earL = rot( ...P( 454 ) ), chin = rot( ...P( 152 ) );
-	const W = Math.hypot( earR[ 0 ] - earL[ 0 ], earR[ 1 ] - earL[ 1 ] ), E = - chin[ 1 ];
-	if ( ! ( W > 0 ) || ! ( E > 0 ) ) return null;
-	const pixelOf = ( rx, ry ) => [ ex + rx * c - ry * s, - ( ey + rx * s + ry * c ) ];
-	let out = '', any = false;
-	for ( let j = 0; j < OCC.nv; j ++ ) {
-
-		for ( let i = 0; i < OCC.nu; i ++ ) {
-
-			let hair = 0, known = 0;
-			for ( let sy = 0; sy < 3; sy ++ ) {
-
-				for ( let sx = 0; sx < 3; sx ++ ) {
-
-					const u = OCC.u0 + ( i + ( sx + 0.5 ) / 3 ) * OCC.du, v = OCC.v0 + ( j + ( sy + 0.5 ) / 3 ) * OCC.dv;
-					const [ px, py ] = pixelOf( u * W, v * E );
-					const x = Math.round( px ), y = Math.round( py );
-					if ( x < 0 || y < 0 || x >= width || y >= height ) continue;
-					known ++;
-					if ( mask[ y * width + x ] === hairValue ) hair ++;
-
-				}
-
-			}
-			const ch = known < 5 ? '2' : hair >= known / 2 ? '1' : '0';
-			if ( ch === '1' ) any = true;
-			out += ch;
-
-		}
-
-	}
-	return any ? { ...OCC, cells: out } : null;
-
-}
-
-/**
- * Turns an occupancy grid into a field of "move toward the nearest hair": zero where the photo has hair (or is unknown, or
- * within one cell of hair), and a vector in (u, v) units elsewhere. Smoothed so neighboring strands move alike.
- * @returns {{ at: (u:number, v:number) => [number, number] }|null}
- */
-export function carveField( occ ) {
-
-	if ( ! occ || typeof occ.cells !== 'string' || occ.cells.length !== occ.nu * occ.nv ) return null;
-	const { nu, nv } = occ, cell = ( i, j ) => occ.cells[ j * nu + i ];
-	const ok = new Uint8Array( nu * nv );
-	for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) if ( cell( i, j ) !== '0' ) ok[ j * nu + i ] = 1;
-	const near = new Uint8Array( nu * nv ); // within a cell of hair: not cut, the mask edge is ragged
-	for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) {
-
-		if ( cell( i, j ) !== '1' ) continue;
-		for ( let b = - 1; b <= 1; b ++ ) for ( let a = - 1; a <= 1; a ++ ) if ( i + a >= 0 && i + a < nu && j + b >= 0 && j + b < nv ) near[ ( j + b ) * nu + i + a ] = 1;
-
-	}
-	const hairCells = [];
-	for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) if ( cell( i, j ) === '1' ) hairCells.push( [ i, j ] );
-	if ( ! hairCells.length ) return null;
-
-	const fu = new Float32Array( nu * nv ), fv = new Float32Array( nu * nv );
-	for ( let j = 0; j < nv; j ++ ) {
-
-		for ( let i = 0; i < nu; i ++ ) {
-
-			const k = j * nu + i;
-			if ( ok[ k ] || near[ k ] ) continue;
-			let best = Infinity, bi = 0, bj = 0;
-			for ( const [ a, b ] of hairCells ) { const d = ( a - i ) ** 2 + ( b - j ) ** 2; if ( d < best ) { best = d; bi = a; bj = b; } }
-			fu[ k ] = ( bi - i ) * occ.du; fv[ k ] = ( bj - j ) * occ.dv;
-
-		}
-
-	}
-	// one 3x3 blur so the field ramps in over a few cells
-	const blur = f => { const o = new Float32Array( f.length ); for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) { let s = 0, n = 0; for ( let b = - 1; b <= 1; b ++ ) for ( let a = - 1; a <= 1; a ++ ) { const x = i + a, y = j + b; if ( x >= 0 && x < nu && y >= 0 && y < nv ) { s += f[ y * nu + x ]; n ++; } } o[ j * nu + i ] = s / n; } return o; };
-	const bu = blur( fu ), bv = blur( fv );
-
-	return {
-		at( u, v ) {
-
-			const gx = ( u - occ.u0 ) / occ.du - 0.5, gy = ( v - occ.v0 ) / occ.dv - 0.5;
-			if ( gx < 0 || gy < 0 || gx >= nu - 1 || gy >= nv - 1 ) return [ 0, 0 ];
-			const i = Math.floor( gx ), j = Math.floor( gy ), tx = gx - i, ty = gy - j;
-			const s = f => ( f[ j * nu + i ] * ( 1 - tx ) + f[ j * nu + i + 1 ] * tx ) * ( 1 - ty ) + ( f[ ( j + 1 ) * nu + i ] * ( 1 - tx ) + f[ ( j + 1 ) * nu + i + 1 ] * tx ) * ty;
-			return [ s( bu ), s( bv ) ];
-
-		},
-	};
-
-}
-
-/**
- * Cuts the VRM's hair back where the photo shows no hair: a displacement toward the nearest hair of the photo, for the hair the
- * photo can see (the front, and the sides beyond the head), below the crown. Hair behind the head is hidden in the photo, so it is left alone.
- * @returns {[number, number, number]} displacement in model units
- */
-export function carvePoint( field, m, strength, x, y, z, maxMove = 0.06 ) {
-
-	if ( ! field || strength <= 0 ) return [ 0, 0, 0 ];
-	const { eyeY, E, W, front, zc } = m;
-	const v = ( y - eyeY ) / E, u = uOf( x, m );
-	const zone = 1 - smooth( clamp( ( v - 0.55 ) / 0.3, 0, 1 ) );
-	if ( zone <= 0 ) return [ 0, 0, 0 ];
-	const seen = front * ( z - zc ) > 0 ? 1 : smooth( clamp( ( Math.abs( u ) - 0.42 ) / 0.12, 0, 1 ) );
-	if ( seen <= 0 ) return [ 0, 0, 0 ];
-	const [ du, dv ] = field.at( u, v );
-	if ( ! du && ! dv ) return [ 0, 0, 0 ];
-	const k = strength * zone * seen;
-	let dx = ( m.front < 0 ? - 1 : 1 ) * du * W * k, dy = dv * E * k;
-	const len = Math.hypot( dx, dy );
-	if ( len > maxMove ) { dx *= maxMove / len; dy *= maxMove / len; }
-	return [ dx, dy, 0 ];
-
-}
-
 // ── from the VRM ────────────────────────────────────────────────────────────
 
 /** Sideways position in head widths, positive toward the right of the picture. */
@@ -324,7 +191,7 @@ export function measureHair( positions, ids, m ) {
 
 // The hair sits only a centimeter or two outside the skull, which is not moved, so it may not shrink much (that would sink
 // it into the head and show the scalp between the strands): the lower limits are small on purpose.
-const LIMITS_DEFAULT = { volume: [ 0.94, 1.2 ], top: [ 0.92, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.05, trimKeep: 0.08 };
+const LIMITS_DEFAULT = { volume: [ 0.94, 1.2 ], top: [ 0.92, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.13, minSqueeze: 0.5 };
 
 // ratios (or shifts) per bin, with gaps filled by interpolating between the valid bins, flat past the ends
 // Beyond the measured range the value fades back to `restValue` (1 for ratios, 0 for shifts; null = stay flat) over `fade`, so a measurement taken at
@@ -366,7 +233,7 @@ export function planHair( cur, ref, m, strength, limits = {} ) {
 
 	const LIMITS = { ...LIMITS_DEFAULT, ...limits };
 	const s = clamp( strength, 0, 1 );
-	const plan = { m, strength: s, mode: 'scalar', volume: null, top: null, length: null, fringe: null, profile: null };
+	const plan = { m, strength: s, curBottomV: cur.lengthV, curLineV: cur.hairlineV, minSqueeze: LIMITS.minSqueeze, mode: 'scalar', volume: null, top: null, length: null, fringe: null, profile: null };
 	const rp = ref.profile, cp = cur.profile;
 
 	if ( rp && cp ) {
@@ -375,22 +242,25 @@ export function planHair( cur, ref, m, strength, limits = {} ) {
 		const sm = a => curve( a, vCenter, 0.5 ), um = a => curve( a, uCenter, 0.3 );
 		const widthR = sm( ratio( rp.halfR, cp.halfR, 0.25, ...LIMITS.volume ) ), widthL = sm( ratio( rp.halfL, cp.halfL, 0.25, ...LIMITS.volume ) );
 		const crown = um( ratio( rp.topByU, cp.topByU, 0.3, ...LIMITS.top ) );
-		// Fringe: where the lower edge should sit, per sideways band. A fringe that must come UP is trimmed (the
-		// strands below the new edge are folded up onto it, so the edge follows the photo's hairline); one that
+		// Fringe: where the lower edge should sit, per sideways band. A fringe that must come UP is lifted (the
+		// strands at the fringe rise toward the photo's hairline); one that
 		// must go DOWN is moved down.
 		const target = rp.lineByU.map( ( r, j ) => r !== null && cp.lineByU[ j ] !== null ? clamp( r, ...LIMITS.hairline ) : null );
 		const down = target.map( ( t, j ) => t !== null && t < cp.lineByU[ j ] ? clamp( t - cp.lineByU[ j ], - LIMITS.fringe, 0 ) : null );
 		const upEdge = target.map( ( t, j ) => t !== null && t > cp.lineByU[ j ] ? t : null );
 		const fringe = curve( down, uCenter, 0.3, 0 ), fringeAt = curve( cp.lineByU, uCenter, 0.3, null );
 		const edge = nearestWithin( upEdge, uCenter, 0.15 );
-		// Length: how far down each side reaches (the lowest band that has hair). Shorter than the VRM: trimmed
-		// at the photo's length. Longer: stretched.
+		// the lift is one amount for the whole front (the median over the middle columns), so the hairline moves as a piece and keeps the VRM's own shape
+		const lifts = upEdge.map( ( t, j ) => t !== null && Math.abs( uCenter( j ) ) < 0.35 ? t - cp.lineByU[ j ] : null ).filter( v => v !== null ).sort( ( a, b ) => a - b );
+		const edgeLift = lifts.length ? lifts[ Math.floor( lifts.length / 2 ) ] : null;
+		// Length: how far down each side reaches (the lowest band that has hair). Shorter than the VRM: pulled up
+		// toward the photo's length (squeezed by at most half). Longer: stretched.
 		const lowest = a => { for ( let i = 0; i < a.length; i ++ ) if ( a[ i ] !== null ) return vCenter( i ) - GRID.v.step / 2; return null; };
 		const lenR = lowest( rp.halfR ), lenL = lowest( rp.halfL ), curR = lowest( cp.halfR ), curL = lowest( cp.halfL );
 		const lenRatio = ( refV, curV ) => refV !== null && curV !== null && 0.1 - refV > 0.05 && 0.1 - curV > 0.05 ? clamp( ( 0.1 - refV ) / ( 0.1 - curV ), ...LIMITS.length ) : null;
 		const rR = lenRatio( lenR, curR ), rL = lenRatio( lenL, curL );
 		plan.profile = {
-			widthR, widthL, crown, fringe, fringeAt, edge,
+			widthR, widthL, crown, fringe, fringeAt, edge, edgeLift,
 			lengthR: rR !== null && rR > 1 ? rR : null, lengthL: rL !== null && rL > 1 ? rL : null,
 			trimR: rR !== null && rR < 1 ? lenR : null, trimL: rL !== null && rL < 1 ? lenL : null,
 		};
@@ -417,7 +287,7 @@ export function planHair( cur, ref, m, strength, limits = {} ) {
 		if ( ref.hairlineV !== null && ref.hairlineV !== undefined && cur.hairlineV !== null ) {
 
 			const target = clamp( ref.hairlineV, ...LIMITS.hairline );
-			if ( target > cur.hairlineV ) plan.edgeV = target; // the fringe has to come up: trim it to the edge
+			if ( target > cur.hairlineV ) plan.edgeV = target; // the fringe has to come up: lift it to the edge
 			else plan.fringe = { v0: cur.hairlineV, shift: clamp( target - cur.hairlineV, - LIMITS.fringe, 0 ) };
 
 		}
@@ -434,14 +304,41 @@ export function summarizePlan( plan ) {
 	if ( plan.mode === 'silhouette' ) {
 
 		const p = plan.profile, at = ( fn, ts ) => fn ? ts.map( t => f( fn( t ) ) ) : null;
-		return { mode: 'silhouette', sides: { right: at( p.widthR, [ - 0.5, 0.25, 1.0 ] ), left: at( p.widthL, [ - 0.5, 0.25, 1.0 ] ) }, crown: at( p.crown, [ - 0.3, 0, 0.3 ] ), fringeShiftE: p.fringe ? [ - 0.3, 0, 0.3 ].map( t => +( p.fringe( t ) * s ).toFixed( 3 ) ) : null, length: { right: f( p.lengthR ), left: f( p.lengthL ) }, trim: { right: p.trimR, left: p.trimL, fringe: p.edge ? [ - 0.3, 0, 0.3 ].map( t => p.edge( t ) ) : null } };
+		return { mode: 'silhouette', sides: { right: at( p.widthR, [ - 0.5, 0.25, 1.0 ] ), left: at( p.widthL, [ - 0.5, 0.25, 1.0 ] ) }, crown: at( p.crown, [ - 0.3, 0, 0.3 ] ), fringeShiftE: p.fringe ? [ - 0.3, 0, 0.3 ].map( t => +( p.fringe( t ) * s ).toFixed( 3 ) ) : null, length: { right: f( p.lengthR ), left: f( p.lengthL ) }, trim: { right: p.trimR, left: p.trimL, fringeLift: p.edgeLift ? +( p.edgeLift * s ).toFixed( 3 ) : null } };
 
 	}
-	return { mode: 'scalar', volume: f( plan.volume ), top: f( plan.top ), length: f( plan.length ), trim: { right: plan.trimV ?? null, left: plan.trimV ?? null, fringe: plan.edgeV ? [ plan.edgeV, plan.edgeV, plan.edgeV ] : null }, fringeShiftE: plan.fringe ? +( plan.fringe.shift * s ).toFixed( 3 ) : null };
+	return { mode: 'scalar', volume: f( plan.volume ), top: f( plan.top ), length: f( plan.length ), trim: { right: plan.trimV ?? null, left: plan.trimV ?? null, fringeLift: plan.edgeV && plan.curLineV !== null && plan.curLineV !== undefined ? +( ( plan.edgeV - plan.curLineV ) * s ).toFixed( 3 ) : null }, fringeShiftE: plan.fringe ? +( plan.fringe.shift * s ).toFixed( 3 ) : null };
 
 }
 
 // ── the warp ────────────────────────────────────────────────────────────────
+
+// Hair is moved by lifting, never by folding. A fold squashes strands onto a line and tears gaps between neighbors; a lift moves a
+// strand as a whole and compresses it smoothly, so the cards keep their shape and keep covering each other.
+
+// Shorter hair: the hair below the ear line is pulled up, more the lower it is, and squeezed to no less than minSqueeze of its length.
+// Returns the lift in E units for a point at height v.
+function lengthLift( v, cutV, bottomV, minSqueeze ) {
+
+	const A = 0.15; // the ear line: the hair above it stays attached
+	if ( cutV === null || cutV === undefined || bottomV === null || bottomV === undefined || ! ( bottomV < cutV ) ) return 0;
+	const ratio = clamp( ( A - cutV ) / ( A - bottomV ), minSqueeze, 1 );
+	const d = A - v;
+	// quadratic ease-in over the first 0.2, then linear: the slope never exceeds (1 - ratio), so the hair is squeezed to ratio at the most
+	return d > 0 ? ( 1 - ratio ) * ( d < 0.2 ? 2.5 * d * d : d - 0.1 ) : 0;
+
+}
+
+// A fringe that has to come up: the strands at the fringe are lifted by `lift` (E units) and the lift fades out above, slowly enough
+// that nothing above is squeezed to less than minSqueeze.
+function fringeLift( v, lineV, lift, minSqueeze ) {
+
+	if ( ! ( lift > 0 ) ) return 0;
+	const fade = Math.max( 0.5, 1.5 * lift / ( 1 - minSqueeze ) ); // the smoothstep's slope peaks at 1.5 times its average
+	const below = smooth( clamp( ( v - ( lineV - 0.6 ) ) / 0.3, 0, 1 ) ); // the sideburns and anything far below the fringe stay put
+	return lift * below * ( 1 - smooth( clamp( ( v - ( lineV + 0.1 ) ) / fade, 0, 1 ) ) );
+
+}
 
 export function warpHairPoint( plan, x, y, z ) {
 
@@ -473,23 +370,28 @@ export function warpHairPoint( plan, x, y, z ) {
 			dy += s * p.fringe( u ) * E * gate * Math.exp( - 0.5 * ( ( v - v0 ) / 0.18 ) ** 2 );
 
 		}
-		// trims: hair longer than the photo's is folded up onto the photo's edge, so the silhouette ends where the photo's does
-		let y1 = y + dy;
-		const fold = ( yv, yCut ) => yv < yCut ? yCut + ( yv - yCut ) * LIMITS_DEFAULT.trimKeep : yv;
+		// shorter hair and a fringe that has to come up: lifted, not folded (see lengthLift / fringeLift)
+		let lift = 0;
 		if ( p.trimR !== null || p.trimL !== null ) {
 
 			const cut = lerp( p.trimL ?? p.trimR, p.trimR ?? p.trimL, mixR ); // a side the photo does not show follows the other
-			y1 += s * ( fold( y1, eyeY + cut * E ) - y1 );
+			lift += lengthLift( ( y + dy - eyeY ) / E, cut, plan.curBottomV, plan.minSqueeze );
 
 		}
-		if ( p.edge && gate && Math.abs( u ) < 0.6 ) {
+		if ( p.edgeLift && gate && Math.abs( u ) < 0.6 ) {
 
-			const e = p.edge( u );
-			// the bangs reach down over the eyes on some VRMs, so the zone starts well below the eye line; the sideburns at the
-			// edges of the face (|u| > 0.35) are left alone
-			if ( e !== null ) y1 += s * smooth( clamp( ( ( y1 - eyeY ) / E + 0.5 ) / 0.3, 0, 1 ) ) * ( 1 - smooth( clamp( ( Math.abs( u ) - 0.35 ) / 0.15, 0, 1 ) ) ) * ( fold( y1, eyeY + e * E ) - y1 );
+			const line0 = p.fringeAt ? p.fringeAt( u ) : null, base = line0 ?? plan.curLineV;
+			if ( p.edgeLift && base !== null && base !== undefined ) {
+
+				const f = fringeLift( ( y + dy - eyeY ) / E, base, p.edgeLift, plan.minSqueeze ) * ( 1 - smooth( clamp( ( Math.abs( u ) - 0.35 ) / 0.15, 0, 1 ) ) );
+				lift += f;
+				dz -= front * 0.17 * f * E * s; // the head's surface falls away as the strands rise: follow it so they do not float
+
+			}
 
 		}
+		dy += s * lift * E;
+		const y1 = y + dy;
 		dy = y1 - y;
 
 	} else {
@@ -498,10 +400,16 @@ export function warpHairPoint( plan, x, y, z ) {
 		if ( plan.top ) dy += ( lerp( 1, plan.top, s ) - 1 ) * ( y - ( eyeY + 0.5 * E ) ) * smooth( clamp( ( v - 0.5 ) / 0.6, 0, 1 ) );
 		if ( plan.length ) dy += ( lerp( 1, plan.length, s ) - 1 ) * ( y - ( eyeY + 0.1 * E ) ) * smooth( clamp( ( 0.1 - v ) / 0.6, 0, 1 ) );
 		if ( plan.fringe ) dy += s * plan.fringe.shift * E * gate * Math.exp( - 0.5 * ( ( v - plan.fringe.v0 ) / 0.18 ) ** 2 ) * ( 1 - smooth( clamp( ( Math.abs( x ) / W - 0.45 ) / 0.25, 0, 1 ) ) );
-		let y1 = y + dy;
-		const fold = ( yv, yCut ) => yv < yCut ? yCut + ( yv - yCut ) * LIMITS_DEFAULT.trimKeep : yv;
-		if ( plan.trimV !== undefined && plan.trimV !== null ) y1 += s * ( fold( y1, eyeY + plan.trimV * E ) - y1 );
-		if ( plan.edgeV ) y1 += s * smooth( clamp( ( ( y1 - eyeY ) / E + 0.5 ) / 0.3, 0, 1 ) ) * gate * ( 1 - smooth( clamp( ( Math.abs( u ) - 0.35 ) / 0.15, 0, 1 ) ) ) * ( fold( y1, eyeY + plan.edgeV * E ) - y1 );
+		let lift = lengthLift( ( y + dy - eyeY ) / E, plan.trimV, plan.curBottomV, plan.minSqueeze );
+		if ( plan.edgeV && gate && plan.curLineV !== null && plan.curLineV !== undefined ) {
+
+			const f = fringeLift( ( y + dy - eyeY ) / E, plan.curLineV, plan.edgeV - plan.curLineV, plan.minSqueeze ) * ( 1 - smooth( clamp( ( Math.abs( u ) - 0.35 ) / 0.15, 0, 1 ) ) );
+			lift += f;
+			dz -= front * 0.17 * f * E * s;
+
+		}
+		dy += s * lift * E;
+		const y1 = y + dy;
 		dy = y1 - y;
 
 	}

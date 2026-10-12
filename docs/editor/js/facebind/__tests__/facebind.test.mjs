@@ -14,7 +14,7 @@ import { readFaceSource, CONVENTION_42 } from '../faceSource.js';
 import { bindVRM, buildBinding, assertRigSafe, ARKIT_52 } from '../bind.js';
 import { hairColorFromMask } from '../hair.js';
 import { faceProportions } from '../proportions.js';
-import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID, hairOccupancy, carveField, carvePoint, OCC } from '../hairShape.js';
+import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID } from '../hairShape.js';
 import { cardsOf, relayCards, widenCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
@@ -336,7 +336,7 @@ test( 'hair never sinks into the head: shrinking toward a much narrower photo si
 
 } );
 
-test( 'hair trims: a fringe longer than the photo\'s is folded up to the photo\'s edge, hair longer than the photo\'s is cut at its length, hair above is untouched', () => {
+test( 'hair lifts: a fringe lower than the photo\'s rises to the photo\'s edge, hair longer than the photo\'s is pulled up, and nothing folds (order kept, squeeze limited)', () => {
 
 	const m = hairFrame;
 	const front = [ - 0.02, 0.0, 0.02 ];
@@ -352,11 +352,18 @@ test( 'hair trims: a fringe longer than the photo\'s is folded up to the photo\'
 	for ( let i = iv( - 0.5 ); i <= iv( 1.0 ); i ++ ) ref.profile.halfL[ i ] = cur.profile.halfL[ i ] ?? 0.62; // the photo's side hair stops at v = -0.5
 	for ( let i = iv( - 0.5 ); i <= iv( 1.0 ); i ++ ) ref.profile.halfR[ i ] = cur.profile.halfR[ i ] ?? 0.62;
 	const plan = planHair( cur, ref, m, 1 );
-	ok( plan.profile.edge && plan.profile.edge( 0 ) === 0.75, 'a fringe edge to trim to' );
-	const foldedUp = warpHairPoint( plan, 0, 1.62, - 0.08 ); // v = 0.09: well below the photo's edge at v = 0.75
-	const yAfter = 1.62 + foldedUp[ 1 ], edgeY = m.eyeY + 0.75 * m.E;
-	ok( yAfter > 1.62 + 0.04 && yAfter <= edgeY + 1e-9, `the fringe tip must rise toward the edge: ${ yAfter } (edge ${ edgeY })` );
-	ok( warpHairPoint( plan, 0, 1.78, - 0.08 )[ 1 ] === 0 || Math.abs( warpHairPoint( plan, 0, 1.78, - 0.08 )[ 1 ] ) < 0.002, 'hair above the edge must not move' );
+	ok( plan.profile.edgeLift > 0.3, 'a fringe lift: ' + plan.profile.edgeLift );
+	const lifted = warpHairPoint( plan, 0, 1.62, - 0.08 ); // the fringe tip: well below the photo's edge at v = 0.75
+	const yAfter = 1.62 + lifted[ 1 ], edgeY = m.eyeY + 0.75 * m.E;
+	ok( yAfter > 1.62 + 0.04 && yAfter <= edgeY + 0.003, `the fringe tip must rise to the edge: ${ yAfter } (edge ${ edgeY })` );
+	ok( lifted[ 2 ] > 0, 'a lifted fringe follows the head surface back' );
+	// strands stay in order and are squeezed by at most 1 - minSqueeze: lifting never folds
+	const col = []; for ( let y = 1.62; y <= 1.78; y += 0.01 ) col.push( y + warpHairPoint( plan, 0, y, - 0.08 )[ 1 ] );
+	for ( let i = 1; i < col.length; i ++ ) ok( col[ i ] - col[ i - 1 ] >= 0.5 * 0.01 - 1e-6, 'the fringe folded at ' + i + ': ' + ( col[ i ] - col[ i - 1 ] ) );
+	const side = []; for ( let y = 1.30; y <= 1.6; y += 0.02 ) side.push( y + warpHairPoint( plan, 0.1, y, 0 )[ 1 ] );
+	for ( let i = 1; i < side.length; i ++ ) ok( side[ i ] - side[ i - 1 ] >= 0.5 * 0.02 - 1e-6, 'the side hair folded at ' + i );
+	ok( side[ 0 ] - 1.30 > 0.02, 'long side hair is pulled up: ' + ( side[ 0 ] - 1.30 ) );
+	ok( Math.abs( warpHairPoint( plan, 0.1, m.eyeY + 0.3 * m.E, 0 )[ 1 ] ) < 0.003, 'hair above the ear line stays attached' );
 	// zero strength: nothing moves
 	const none = planHair( cur, ref, m, 0 );
 	ok( Math.hypot( ...warpHairPoint( none, 0, 1.62, - 0.08 ) ) < 1e-12 );
@@ -383,11 +390,11 @@ test( 'hair plan and warp (scalar fallback): moves toward the reference, stays w
 	const ref = { topV: 2.0, widthW: 1.6, lengthV: - 2.5, hairlineV: 0.9 };
 	const p = planHair( cur, ref, m, 1 );
 	ok( p.mode === 'scalar' && p.volume === 1.2 && p.top === 1.25 && p.length === 1.6, JSON.stringify( p ) ); // all at their limits
-	ok( p.edgeV === 0.9, 'a fringe that has to come up is trimmed to the edge: ' + p.edgeV );
+	ok( p.edgeV === 0.9, 'a fringe that has to come up is lifted to the edge: ' + p.edgeV );
 	const skip = planHair( cur, { topV: null, widthW: null, lengthV: null, hairlineV: null }, m, 1 );
 	ok( ! skip.volume && ! skip.top && ! skip.length && ! skip.fringe );
 	ok( warpHairPoint( p, 0, 1.78, 0 )[ 1 ] > 0 ); ok( warpHairPoint( p, 0.11, 1.65, 0 )[ 0 ] > 0 ); ok( warpHairPoint( p, 0.1, 1.53, 0 )[ 1 ] < 0 );
-	for ( const pt of [ [ 0.2, 1.9, 0.3 ], [ 0.1, 1.5, - 0.1 ], [ 0, 1.7, - 0.2 ] ] ) ok( Math.hypot( ...warpHairPoint( p, ...pt ) ) <= 0.05 + 1e-9 );
+	for ( const pt of [ [ 0.2, 1.9, 0.3 ], [ 0.1, 1.5, - 0.1 ], [ 0, 1.7, - 0.2 ] ] ) ok( Math.hypot( ...warpHairPoint( p, ...pt ) ) <= 0.13 + 1e-9 );
 	const zero = planHair( cur, ref, m, 0 );
 	for ( const pt of [ [ 0.1, 1.65, 0 ], [ 0, 1.78, 0 ] ] ) ok( Math.hypot( ...warpHairPoint( zero, ...pt ) ) < 1e-12 );
 
@@ -442,38 +449,6 @@ test( 'hair texture re-lay: the root stays on the scalp, the tips move, tighter 
 	ok( spread( tight.positions ) > spread( loose.positions ), 'a tighter texture should move the lock more' );
 	eq( TEXTURES.straight, null );
 	ok( CUTS.afro.texture === 'coily' );
-
-} );
-
-test( 'hair occupancy: cells say hair / not hair / unknown in the head frame, and a face stays empty', () => {
-
-	// a 400x400 picture, level eyes, ears at x 140 and 260, chin at y 260 (W = 120, E = 100 px), hair above y = 130 and down the sides
-	const W = 400, H = 400, lm = Array.from( { length: 478 }, () => ( { x: 0.5, y: 0.5 } ) );
-	const set = ( i, x, y ) => { lm[ i ] = { x: x / W, y: y / H }; };
-	set( 33, 170, 160 ); set( 133, 190, 160 ); set( 263, 230, 160 ); set( 362, 210, 160 ); set( 234, 140, 190 ); set( 454, 260, 190 ); set( 152, 200, 260 );
-	const mask = new Uint8Array( W * H );
-	for ( let y = 0; y < H; y ++ ) for ( let x = 0; x < W; x ++ ) if ( ( y < 130 && x > 120 && x < 280 ) || ( y >= 130 && y < 230 && ( x < 150 && x > 120 || x > 250 && x < 280 ) ) ) mask[ y * W + x ] = 1;
-	const occ = hairOccupancy( lm, mask, { width: W, height: H, hairValue: 1 } );
-	ok( occ && occ.cells.length === OCC.nu * OCC.nv, 'no grid' );
-	const at = ( u, v ) => occ.cells[ Math.floor( ( v - OCC.v0 ) / OCC.dv ) * OCC.nu + Math.floor( ( u - OCC.u0 ) / OCC.du ) ];
-	eq( at( 0, 1.3 ), '1', 'crown is hair' ); eq( at( 0, 0.2 ), '0', 'the face is not hair' ); eq( at( 0.6, 0.1 ), '1', 'hair beside the face' );
-	eq( at( 0, - 0.5 ), '0', 'below the chin line is not hair' );
-	eq( at( 0.95, 1.9 ), '2', 'outside the picture is unknown' );
-	ok( hairOccupancy( lm, new Uint8Array( W * H ), { width: W, height: H, hairValue: 1 } ) === null, 'no hair, no grid' );
-
-	// the cut-back field: nothing inside or next to hair, and a pull toward hair on the face
-	const field = carveField( occ );
-	eq( field.at( 0, 1.3 ), [ 0, 0 ] );
-	const [ du, dv ] = field.at( 0, 0.1 );
-	ok( dv > 0, 'a point on the forehead should be pulled up toward the hair: ' + dv );
-	const m = { eyeY: 0, E: 0.2, W: 0.15, front: - 1, zc: 0 };
-	const front = carvePoint( field, m, 1, 0, 0.1 * 0.2, - 0.1 );
-	ok( front[ 1 ] > 0.001 && front[ 2 ] === 0, 'forehead hair is cut back: ' + front );
-	eq( carvePoint( field, m, 1, 0, 0.1 * 0.2, 0.1 ), [ 0, 0, 0 ], 'hair behind the head is hidden in the photo and is left alone' );
-	eq( carvePoint( field, m, 0, 0, 0.1 * 0.2, - 0.1 ), [ 0, 0, 0 ], 'strength 0 moves nothing' );
-	eq( carvePoint( field, m, 1, 0, 1.5 * 0.2, - 0.1 ), [ 0, 0, 0 ], 'the crown is not carved' );
-	ok( Math.hypot( ...carvePoint( field, m, 1, 0, - 0.5 * 0.2, - 0.1 ) ) <= 0.0601, 'the move is capped' );
-	eq( carveField( null ), null ); eq( carveField( { ...occ, cells: occ.cells.replace( /1/g, '0' ) } ), null );
 
 } );
 
@@ -657,7 +632,7 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, hairColor: { r: 0.1, g: 0.1, b: 0.1 }, hairCoverage: 0.5, hairShape: { topV: 1.9, widthW: 1.4, lengthV: - 1.6, hairlineV: 0.8, cropped: { top: false, side: false, bottom: false } } };
 		const face = writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } );
 		const out = bindVRM( vrmBytes, face, { hairShape: { strength: 1 } } );
-		ok( out.report.hairShape && out.report.hairShape.maxMoveMm > 2 && out.report.hairShape.maxMoveMm <= 50, 'move ' + ( out.report.hairShape && out.report.hairShape.maxMoveMm ) );
+		ok( out.report.hairShape && out.report.hairShape.maxMoveMm > 2 && out.report.hairShape.maxMoveMm <= 130, 'move ' + ( out.report.hairShape && out.report.hairShape.maxMoveMm ) );
 		ok( out.report.shape === null, 'the face must not move when only the hair is asked for' );
 		const a = parseGLB( vrmBytes ), b = parseGLB( out.bytes ), ja = a.json;
 		// the vertices that belong to the hair
@@ -680,7 +655,7 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		const ref = { halfR: cur.halfR.map( v => v === null ? null : v * 1.15 ), halfL: cur.halfL.slice(), topByU: cur.topByU.map( v => v === null ? null : v * 1.15 ), lineByU: cur.lineByU.slice(), };
 		const refShape = { topV: null, widthW: null, lengthV: null, hairlineV: null, profile: ref };
 		const out = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference: refShape } } );
-		ok( out.report.hairShape.applied.mode === 'silhouette' && out.report.hairShape.maxMoveMm > 1 && out.report.hairShape.maxMoveMm <= 50, JSON.stringify( out.report.hairShape.applied ).slice( 0, 160 ) );
+		ok( out.report.hairShape.applied.mode === 'silhouette' && out.report.hairShape.maxMoveMm > 1 && out.report.hairShape.maxMoveMm <= 130, JSON.stringify( out.report.hairShape.applied ).slice( 0, 160 ) );
 		const after = bindVRM( out.bytes, faceBytes, { hairShape: { strength: 0, reference: refShape } } ).report.hairShape.vrmBefore.profile;
 		const err = p => p.halfR.reduce( ( s, v, i ) => v !== null && ref.halfR[ i ] !== null ? s + Math.abs( v - ref.halfR[ i ] ) : s, 0 );
 		ok( err( after ) < err( cur ) * 0.7, `the right-side reach did not move toward the reference: ${ err( cur ).toFixed( 3 ) } -> ${ err( after ).toFixed( 3 ) }` );
@@ -751,21 +726,6 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( same( parseGLB( flat.bytes ).chunks[ 0 ].data, a.chunks[ 0 ].data ), 'keep + straight must not touch the binary chunk' );
 		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { cut: 'mullet' } } ), 'BAD_HAIR_STYLE' );
 		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { texture: 'frizzy' } } ), 'BAD_HAIR_STYLE' );
-
-	} );
-	test( 'hair cut back to the photo: with an occupancy grid the hair near the face moves, the audit holds, it is deterministic, and no grid means no cut', () => {
-
-		const base = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference: { topV: 1.6, widthW: 1.3, lengthV: - 0.95, hairlineV: 0.4 } } } );
-		eq( base.report.hairShape.carved, null );
-		// a photo whose hair is only the top of the head: everything lower (sideburns, fringe, sides) must be pulled up
-		const cells = Array.from( { length: OCC.nu * OCC.nv }, ( _, k ) => { const j = Math.floor( k / OCC.nu ); return OCC.v0 + j * OCC.dv > 0.9 ? '1' : '0'; } ).join( '' );
-		const reference = { topV: 1.6, widthW: 1.3, lengthV: - 0.95, hairlineV: 0.4, occupancy: { ...OCC, cells } };
-		const a = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference } } );
-		ok( a.report.hairShape.carved > 100, 'vertices cut back: ' + a.report.hairShape.carved );
-		ok( ! same( a.bytes, base.bytes ) );
-		ok( same( a.bytes, bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference } } ).bytes ), 'not deterministic' );
-		const bad = { ...reference, occupancy: { ...OCC, cells: 'x' } };
-		eq( bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference: bad } } ).report.hairShape.carved, null );
 
 	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {
