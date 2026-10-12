@@ -81,6 +81,8 @@ function Shell( editor ) {
 	let toonLook = null;
 	import( './toon/ToonLook.js' ).then( m => { toonLook = m; } ).catch( e => console.warn( 'Shell: toon look unavailable', e ) );
 
+	let faceBind = null;
+	import( './facebind/runtime.js' ).then( m => { faceBind = m; } ).catch( e => console.warn( 'Shell: face bind runtime unavailable', e ) );
 	let faceRefine = null;
 	import( './face/FaceRefine.js' ).then( m => { faceRefine = m; } ).catch( e => console.warn( 'Shell: face refine unavailable', e ) );
 
@@ -559,7 +561,7 @@ function Shell( editor ) {
 
 		// ── Misc ──
 		{ w: 'fetchAPI', k: 'fn' }, { w: 'askScene', k: 'fn' },
-		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'refineFace', k: 'fn' },
+		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'refineFace', k: 'fn' }, { w: 'driveFace', k: 'fn' },
 		{ w: 'evalAI', k: 'fn' }, { w: 'evalEditMatrix', k: 'fn' },
 		{ w: 'saveEvalRows', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
 		{ w: 'askExternal', k: 'fn' }, { w: 'checkApiHealth', k: 'fn' },
@@ -2404,6 +2406,16 @@ function Shell( editor ) {
 
 					if ( ! faceRefine ) throw new Error( 'refineFace: the face module is still loading (or failed to load; see the console) — try again in a moment' );
 					return faceRefine.refineFace( object, opts );
+
+				},
+				// ── Face bind (see guides/FACE_BIND.md) ──────────────────────────────
+				//   driveFace(vrm, weights)  drive a face-bound VRM's expression morphs from face-morph
+				//                            weights (array by source index, or { index|name: 0–1 }).
+				//                            Morph influences only. Returns { applied, skipped }.
+				driveFace: function ( object, weights ) {
+
+					if ( ! faceBind ) throw new Error( 'driveFace: the face bind module is still loading (or failed to load; see the console) — try again in a moment' );
+					return faceBind.applyFaceWeights( object, weights );
 
 				},
 				toonMaterial: function ( color, spec ) {

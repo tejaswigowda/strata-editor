@@ -80,6 +80,11 @@ function Loader( editor ) {
 
 		}
 
+		// A VRM bound to a face-blendshape GLB (guides/FACE_BIND.md) carries its weight map; keep it on the scene
+		// so driveFace() can use it.
+		const faceBind = result.parser && result.parser.json.extensions && result.parser.json.extensions.STRATA_face_bind;
+		if ( faceBind ) scene.userData.faceBind = faceBind;
+
 		scene.animations.push( ...result.animations );
 
 		// The dialog is interactive, so the import progress bar must not linger behind it.
