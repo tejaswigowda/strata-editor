@@ -4,10 +4,13 @@ Binds a **face-blendshape GLB** to a **base VRM**, on device. The VRM comes out 
 says "face morph *i* drives this VRM expression morph", so a face performance (facerig / mocap / the
 `driveFace` shell global) animates the VRM's expressions.
 
-- **Inputs:** a base VRM (URL or file) and a face-blendshape GLB (autorigger output: a standalone face mesh,
+- **Inputs:** a base VRM and a face-blendshape GLB (autorigger output: a standalone face mesh,
   N morph targets, PBR materials, no skeleton). Nothing else.
 - **Output:** the base VRM with an `extensions.STRATA_face_bind` block added. Download +
   `window.__webcli_result`.
+- **Base VRMs:** the page defaults to the bundled VRoid **male** base, with **female** one click away (`?vrm=female`).
+  They are the unmodified [hinzka](https://github.com/hinzka/52blendshapes-for-VRoid-face) models, in
+  [`docs/facebind/base/`](../docs/facebind/base/README.md); your own VRM (URL or file) overrides them.
 - **Page:** [`docs/facebind/`](../docs/facebind/index.html) (`/facebind/` on the site).
 - **Code:** [`docs/editor/js/facebind/`](../docs/editor/js/facebind/bind.js).
 
@@ -32,7 +35,7 @@ The face GLB is identity data.
   morph deltas and texture are never read.
 - The bind modules (`glb.js`, `faceSource.js`, `bind.js`, `runtime.js`) contain no `fetch`, XHR, WebSocket, beacon,
   storage or dynamic import; a test enforces this.
-- The page makes **GET requests only** (the base VRM). Its Content-Security-Policy limits `connect-src` to the page's
+- The page makes **GET requests only** (the base VRM — by default the bundled one, from the same origin). Its Content-Security-Policy limits `connect-src` to the page's
   own origin and `raw.githubusercontent.com` (edit the `<meta>` to add your VRM host), and
   [`egressGuard.js`](../docs/facebind/egressGuard.js) refuses any non-GET fetch/XHR, any request body, beacons,
   WebSockets and WebRTC, logging every request to `window.__facebind_net` (shown under "Network audit").
@@ -92,8 +95,8 @@ layer (`toon()`); binding does not touch it.
 ## The page and agents
 
 ```
-/facebind/?vrm=<url>&run=1[&download=0]     auto-runs once a face GLB is chosen from local disk
-window.__facebind.run({ vrm, face, tint })  vrm: URL | File | bytes;  face: File | bytes (never a URL)
+/facebind/?vrm=male|female|<url>&run=1[&download=0]   auto-runs once a face GLB is chosen from local disk
+window.__facebind.run({ vrm, face, tint })  vrm: 'male' (default) | 'female' | URL | File | bytes;  face: File | bytes (never a URL)
 window.__webcli_result                       { ok, filename, size, bytes, blobUrl, bind, report }  or { ok:false, code, error }
 ```
 

@@ -20,7 +20,7 @@
 	.box { background: #1b1e24; border: 1px solid #2a2f38; border-radius: 8px; padding: 14px 16px; margin: 14px 0; }
 	.priv { border-color: #2f5d46; } .scope { border-color: #5d4f2f; }
 	label { display: block; margin: 10px 0 4px; color: #c3cad4; }
-	input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; background: #14161a; color: inherit; border: 1px solid #343a45; border-radius: 6px; }
+	select, input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; background: #14161a; color: inherit; border: 1px solid #343a45; border-radius: 6px; }
 	button, .btn { background: #3b6fd4; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 12px; }
 	#status { margin-top: 12px; min-height: 1.5em; } #status.ok { color: #7ddc9e; } #status.err { color: #ff8f8f; }
 	pre { background: #0f1115; padding: 10px; border-radius: 6px; overflow: auto; font-size: 12px; }
@@ -37,7 +37,12 @@
 	<div class="box priv"><strong>Stays on this device.</strong> The face GLB is read from a local file and is never fetched from, or sent to, any server. This page makes GET requests only (the base VRM), and the binding works with the network off once the page has loaded.</div>
 	<div class="box scope"><strong>Expression-bound, not a likeness.</strong> This makes the VRM's expressions drivable from the face source. It does not reshape the VRM into the person's face.</div>
 
-	<label for="vrmUrl">Base VRM — URL (GET) <span class="muted">or choose a file</span></label>
+	<label for="base">Base VRM</label>
+	<select id="base">
+		<option value="male" selected>Male — VRoid base (bundled)</option>
+		<option value="female">Female — VRoid base (bundled)</option>
+	</select>
+	<label for="vrmUrl" class="muted">Or use your own — URL (GET) or a local file <span>(overrides the choice above)</span></label>
 	<input type="text" id="vrmUrl" placeholder="https://raw.githubusercontent.com/…/base.vrm">
 	<input type="file" id="vrmFile" accept=".vrm,.glb"> <span id="vrmName" class="muted"></span>
 
@@ -53,7 +58,7 @@
 
 	<h2>Network audit</h2>
 	<pre id="net">(no requests)</pre>
-	<p class="muted">Agent use: <code>?vrm=URL&amp;run=1</code> auto-runs once the face GLB is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, face, tint })</code> takes a URL or File for <code>vrm</code> and a File or bytes — never a URL — for <code>face</code>.</p>
+	<p class="muted">Agent use: <code>?vrm=male|female|URL&amp;run=1</code> auto-runs once the face GLB is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, face, tint })</code> takes <code>'male'</code> (default), <code>'female'</code>, a URL or a File for <code>vrm</code> and a File or bytes — never a URL — for <code>face</code>.</p>
 </main>
 <script type="module" src="page.js"></script>
 </body>

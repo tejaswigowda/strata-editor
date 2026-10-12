@@ -2,8 +2,14 @@ import { bindVRM, skinTextureOf, SCOPE } from '../editor/js/facebind/bind.js';
 
 // ── pure transform: (base VRM = url | local file, face GLB = LOCAL file only) -> bound VRM ──
 // window.__facebind.run({ vrm, face, tint })  -> window.__webcli_result
-// ?vrm=<url>&run=1   auto-runs as soon as a face GLB is supplied from local disk.
+// ?vrm=male|female|<url>&run=1   auto-runs as soon as a face GLB is supplied from local disk.
+// The base VRM defaults to the bundled male model; 'male' / 'female' select the bundled bases.
 // The face GLB is never a URL: a `face=` parameter is refused, and a string passed as `face` is rejected.
+
+export const DEFAULT_BASES = {
+	male: 'base/VRoid_V110_Male_v1.1.3.vrm',
+	female: 'base/VRoid_V110_Female_v1.1.3.vrm',
+};
 
 const $ = id => document.getElementById( id );
 const params = new URLSearchParams( location.search );
@@ -43,9 +49,10 @@ async function run( { vrm, face, tint = false, names } ) {
 
 		}
 		if ( ! face ) throw Object.assign( new Error( 'Choose the face-blendshape GLB from local disk.' ), { code: 'NO_FACE' } );
-		if ( ! vrm ) throw Object.assign( new Error( 'Give a base VRM (a URL, or choose a file).' ), { code: 'NO_VRM' } );
 
 		say( 'Binding on this device…' );
+		vrm = vrm || 'male';
+		if ( typeof vrm === 'string' && DEFAULT_BASES[ vrm ] ) vrm = DEFAULT_BASES[ vrm ];
 		let vrmBytes, vrmName;
 		if ( typeof vrm === 'string' ) {
 
@@ -107,12 +114,12 @@ function showNetwork() {
 }
 
 let vrmFile = null, faceFile = null;
-const ready = () => ( vrmFile || $( 'vrmUrl' ).value.trim() ) && faceFile;
-const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim(), face: faceFile, tint: $( 'tint' ).checked } ).then( showNetwork );
+const ready = () => !! faceFile;
+const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, face: faceFile, tint: $( 'tint' ).checked } ).then( showNetwork );
 
 $( 'vrmFile' ).addEventListener( 'change', e => { vrmFile = e.target.files[ 0 ] || null; } );
 $( 'faceFile' ).addEventListener( 'change', e => { faceFile = e.target.files[ 0 ] || null; if ( params.has( 'run' ) && ready() ) go(); } );
-$( 'bind' ).addEventListener( 'click', () => ready() ? go() : say( 'Choose the base VRM and the face GLB first.', 'err' ) );
+$( 'bind' ).addEventListener( 'click', () => ready() ? go() : say( 'Choose the face GLB first.', 'err' ) );
 
 document.addEventListener( 'dragover', e => e.preventDefault() );
 document.addEventListener( 'drop', e => {
@@ -123,7 +130,12 @@ document.addEventListener( 'drop', e => {
 
 } );
 
-if ( params.has( 'vrm' ) ) $( 'vrmUrl' ).value = params.get( 'vrm' );
+if ( params.has( 'vrm' ) ) {
+
+	const v = params.get( 'vrm' );
+	if ( DEFAULT_BASES[ v ] ) $( 'base' ).value = v; else $( 'vrmUrl' ).value = v;
+
+}
 if ( params.has( 'face' ) ) say( 'Ignoring ?face=: the face GLB is local-only and is never loaded from a URL.', 'err' );
 
 window.__facebind = { run, network: () => window.__facebind_net };
