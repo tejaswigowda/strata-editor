@@ -20,7 +20,7 @@ export const EXPRESSIONS = {
 
 export function createPreview( container ) {
 
-	const renderer = new THREE.WebGLRenderer( { antialias: true } );
+	const renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } ) // kept so the canvas can be saved or captured;
 	renderer.setPixelRatio( Math.min( 2, window.devicePixelRatio || 1 ) );
 	container.appendChild( renderer.domElement );
 

@@ -146,6 +146,8 @@ function describeHair( a ) {
 		if ( l ) lines.push( `left side reach (below ears / ear level / crown): ${ l }` );
 		if ( c ) lines.push( `crown height (left / middle / right): ${ c }` );
 		if ( a.length.right || a.length.left ) lines.push( `length (right / left): ${ x( a.length.right ) ?? 'n/a' } / ${ x( a.length.left ) ?? 'n/a' }` );
+		if ( a.trim && ( a.trim.right !== null || a.trim.left !== null ) ) lines.push( `trimmed to the photo's length (right / left, height above the eye line in eye-to-chin heights): ${ a.trim.right ?? 'no' } / ${ a.trim.left ?? 'no' }` );
+		if ( a.trim && a.trim.fringe && a.trim.fringe.some( v => v !== null ) ) lines.push( `fringe trimmed up to the photo's hairline (left / middle / right): ${ a.trim.fringe.map( v => v === null ? 'no' : v.toFixed( 2 ) ).join( ' / ' ) }` );
 		if ( a.fringeShiftE && a.fringeShiftE.some( v => v !== null && Math.abs( v ) > 0.005 ) ) lines.push( `fringe edge shift (left / middle / right, in eye-to-chin heights): ${ a.fringeShiftE.join( ' / ' ) }` );
 
 	} else {
