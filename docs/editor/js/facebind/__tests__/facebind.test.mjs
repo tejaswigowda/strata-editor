@@ -113,7 +113,7 @@ test( 'refuses a non-VRM base, a morph-less face, and a bind that would touch th
 
 } );
 
-test( 'optional look: skin and hair tint change only material colours (base + shade), and say they are approximate', () => {
+test( 'optional look: skin and hair tint change only material colors (base + shade), and say they are approximate', () => {
 
 	const j = vrmJson();
 	j.materials.push( { name: 'Hair_HAIR', pbrMetallicRoughness: { baseColorFactor: [ 1, 1, 1, 1 ] } } );
@@ -127,9 +127,9 @@ test( 'optional look: skin and hair tint change only material colours (base + sh
 	ok( out.materials[ 0 ].pbrMetallicRoughness.baseColorFactor[ 0 ] < 1, 'skin not tinted' );
 	ok( out.materials[ 1 ].pbrMetallicRoughness.baseColorFactor[ 0 ] < 0.2, 'hair not darkened' );
 	ok( out.extensions.VRM.materialProperties[ 1 ].vectorProperties._Color[ 0 ] < 0.6, 'VRM0 hair _Color not applied' );
-	ok( out.extensions.VRM.materialProperties[ 1 ].vectorProperties._ShadeColor[ 0 ] < 0.8, 'hair shade colour did not follow' );
+	ok( out.extensions.VRM.materialProperties[ 1 ].vectorProperties._ShadeColor[ 0 ] < 0.8, 'hair shade color did not follow' );
 	ok( r.report.look.applied.every( a => a.reached ) );
-	// a hair colour lighter than the texture cannot be reached by a tint: it is reported, not faked
+	// a hair color lighter than the texture cannot be reached by a tint: it is reported, not faked
 	const blond = bindVRM( base, glb( faceJson( [ 'jawOpen' ], { nodes: [ { extras: { hairColor: { r: 0.9, g: 0.8, b: 0.5 }, hairCoverage: 0.9 } } ] } ) ), { look: { hair: true, strength: 1, textureMeans: { 1: [ 120, 120, 120 ] } } } );
 	ok( blond.report.look.applied[ 0 ].reached === false && blond.report.warnings.some( w => /could not be fully reached/.test( w ) ) );
 
@@ -173,14 +173,14 @@ test( 'zero-egress by construction: the bind modules have no network, storage or
 
 } );
 
-test( 'hair colour: reads the masked pixels, ignores highlights, shadows and the mask edge', () => {
+test( 'hair color: reads the masked pixels, ignores highlights, shadows and the mask edge', () => {
 
 	const w = 20, h = 20, rgba = new Uint8ClampedArray( w * h * 4 ), mask = new Uint8Array( w * h );
 	for ( let i = 0; i < w * h; i ++ ) { rgba.set( [ 240, 240, 240, 255 ], i * 4 ); } // white background
 	for ( let y = 4; y < 16; y ++ ) for ( let x = 4; x < 16; x ++ ) { const i = y * w + x; mask[ i ] = 1; rgba.set( [ 60, 40, 30, 255 ], i * 4 ); }
 	rgba.set( [ 255, 255, 255, 255 ], ( 8 * w + 8 ) * 4 ); // a specular highlight inside the hair
 	const r = hairColorFromMask( rgba, mask, { width: w, height: h, faceArea: 100 } );
-	ok( Math.abs( r.color.r * 255 - 60 ) < 3 && Math.abs( r.color.g * 255 - 40 ) < 3 && Math.abs( r.color.b * 255 - 30 ) < 3, 'colour ' + JSON.stringify( r.color ) );
+	ok( Math.abs( r.color.r * 255 - 60 ) < 3 && Math.abs( r.color.g * 255 - 40 ) < 3 && Math.abs( r.color.b * 255 - 30 ) < 3, 'color ' + JSON.stringify( r.color ) );
 	ok( r.pixels === 100 && r.coverage === 1, 'pixels/coverage ' + r.pixels );
 	eq( hairColorFromMask( rgba, new Uint8Array( w * h ), { width: w, height: h } ), null );
 
@@ -263,7 +263,7 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 
 		ok( r.bytes.length < vrmBytes.length + 20000, `output grew by ${ r.bytes.length - vrmBytes.length } bytes` );
 		ok( ! JSON.stringify( parseGLB( r.bytes ).json ).includes( 'faceMesh' ) );
-		ok( ! JSON.stringify( r.bind ).includes( 'skinColor' ) && ! JSON.stringify( r.bind ).includes( 'hairColor' ), 'colour hints leaked into the bind block' );
+		ok( ! JSON.stringify( r.bind ).includes( 'skinColor' ) && ! JSON.stringify( r.bind ).includes( 'hairColor' ), 'color hints leaked into the bind block' );
 
 	} );
 	// a face GLB carrying the measured proportions, as a photo-made one does
@@ -302,7 +302,7 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( same( parseGLB( r.bytes ).chunks[ 0 ].data, parseGLB( vrmBytes ).chunks[ 0 ].data ) );
 
 	} );
-	test( 'iris and brow colours tint the VRM eye and brow materials (and the shade colour follows)', () => {
+	test( 'iris and brow colors tint the VRM eye and brow materials (and the shade color follows)', () => {
 
 		const j = parseGLB( vrmBytes ).json;
 		const idx = ( re ) => j.materials.findIndex( m => re.test( m.name ) );

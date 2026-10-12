@@ -2404,7 +2404,7 @@ function Shell( editor ) {
 				//                           Returns { applied, measured, maxMove, revert() }.
 				refineFace: function ( object, opts ) {
 
-					if ( ! faceRefine ) throw new Error( 'refineFace: the face module is still loading (or failed to load; see the console) — try again in a moment' );
+					if ( ! faceRefine ) throw new Error( 'refineFace: the face module is still loading (or failed to load; see the console); try again in a moment' );
 					return faceRefine.refineFace( object, opts );
 
 				},
@@ -2414,7 +2414,7 @@ function Shell( editor ) {
 				//                            Morph influences only. Returns { applied, skipped }.
 				driveFace: function ( object, weights ) {
 
-					if ( ! faceBind ) throw new Error( 'driveFace: the face bind module is still loading (or failed to load; see the console) — try again in a moment' );
+					if ( ! faceBind ) throw new Error( 'driveFace: the face bind module is still loading (or failed to load; see the console); try again in a moment' );
 					return faceBind.applyFaceWeights( object, weights );
 
 				},

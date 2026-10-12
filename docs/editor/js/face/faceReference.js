@@ -15,6 +15,6 @@ export const FACE_REFERENCE = {
 		lips: { t: 0.403, dz: 0.09 },
 		chin: { t: 0.0, dz: 0.035 },
 	},
-	// Mean cheek/forehead colour of the photo the mesh was fitted to (sRGB 0–255)
+	// Mean cheek/forehead color of the photo the mesh was fitted to (sRGB 0–255)
 	skinRGB: [230, 176, 148],
 };

@@ -1,5 +1,5 @@
 // Runtime side of the face bind: drive a bound VRM's expression morphs from face-morph weights.
-// Morph influences only — no geometry, skeleton or skin-weight access.
+// Morph influences only: no geometry, skeleton or skin-weight access.
 
 export const BIND_KEY = 'faceBind';
 

@@ -7,7 +7,7 @@ request at all (nothing from a CDN at run time).
 |---|---|---|---|
 | `vision_bundle.mjs` | MediaPipe Tasks Vision JS, `@mediapipe/tasks-vision@0.10.35` (`vision_bundle.mjs`) | npm | Apache-2.0 |
 | `wasm/vision_wasm_internal.js`, `.wasm` | its SIMD wasm runtime | same package, `wasm/` | Apache-2.0 |
-| `hair_segmenter.tflite` | MediaPipe Hair Segmenter (float32): a per-pixel hair mask, used to read the hair colour from the photo | `https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/latest/hair_segmenter.tflite` | Apache-2.0 |
+| `hair_segmenter.tflite` | MediaPipe Hair Segmenter (float32): a per-pixel hair mask, used to read the hair color from the photo | `https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/latest/hair_segmenter.tflite` | Apache-2.0 |
 | `face_landmarker.task` | MediaPipe Face Landmarker, float16 | `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task` | Apache-2.0 |
 
 SHA-256

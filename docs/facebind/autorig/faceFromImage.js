@@ -82,7 +82,7 @@ export function loadHairSegmenter() {
 
 }
 
-// Hair colour (sRGB 0–1) and how much of the frame is hair, relative to the face. null if the model is unavailable.
+// Hair color (sRGB 0–1) and how much of the frame is hair, relative to the face. null if the model is unavailable.
 async function readHair( bitmap, landmarks ) {
 
 	const seg = await loadHairSegmenter();
@@ -116,7 +116,7 @@ async function readHair( bitmap, landmarks ) {
 
 }
 
-// Iris and brow colour (sRGB 0–1) read at the landmarks: a disc inside each iris, and the polygon of each brow.
+// Iris and brow color (sRGB 0–1) read at the landmarks: a disc inside each iris, and the polygon of each brow.
 const IRIS = [ [ 468, [ 469, 470, 471, 472 ] ], [ 473, [ 474, 475, 476, 477 ] ] ];
 const BROWS = [ [ 70, 63, 105, 66, 107, 55, 65, 52, 53, 46 ], [ 300, 293, 334, 296, 336, 285, 295, 282, 283, 276 ] ];
 
@@ -196,7 +196,7 @@ export async function faceGLBFromImage( image ) {
 	try { hair = await readHair( bitmap, landmarks ); } catch ( e ) { console.warn( 'facebind: hair segmentation unavailable', e ); }
 
 	let eyeBrow = { iris: null, brow: null };
-	try { eyeBrow = await readEyeAndBrow( bitmap, landmarks ); } catch ( e ) { console.warn( 'facebind: iris/brow colours unavailable', e ); }
+	try { eyeBrow = await readEyeAndBrow( bitmap, landmarks ); } catch ( e ) { console.warn( 'facebind: iris/brow colors unavailable', e ); }
 	const proportions = faceProportions( landmarks, { width: bitmap.width, height: bitmap.height } );
 
 	const texture = new TextureMapper().createFaceTexture( bitmap, landmarks );

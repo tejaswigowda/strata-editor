@@ -1,4 +1,4 @@
-// refineFace( object, opts ) — nudge a VRoid-style VRM face toward the proportions in
+// refineFace( object, opts ): nudge a VRoid-style VRM face toward the proportions in
 // faceReference.js (measured on a real-face GLB). It is a smooth, local warp of the face mesh's
 // base positions plus a skin-tone retint:
 //   · eyes: spacing and size
@@ -217,10 +217,10 @@ export function applyPlan( plan, source, target ) {
 }
 
 /**
- * New colour multiplier (linear rgb) so that texture × tint renders `strength` of the way from its
- * current colour to the target skin colour.
+ * New color multiplier (linear rgb) so that texture × tint renders `strength` of the way from its
+ * current color to the target skin color.
  * @param {number[]} textureSRGB mean of the skin texture, 0–255
- * @param {number[]} tintLinear current material colour (linear 0–1)
+ * @param {number[]} tintLinear current material color (linear 0–1)
  * @param {number[]} targetSRGB 0–255
  */
 export function retintSkin( textureSRGB, tintLinear, targetSRGB, strength = 0.5 ) {
@@ -254,7 +254,7 @@ function findFaceMeshes( root ) {
 
 }
 
-// mean sRGB colour of the face skin texture over the cheeks and forehead
+// mean sRGB color of the face skin texture over the cheeks and forehead
 function sampleSkinTexture( mesh, m ) {
 
 	const map = mesh.material.map;

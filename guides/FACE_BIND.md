@@ -13,13 +13,14 @@ mocap / the `driveFace` shell global) animates the VRM's expressions.
 - **Base VRMs:** the page defaults to the bundled VRoid **male** base, with **female** one click away (`?vrm=female`).
   They are the unmodified [hinzka](https://github.com/hinzka/52blendshapes-for-VRoid-face) models, in
   [`docs/facebind/base/`](../docs/facebind/base/README.md); your own VRM (URL or file) overrides them.
-- **Page:** [`docs/facebind/`](../docs/facebind/index.html) (`/facebind/` on the site).
+- **Page:** [`docs/facebind/`](../docs/facebind/index.html) (`/facebind/` on the site), with a 3D preview.
+- **Privacy audit:** [FACE_BIND_PRIVACY.md](FACE_BIND_PRIVACY.md).
 - **Code:** [`docs/editor/js/facebind/`](../docs/editor/js/facebind/bind.js).
 
 ## What it is and is not
 
 **Expression binding first, a photo-informed look second, never a likeness guarantee.** The core is the weight
-map. On top, optionally, the face shape and some colours are nudged toward the photo ("Matching the photo", below).
+map. On top, optionally, the face shape and some colors are nudged toward the photo ("Matching the photo", below).
 An anime base will still look like an anime character; this gets closer, it does not get identical.
 
 **Rig-safe.** The skeleton, skin weights, morph deltas, textures, hair and body are carried through byte for
@@ -27,7 +28,7 @@ byte, and the face GLB's mesh is never grafted on. The only changes to the VRM a
 
 - the bind block and `extensionsUsed`;
 - (optional) the base **POSITION** data of the face (its shape) and of the hair (its volume, height, length and fringe);
-- (optional) material colours (skin, hair, iris, brow) and their MToon shade colours.
+- (optional) material colors (skin, hair, iris, brow) and their MToon shade colors.
 
 `bindVRM` audits this before it writes: the JSON diff may only touch those paths and the moved POSITION accessors'
 min/max, and every byte of the binary chunk outside the face's and the hair's own vertices must be identical (the body
@@ -52,29 +53,42 @@ photo (local File) -> MediaPipe Face Landmarker (on device, CPU) -> face-blendsh
 
 ## Zero egress
 
-The photo, the face GLB made from it and everything derived from them are identity data.
+The photo, the face GLB made from it and everything derived from them (landmarks, hair mask, measurements,
+colors, the reshaped VRM) are identity data. They are processed in this page and never sent anywhere. The full
+audit (data inventory, every network request, threat model, findings and how to verify it yourself) is in
+**[FACE_BIND_PRIVACY.md](FACE_BIND_PRIVACY.md)**. In short:
 
-- They are **local inputs/values only**: a chosen/dropped file, or bytes handed to `window.__facebind.run`. A URL for
-  the photo or face GLB is rejected (`IMAGE_MUST_BE_LOCAL` / `FACE_MUST_BE_LOCAL`), and `?image=` / `?face=` are
-  ignored — in the headless/agent path too. The orchestrator supplies them from local disk.
-- Binding reads only the face GLB's **JSON metadata**: morph count, morph names, a skin-colour hint. Its vertices,
-  morph deltas and texture are never read by the bind.
-- The photo pipeline (`autorig/`, `vendor/`) has no network code that takes your data: the page's CSP allows no
-  script from anywhere but this origin, and the egress guard refuses everything but plain GETs.
-- The bind modules (`glb.js`, `faceSource.js`, `bind.js`, `runtime.js`) contain no `fetch`, XHR, WebSocket, beacon,
-  storage or dynamic import; a test enforces this.
-- The page makes **GET requests only** (the base VRM — by default the bundled one, from the same origin). Its Content-Security-Policy limits `connect-src` to the page's
-  own origin and `raw.githubusercontent.com` (edit the `<meta>` to add your VRM host), and
-  [`egressGuard.js`](../docs/facebind/egressGuard.js) refuses any non-GET fetch/XHR, any request body, beacons,
-  WebSockets and WebRTC, logging every request to `window.__facebind_net` (shown under "Network audit").
-- The photo→GLB→bind path works with the network **off** after the page has loaded (use your own VRM file, or have
-  the base loaded: the bundled bases are fetched at bind time).
-- The only model is the vendored on-device MediaPipe one. No cloud inference, no model that receives face data.
-- CSP: `script-src 'self' 'wasm-unsafe-eval'` plus the hash of the page's one inline import map (the wasm runtime needs
-  `wasm-unsafe-eval`). `page.test.mjs` re-checks the hash.
+- **Local inputs only.** The photo and face GLB are a chosen or dropped file, or bytes handed to
+  `window.__facebind.run`. A URL for either is rejected (`IMAGE_MUST_BE_LOCAL` / `FACE_MUST_BE_LOCAL`), and
+  `?image=` / `?face=` are ignored, in the headless/agent path too.
+- **No network code touches them.** The bind, face, hair, reshape, preview and autorigger modules contain no
+  `fetch`, XHR, WebSocket, beacon, storage, `postMessage` or computed dynamic import. `page.test.mjs` scans every
+  file and fails the build if one appears.
+- **GET only, same origin.** The page's Content-Security-Policy allows scripts only from this origin (plus the hash
+  of its one import map), and [`egressGuard.js`](../docs/facebind/egressGuard.js) refuses everything except GET
+  without a body to this origin, in-memory `blob:` data, or the one base-VRM URL you typed. Every request is logged
+  and shown under "Network audit".
+- **No CDN, no cloud model.** MediaPipe (JS, wasm, face model, hair model) is vendored with SHA-256s and runs
+  on the CPU. Nothing is fetched from a third party at run time.
+- **Works offline.** The models load when the page opens, so the photo, bind and preview steps run with the network
+  off (use your own VRM file, or one already loaded: the bundled bases are fetched at bind time).
+- **Nothing is stored.** No `localStorage`, IndexedDB, cache or service worker. Object URLs are revoked when you run
+  again.
 
-Packaging: in a browser this is enforced by the CSP and the sandbox, and you can confirm it in the network panel.
-A desktop (Electron) shell has no such sandbox, so there it is policy plus the audit log — not the same claim.
+What this does not cover: a compromised host that serves you different code, browser extensions, files you
+download and then share, and the Strata editor's own features (Git, optional AI) once you open the bound VRM there.
+Details in the audit.
+
+Packaging: in a browser the CSP and the sandbox enforce the network limits and you can confirm them in the network
+panel. A desktop (Electron) shell has no such sandbox, so there it is policy plus the audit log, not the same claim.
+
+## Preview
+
+After a bind, the page shows a 3D preview (three.js, drawn on this device from the bytes in the page). Switch
+between the **bound** VRM and the **base** to compare, drag to rotate, and use the sliders (jaw open, smile, blink,
+brows up) to drive the VRM through the bind map. The preview is flat (the VRM's unlit materials, no MToon shading).
+The preview reads the in-memory VRM through `GLTFLoader.parse`; its textures are `blob:` URLs of in-memory data,
+which is why the CSP's `connect-src` includes `blob:`.
 
 ## The binding
 
@@ -95,14 +109,14 @@ The block, on the VRM's root `extensions`:
 ```json
 "STRATA_face_bind": {
   "version": 1,
-  "scope": "expression-bound; not a likeness; face shape unchanged",
+  "scope": "expression-bound; optional photo-informed face proportions and colors are approximate; not a likeness guarantee",
   "source": { "morphCount": 42, "nameResolution": "primitive.extras.targetNames", "names": ["eyeBlinkLeft", "…"] },
   "map": [ { "source": 0, "name": "eyeBlinkLeft", "targets": [ { "mesh": 0, "morph": 13, "name": "eyeBlinkLeft" } ], "weight": 1 } ],
   "unmapped": [], "undriven": ["mouthDimpleLeft", "…"]
 }
 ```
 
-The block holds only generic morph names and counts — nothing from the person's mesh or texture.
+The block holds only generic morph names and counts: nothing from the person's mesh, texture, measurements or colors. (The reshaped geometry and tinted colors of the bound VRM are derived from the photo, though; see the privacy audit.)
 
 ## Driving it
 
@@ -127,36 +141,36 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | **Face shape** | eye spacing, eye width and openness, mouth width, jaw width, nose-tip / lip / chin depth (all as ratios of head width, so photo size drops out) | a smooth local warp of the face's base positions (`FaceRefine.js`); eyes, mouth, jaw and the nose / lips / chin profile. Limited (jaw ≤ ±12%, eyes ±25–30%, depth clamped to human ranges) and faded out before the head outline, so hair, ears and neck still meet the face |
 | **Hair shape** | from the hair mask, in the same head units: crown height, width at ear level, length below the ears, and where the fringe ends on the forehead | a smooth warp of the VRM's existing hair vertices: volume (×0.85–1.2), crown height (×0.8–1.25), length (×0.6–1.6), fringe edge (up to ±0.35 E), each move capped at 4 cm. Measurements the photo crops (top, sides, bottom of the frame) are skipped and listed as warnings |
 | **Skin tone** | average of five patches of the face | skin materials (face and body share one tint) |
-| **Hair colour** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
-| **Eye colour** | a disc inside each iris | iris material |
-| **Brow colour** | the darker half of the brow polygons | brow material |
+| **Hair color** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
+| **Eye color** | a disc inside each iris | iris material |
+| **Brow color** | the darker half of the brow polygons | brow material |
 
 Notes:
 
-- Each colour is applied as a material tint **against the material's own texture mean** (decoded on device), so the
-  rendered colour moves toward the photo's. A tint can only darken, so a colour lighter than the texture is as close
+- Each color is applied as a material tint **against the material's own texture mean** (decoded on device), so the
+  rendered color moves toward the photo's. A tint can only darken, so a color lighter than the texture is as close
   as it gets, and the report says so (`reached: false`).
-- The MToon shade colour is scaled by the same ratio so the shadowed side follows.
+- The MToon shade color is scaled by the same ratio so the shadowed side follows.
 - The hairstyle itself is **scaled and shifted, not replaced**. A different cut (curls, braids, a bob instead of an undercut) needs a different hair mesh, which is a separate rig step. A photo that crops the head can only give partial hair measurements, and a bald or shaved head (little hair found) leaves the hair unchanged.
 - Hair vertices keep their bone weights, so the hair still follows the head and the spring bones; the new shape is the new rest pose.
-- Strength is 0–1 for shape and for colour (default 70%).
+- Strength is 0–1 for shape and for color (default 70%).
 - **Not used: the photo's texture itself.** The face GLB carries a UV-mapped crop of the photo. Painting it onto the
   VRM's face texture would put a photographic face under the anime eyes, brows and mouth (which are separate meshes),
-  so it would not help; the useful parts of that texture (skin, iris and brow colour) are taken as colours instead.
+  so it would not help; the useful parts of that texture (skin, iris and brow color) are taken as colors instead.
 - Depth from a single photo is a rough estimate; a turned head (> 25°) skips profile depth.
 - Re-binding an already reshaped VRM measures it again and moves it further: bind from the base.
 
 ## Skin tint without a photo
 
-With a face GLB instead of a photo, only the skin tone applies (the GLB has a skin-colour hint, but no measurements
-and no hair, eye or brow colours). It is approximate, a material change only, and off by default. 
+With a face GLB instead of a photo, only the skin tone applies (the GLB has a skin-color hint, but no measurements
+and no hair, eye or brow colors). It is approximate, a material change only, and off by default. 
 
 ## The page and agents
 
 ```
 /facebind/?vrm=male|female|<url>&run=1[&download=0]   auto-runs once a photo (or face GLB) is chosen from local disk
 window.__facebind.run({ vrm, image, shape, look })  shape / hairShape: { strength } | omitted;  look: { skin, hair, iris, brow, strength } | omitted;  vrm: 'male' (default) | 'female' | URL | File | bytes;  image: File | Blob (never a URL)
-window.__facebind.run({ vrm, face, tint })   face: an existing face GLB, File | bytes (never a URL) — skips the photo step
+window.__facebind.run({ vrm, face, tint })   face: an existing face GLB, File | bytes (never a URL), skips the photo step
 window.__facebind.preload()                  resolves when the on-device face model is loaded
 window.__webcli_result                       { ok, filename, size, bytes, blobUrl, faceGlbBlobUrl, bind, report }  or { ok:false, code, error }
 ```
@@ -167,11 +181,12 @@ the sample).
 ## Verifying
 
 ```bash
-node docs/editor/js/facebind/__tests__/facebind.test.mjs   # bind logic
-node docs/editor/js/facebind/__tests__/page.test.mjs       # CSP, import-map hash, no CDN/remote URLs, vendored hashes
+node docs/editor/js/face/__tests__/faceRefine.test.mjs      # face warp
+node docs/editor/js/facebind/__tests__/facebind.test.mjs    # bind, reshape, hair, look, rig audit (real VRM if present)
+node docs/editor/js/facebind/__tests__/page.test.mjs        # CSP, import-map hash, no network code, guard, escaping, vendored hashes
 ```
 
-Runs synthetic checks plus, if present, the real VRoid male and the sample face GLB: 42 of 42 mapped, BIN chunk
-and rig JSON identical, byte-stable. In the browser: bind with the network disabled (it completes, zero requests),
-run a photo end to end with every request aborted (zero requests; same bytes every run), import the bound VRM into Strata (the bind block is kept, `driveFace` moves the morphs, skeleton and skin weights
-match the base).
+The first two run synthetic checks plus, if present, the real VRoid male and the sample face GLB: 42 of 42 mapped,
+only the face and hair vertices change, everything else byte-identical, byte-stable output. The third is the static
+privacy audit. The browser checks (a photo run with every request aborted, offline binding, the preview, importing the
+bound VRM into Strata) are listed in [FACE_BIND_PRIVACY.md](FACE_BIND_PRIVACY.md#verify-it-yourself).

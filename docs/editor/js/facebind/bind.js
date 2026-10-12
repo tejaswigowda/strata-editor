@@ -6,7 +6,7 @@
 // no byte of the binary chunk changes except (optionally) the face's POSITION data. The only things written are
 //   · an `extensions.STRATA_face_bind` block (a weight map: face morph -> the VRM's own morph targets),
 //   · optionally, a reshape of the face's and the hair's base positions toward the photo's measurements, and
-//   · optionally, tints on the skin / hair / iris / brow materials toward colours read from the photo.
+//   · optionally, tints on the skin / hair / iris / brow materials toward colors read from the photo.
 // A face morph with no matching VRM target is skipped and listed; nothing is synthesised. The face GLB's mesh
 // is never copied into the VRM, and the hairstyle is only scaled, not replaced. The reshape and tints are
 // approximate: this is expression binding with a photo-informed look, not a likeness guarantee. The hair
@@ -22,7 +22,7 @@ import { FACE_REFERENCE } from '../face/faceReference.js';
 import { retintSkin, linearToSrgb, srgbToLinear } from '../face/FaceRefine.js';
 
 export const BIND_EXTENSION = 'STRATA_face_bind';
-export const SCOPE = 'expression-bound; optional photo-informed face proportions and colours are approximate; not a likeness guarantee';
+export const SCOPE = 'expression-bound; optional photo-informed face proportions and colors are approximate; not a likeness guarantee';
 
 export const ARKIT_52 = [
 	'browDownLeft', 'browDownRight', 'browInnerUp', 'browOuterUpLeft', 'browOuterUpRight', 'cheekPuff', 'cheekSquintLeft', 'cheekSquintRight',
@@ -106,8 +106,8 @@ function materialIndices( json, role ) {
 }
 
 /**
- * The base-colour texture of every skin / hair material, so a caller can decode them (on device) and pass each
- * one's mean colour back as opts.look.textureMeans[materialIndex].
+ * The base-color texture of every skin / hair material, so a caller can decode them (on device) and pass each
+ * one's mean color back as opts.look.textureMeans[materialIndex].
  * @returns {{ index:number, name:string, role:string, bytes:Uint8Array, mime:string }[]}
  */
 export function lookTexturesOf( input ) {
@@ -130,7 +130,7 @@ export function lookTexturesOf( input ) {
 
 const lin = srgbToLinear;
 
-// New colour for a material so that texture × colour renders `strength` of the way to `target` (sRGB 0–255).
+// New color for a material so that texture × color renders `strength` of the way to `target` (sRGB 0–255).
 // Returns the linear multiplier, and whether the target was out of reach (a multiplier can only darken).
 function retint( textureMean, current, target, strength ) {
 
@@ -148,8 +148,8 @@ function setMaterialColor( json, mi, next, report ) {
 	const a = old[ 3 ] === undefined ? 1 : old[ 3 ];
 	pbr.baseColorFactor = [ next[ 0 ], next[ 1 ], next[ 2 ], a ];
 
-	// MToon's shaded side is its own colour, not multiplied by the base colour: scale it by the same ratio
-	// so the shadow side follows the tint instead of staying the old colour.
+	// MToon's shaded side is its own color, not multiplied by the base color: scale it by the same ratio
+	// so the shadow side follows the tint instead of staying the old color.
 	const ratio = next.map( ( v, c ) => old[ c ] > 1e-4 ? v / old[ c ] : 1 );
 	const vrm0 = json.extensions.VRM && json.extensions.VRM.materialProperties && json.extensions.VRM.materialProperties[ mi ];
 	if ( vrm0 && vrm0.vectorProperties ) {
@@ -174,21 +174,21 @@ function applyLook( json, source, look, report ) {
 	if ( look.skin ) {
 
 		if ( source.skinColor ) jobs.push( [ 'skin', [ source.skinColor.r, source.skinColor.g, source.skinColor.b ].map( v => v * 255 ) ] );
-		else report.warnings.push( 'Skin tint skipped: the face GLB has no skin-colour hint.' );
+		else report.warnings.push( 'Skin tint skipped: the face GLB has no skin-color hint.' );
 
 	}
 	if ( look.hair ) {
 
-		if ( ! source.hair ) report.warnings.push( 'Hair colour skipped: the face GLB has no hair-colour hint (it was not made from a photo, or no hair model was available).' );
-		else if ( source.hair.coverage !== null && source.hair.coverage < MIN_HAIR_COVERAGE ) report.warnings.push( 'Hair colour skipped: little or no hair was detected in the photo. The VRM hair is unchanged.' );
+		if ( ! source.hair ) report.warnings.push( 'Hair color skipped: the face GLB has no hair-color hint (it was not made from a photo, or no hair model was available).' );
+		else if ( source.hair.coverage !== null && source.hair.coverage < MIN_HAIR_COVERAGE ) report.warnings.push( 'Hair color skipped: little or no hair was detected in the photo. The VRM hair is unchanged.' );
 		else jobs.push( [ 'hair', [ source.hair.color.r, source.hair.color.g, source.hair.color.b ].map( v => v * 255 ) ] );
 
 	}
-	for ( const [ role, color, label ] of [ [ 'iris', source.irisColor, 'Eye colour' ], [ 'brow', source.browColor, 'Brow colour' ] ] ) {
+	for ( const [ role, color, label ] of [ [ 'iris', source.irisColor, 'Eye color' ], [ 'brow', source.browColor, 'Brow color' ] ] ) {
 
 		if ( ! look[ role ] ) continue;
 		if ( color ) jobs.push( [ role, [ color.r, color.g, color.b ].map( v => v * 255 ) ] );
-		else report.warnings.push( `${ label } skipped: the face GLB has no ${ role } colour hint (it was not made from a photo).` );
+		else report.warnings.push( `${ label } skipped: the face GLB has no ${ role } color hint (it was not made from a photo).` );
 
 	}
 
@@ -197,7 +197,7 @@ function applyLook( json, source, look, report ) {
 		for ( const mi of materialIndices( json, role ) ) {
 
 			const mean = means[ mi ];
-			if ( ! mean ) { report.warnings.push( `${ role } colour skipped for ${ json.materials[ mi ].name }: its texture mean was not supplied.` ); continue; }
+			if ( ! mean ) { report.warnings.push( `${ role } color skipped for ${ json.materials[ mi ].name }: its texture mean was not supplied.` ); continue; }
 			const old = ( json.materials[ mi ].pbrMetallicRoughness.baseColorFactor || [ 1, 1, 1, 1 ] ).slice( 0, 3 );
 			const { next, reached } = retint( mean, old, target, strength );
 			setMaterialColor( json, mi, next, report );
@@ -207,7 +207,7 @@ function applyLook( json, source, look, report ) {
 
 	}
 	report.look = applied.length ? { approximate: true, strength, applied } : null;
-	if ( applied.some( a => ! a.reached ) ) report.warnings.push( 'Some colours could not be fully reached: a tint can only darken the texture, so a lighter colour than the texture is as close as it gets.' );
+	if ( applied.some( a => ! a.reached ) ) report.warnings.push( 'Some colors could not be fully reached: a tint can only darken the texture, so a lighter color than the texture is as close as it gets.' );
 
 }
 
@@ -231,7 +231,7 @@ const ALLOWED_CHANGE = [
 ];
 
 /**
- * Throws unless the only differences are the bind block, extensionsUsed, look-transfer material colours and
+ * Throws unless the only differences are the bind block, extensionsUsed, look-transfer material colors and
  * (when the face was reshaped) the bounds of the face POSITION accessors.
  * @param {{ accessors?: number[] }} [shape] position accessors that a reshape rewrote
  */
@@ -247,7 +247,7 @@ export function assertRigSafe( before, after, shape = {} ) {
  * @param {ArrayBuffer|Uint8Array} vrmInput base VRM bytes
  * @param {ArrayBuffer|Uint8Array} faceInput LOCAL face-blendshape GLB bytes (never a URL)
  * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, reference?: object }, look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
- *   look = optional, approximate material tints (skin / hair colour). textureMeans[materialIndex] = the mean sRGB colour (0–255)
+ *   look = optional, approximate material tints (skin / hair color). textureMeans[materialIndex] = the mean sRGB color (0–255)
  *   of that material's base texture, from lookTexturesOf().
  */
 export function bindVRM( vrmInput, faceInput, opts = {} ) {

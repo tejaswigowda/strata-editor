@@ -1,4 +1,4 @@
-// Reads a hair colour out of a photo, given a hair mask. Pure (no DOM, no network): the caller
+// Reads a hair color out of a photo, given a hair mask. Pure (no DOM, no network): the caller
 // supplies the photo's RGBA pixels and a mask of the same size, so this runs the same in a browser
 // and in Node tests. The mask itself comes from the vendored on-device MediaPipe hair segmenter.
 
@@ -12,7 +12,7 @@ const toSrgb = c => 255 * ( c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow( c, 1 
  *   faceArea = the face's bounding-box area in pixels, so coverage can be reported relative to the face.
  *   The darkest `lowTrim` (shadows, the edge against the background) and brightest `highTrim` (specular
  *   highlights) of the hair pixels are ignored.
- * @returns {{ color: {r:number,g:number,b:number}, pixels:number, coverage:number|null } | null} colour in sRGB 0–1
+ * @returns {{ color: {r:number,g:number,b:number}, pixels:number, coverage:number|null } | null} color in sRGB 0–1
  */
 export function hairColorFromMask( rgba, mask, opts ) {
 
@@ -42,7 +42,7 @@ export function hairColorFromMask( rgba, mask, opts ) {
 }
 
 /**
- * Mean colour (averaged in linear light, returned as sRGB 0–1) of the pixels `indices`, ignoring the darkest
+ * Mean color (averaged in linear light, returned as sRGB 0–1) of the pixels `indices`, ignoring the darkest
  * `lowTrim` and the brightest `highTrim` fraction by luminance.
  */
 export function trimmedMeanColor( rgba, indices, { lowTrim = 0, highTrim = 0 } = {} ) {

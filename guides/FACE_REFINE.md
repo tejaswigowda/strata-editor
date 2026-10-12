@@ -37,7 +37,7 @@ refineFace(R, { materials: false });              // shape only, keep the skin t
 [`faceReference.js`](../docs/editor/js/face/faceReference.js) holds the numbers, measured on a 478-landmark
 MediaPipe face mesh (`face-model-blendshapes.glb`) after removing its head yaw. Everything is normalised
 by the face's own width (`W`) and chin-to-eye-line height (`E`), so it does not depend on model scale.
-Only the GLB's base shape and its photo's skin colour are used; its 42 morph targets are not read. Pass your
+Only the GLB's base shape and its photo's skin color are used; its 42 morph targets are not read. Pass your
 own `reference` object in `opts` to refine toward a different face.
 
 ## Notes
