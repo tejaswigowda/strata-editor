@@ -81,6 +81,9 @@ function Shell( editor ) {
 	let toonLook = null;
 	import( './toon/ToonLook.js' ).then( m => { toonLook = m; } ).catch( e => console.warn( 'Shell: toon look unavailable', e ) );
 
+	let faceRefine = null;
+	import( './face/FaceRefine.js' ).then( m => { faceRefine = m; } ).catch( e => console.warn( 'Shell: face refine unavailable', e ) );
+
 	const container = new UIPanel();
 	container.setId( 'shell' );
 	container.setDisplay( '' );
@@ -556,7 +559,7 @@ function Shell( editor ) {
 
 		// ── Misc ──
 		{ w: 'fetchAPI', k: 'fn' }, { w: 'askScene', k: 'fn' },
-		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' },
+		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'refineFace', k: 'fn' },
 		{ w: 'evalAI', k: 'fn' }, { w: 'evalEditMatrix', k: 'fn' },
 		{ w: 'saveEvalRows', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
 		{ w: 'askExternal', k: 'fn' }, { w: 'checkApiHealth', k: 'fn' },
@@ -2389,6 +2392,18 @@ function Shell( editor ) {
 
 					if ( ! toonLook ) throw new Error( 'toon: the toon module is still loading (or failed to load; see the console) — try again in a moment' );
 					return toonLook.applyToonLook( object, spec.look === undefined && spec.mode === undefined ? { look: 'toon', ...spec } : spec, { addLight: ( scene, light ) => editor.execute( new AddObjectCommand( editor, light ) ) } );
+
+				},
+				// ── Face refine (see guides/FACE_REFINE.md) ──────────────────────────
+				//   refineFace(vrm, opts?)  nudge a VRoid-style VRM face toward the proportions of a
+				//                           real-face reference GLB: eye spacing/size, mouth width,
+				//                           nose/lip/chin depth, skin tone. Existing blendshapes are
+				//                           untouched. opts: { strength: 0–1 (0.5), geometry, materials }.
+				//                           Returns { applied, measured, maxMove, revert() }.
+				refineFace: function ( object, opts ) {
+
+					if ( ! faceRefine ) throw new Error( 'refineFace: the face module is still loading (or failed to load; see the console) — try again in a moment' );
+					return faceRefine.refineFace( object, opts );
 
 				},
 				toonMaterial: function ( color, spec ) {
