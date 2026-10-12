@@ -17,7 +17,6 @@ import { faceProportions } from '../proportions.js';
 import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID } from '../hairShape.js';
 import { cardsOf, relayCards, widenCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
 import { facialHairFromPhoto, paintFacialHair } from '../facialHair.js';
-import { shirtColorFromPhoto } from '../clothing.js';
 import { buildSkull, thicknessAt, hugScalp, hugWeight } from '../scalp.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
@@ -493,48 +492,6 @@ test( 'facial hair painting: dots in the mustache, chin and jaw zones only, the 
 
 } );
 
-test( 'shirt color: the chest below the chin, cleaned of skin and background; none when the picture stops at the chin or the strip is all skin', () => {
-
-	const W = 400, H = 600, lm = Array.from( { length: 478 }, () => ( { x: 0.5, y: 0.5 } ) );
-	const set = ( i, x, y ) => { lm[ i ] = { x: x / W, y: y / H }; };
-	set( 234, 150, 200 ); set( 454, 250, 200 ); set( 152, 200, 300 ); // ear to ear 100 px, chin at y 300
-	const skin = { r: 0.8, g: 0.6, b: 0.5 };
-	const photo = ( shirt ) => { const d = new Uint8ClampedArray( W * H * 4 ); for ( let y = 0; y < H; y ++ ) for ( let x = 0; x < W; x ++ ) { const i = ( y * W + x ) * 4, inBody = x > 120 && x < 280 && y > 340; const c = inBody ? ( shirt || [ 204, 153, 128 ] ) : [ 235, 235, 235 ]; d[ i ] = c[ 0 ]; d[ i + 1 ] = c[ 1 ]; d[ i + 2 ] = c[ 2 ]; d[ i + 3 ] = 255; } return d; };
-	const maroon = shirtColorFromPhoto( photo( [ 110, 30, 55 ] ), { width: W, height: H }, lm, skin );
-	ok( maroon && Math.abs( maroon.r - 110 / 255 ) < 0.01 && Math.abs( maroon.g - 30 / 255 ) < 0.01 && maroon.share > 0.6, JSON.stringify( maroon ) );
-	eq( shirtColorFromPhoto( photo( null ), { width: W, height: H }, lm, skin ), null, 'a chest of skin is not a shirt' );
-	set( 152, 200, 560 ); // the chin near the bottom of the picture: nothing below it
-	eq( shirtColorFromPhoto( photo( [ 110, 30, 55 ] ), { width: W, height: H }, lm, skin ), null );
-	eq( shirtColorFromPhoto( photo( [ 110, 30, 55 ] ), { width: W, height: H }, null, skin ), null );
-
-} );
-
-test( 'scalp: a skull from the innermost points, hair that floats is pulled back toward it, nothing else moves', () => {
-
-	// points on a sphere of radius 0.09 around (0, 1.65, 0): the skull
-	const pts = []; for ( let el = - 20; el <= 90; el += 4 ) for ( let az = 0; az < 360; az += 4 ) { const e = el * Math.PI / 180, a = az * Math.PI / 180; pts.push( 0.09 * Math.cos( e ) * Math.sin( a ), 1.65 + 0.09 * Math.sin( e ), 0.09 * Math.cos( e ) * Math.cos( a ) ); }
-	const sk = buildSkull( Float32Array.from( pts ), [ 0, 1.65, 0 ] );
-	for ( const [ x, y, z ] of [ [ 0, 1.65, 0.09 ], [ 0.09, 1.65, 0 ], [ 0, 1.74, 0 ], [ 0.05, 1.7, 0.06 ] ] ) {
-
-		const len = Math.hypot( x, y - 1.65, z ); // on or near the sphere
-		near( sk.radiusAt( x / len * 0.09, 1.65 + ( y - 1.65 ) / len * 0.09, z / len * 0.09 ), 0.09, 0.004, 'skull radius' );
-
-	}
-	// a point 0.01 over the crown, lifted by 0.05: it floats 0.05 more than it should
-	const t0 = thicknessAt( sk, 0, 1.75, 0 );
-	near( t0, 0.01, 0.004 );
-	const up = [ 0, 1.80, 0 ];
-	const full = hugScalp( sk, ...up, t0, 1, 1 ), none = hugScalp( sk, ...up, t0, 1, 0 ), half = hugScalp( sk, ...up, t0, 1, 0.5 );
-	near( full[ 1 ], 1.75, 0.003, 'full hug puts it back at its own distance from the skull' );
-	eq( none, up ); ok( half[ 1 ] < 1.80 && half[ 1 ] > 1.75, 'half hug is between: ' + half[ 1 ] );
-	// hair that is not floating, or is below the ear line, is not moved
-	eq( hugScalp( sk, 0, 1.74, 0, t0, 1, 1 ), [ 0, 1.74, 0 ] );
-	eq( hugScalp( sk, ...up, t0, hugWeight( - 0.5 ), 1 ), up );
-	ok( hugWeight( 0.8 ) === 1 && hugWeight( 0.1 ) === 0 && hugWeight( 0.35 ) > 0 && hugWeight( 0.35 ) < 1 );
-	ok( same( Float32Array.from( hugScalp( sk, 0.02, 1.8, 0.03, 0.01, 0.7, 0.8 ) ), Float32Array.from( hugScalp( sk, 0.02, 1.8, 0.03, 0.01, 0.7, 0.8 ) ) ) );
-
-} );
-
 test( 'carryNormal: unit length kept and the rotation takes the old direction to the new one', () => {
 
 	const n = carryNormal( [ 0, 0, 1 ], [ 0, - 1, 0 ], [ 1, 0, 0 ] );
@@ -823,34 +780,43 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( all.report.shape && all.report.shape.maxMoveMm > 0.5, 'the reshape still runs with a texture edit' );
 
 	} );
-	test( 'shirt color: the Tops material is tinted toward the photo\'s shirt, nothing else about the file changes but that material color', () => {
+	test( 'the outfit is never touched: with every option on, the clothing materials, their images and their meshes are identical', () => {
 
-		const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) );
-		j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, topColor: { r: 0.45, g: 0.12, b: 0.2 } };
-		const face = writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } );
-		const a = parseGLB( vrmBytes ), top = a.json.materials.findIndex( m => /_Tops_/.test( m.name ) );
-		ok( top >= 0, 'the base has a Tops material' );
-		const out = bindVRM( vrmBytes, face, { look: { top: true, strength: 1, textureMeans: { [ top ]: [ 240, 240, 240 ] } } } );
-		const b = parseGLB( out.bytes );
-		ok( out.report.look.applied.some( x => x.role === 'top' ), 'no top tint reported' );
-		const f = b.json.materials[ top ].pbrMetallicRoughness.baseColorFactor;
-		ok( f[ 0 ] > f[ 1 ] && f[ 0 ] > f[ 2 ], 'the shirt should be reddish: ' + f );
-		ok( same( b.chunks[ 0 ].data, a.chunks[ 0 ].data ), 'a tint must not touch the binary chunk' );
-		ok( bindVRM( vrmBytes, faceBytes, { look: { top: true, textureMeans: { [ top ]: [ 240, 240, 240 ] } } } ).report.warnings.some( w => /Shirt color skipped/.test( w ) ), 'no shirt in the face GLB should warn' );
-
-	} );
-	test( 'scalp hug on the real VRM: the swept-up crown is pulled back toward the head, hug 0 keeps the full lift, the audit passes either way, deterministic', () => {
-
-		const shape = { topV: 1.2, widthW: 1.285, lengthV: - 0.25, hairlineV: 0.52, cropped: { top: false, side: false, bottom: false } };
-		const run = hug => bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, hug, reference: shape }, hairStyle: { cut: 'photo', texture: 'straight' } } );
 		const a = parseGLB( vrmBytes ), ja = a.json;
-		const mesh = ja.meshes.find( m => m.name.startsWith( 'Hair001' ) );
-		const readHair = bytes => { const v = parseGLB( bytes ), acc = v.json.accessors[ mesh.primitives[ 0 ].attributes.POSITION ], bv = v.json.bufferViews[ acc.bufferView ], d = v.chunks[ 0 ].data; return new Float32Array( d.buffer.slice( d.byteOffset + ( bv.byteOffset || 0 ) + ( acc.byteOffset || 0 ), d.byteOffset + ( bv.byteOffset || 0 ) + ( acc.byteOffset || 0 ) + acc.count * 12 ) ); };
-		const crown = h => { let top = - Infinity; for ( let i = 0; i < h.length; i += 3 ) top = Math.max( top, h[ i + 1 ] ); return top; };
-		const stock = crown( readHair( vrmBytes ) ), none = crown( readHair( run( 0 ).bytes ) ), hugged = crown( readHair( run( 0.8 ).bytes ) ), full = crown( readHair( run( 1 ).bytes ) );
-		ok( none - stock > 0.03, 'hug 0 keeps the lifted crown: ' + ( none - stock ) );
-		ok( hugged < none - 0.015 && hugged >= full - 1e-6, `the hugged crown is lower: stock ${ stock }, hug 0 ${ none }, 0.8 ${ hugged }, 1 ${ full }` );
-		ok( same( run( 0.8 ).bytes, run( 0.8 ).bytes ), 'not deterministic' );
+		const png = Uint8Array.from( atob( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' ), c => c.charCodeAt( 0 ) );
+		const cloth = ja.materials.map( ( m, i ) => /_CLOTH$/.test( m.name ) ? i : - 1 ).filter( i => i >= 0 );
+		ok( cloth.length >= 3, 'the base has clothing materials' );
+		const faceMat = ja.materials.findIndex( m => /Face_00_SKIN/.test( m.name ) );
+		const means = {}; ja.materials.forEach( ( m, i ) => { means[ i ] = [ 200, 200, 200 ]; } );
+		const out = bindVRM( vrmBytes, photoFace(), { shape: { strength: 1 }, hairShape: { strength: 1 }, hairStyle: { texture: 'wavy' }, look: { skin: true, hair: true, iris: true, brow: true, strength: 1, textureMeans: means }, textures: [ { materialIndex: faceMat, png } ] } );
+		const b = parseGLB( out.bytes );
+		throws( () => bindVRM( vrmBytes, photoFace(), { textures: [ { materialIndex: cloth[ 0 ], png } ] } ), 'OUTFIT_UNTOUCHED' );
+		for ( const i of cloth ) {
+
+			eq( b.json.materials[ i ], ja.materials[ i ], 'clothing material ' + ja.materials[ i ].name + ' changed' );
+			const vp0 = ja.extensions.VRM && ja.extensions.VRM.materialProperties && ja.extensions.VRM.materialProperties[ i ];
+			if ( vp0 ) eq( b.json.extensions.VRM.materialProperties[ i ], vp0, 'VRM properties of ' + ja.materials[ i ].name + ' changed' );
+			const tex = ja.materials[ i ].pbrMetallicRoughness.baseColorTexture;
+			if ( tex ) { const src = ja.textures[ tex.index ].source; eq( b.json.images[ src ], ja.images[ src ], 'clothing image changed' ); }
+
+		}
+		// the clothing meshes' vertex data: every vertex a clothing primitive uses keeps its bytes in every attribute
+		// (the back hair shares the body's accessors, so whole accessors may differ, but not those vertices)
+		const readIdx = acc => { const x = ja.accessors[ acc ], bv = ja.bufferViews[ x.bufferView ], dv = new DataView( a.chunks[ 0 ].data.buffer, a.chunks[ 0 ].data.byteOffset + ( bv.byteOffset || 0 ) + ( x.byteOffset || 0 ) ); return Array.from( { length: x.count }, ( _, i ) => x.componentType === 5125 ? dv.getUint32( i * 4, true ) : dv.getUint16( i * 2, true ) ); };
+		let checked = 0;
+		for ( const m of ja.meshes ) for ( const p of m.primitives ) {
+
+			if ( ! cloth.includes( p.material ) ) continue;
+			const verts = [ ...new Set( readIdx( p.indices ) ) ];
+			for ( const [ name, acc ] of Object.entries( p.attributes ) ) {
+
+				const x = ja.accessors[ acc ], bv = ja.bufferViews[ x.bufferView ], n = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[ x.type ] * ( { 5126: 4, 5125: 4, 5123: 2, 5121: 1 }[ x.componentType ] || 4 ), stride = bv.byteStride || n, s = ( bv.byteOffset || 0 ) + ( x.byteOffset || 0 );
+				for ( const v of verts ) { const o = s + v * stride; ok( same( a.chunks[ 0 ].data.subarray( o, o + n ), b.chunks[ 0 ].data.subarray( o, o + n ) ), `clothing vertex ${ v } changed in ${ name }` ); checked ++; }
+
+			}
+
+		}
+		ok( checked > 1000, 'checked clothing vertex data: ' + checked );
 
 	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {

@@ -100,7 +100,7 @@ export function buildBinding( source, vrmJson ) {
 
 // ── optional look transfer (rig-safe material tints) ────────────────────────
 
-const ROLES = { skin: /_SKIN$/, hair: /_HAIR$/, iris: /_EyeIris_/, brow: /_FaceBrow_/, top: /_Tops_/ };
+const ROLES = { skin: /_SKIN$/, hair: /_HAIR$/, iris: /_EyeIris_/, brow: /_FaceBrow_/ };
 
 function materialIndices( json, role ) {
 
@@ -187,11 +187,11 @@ function applyLook( json, source, look, report ) {
 		else jobs.push( [ 'hair', [ source.hair.color.r, source.hair.color.g, source.hair.color.b ].map( v => v * 255 ) ] );
 
 	}
-	for ( const [ role, color, label ] of [ [ 'iris', source.irisColor, 'Eye color' ], [ 'brow', source.browColor, 'Brow color' ], [ 'top', source.topColor, 'Shirt color' ] ] ) {
+	for ( const [ role, color, label ] of [ [ 'iris', source.irisColor, 'Eye color' ], [ 'brow', source.browColor, 'Brow color' ] ] ) {
 
 		if ( ! look[ role ] ) continue;
 		if ( color ) jobs.push( [ role, [ color.r, color.g, color.b ].map( v => v * 255 ) ] );
-		else report.warnings.push( `${ label } skipped: the face GLB has no ${ role } color hint (it was not made from a photo, or the photo shows no shirt below the chin).` );
+		else report.warnings.push( `${ label } skipped: the face GLB has no ${ role } color hint (it was not made from a photo).` );
 
 	}
 
@@ -235,6 +235,7 @@ function replaceImages( vrm, textures, report ) {
 	for ( const t of textures ) {
 
 		const mat = json.materials && json.materials[ t.materialIndex ];
+		if ( mat && /_CLOTH$/.test( mat.name || '' ) ) throw new BindError( 'OUTFIT_UNTOUCHED', `refusing to edit the texture of ${ mat.name }: facebind never changes the outfit` );
 		const tex = mat && mat.pbrMetallicRoughness && mat.pbrMetallicRoughness.baseColorTexture;
 		const src = tex && json.textures && ( json.textures[ tex.index ] || {} ).source;
 		if ( src === undefined || ! json.images[ src ] ) { report.warnings.push( `Texture edit skipped for material ${ t.materialIndex }: it has no base-color image.` ); continue; }

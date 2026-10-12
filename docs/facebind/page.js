@@ -124,12 +124,12 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 		if ( shape ) opts.shape = { strength: shape.strength };
 		if ( hairShape ) opts.hairShape = { strength: hairShape.strength, hug: hairShape.hug };
 		if ( hairStyle ) opts.hairStyle = hairStyle;
-		if ( look && ( look.skin || look.hair || look.iris || look.brow || look.top ) ) {
+		if ( look && ( look.skin || look.hair || look.iris || look.brow ) ) {
 
 			// decode the VRM's skin / hair textures here, on device, and pass each one's mean color to the bind
 			const textureMeans = {};
 			for ( const t of lookTexturesOf( vrmBytes ) ) if ( look[ t.role ] ) textureMeans[ t.index ] = await meanOpaqueRGB( t.bytes, t.mime );
-			opts.look = { skin: !! look.skin, hair: !! look.hair, iris: !! look.iris, brow: !! look.brow, top: !! look.top, strength: look.strength, textureMeans };
+			opts.look = { skin: !! look.skin, hair: !! look.hair, iris: !! look.iris, brow: !! look.brow, strength: look.strength, textureMeans };
 
 		}
 		// facial hair: painted into the face SKIN texture (a texture edit, no geometry), only when the photo shows some
@@ -289,7 +289,7 @@ function updateExpressionNote() {
 
 let vrmFile = null, faceFile = null, imageFile = null;
 const ready = () => !! ( imageFile || faceFile );
-const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked, top: $( 'lookTop' ).checked, strength: Number( $( 'lookStrength' ).value ) / 100 } );
+const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked strength: Number( $( 'lookStrength' ).value ) / 100 } );
 const shapeOptions = () => $( 'shapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
 const hairShapeOptions = () => $( 'hairShapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100, hug: Number( $( 'hairHug' ).value ) / 100 } : null;
 const hairStyleOptions = () => ( { cut: $( 'hairCut' ).value, texture: $( 'hairTexture' ).value } );

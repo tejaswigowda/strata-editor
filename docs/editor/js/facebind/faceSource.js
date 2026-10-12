@@ -94,14 +94,13 @@ export function readFaceSource( input, opts = {} ) {
 	}
 
 	const color = c => c && [ c.r, c.g, c.b ].every( v => typeof v === 'number' ) ? { r: c.r, g: c.g, b: c.b } : null;
-	let skinColor = null, hair = null, irisColor = null, browColor = null, proportions = null, hairShape = null, hairTexture = null, topColor = null;
+	let skinColor = null, hair = null, irisColor = null, browColor = null, proportions = null, hairShape = null, hairTexture = null;
 	for ( const node of json.nodes || [] ) {
 
 		const ex = node.extras;
 		if ( ! ex ) continue;
 		if ( ! skinColor ) skinColor = color( ex.skinColor );
 		if ( ! irisColor ) irisColor = color( ex.irisColor );
-		if ( ! topColor ) topColor = color( ex.topColor );
 		if ( ! browColor ) browColor = color( ex.browColor );
 		if ( ! hairShape && ex.hairShape && typeof ex.hairShape === 'object' ) hairShape = ex.hairShape;
 		if ( ! hairTexture && ex.hairTexture && typeof ex.hairTexture.kind === 'string' ) hairTexture = ex.hairTexture;
@@ -110,6 +109,6 @@ export function readFaceSource( input, opts = {} ) {
 
 	}
 
-	return { count, names, resolution, warnings, skinColor, hair, irisColor, browColor, proportions, hairShape, hairTexture, topColor };
+	return { count, names, resolution, warnings, skinColor, hair, irisColor, browColor, proportions, hairShape, hairTexture };
 
 }

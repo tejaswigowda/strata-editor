@@ -28,7 +28,11 @@ byte, and the face GLB's mesh is never grafted on. The only changes to the VRM a
 
 - the bind block and `extensionsUsed`;
 - (optional) the base **POSITION**, **NORMAL** and **TANGENT** (if present) data of the face's and the hair's own vertices (shape, volume, height, length, fringe);
-- (optional) material colors (skin, hair, iris, brow) and their MToon shade colors.
+- (optional) material colors (skin, hair, iris, brow) and their MToon shade colors;
+- (optional) one appended PNG for the face skin texture (painted facial hair), see below.
+
+**The outfit is never touched.** Only the face and the hair change. The clothing materials (tops, bottoms, shoes), their colors, textures and meshes are
+identical in the output, and a test checks it. The skin tone is also applied to the body's skin material, so the neck and hands match the face; that is skin, not clothing.
 
 The normals of a warped vertex are not recomputed from the triangles (that would flatten the artist's hard edges and seams, which are split vertices). Each one is carried through the warp with the inverse transpose of the warp's Jacobian, so seams stay and the shading follows the new surface; vertices the warp does not move keep their exact normals, and the morph targets' normal deltas are relative and left alone.
 
@@ -170,7 +174,6 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | **Hair color** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
 | **Eye color** | a disc inside each iris | iris material |
 | **Brow color** | the darker half of the brow polygons | brow material |
-| **Shirt color** | the strip of chest just below the chin, cleaned of skin and plain background (trimmed mean) | the Tops material (the MToon shade color follows). Skipped when the photo stops at the chin or shows no shirt |
 | **Facial hair** | how much darker the area above the lip, the chin and the jaws are than the cheeks of the same face (three amounts, 0 to 1) | **dots painted into the face SKIN texture**, see [Facial hair](#facial-hair-painted-on-the-face-texture). Nothing is painted for a clean-shaven face |
 
 ### The swept-up cut (how the length and fringe are moved)
@@ -272,8 +275,7 @@ The tool now copies the ones that stay rig-safe and automatic:
 | Hair, skin, iris and brow colors from the photo | yes (material tints) |
 | Eye openness and mouth width nudged a few millimeters to a centimeter | yes (face shape warp) |
 | Mustache and beard painted into the face texture | yes ([facial hair](#facial-hair-painted-on-the-face-texture)) |
-| Shirt recolored to the photo's shirt | yes (Tops material tint) |
-| A collar mesh added to the shirt, trousers recolored black and the body texture cut for them, shirt and shorts cut from the clothes | **no**: it adds or removes geometry or edits garments, which the rig-safe rule forbids, and a headshot does not show trousers |
+| A shirt recolored to the photo's, a collar mesh added to it, trousers recolored black, the body texture cut for them, clothes cut | **no**: facebind changes the face and hair only and never the outfit (no garment color, texture or geometry) |
 | Transparent texels of the back hair texture turned black | no effect worth the extra edit; it was a side effect of re-saving the texture through a canvas |
 
 Notes:

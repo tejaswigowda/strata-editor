@@ -17,7 +17,6 @@ import { hairColorFromMask, trimmedMeanColor } from '../../editor/js/facebind/ha
 import { hairShapeFromMask } from '../../editor/js/facebind/hairShape.js';
 import { classifyHairTexture } from '../../editor/js/facebind/hairStyle.js';
 import { facialHairFromPhoto } from '../../editor/js/facebind/facialHair.js';
-import { shirtColorFromPhoto } from '../../editor/js/facebind/clothing.js';
 import { faceProportions } from '../../editor/js/facebind/proportions.js';
 
 const VENDOR = new URL( '../vendor/mediapipe/', import.meta.url ).href;
@@ -85,7 +84,7 @@ export function loadHairSegmenter() {
 
 }
 
-// The photo's pixels at up to 1024 px, for the facial hair and shirt readings.
+// The photo's pixels at up to 1024 px, for the facial hair reading.
 function photoPixels( bitmap ) {
 
 	const scale = Math.min( 1, 1024 / Math.max( bitmap.width, bitmap.height ) );
@@ -225,9 +224,6 @@ export async function faceGLBFromImage( image ) {
 	// travels in the face GLB's node extras next to skinColor, so the bind reads it from the GLB like everything else
 	if ( hair ) { mesh.userData.hairColor = hair.color; mesh.userData.hairCoverage = hair.coverage; if ( hair.shape ) mesh.userData.hairShape = hair.shape; if ( hair.texture ) mesh.userData.hairTexture = hair.texture; }
 	if ( facialHair ) mesh.userData.facialHair = facialHair;
-	let topColor = null;
-	try { topColor = pixels ? shirtColorFromPhoto( pixels.rgba, pixels.size, landmarks, generator.skinColor ) : null; } catch ( e ) { console.warn( 'facebind: shirt color not read', e ); }
-	if ( topColor ) mesh.userData.topColor = topColor;
 	if ( eyeBrow.iris ) mesh.userData.irisColor = eyeBrow.iris;
 	if ( eyeBrow.brow ) mesh.userData.browColor = eyeBrow.brow;
 	if ( proportions ) mesh.userData.faceProportions = proportions;
@@ -243,6 +239,6 @@ export async function faceGLBFromImage( image ) {
 
 	mesh.geometry.dispose(); mesh.material.map.dispose(); mesh.material.dispose();
 	if ( bitmap.close && image !== bitmap ) bitmap.close();
-	return { glb, blendshapes, skinColor: generator.skinColor, hair, hairMask: hair ? hair.mask : null, iris: eyeBrow.iris, brow: eyeBrow.brow, proportions, facialHair, topColor };
+	return { glb, blendshapes, skinColor: generator.skinColor, hair, hairMask: hair ? hair.mask : null, iris: eyeBrow.iris, brow: eyeBrow.brow, proportions, facialHair };
 
 }
