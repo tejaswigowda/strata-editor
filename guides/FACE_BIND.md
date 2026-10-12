@@ -171,6 +171,35 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | **Eye color** | a disc inside each iris | iris material |
 | **Brow color** | the darker half of the brow polygons | brow material |
 
+### Hair style
+
+Two independent choices on the page (and `opts.hairStyle = { cut, texture }` in `bindVRM`):
+
+| Choice | Values | What it does |
+|---|---|---|
+| **Cut** | `photo` (default), `keep`, `crop`, `bob`, `long`, `afro` | `photo` fits the silhouette to the photo's hair as above. `keep` leaves the VRM's cut. The presets replace the photo's silhouette with a reference one (a short crop, a bob, long hair, a rounded afro) and allow larger changes than the photo fit (length down to 0.1 or up to 2.8 times, volume up to 1.6 times for the afro). |
+| **Texture** | `auto` (default), `straight`, `wavy`, `curly`, `coily` | Re-lays each lock of the VRM's hair. `auto` uses an estimate from the photo; an afro cut implies `coily` unless you pick one. |
+
+How the texture works: the VRM's hair is made of ribbon "cards" (one per lock, 103 on the VRoid bases). Each card is
+found as a connected piece of mesh, its root is pinned to the scalp, and the rest of it is bent along a helix around
+the lock's own direction, with some shrinkage and an outward puff (more for tighter textures). Nothing is added: the same
+vertices move, bone weights and UVs are untouched, normals are carried through the same bend and the warp, and the byte
+audit still passes (only the hair's own POSITION and NORMAL bytes change). It is deterministic (the phase of each lock
+is a hash of its first vertex id).
+
+Limits, stated plainly:
+
+- **It re-lays the VRM's own hair; it does not generate a haircut.** It cannot add a braid, bun, ponytail, bangs the mesh
+  does not have, or hair where the mesh has none. A cut preset is a silhouette target applied to the existing mesh, so a
+  `long` cut stretches the VRM's hair rather than growing new locks.
+- The texture estimate (`hairTexture` in the face GLB extras) comes from how ordered the strand directions inside the
+  hair mask are, plus how ragged the outline is. It is **uncalibrated** (tested on one photo of straight hair), and dark or
+  low-contrast hair is reported as `unknown`, which binds as straight. Choose the texture by hand when it matters.
+- Curl and coil displacement is small and bounded (helix radius 5, 9 or 12 mm); tight textures shrink the locks, so the
+  hair reads shorter and the nape can show a little more skin than the straight version.
+- All of it is on-device geometry math on the bytes already in the page; it adds no network request and no new data
+  leaves the device.
+
 Notes:
 
 - **Morph-delta fidelity.** The morph targets are deltas tuned to the original base, and they are not rescaled. A reshape
@@ -182,7 +211,7 @@ Notes:
   as it gets, and the report says so (`reached: false`).
 - The MToon shade color is scaled by the same ratio so the shadowed side follows.
 - The page shades the hair the segmenter found on a small copy of your photo, so you can see what the hair shape is based on (it is drawn in the page and goes nowhere).
-- The hairstyle itself is **scaled and shifted, not replaced**. A different cut (curls, braids, a bob instead of an undercut) needs a different hair mesh, which is a separate rig step. A photo that crops the head can only give partial hair measurements, and a bald or shaved head (little hair found) leaves the hair unchanged.
+- The hairstyle is the VRM's **own hair mesh**: it is scaled, shifted and, optionally, re-laid (see [Hair style](#hair-style)). Braids, buns, ponytails and any hair the mesh does not have are not possible. A photo that crops the head can only give partial hair measurements, and a bald or shaved head (little hair found) leaves the hair unchanged.
 - Hair vertices keep their bone weights, so the hair still follows the head and the spring bones; the new shape is the new rest pose.
 - Strength is 0–1 for shape and for color (default 70%).
 - **Not used: the photo's texture itself.** The face GLB carries a UV-mapped crop of the photo. Painting it onto the

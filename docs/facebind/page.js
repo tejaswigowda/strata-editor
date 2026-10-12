@@ -1,7 +1,7 @@
 import { bindVRM, lookTexturesOf, SCOPE } from '../editor/js/facebind/bind.js';
 
 // ── pure transform: (base VRM = url | local file, face GLB = LOCAL file only) -> bound VRM ──
-// window.__facebind.run({ vrm, image | face, look, shape, hairShape })  -> window.__webcli_result
+// window.__facebind.run({ vrm, image | face, look, shape, hairShape, hairStyle })  -> window.__webcli_result
 // The starting point is a photo: image -> on-device face landmarks -> face-blendshape GLB -> bind.
 // `face` (an existing face GLB) skips the photo step.
 // ?vrm=male|female|<url>&run=1   auto-runs as soon as a photo (or face GLB) is supplied from local disk.
@@ -57,7 +57,7 @@ async function meanOpaqueRGB( bytes, mime ) {
 
 }
 
-async function run( { vrm, image, face, look, shape, hairShape, names } ) {
+async function run( { vrm, image, face, look, shape, hairShape, hairStyle, names } ) {
 
 	try {
 
@@ -101,6 +101,7 @@ async function run( { vrm, image, face, look, shape, hairShape, names } ) {
 		const opts = { names };
 		if ( shape ) opts.shape = { strength: shape.strength };
 		if ( hairShape ) opts.hairShape = { strength: hairShape.strength };
+		if ( hairStyle ) opts.hairStyle = hairStyle;
 		if ( look && ( look.skin || look.hair || look.iris || look.brow ) ) {
 
 			// decode the VRM's skin / hair textures here, on device, and pass each one's mean color to the bind
@@ -172,6 +173,7 @@ function render( report ) {
 		<h3>Not driven: VRM ARKit shapes the face GLB has no morph for</h3>${ list( report.undriven, n => esc( n ) ) }
 		${ report.warnings.length ? `<h3>Warnings</h3>${ list( report.warnings, w => esc( w ) ) }` : '' }
 		${ report.shape ? `<h3>Face shape <span class="muted">(approximate; the face's base positions moved by up to ${ report.shape.maxMoveMm } mm)</span></h3>` : '' }
+		${ report.hairStyle && ( report.hairStyle.texture !== 'straight' || report.hairStyle.cut !== 'photo' ) ? `<h3>Hair style <span class="muted">(approximate; each lock of the VRM's own hair cards is re-laid, nothing is added)</span></h3>${ list( [ `cut: ${ report.hairStyle.cut }`, `texture: ${ report.hairStyle.texture } (${ report.hairStyle.textureSource })`, ...( report.hairStyle.cards ? [ `${ report.hairStyle.cards } hair locks re-laid` ] : [] ) ], l => esc( l ) ) }` : '' }
 		${ report.hairShape ? `<h3>Hair shape <span class="muted">(approximate; the existing hairstyle scaled and shifted to the photo's hair silhouette, by up to ${ report.hairShape.maxMoveMm } mm)</span></h3>${ list( describeHair( report.hairShape.applied ), l => esc( l ) ) }` : '' }
 		${ report.look ? `<h3>Look transfer <span class="muted">(approximate; material tint only)</span></h3>${ list( report.look.applied, a => `${ esc( a.role ) }: ${ esc( a.material ) } → rgb(${ a.target.map( esc ).join( ', ' ) })${ a.reached ? '' : ' (not fully reachable)' }` ) }` : '' }`;
 
@@ -254,7 +256,8 @@ const ready = () => !! ( imageFile || faceFile );
 const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked, strength: Number( $( 'lookStrength' ).value ) / 100 } );
 const shapeOptions = () => $( 'shapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
 const hairShapeOptions = () => $( 'hairShapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
-const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions(), hairShape: hairShapeOptions() } ).then( showNetwork );
+const hairStyleOptions = () => ( { cut: $( 'hairCut' ).value, texture: $( 'hairTexture' ).value } );
+const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions(), hairShape: hairShapeOptions(), hairStyle: hairStyleOptions() } ).then( showNetwork );
 
 function setImage( f ) {
 

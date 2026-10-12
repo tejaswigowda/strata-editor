@@ -17,6 +17,7 @@
 import { parseGLB, writeGLB, GLBError } from './glb.js';
 import { readFaceSource } from './faceSource.js';
 import { MIN_HAIR_COVERAGE } from './hair.js';
+import { CUTS, TEXTURES } from './hairStyle.js';
 import { reshapeVRM, assertBinOnlyChanged } from './reshape.js';
 import { FACE_REFERENCE } from '../face/faceReference.js';
 import { retintSkin, linearToSrgb, srgbToLinear } from '../face/FaceRefine.js';
@@ -248,7 +249,7 @@ export function assertRigSafe( before, after, shape = {} ) {
 /**
  * @param {ArrayBuffer|Uint8Array} vrmInput base VRM bytes
  * @param {ArrayBuffer|Uint8Array} faceInput LOCAL face-blendshape GLB bytes (never a URL)
- * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, reference?: object }, look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
+ * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, reference?: object }, hairStyle?: { cut?: 'photo'|'keep'|'crop'|'bob'|'long'|'afro', texture?: 'auto'|'straight'|'wavy'|'curly'|'coily' }, look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
  *   look = optional, approximate material tints (skin / hair color). textureMeans[materialIndex] = the mean sRGB color (0–255)
  *   of that material's base texture, from lookTexturesOf().
  */
@@ -270,13 +271,14 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		look: null,
 		shape: null,
 		hairShape: null,
+		hairStyle: null,
 		normals: null,
 		egress: 'none: the face GLB was read from local bytes only; nothing derived from it left this process',
 	};
 
 	const origBin = ( vrm.chunks.find( c => c.type === 0x004e4942 ) || {} ).data;
 	let reshaped = null;
-	if ( opts.shape || opts.hairShape ) {
+	if ( opts.shape || opts.hairShape || opts.hairStyle ) {
 
 		const what = {};
 		if ( opts.shape ) {
@@ -293,19 +295,44 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 			}
 
 		}
-		if ( opts.hairShape ) {
+		const style = opts.hairStyle || {};
+		const cutName = style.cut || 'photo';
+		if ( cutName !== 'photo' && cutName !== 'keep' && ! CUTS[ cutName ] ) throw new GLBError( 'BAD_HAIR_STYLE', `unknown hair cut "${ cutName }"` );
+		if ( style.texture && style.texture !== 'auto' && ! ( style.texture in TEXTURES ) ) throw new GLBError( 'BAD_HAIR_STYLE', `unknown hair texture "${ style.texture }"` );
+		const preset = CUTS[ cutName ] || null;
 
-			const strength = opts.hairShape.strength === undefined ? 0.7 : opts.hairShape.strength;
-			const ref = opts.hairShape.reference || source.hairShape;
-			if ( ! ref ) report.warnings.push( 'Hair shape skipped: the face GLB carries no hair measurements (it was not made from a photo, or no hair was found).' );
-			else if ( [ ref.topV, ref.widthW, ref.lengthV, ref.hairlineV ].every( v => v === null || v === undefined ) && ! ( ref.profile && Object.values( ref.profile ).some( a => a.some( v => v !== null ) ) ) ) report.warnings.push( 'Hair shape skipped: the photo crops the hair on every side, so its size cannot be measured. Use a photo that shows the whole head.' );
-			else {
+		// texture: explicit, else what the photo shows (an estimate), else straight; an afro cut implies coily
+		let texture = style.texture && style.texture !== 'auto' ? style.texture : null, textureSource = texture ? 'chosen' : null;
+		if ( ! texture && preset && preset.texture ) { texture = preset.texture; textureSource = 'cut'; }
+		if ( ! texture && source.hairTexture && source.hairTexture.kind in TEXTURES ) { texture = source.hairTexture.kind; textureSource = 'photo'; }
+		texture = texture || 'straight';
+		const wantStyle = texture !== 'straight' || !! preset;
+		if ( textureSource === 'photo' && texture !== 'straight' ) report.warnings.push( `Hair texture "${ texture }" was estimated from the photo (approximate, not calibrated). Pick a texture by hand if it is wrong.` );
 
-				const cut = ref.cropped ? Object.entries( ref.cropped ).filter( ( [ , v ] ) => v ).map( ( [ k ] ) => k ) : [];
-				if ( cut.length ) report.warnings.push( `Part of the hair shape was skipped because the photo crops the hair (${ cut.join( ', ' ) }).` );
-				what.hair = { reference: ref, strength };
+		if ( opts.hairStyle ) report.hairStyle = { approximate: true, cut: cutName, texture, textureSource: textureSource || 'default', detected: source.hairTexture || null, cards: null };
+		if ( opts.hairShape || wantStyle ) {
+
+			const strength = opts.hairShape && opts.hairShape.strength !== undefined ? opts.hairShape.strength : 0.7;
+			let ref = null, limits = null;
+			if ( preset ) { ref = preset.ref; limits = preset.limits; }
+			else if ( cutName === 'photo' && opts.hairShape ) {
+
+				ref = opts.hairShape.reference || source.hairShape;
+				if ( ! ref ) report.warnings.push( 'Hair shape skipped: the face GLB carries no hair measurements (it was not made from a photo, or no hair was found).' );
+				else if ( [ ref.topV, ref.widthW, ref.lengthV, ref.hairlineV ].every( v => v === null || v === undefined ) && ! ( ref.profile && Object.values( ref.profile ).some( a => a.some( v => v !== null ) ) ) ) {
+
+					report.warnings.push( 'Hair shape skipped: the photo crops the hair on every side, so its size cannot be measured. Use a photo that shows the whole head.' );
+					ref = null;
+
+				} else {
+
+					const cut = ref.cropped ? Object.entries( ref.cropped ).filter( ( [ , v ] ) => v ).map( ( [ k ] ) => k ) : [];
+					if ( cut.length ) report.warnings.push( `Part of the hair shape was skipped because the photo crops the hair (${ cut.join( ', ' ) }).` );
+
+				}
 
 			}
+			if ( ref || wantStyle ) what.hair = { reference: ref, strength: preset ? Math.max( strength, 0.9 ) : strength, texture, limits };
 
 		}
 		if ( what.face || what.hair ) {
@@ -313,7 +340,8 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 			reshaped = reshapeVRM( vrm, what );
 			if ( reshaped.face ) report.shape = { approximate: true, strength: what.face.strength, maxMoveMm: +( reshaped.face.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.face.measured, photo: what.face.reference };
 			report.normals = reshaped.normals;
-			if ( reshaped.hair ) report.hairShape = { approximate: true, strength: what.hair.strength, maxMoveMm: +( reshaped.hair.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.hair.measured, photo: what.hair.reference, applied: reshaped.hair.plan };
+			if ( reshaped.hair && report.hairStyle ) report.hairStyle.cards = reshaped.hair.style.cards;
+			if ( reshaped.hair && what.hair.reference && cutName === 'photo' ) report.hairShape = { approximate: true, strength: what.hair.strength, maxMoveMm: +( reshaped.hair.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.hair.measured, photo: what.hair.reference, applied: reshaped.hair.plan };
 
 		}
 

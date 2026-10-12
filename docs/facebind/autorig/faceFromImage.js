@@ -15,6 +15,7 @@ import { FaceMeshGenerator } from './face-mesh-generator.js';
 import { TextureMapper } from './texture-mapper.js';
 import { hairColorFromMask, trimmedMeanColor } from '../../editor/js/facebind/hair.js';
 import { hairShapeFromMask } from '../../editor/js/facebind/hairShape.js';
+import { classifyHairTexture } from '../../editor/js/facebind/hairStyle.js';
 import { faceProportions } from '../../editor/js/facebind/proportions.js';
 
 const VENDOR = new URL( '../vendor/mediapipe/', import.meta.url ).href;
@@ -104,8 +105,9 @@ async function readHair( bitmap, landmarks ) {
 		const labels = seg.getLabels();
 		const hairValue = labels.indexOf( 'hair' ) >= 0 ? labels.indexOf( 'hair' ) : 1;
 		const data = mask.getAsUint8Array();
-		const stats = hairColorFromMask( ctx.getImageData( 0, 0, width, height ).data, data, { width, height, hairValue, faceArea } );
-		return stats && { ...stats, shape: hairShapeFromMask( landmarks, data, { width, height, hairValue } ), mask: { width, height, hairValue, data: data.slice() } };
+		const pixels = ctx.getImageData( 0, 0, width, height ).data;
+		const stats = hairColorFromMask( pixels, data, { width, height, hairValue, faceArea } );
+		return stats && { ...stats, shape: hairShapeFromMask( landmarks, data, { width, height, hairValue } ), texture: classifyHairTexture( pixels, data, { width, height, hairValue } ), mask: { width, height, hairValue, data: data.slice() } };
 
 	} finally {
 
@@ -204,7 +206,7 @@ export async function faceGLBFromImage( image ) {
 	const mesh = generator.generateWithMorphTargets( landmarks, blendshapes, transform, texture );
 	mesh.name = 'faceMesh';
 	// travels in the face GLB's node extras next to skinColor, so the bind reads it from the GLB like everything else
-	if ( hair ) { mesh.userData.hairColor = hair.color; mesh.userData.hairCoverage = hair.coverage; if ( hair.shape ) mesh.userData.hairShape = hair.shape; }
+	if ( hair ) { mesh.userData.hairColor = hair.color; mesh.userData.hairCoverage = hair.coverage; if ( hair.shape ) mesh.userData.hairShape = hair.shape; if ( hair.texture ) mesh.userData.hairTexture = hair.texture; }
 	if ( eyeBrow.iris ) mesh.userData.irisColor = eyeBrow.iris;
 	if ( eyeBrow.brow ) mesh.userData.browColor = eyeBrow.brow;
 	if ( proportions ) mesh.userData.faceProportions = proportions;

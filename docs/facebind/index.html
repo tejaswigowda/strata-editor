@@ -43,7 +43,7 @@
 <body>
 <main>
 	<h1>Bind a face GLB to a VRM</h1>
-	<p class="tagline">Start from a photo. The page reads the face on your device, makes a face-blendshape GLB from it, and drives a base VRM's expression blendshapes from that GLB's morphs, and (optionally) moves the VRM's face shape, hair shape and colors toward the photo. The skeleton, skin weights and existing blendshapes are not changed, and the hairstyle is scaled and shifted, not replaced.</p>
+	<p class="tagline">Start from a photo. The page reads the face on your device, makes a face-blendshape GLB from it, and drives a base VRM's expression blendshapes from that GLB's morphs, and (optionally) moves the VRM's face shape, hair shape and colors toward the photo. The skeleton, skin weights and existing blendshapes are not changed, and the hairstyle can be re-laid as waves, curls or coils or switched to a cut preset (no new hair is added).</p>
 
 	<div class="box priv"><strong>Stays on this device.</strong> Your photo, the face GLB made from it, and everything derived from them are processed in this page and are never sent to any server. The face model runs locally from files served with this page (nothing from a CDN). The page makes GET requests only, and the whole thing works with the network off once the page has loaded.</div>
 	<div class="box scope"><strong>Approximate, not a likeness guarantee.</strong> The binding makes the VRM's expressions drivable from the face source. The shape and color matching below is a rough, measured nudge (eye size and spacing, mouth, jaw, profile depth; skin, hair, eye and brow color); an anime base will still look like an anime character.</div>
@@ -75,13 +75,16 @@
 		<strong>Match the photo</strong> <span class="muted">(optional and approximate; everything is applied to the VRM's own geometry and materials)</span>
 		<label><input type="checkbox" id="shapeOn" checked> Face shape: eye size and spacing, mouth width, jaw, nose / lips / chin depth <span class="muted">(moves the face's base positions; every blendshape keeps working)</span></label>
 		<label><input type="checkbox" id="hairShapeOn" checked> Hair shape: volume, height, length and fringe of the existing hairstyle <span class="muted">(needs a photo that shows the whole head)</span></label>
+		<label>Hair cut <select id="hairCut"><option value="photo" selected>As in the photo</option><option value="keep">Keep the VRM's cut</option><option value="crop">Short crop</option><option value="bob">Bob</option><option value="long">Long</option><option value="afro">Afro</option></select>
+			Texture <select id="hairTexture"><option value="auto" selected>Auto (estimated from the photo)</option><option value="straight">Straight</option><option value="wavy">Wavy</option><option value="curly">Curly</option><option value="coily">Coily</option></select>
+			<span class="muted">(re-lays each lock as a wave, curl or coil on the VRM's own hair cards; a cut preset replaces the photo's silhouette; braids, buns and ponytails are not possible)</span></label>
 		<label>Shape strength <input type="range" id="shapeStrength" min="0" max="100" value="70"> <span id="shapeStrengthValue">70%</span></label>
 		<label><input type="checkbox" id="lookSkin" checked> Skin tone</label>
 		<label><input type="checkbox" id="lookHair" checked> Hair color <span class="muted">(read by an on-device hair segmenter)</span></label>
 		<label><input type="checkbox" id="lookIris" checked> Eye color</label>
 		<label><input type="checkbox" id="lookBrow" checked> Brow color</label>
 		<label>Color strength <input type="range" id="lookStrength" min="0" max="100" value="70"> <span id="lookStrengthValue">70%</span></label>
-		<p class="muted">The hairstyle itself (the cut, curls) is not replaced, only scaled and shifted; the body and the skeleton are not changed, and the photo's texture is not painted onto the avatar. With a face GLB instead of a photo only the skin tone applies (there are no measurements or hair/eye/brow colors in it).</p>
+		<p class="muted">The hairstyle is the VRM's own hair cards, scaled, shifted and optionally re-laid (waves, curls, coils, or a cut preset); braids, buns and ponytails are not possible, and the texture guessed from the photo is a rough estimate you can override. The body and the skeleton are not changed, and the photo's texture is not painted onto the avatar. With a face GLB instead of a photo only the skin tone applies (there are no measurements or hair/eye/brow colors in it).</p>
 	</div>
 
 	<button id="bind">Bind</button>
@@ -118,7 +121,7 @@
 
 	<h2>Network audit</h2>
 	<pre id="net">(no requests)</pre>
-	<p class="muted">Agent use: <code>?vrm=male|female|URL&amp;run=1</code> auto-runs once a photo (or face GLB) is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, image, shape: { strength }, hairShape: { strength }, look: { skin, hair, iris, brow, strength } })</code> takes <code>'male'</code> (default), <code>'female'</code>, a URL or a File for <code>vrm</code> and a File (or <code>face</code>: a face GLB's bytes) for the starting point, never a URL, for either.</p>
+	<p class="muted">Agent use: <code>?vrm=male|female|URL&amp;run=1</code> auto-runs once a photo (or face GLB) is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, image, shape: { strength }, hairShape: { strength }, hairStyle: { cut, texture }, look: { skin, hair, iris, brow, strength } })</code> takes <code>'male'</code> (default), <code>'female'</code>, a URL or a File for <code>vrm</code> and a File (or <code>face</code>: a face GLB's bytes) for the starting point, never a URL, for either.</p>
 </main>
 <script type="module" src="page.js"></script>
 </body>

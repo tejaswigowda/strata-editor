@@ -197,6 +197,16 @@ export function createPreview( container ) {
 
 		get expressionMode() { return mode; },
 
+		/** Turn the camera around the head: 0 = front, 180 = back. */
+		orbit( degrees ) {
+
+			const r = Math.hypot( camera.position.x - controls.target.x, camera.position.z - controls.target.z ), a = degrees * Math.PI / 180;
+			camera.position.x = controls.target.x + Math.sin( a ) * r;
+			camera.position.z = controls.target.z + Math.cos( a ) * r;
+			controls.update(); request();
+
+		},
+
 		get info() { return info; },
 
 		setExpression( key, value ) { weights[ key ] = value; mode = 'manual'; applyWeights(); },

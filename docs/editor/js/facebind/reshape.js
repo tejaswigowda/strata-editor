@@ -16,6 +16,7 @@
 
 import { measureFace, planFaceRefine, warpPoint } from '../face/FaceRefine.js';
 import { measureHair, planHair, warpHairPoint, summarizePlan } from './hairShape.js';
+import { cardsOf, relayCards, carryNormal } from './hairStyle.js';
 import { GLBError } from './glb.js';
 
 const FACE_MATERIAL = /_(FaceMouth|EyeIris|EyeHighlight|EyeWhite|FaceBrow|FaceEyelash|FaceEyeline|Face)_\d+_(FACE|EYE|SKIN)/;
@@ -107,7 +108,7 @@ const unit = v => { const l = Math.hypot( ...v ); return l > 1e-12 ? v.map( c =>
  */
 function transformAttributes( json, bin, prims, job ) {
 
-	const { accessor, ids, warp, positions } = job;
+	const { accessor, ids, warp, positions, pre, minCos = 0.35 } = job;
 	const out = new DataView( bin.data.buffer, bin.data.byteOffset );
 	const ranges = [], touched = [];
 	let changed = 0, maxAngle = 0;
@@ -133,13 +134,15 @@ function transformAttributes( json, bin, prims, job ) {
 			const det = det3( J );
 			if ( ! ( det > 0.1 ) ) continue; // a vertex the warp folds flat: keep its normal
 			const o = start + i * stride;
-			const v = [ out.getFloat32( o, true ), out.getFloat32( o + 4, true ), out.getFloat32( o + 8, true ) ];
+			let v = [ out.getFloat32( o, true ), out.getFloat32( o + 4, true ), out.getFloat32( o + 8, true ) ];
+			const v0 = v;
+			if ( pre && kind === 'NORMAL' ) v = pre( i, v ); // the hair style's own rotation of the normal, before the warp's
 			const t = unit( kind === 'NORMAL' ? mulv( cofactor( J ), v ) : mulv( J, v ) );
 			if ( ! t ) continue;
-			const before = unit( v );
+			const before = unit( v0 );
 			const cos = before ? before[ 0 ] * t[ 0 ] + before[ 1 ] * t[ 1 ] + before[ 2 ] * t[ 2 ] : 1;
-			if ( cos < 0.35 ) continue; // more than ~70 degrees: not a believable change, keep the original
-			if ( Math.abs( t[ 0 ] - v[ 0 ] ) + Math.abs( t[ 1 ] - v[ 1 ] ) + Math.abs( t[ 2 ] - v[ 2 ] ) < 1e-3 ) continue; // under ~0.06 degrees: not worth a write
+			if ( cos < minCos ) continue; // too big a change to be believable: keep the original
+			if ( Math.abs( t[ 0 ] - v0[ 0 ] ) + Math.abs( t[ 1 ] - v0[ 1 ] ) + Math.abs( t[ 2 ] - v0[ 2 ] ) < 1e-3 ) continue; // under ~0.06 degrees: not worth a write
 			out.setFloat32( o, t[ 0 ], true ); out.setFloat32( o + 4, t[ 1 ], true ); out.setFloat32( o + 8, t[ 2 ], true );
 			maxAngle = Math.max( maxAngle, Math.acos( Math.min( 1, cos ) ) * 180 / Math.PI );
 			writtenIds.push( i ); changed ++;
@@ -237,39 +240,58 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 	// ── hair ──
 	if ( hair ) {
 
-		const byAccessor = new Map();
+		const byAccessor = new Map(), triLists = new Map();
 		for ( const { p } of prims.filter( q => HAIR_MATERIAL.test( q.name ) ) ) {
 
 			const a = p.attributes.POSITION;
-			if ( ! byAccessor.has( a ) ) byAccessor.set( a, new Set() );
-			for ( const i of readIndices( json, bin, p.indices ) ) byAccessor.get( a ).add( i );
+			if ( ! byAccessor.has( a ) ) { byAccessor.set( a, new Set() ); triLists.set( a, [] ); }
+			const idx = readIndices( json, bin, p.indices );
+			for ( const i of idx ) byAccessor.get( a ).add( i );
+			triLists.get( a ).push( idx );
 
 		}
 		if ( ! byAccessor.size ) throw new GLBError( 'NO_HAIR_MESH', 'no hair meshes found in the VRM' );
 
-		const store = new Map( [ ...byAccessor.keys() ].map( a => [ a, readPositions( json, bin, a ) ] ) );
+		// 1. the style: re-lay the locks (wavy / curly / coily). The silhouette is then measured on the re-laid hair.
+		const store = new Map(), tangents = new Map();
+		let cardCount = 0;
+		for ( const [ a, ids ] of byAccessor ) {
+
+			const src = readPositions( json, bin, a );
+			const cards = cardsOf( triLists.get( a ) );
+			const relaid = hair.texture && hair.texture !== 'straight' ? relayCards( src, cards, m, hair.texture ) : null;
+			store.set( a, relaid ? relaid.positions : src );
+			if ( relaid ) { tangents.set( a, relaid.tangents ); cardCount += cards.filter( c => c.length >= 12 ).length; }
+
+		}
 		const flat = [];
 		for ( const [ a, ids ] of byAccessor ) for ( const i of ids ) flat.push( store.get( a )[ i * 3 ], store.get( a )[ i * 3 + 1 ], store.get( a )[ i * 3 + 2 ] );
 		const hp = Float32Array.from( flat );
 		const cur = measureHair( hp, Array.from( { length: hp.length / 3 }, ( _, i ) => i ), m );
 
-		const plan = planHair( cur, hair.reference, m, hair.strength );
+		// 2. the silhouette (volume, height, length, fringe) toward the photo or a cut preset
+		const plan = planHair( cur, hair.reference || {}, m, hair.strength, hair.limits || {} );
 		let maxMove = 0;
 		for ( const [ a, ids ] of byAccessor ) {
 
-			const src = store.get( a ), dst = Float32Array.from( src );
+			const mid = store.get( a ), original = readPositions( json, bin, a ), dst = Float32Array.from( mid );
 			for ( const i of ids ) {
 
-				const [ dx, dy, dz ] = warpHairPoint( plan, src[ i * 3 ], src[ i * 3 + 1 ], src[ i * 3 + 2 ] );
+				const [ dx, dy, dz ] = warpHairPoint( plan, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ] );
 				dst[ i * 3 ] += dx; dst[ i * 3 + 1 ] += dy; dst[ i * 3 + 2 ] += dz;
-				maxMove = Math.max( maxMove, Math.hypot( dx, dy, dz ) );
+				maxMove = Math.max( maxMove, Math.hypot( dst[ i * 3 ] - original[ i * 3 ], dst[ i * 3 + 1 ] - original[ i * 3 + 1 ], dst[ i * 3 + 2 ] - original[ i * 3 + 2 ] ) );
 
 			}
 			modified.set( a, { positions: dst, ids: [ ...ids ] } );
-			jobs.push( { accessor: a, ids: [ ...ids ], positions: src, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ) } );
+			const tg = tangents.get( a );
+			jobs.push( {
+				accessor: a, ids: [ ...ids ], positions: mid, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ),
+				pre: tg ? ( i, n ) => { const t = tg.get( i ); return t ? carryNormal( n, t.from, t.to ) : n; } : null,
+				minCos: tg ? - 0.3 : 0.35,
+			} );
 
 		}
-		result.hair = { maxMove, measured: cur, plan: summarizePlan( plan ) };
+		result.hair = { maxMove, measured: cur, plan: summarizePlan( plan ), style: { texture: hair.texture || 'straight', cards: cardCount } };
 
 	}
 

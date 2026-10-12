@@ -191,7 +191,7 @@ export function measureHair( positions, ids, m ) {
 
 // The hair sits only a centimeter or two outside the skull, which is not moved, so it may not shrink much (that would sink
 // it into the head and show the scalp between the strands): the lower limits are small on purpose.
-const LIMITS = { volume: [ 0.94, 1.2 ], top: [ 0.92, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.05, trimKeep: 0.08 };
+const LIMITS_DEFAULT = { volume: [ 0.94, 1.2 ], top: [ 0.92, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.05, trimKeep: 0.08 };
 
 // ratios (or shifts) per bin, with gaps filled by interpolating between the valid bins, flat past the ends
 // Beyond the measured range the value fades back to `restValue` (1 for ratios, 0 for shifts; null = stay flat) over `fade`, so a measurement taken at
@@ -229,8 +229,9 @@ function nearestWithin( values, centerOf, reach ) {
 const ratio = ( ref, cur, min, lo, hi ) => ref.map( ( r, i ) => r !== null && cur[ i ] !== null && cur[ i ] > min && r > min ? clamp( r / cur[ i ], lo, hi ) : null );
 
 /** @returns {object} plan: what applies and by how much (it is also the report) */
-export function planHair( cur, ref, m, strength ) {
+export function planHair( cur, ref, m, strength, limits = {} ) {
 
+	const LIMITS = { ...LIMITS_DEFAULT, ...limits };
 	const s = clamp( strength, 0, 1 );
 	const plan = { m, strength: s, mode: 'scalar', volume: null, top: null, length: null, fringe: null, profile: null };
 	const rp = ref.profile, cp = cur.profile;
@@ -272,13 +273,19 @@ export function planHair( cur, ref, m, strength ) {
 		if ( ref.lengthV !== null && ref.lengthV !== undefined && cur.lengthV !== null ) {
 
 			const refL = 0.1 - ref.lengthV, curL = 0.1 - cur.lengthV; // how far below the ear line the hair hangs
-			if ( refL > 0.05 && curL > 0.05 ) plan.length = clamp( refL / curL, ...LIMITS.length );
+			if ( refL > 0.05 && curL > 0.05 ) {
+
+				const r = clamp( refL / curL, ...LIMITS.length );
+				if ( r < 1 ) plan.trimV = ref.lengthV; else plan.length = r; // shorter: cut at the photo's length; longer: stretch
+
+			}
 
 		}
 		if ( ref.hairlineV !== null && ref.hairlineV !== undefined && cur.hairlineV !== null ) {
 
 			const target = clamp( ref.hairlineV, ...LIMITS.hairline );
-			plan.fringe = { v0: cur.hairlineV, shift: clamp( target - cur.hairlineV, - LIMITS.fringe, LIMITS.fringe ) };
+			if ( target > cur.hairlineV ) plan.edgeV = target; // the fringe has to come up: trim it to the edge
+			else plan.fringe = { v0: cur.hairlineV, shift: clamp( target - cur.hairlineV, - LIMITS.fringe, 0 ) };
 
 		}
 
@@ -297,7 +304,7 @@ export function summarizePlan( plan ) {
 		return { mode: 'silhouette', sides: { right: at( p.widthR, [ - 0.5, 0.25, 1.0 ] ), left: at( p.widthL, [ - 0.5, 0.25, 1.0 ] ) }, crown: at( p.crown, [ - 0.3, 0, 0.3 ] ), fringeShiftE: p.fringe ? [ - 0.3, 0, 0.3 ].map( t => +( p.fringe( t ) * s ).toFixed( 3 ) ) : null, length: { right: f( p.lengthR ), left: f( p.lengthL ) }, trim: { right: p.trimR, left: p.trimL, fringe: p.edge ? [ - 0.3, 0, 0.3 ].map( t => p.edge( t ) ) : null } };
 
 	}
-	return { mode: 'scalar', volume: f( plan.volume ), top: f( plan.top ), length: f( plan.length ), fringeShiftE: plan.fringe ? +( plan.fringe.shift * s ).toFixed( 3 ) : null };
+	return { mode: 'scalar', volume: f( plan.volume ), top: f( plan.top ), length: f( plan.length ), trim: { right: plan.trimV ?? null, left: plan.trimV ?? null, fringe: plan.edgeV ? [ plan.edgeV, plan.edgeV, plan.edgeV ] : null }, fringeShiftE: plan.fringe ? +( plan.fringe.shift * s ).toFixed( 3 ) : null };
 
 }
 
@@ -335,7 +342,7 @@ export function warpHairPoint( plan, x, y, z ) {
 		}
 		// trims: hair longer than the photo's is folded up onto the photo's edge, so the silhouette ends where the photo's does
 		let y1 = y + dy;
-		const fold = ( yv, yCut ) => yv < yCut ? yCut + ( yv - yCut ) * LIMITS.trimKeep : yv;
+		const fold = ( yv, yCut ) => yv < yCut ? yCut + ( yv - yCut ) * LIMITS_DEFAULT.trimKeep : yv;
 		if ( p.trimR !== null || p.trimL !== null ) {
 
 			const cut = lerp( p.trimL ?? p.trimR, p.trimR ?? p.trimL, mixR ); // a side the photo does not show follows the other
@@ -358,11 +365,16 @@ export function warpHairPoint( plan, x, y, z ) {
 		if ( plan.top ) dy += ( lerp( 1, plan.top, s ) - 1 ) * ( y - ( eyeY + 0.5 * E ) ) * smooth( clamp( ( v - 0.5 ) / 0.6, 0, 1 ) );
 		if ( plan.length ) dy += ( lerp( 1, plan.length, s ) - 1 ) * ( y - ( eyeY + 0.1 * E ) ) * smooth( clamp( ( 0.1 - v ) / 0.6, 0, 1 ) );
 		if ( plan.fringe ) dy += s * plan.fringe.shift * E * gate * Math.exp( - 0.5 * ( ( v - plan.fringe.v0 ) / 0.18 ) ** 2 ) * ( 1 - smooth( clamp( ( Math.abs( x ) / W - 0.45 ) / 0.25, 0, 1 ) ) );
+		let y1 = y + dy;
+		const fold = ( yv, yCut ) => yv < yCut ? yCut + ( yv - yCut ) * LIMITS_DEFAULT.trimKeep : yv;
+		if ( plan.trimV !== undefined && plan.trimV !== null ) y1 += s * ( fold( y1, eyeY + plan.trimV * E ) - y1 );
+		if ( plan.edgeV ) y1 += s * smooth( clamp( ( ( y1 - eyeY ) / E + 0.5 ) / 0.3, 0, 1 ) ) * gate * ( 1 - smooth( clamp( ( Math.abs( u ) - 0.35 ) / 0.15, 0, 1 ) ) ) * ( fold( y1, eyeY + plan.edgeV * E ) - y1 );
+		dy = y1 - y;
 
 	}
 
 	const len = Math.hypot( dx, dy, dz );
-	const k = len > LIMITS.maxMove ? LIMITS.maxMove / len : 1;
+	const k = len > LIMITS_DEFAULT.maxMove ? LIMITS_DEFAULT.maxMove / len : 1;
 	return [ dx * k, dy * k, dz * k ];
 
 }

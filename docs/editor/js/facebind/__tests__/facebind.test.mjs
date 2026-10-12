@@ -15,6 +15,7 @@ import { bindVRM, buildBinding, assertRigSafe, ARKIT_52 } from '../bind.js';
 import { hairColorFromMask } from '../hair.js';
 import { faceProportions } from '../proportions.js';
 import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID } from '../hairShape.js';
+import { cardsOf, relayCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -382,7 +383,7 @@ test( 'hair plan and warp (scalar fallback): moves toward the reference, stays w
 	const ref = { topV: 2.0, widthW: 1.6, lengthV: - 2.5, hairlineV: 0.9 };
 	const p = planHair( cur, ref, m, 1 );
 	ok( p.mode === 'scalar' && p.volume === 1.2 && p.top === 1.25 && p.length === 1.6, JSON.stringify( p ) ); // all at their limits
-	ok( p.fringe.shift > 0 );
+	ok( p.edgeV === 0.9, 'a fringe that has to come up is trimmed to the edge: ' + p.edgeV );
 	const skip = planHair( cur, { topV: null, widthW: null, lengthV: null, hairlineV: null }, m, 1 );
 	ok( ! skip.volume && ! skip.top && ! skip.length && ! skip.fringe );
 	ok( warpHairPoint( p, 0, 1.78, 0 )[ 1 ] > 0 ); ok( warpHairPoint( p, 0.11, 1.65, 0 )[ 0 ] > 0 ); ok( warpHairPoint( p, 0.1, 1.53, 0 )[ 1 ] < 0 );
@@ -396,6 +397,78 @@ test( 'hair plan and warp (scalar fallback): moves toward the reference, stays w
 const dl = path.join( os.homedir(), 'Downloads' );
 const vrmPath = process.env.VRM || path.join( dl, '52blendshapes-for-VRoid-face-main', 'VRoid_V110_Male_v1.1.3.vrm' );
 const facePath = process.env.FACE || path.join( dl, 'face-model-blendshapes (2).glb' );
+
+test( 'hair cards: connected pieces of the triangle mesh, separate locks stay separate', () => {
+
+	const cards = cardsOf( [ [ 0, 1, 2, 1, 2, 3 ], [ 10, 11, 12 ] ] );
+	eq( cards, [ [ 0, 1, 2, 3 ], [ 10, 11, 12 ] ] );
+
+} );
+
+// a vertical ribbon: 2 verts per row, rows going down from a root at the origin
+const ribbon = ( rows = 20, step = 0.01 ) => {
+
+	const p = [], idx = [];
+	for ( let r = 0; r < rows; r ++ ) p.push( - 0.005, - r * step, 0, 0.005, - r * step, 0 );
+	for ( let r = 0; r + 1 < rows; r ++ ) { const a = r * 2; idx.push( a, a + 1, a + 2, a + 1, a + 3, a + 2 ); }
+	return { positions: Float32Array.from( p ), idx };
+
+};
+const frame = { eyeY: 0, E: 0.2, zc: 0 };
+
+test( 'hair texture re-lay: the root stays on the scalp, the tips move and shorten, it is deterministic and bounded', () => {
+
+	const { positions, idx } = ribbon( 40, 0.01 );
+	const cards = cardsOf( [ idx ] );
+	eq( relayCards( positions, cards, frame, 'straight' ), null );
+	for ( const tex of [ 'wavy', 'curly', 'coily' ] ) {
+
+		const a = relayCards( positions, cards, frame, tex ), b = relayCards( positions, cards, frame, tex );
+		ok( same( a.positions, b.positions ), tex + ' is not deterministic' );
+		let tipMove = 0, maxMove = 0;
+		for ( let i = 0; i < positions.length / 3; i ++ ) {
+
+			const d = Math.hypot( a.positions[ i * 3 ] - positions[ i * 3 ], a.positions[ i * 3 + 1 ] - positions[ i * 3 + 1 ], a.positions[ i * 3 + 2 ] - positions[ i * 3 + 2 ] );
+			maxMove = Math.max( maxMove, d ); if ( i >= positions.length / 3 - 4 ) tipMove = Math.max( tipMove, d );
+
+		}
+		ok( tipMove > 0.003, tex + ' tips barely moved: ' + tipMove );
+		ok( maxMove < 0.12, tex + ' moved a vertex ' + maxMove );
+		ok( Math.hypot( a.positions[ 0 ] - positions[ 0 ], a.positions[ 1 ] - positions[ 1 ], a.positions[ 2 ] - positions[ 2 ] ) < 0.4 * tipMove, 'the root moved as much as the tips' );
+
+	}
+	const tight = relayCards( positions, cards, frame, 'coily' ), loose = relayCards( positions, cards, frame, 'wavy' );
+	const lastY = p => p[ p.length / 3 * 3 - 2 ];
+	ok( lastY( tight.positions ) > lastY( loose.positions ), 'a tighter texture should shorten the lock more' );
+	eq( TEXTURES.straight, null );
+	ok( CUTS.afro.texture === 'coily' );
+
+} );
+
+test( 'carryNormal: unit length kept and the rotation takes the old direction to the new one', () => {
+
+	const n = carryNormal( [ 0, 0, 1 ], [ 0, - 1, 0 ], [ 1, 0, 0 ] );
+	near( Math.hypot( ...n ), 1, 1e-9 );
+	const same0 = carryNormal( [ 0.3, 0.4, 0.5 ], [ 0, - 1, 0 ], [ 0, - 1, 0 ] );
+	eq( same0, [ 0.3, 0.4, 0.5 ] );
+	const d = carryNormal( [ 1, 0, 0 ], [ 0, 1, 0 ], [ 1, 0, 0 ] );
+	near( d[ 1 ], - 1, 1e-9 );
+
+} );
+
+test( 'hair texture estimate: ordered strands read as straight, noise as curly or coily, low contrast as unknown (an estimate, not a measurement)', () => {
+
+	const W = 80, H = 80, mask = new Uint8Array( W * H ).fill( 1 );
+	const img = f => { const d = new Uint8ClampedArray( W * H * 4 ); for ( let i = 0; i < W * H; i ++ ) { const v = f( i % W, Math.floor( i / W ) ); d[ i * 4 ] = d[ i * 4 + 1 ] = d[ i * 4 + 2 ] = v; d[ i * 4 + 3 ] = 255; } return d; };
+	const stripes = classifyHairTexture( img( x => 128 + 60 * Math.sin( x * 0.9 ) ), mask, { width: W, height: H, hairValue: 1 } );
+	eq( stripes.kind, 'straight' );
+	let s = 7; const rnd = () => ( s = ( s * 16807 ) % 2147483647 ) / 2147483647;
+	const noise = classifyHairTexture( img( () => 128 + 100 * ( rnd() - 0.5 ) ), mask, { width: W, height: H, hairValue: 1 } );
+	ok( noise.kind === 'curly' || noise.kind === 'coily', 'noise read as ' + noise.kind );
+	eq( classifyHairTexture( img( x => 128 + 0.5 * Math.sin( x ) ), mask, { width: W, height: H, hairValue: 1 } ).kind, 'unknown' );
+	eq( classifyHairTexture( img( () => 100 ), new Uint8Array( W * H ), { width: W, height: H, hairValue: 1 } ), null );
+
+} );
 
 console.log( 'face bind (real VRoid male + sample face GLB)' );
 if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; console.log( '  - skipped (files not found)' ); } else {
@@ -593,6 +666,58 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		const shuffled = JSON.parse( JSON.stringify( j ) ); shuffled.nodes[ 0 ].name = 'someHead';
 		const bad = bindVRM( vrmBytes, writeGLB( { json: shuffled, chunks: g.chunks } ) );
 		eq( bad.report.mapped, 0 ); eq( bad.bind.source.nameResolution, 'unresolved' );
+
+	} );
+	test( 'hair style on the real VRM: curls re-lay the locks, only the hair POSITION/NORMAL bytes change, normals stay unit length, same inputs give the same bytes', () => {
+
+		const a = parseGLB( vrmBytes ), ja = a.json;
+		const hairVerts = new Map(), normalOf = new Map();
+		const readIdx = acc => { const x = ja.accessors[ acc ], bv = ja.bufferViews[ x.bufferView ], dv = new DataView( a.chunks[ 0 ].data.buffer, a.chunks[ 0 ].data.byteOffset + ( bv.byteOffset || 0 ) + ( x.byteOffset || 0 ) ); return Array.from( { length: x.count }, ( _, i ) => x.componentType === 5125 ? dv.getUint32( i * 4, true ) : dv.getUint16( i * 2, true ) ); };
+		ja.meshes.forEach( m => m.primitives.forEach( p => { if ( /_HAIR$/.test( ja.materials[ p.material ].name ) ) { const s = hairVerts.get( p.attributes.POSITION ) || new Set(); readIdx( p.indices ).forEach( i => s.add( i ) ); hairVerts.set( p.attributes.POSITION, s ); normalOf.set( p.attributes.POSITION, p.attributes.NORMAL ); } } ) );
+		const allowed = new Set();
+		for ( const [ acc, ids ] of hairVerts ) { for ( const s of [ attrRange( ja, acc, ids ), attrRange( ja, normalOf.get( acc ), ids ) ] ) for ( const o of s ) allowed.add( o ); }
+
+		const styles = { curly: { texture: 'curly' }, coily: { texture: 'coily' }, afro: { cut: 'afro' }, long: { cut: 'long', texture: 'wavy' }, crop: { cut: 'crop' } };
+		const bytesOf = {};
+		for ( const [ name, hairStyle ] of Object.entries( styles ) ) {
+
+			const out = bindVRM( vrmBytes, faceBytes, { hairStyle } );
+			bytesOf[ name ] = out.bytes;
+			ok( out.report.hairStyle && out.report.hairStyle.approximate, name + ': no hairStyle in the report' );
+			const b = parseGLB( out.bytes );
+			let outside = 0, inside = 0;
+			a.chunks[ 0 ].data.forEach( ( v, i ) => { if ( v !== b.chunks[ 0 ].data[ i ] ) allowed.has( i ) ? inside ++ : outside ++; } );
+			ok( outside === 0, name + ': ' + outside + ' bytes outside the hair vertices changed' );
+			ok( inside > 1000, name + ': hair barely changed (' + inside + ')' );
+			ok( same( bindVRM( vrmBytes, faceBytes, { hairStyle } ).bytes, out.bytes ), name + ' is not deterministic' );
+			if ( hairStyle.texture && hairStyle.texture !== 'straight' ) ok( out.report.hairStyle.cards > 50, name + ': locks re-laid ' + out.report.hairStyle.cards );
+			// normals of the hair stay unit length
+			for ( const [ acc, ids ] of hairVerts ) {
+
+				const nx = normalOf.get( acc ), x = b.json.accessors[ nx ], bv = b.json.bufferViews[ x.bufferView ], dv = new DataView( b.chunks[ 0 ].data.buffer, b.chunks[ 0 ].data.byteOffset + ( bv.byteOffset || 0 ) + ( x.byteOffset || 0 ) );
+				let bad = 0; for ( const i of ids ) { const l = Math.hypot( dv.getFloat32( i * 12, true ), dv.getFloat32( i * 12 + 4, true ), dv.getFloat32( i * 12 + 8, true ) ); if ( Math.abs( l - 1 ) > 1e-3 ) bad ++; }
+				ok( bad === 0, name + ': ' + bad + ' hair normals are not unit length' );
+
+			}
+
+		}
+		ok( ! same( bytesOf.curly, bytesOf.coily ) && ! same( bytesOf.afro, bytesOf.long ), 'different styles gave the same bytes' );
+		const flat = bindVRM( vrmBytes, faceBytes, { hairStyle: { cut: 'keep', texture: 'straight' } } );
+		ok( flat.report.hairStyle.texture === 'straight' && flat.report.hairStyle.cards === null );
+		ok( same( parseGLB( flat.bytes ).chunks[ 0 ].data, a.chunks[ 0 ].data ), 'keep + straight must not touch the binary chunk' );
+		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { cut: 'mullet' } } ), 'BAD_HAIR_STYLE' );
+		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { texture: 'frizzy' } } ), 'BAD_HAIR_STYLE' );
+
+	} );
+	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {
+
+		const mk = kind => { const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) ); j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, hairTexture: { kind, coherence: 0.3, contrast: 9, roughness: 3 } }; return writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } ); };
+		const curly = bindVRM( vrmBytes, mk( 'curly' ), { hairStyle: { texture: 'auto' } } );
+		eq( [ curly.report.hairStyle.texture, curly.report.hairStyle.textureSource ], [ 'curly', 'photo' ] );
+		ok( curly.report.warnings.some( w => /estimated from the photo/.test( w ) ) );
+		eq( bindVRM( vrmBytes, mk( 'unknown' ), { hairStyle: { texture: 'auto' } } ).report.hairStyle.texture, 'straight' );
+		eq( bindVRM( vrmBytes, faceBytes, { hairStyle: { texture: 'auto' } } ).report.hairStyle.texture, 'straight' );
+		eq( bindVRM( vrmBytes, mk( 'curly' ), { hairStyle: { texture: 'straight' } } ).report.hairStyle.texture, 'straight' );
 
 	} );
 	test( 'a bound VRM can be re-bound (bind block replaced, not duplicated)', () => {
