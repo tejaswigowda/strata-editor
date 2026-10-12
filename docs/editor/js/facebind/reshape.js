@@ -15,8 +15,8 @@
 // bindVRM() audits that, byte for byte, before it writes anything.
 
 import { measureFace, planFaceRefine, warpPoint } from '../face/FaceRefine.js';
-import { measureHair, planHair, warpHairPoint, summarizePlan } from './hairShape.js';
-import { cardsOf, relayCards, carryNormal } from './hairStyle.js';
+import { measureHair, planHair, warpHairPoint, summarizePlan, carveField, carvePoint } from './hairShape.js';
+import { cardsOf, relayCards, widenCards, carryNormal, TEXTURES } from './hairStyle.js';
 import { GLBError } from './glb.js';
 
 const FACE_MATERIAL = /_(FaceMouth|EyeIris|EyeHighlight|EyeWhite|FaceBrow|FaceEyelash|FaceEyeline|Face)_\d+_(FACE|EYE|SKIN)/;
@@ -259,7 +259,9 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 			const src = readPositions( json, bin, a );
 			const cards = cardsOf( triLists.get( a ) );
-			const relaid = hair.texture && hair.texture !== 'straight' ? relayCards( src, cards, m, hair.texture ) : null;
+			const styled = hair.texture && hair.texture !== 'straight';
+			const wide = styled ? widenCards( src, cards, TEXTURES[ hair.texture ].widen ) : src;
+			const relaid = styled ? relayCards( wide, cards, m, hair.texture ) : null;
 			store.set( a, relaid ? relaid.positions : src );
 			if ( relaid ) { tangents.set( a, relaid.tangents ); cardCount += cards.filter( c => c.length >= 12 ).length; }
 
@@ -271,13 +273,24 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 		// 2. the silhouette (volume, height, length, fringe) toward the photo or a cut preset
 		const plan = planHair( cur, hair.reference || {}, m, hair.strength, hair.limits || {} );
-		let maxMove = 0;
+		// 3. where the photo shows no hair (face, ear, neck) the VRM's hair is cut back toward the nearest hair of the photo
+		const field = carveField( hair.reference && hair.reference.occupancy );
+		const carveStrength = field ? Math.min( 1, hair.strength * 1.2 ) : 0;
+		const warpAll = ( x, y, z ) => {
+
+			const w = warpHairPoint( plan, x, y, z );
+			const c = carvePoint( field, plan.m, carveStrength, x + w[ 0 ], y + w[ 1 ], z + w[ 2 ] );
+			return [ w[ 0 ] + c[ 0 ], w[ 1 ] + c[ 1 ], w[ 2 ] + c[ 2 ] ];
+
+		};
+		let maxMove = 0, carved = 0;
 		for ( const [ a, ids ] of byAccessor ) {
 
 			const mid = store.get( a ), original = readPositions( json, bin, a ), dst = Float32Array.from( mid );
 			for ( const i of ids ) {
 
-				const [ dx, dy, dz ] = warpHairPoint( plan, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ] );
+				const [ dx, dy, dz ] = warpAll( mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ] );
+				if ( field && Math.hypot( ...carvePoint( field, plan.m, carveStrength, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ] ) ) > 1e-4 ) carved ++;
 				dst[ i * 3 ] += dx; dst[ i * 3 + 1 ] += dy; dst[ i * 3 + 2 ] += dz;
 				maxMove = Math.max( maxMove, Math.hypot( dst[ i * 3 ] - original[ i * 3 ], dst[ i * 3 + 1 ] - original[ i * 3 + 1 ], dst[ i * 3 + 2 ] - original[ i * 3 + 2 ] ) );
 
@@ -285,13 +298,13 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 			modified.set( a, { positions: dst, ids: [ ...ids ] } );
 			const tg = tangents.get( a );
 			jobs.push( {
-				accessor: a, ids: [ ...ids ], positions: mid, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ),
+				accessor: a, ids: [ ...ids ], positions: mid, warp: warpAll,
 				pre: tg ? ( i, n ) => { const t = tg.get( i ); return t ? carryNormal( n, t.from, t.to ) : n; } : null,
 				minCos: tg ? - 0.3 : 0.35,
 			} );
 
 		}
-		result.hair = { maxMove, measured: cur, plan: summarizePlan( plan ), style: { texture: hair.texture || 'straight', cards: cardCount } };
+		result.hair = { maxMove, measured: cur, plan: summarizePlan( plan ), style: { texture: hair.texture || 'straight', cards: cardCount, carved: field ? carved : null } };
 
 	}
 

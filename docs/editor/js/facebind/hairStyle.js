@@ -17,12 +17,12 @@ const dot = ( a, b ) => a[ 0 ] * b[ 0 ] + a[ 1 ] * b[ 1 ] + a[ 2 ] * b[ 2 ];
 const len = a => Math.hypot( a[ 0 ], a[ 1 ], a[ 2 ] );
 const unit = a => { const l = len( a ); return l > 1e-9 ? [ a[ 0 ] / l, a[ 1 ] / l, a[ 2 ] / l ] : null; };
 
-/** Texture presets. turns = helix turns per meter of strand, amp = helix radius (m), shrink = how much shorter the curled lock is. */
+/** Texture presets. turns = helix turns per meter of strand, amp = helix radius (m), shrink = how much shorter the curled lock is, puff = extra volume, widen = how much wider each lock's ribbon is made (curls open gaps between locks, wider locks close them). */
 export const TEXTURES = {
 	straight: null,
-	wavy: { turns: 7, amp: 0.005, shrink: 0.02, puff: 1.02 },
-	curly: { turns: 14, amp: 0.008, shrink: 0.05, puff: 1.08 },
-	coily: { turns: 24, amp: 0.011, shrink: 0.08, puff: 1.15 },
+	wavy: { turns: 7, amp: 0.005, shrink: 0.02, puff: 1.02, widen: 1.2 },
+	curly: { turns: 14, amp: 0.008, shrink: 0.05, puff: 1.08, widen: 1.3 },
+	coily: { turns: 24, amp: 0.011, shrink: 0.08, puff: 1.15, widen: 1.4 },
 };
 
 /** Cut presets: reference silhouettes (the same units as a photo's) and the limits they may use. Applied by hairShape.js. */
@@ -47,6 +47,39 @@ export function cardsOf( triangleIndexLists ) {
 	const cards = new Map();
 	for ( const v of parent.keys() ) { const r = find( v ); if ( ! cards.has( r ) ) cards.set( r, [] ); cards.get( r ).push( v ); }
 	return [ ...cards.values() ].map( c => c.sort( ( a, b ) => a - b ) ).sort( ( a, b ) => a[ 0 ] - b[ 0 ] );
+
+}
+
+/**
+ * Make every card wider across the strand, about the card's own center line. Re-laid locks drift apart; wider ribbons keep them
+ * overlapping so the scalp does not show. The ribbon's length is unchanged. Vertices are binned along the strand and each bin is
+ * scaled about its own mean.
+ * @returns {Float32Array}
+ */
+export function widenCards( positions, cards, factor ) {
+
+	const out = Float32Array.from( positions );
+	if ( ! ( factor > 1 ) ) return out;
+	for ( const card of cards ) {
+
+		if ( card.length < 12 ) continue;
+		const P = i => [ positions[ i * 3 ], positions[ i * 3 + 1 ], positions[ i * 3 + 2 ] ];
+		const c = [ 0, 0, 0 ]; for ( const i of card ) { const p = P( i ); c[ 0 ] += p[ 0 ] / card.length; c[ 1 ] += p[ 1 ] / card.length; c[ 2 ] += p[ 2 ] / card.length; }
+		// the strand direction: from the card's center toward its farthest vertex (the tip side), sign does not matter
+		let far = card[ 0 ], fd = - 1; for ( const i of card ) { const d = len( sub( P( i ), c ) ); if ( d > fd ) { fd = d; far = i; } }
+		const d = unit( sub( P( far ), c ) ); if ( ! d ) continue;
+		const bins = new Map();
+		for ( const i of card ) { const k = Math.round( dot( sub( P( i ), c ), d ) / 0.004 ); if ( ! bins.has( k ) ) bins.set( k, [] ); bins.get( k ).push( i ); }
+		for ( const ids of bins.values() ) {
+
+			if ( ids.length < 2 ) continue;
+			const mean = [ 0, 0, 0 ]; for ( const i of ids ) { const p = P( i ); mean[ 0 ] += p[ 0 ] / ids.length; mean[ 1 ] += p[ 1 ] / ids.length; mean[ 2 ] += p[ 2 ] / ids.length; }
+			for ( const i of ids ) { const p = P( i ); for ( let a = 0; a < 3; a ++ ) out[ i * 3 + a ] = mean[ a ] + ( p[ a ] - mean[ a ] ) * factor; }
+
+		}
+
+	}
+	return out;
 
 }
 

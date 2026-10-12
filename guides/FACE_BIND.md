@@ -171,6 +171,23 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | **Eye color** | a disc inside each iris | iris material |
 | **Brow color** | the darker half of the brow polygons | brow material |
 
+### Cutting the hair back to the photo
+
+The silhouette fit above works on outlines (reach per height band, crown, fringe edge). It cannot see inside the outline, so the
+VRM's hair could still cover an ear, a cheek or the forehead where the photo shows skin. The page now also keeps a **hair
+occupancy grid** of the photo: 40 by 80 cells in the same head frame (sideways in head widths, up in eye-to-chin heights),
+each marked hair, not hair, or unknown (outside the picture). It is derived from the segmenter mask and rides in the face
+GLB's node extras (`hairShape.occupancy`), so it is as local as the rest.
+
+On the VRM side, each hair vertex that the photo could see is looked up in the grid. Where the photo shows no hair, the vertex is
+moved toward the nearest hair of the photo (a smoothed field, capped at 6 cm, and only below the crown). "Could see" means the
+front of the head and the hair beyond the head's width at the sides; hair behind the head is hidden in a front photo, so it is
+left alone. Cells next to hair are not cut (the mask edge is ragged). Presets and photos without a grid skip this step. The
+report says how many vertices were cut back (`hairShape.carved`).
+
+What this is not: it cannot see behind the head, so the length of the hair at the back and the sides behind the ears still
+follows the silhouette fit. If the segmenter calls skin or a collar "hair", or misses hair, the cut follows the mistake.
+
 ### Hair style
 
 Two independent choices on the page (and `opts.hairStyle = { cut, texture }` in `bindVRM`):
@@ -182,7 +199,7 @@ Two independent choices on the page (and `opts.hairStyle = { cut, texture }` in 
 
 How the texture works: the VRM's hair is made of ribbon "cards" (one per lock, 103 on the VRoid bases). Each card is
 found as a connected piece of mesh, its root is pinned to the scalp, and the rest of it is bent along a helix around
-the lock's own direction, with a little shrinkage and a radial puff away from the middle of the skull (more for tighter textures). The helix phase varies smoothly over the scalp, so neighboring locks curl together and keep covering each other (random phases opened gaps). Nothing is added: the same
+the lock's own direction, with each lock's ribbon made 20 to 40 percent wider (so re-laid locks keep overlapping and the scalp does not show), a little shrinkage and a radial puff away from the middle of the skull (more for tighter textures). The helix phase varies smoothly over the scalp, so neighboring locks curl together and keep covering each other (random phases opened gaps). Nothing is added: the same
 vertices move, bone weights and UVs are untouched, normals are carried through the same bend and the warp, and the byte
 audit still passes (only the hair's own POSITION and NORMAL bytes change). It is deterministic (the phase of each lock
 is a hash of its first vertex id).

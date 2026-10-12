@@ -136,6 +136,139 @@ export function hairShapeFromMask( landmarks, mask, { width, height, hairValue =
 
 }
 
+// ── where the photo has hair, cell by cell ──────────────────────────────────
+
+export const OCC = { u0: - 1.0, du: 0.05, nu: 40, v0: - 2.0, dv: 0.05, nv: 80 };
+
+/**
+ * Hair occupancy of the photo in the head frame: for every cell of a fixed (u, v) grid, 1 = the hair segmenter found hair
+ * there, 0 = it found something else (skin, ear, background), 2 = outside the picture (unknown). Same units as the silhouette.
+ * This is what lets the VRM's hair be cut back where the photo shows a face, an ear or a neck.
+ * @returns {{ u0:number, du:number, nu:number, v0:number, dv:number, nv:number, cells:string }|null}
+ */
+export function hairOccupancy( landmarks, mask, { width, height, hairValue = 1 } ) {
+
+	if ( ! landmarks || landmarks.length < 468 ) return null;
+	// the same frame as hairShapeFromMask (y up), so a cell means the same thing on the photo and on the VRM
+	const P = i => [ landmarks[ i ].x * width, - landmarks[ i ].y * height ];
+	const mid = ( ...ids ) => { const p = ids.map( P ); return [ p.reduce( ( s, a ) => s + a[ 0 ], 0 ) / p.length, p.reduce( ( s, a ) => s + a[ 1 ], 0 ) / p.length ]; };
+	const [ ex, ey ] = mid( 33, 133, 263, 362 );
+	const roll = Math.atan2( P( 263 )[ 1 ] - P( 33 )[ 1 ], P( 263 )[ 0 ] - P( 33 )[ 0 ] );
+	const c = Math.cos( roll ), s = Math.sin( roll );
+	const rot = ( x, y ) => [ ( x - ex ) * c + ( y - ey ) * s, - ( x - ex ) * s + ( y - ey ) * c ];
+	const earR = rot( ...P( 234 ) ), earL = rot( ...P( 454 ) ), chin = rot( ...P( 152 ) );
+	const W = Math.hypot( earR[ 0 ] - earL[ 0 ], earR[ 1 ] - earL[ 1 ] ), E = - chin[ 1 ];
+	if ( ! ( W > 0 ) || ! ( E > 0 ) ) return null;
+	const pixelOf = ( rx, ry ) => [ ex + rx * c - ry * s, - ( ey + rx * s + ry * c ) ];
+	let out = '', any = false;
+	for ( let j = 0; j < OCC.nv; j ++ ) {
+
+		for ( let i = 0; i < OCC.nu; i ++ ) {
+
+			let hair = 0, known = 0;
+			for ( let sy = 0; sy < 3; sy ++ ) {
+
+				for ( let sx = 0; sx < 3; sx ++ ) {
+
+					const u = OCC.u0 + ( i + ( sx + 0.5 ) / 3 ) * OCC.du, v = OCC.v0 + ( j + ( sy + 0.5 ) / 3 ) * OCC.dv;
+					const [ px, py ] = pixelOf( u * W, v * E );
+					const x = Math.round( px ), y = Math.round( py );
+					if ( x < 0 || y < 0 || x >= width || y >= height ) continue;
+					known ++;
+					if ( mask[ y * width + x ] === hairValue ) hair ++;
+
+				}
+
+			}
+			const ch = known < 5 ? '2' : hair >= known / 2 ? '1' : '0';
+			if ( ch === '1' ) any = true;
+			out += ch;
+
+		}
+
+	}
+	return any ? { ...OCC, cells: out } : null;
+
+}
+
+/**
+ * Turns an occupancy grid into a field of "move toward the nearest hair": zero where the photo has hair (or is unknown, or
+ * within one cell of hair), and a vector in (u, v) units elsewhere. Smoothed so neighboring strands move alike.
+ * @returns {{ at: (u:number, v:number) => [number, number] }|null}
+ */
+export function carveField( occ ) {
+
+	if ( ! occ || typeof occ.cells !== 'string' || occ.cells.length !== occ.nu * occ.nv ) return null;
+	const { nu, nv } = occ, cell = ( i, j ) => occ.cells[ j * nu + i ];
+	const ok = new Uint8Array( nu * nv );
+	for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) if ( cell( i, j ) !== '0' ) ok[ j * nu + i ] = 1;
+	const near = new Uint8Array( nu * nv ); // within a cell of hair: not cut, the mask edge is ragged
+	for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) {
+
+		if ( cell( i, j ) !== '1' ) continue;
+		for ( let b = - 1; b <= 1; b ++ ) for ( let a = - 1; a <= 1; a ++ ) if ( i + a >= 0 && i + a < nu && j + b >= 0 && j + b < nv ) near[ ( j + b ) * nu + i + a ] = 1;
+
+	}
+	const hairCells = [];
+	for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) if ( cell( i, j ) === '1' ) hairCells.push( [ i, j ] );
+	if ( ! hairCells.length ) return null;
+
+	const fu = new Float32Array( nu * nv ), fv = new Float32Array( nu * nv );
+	for ( let j = 0; j < nv; j ++ ) {
+
+		for ( let i = 0; i < nu; i ++ ) {
+
+			const k = j * nu + i;
+			if ( ok[ k ] || near[ k ] ) continue;
+			let best = Infinity, bi = 0, bj = 0;
+			for ( const [ a, b ] of hairCells ) { const d = ( a - i ) ** 2 + ( b - j ) ** 2; if ( d < best ) { best = d; bi = a; bj = b; } }
+			fu[ k ] = ( bi - i ) * occ.du; fv[ k ] = ( bj - j ) * occ.dv;
+
+		}
+
+	}
+	// one 3x3 blur so the field ramps in over a few cells
+	const blur = f => { const o = new Float32Array( f.length ); for ( let j = 0; j < nv; j ++ ) for ( let i = 0; i < nu; i ++ ) { let s = 0, n = 0; for ( let b = - 1; b <= 1; b ++ ) for ( let a = - 1; a <= 1; a ++ ) { const x = i + a, y = j + b; if ( x >= 0 && x < nu && y >= 0 && y < nv ) { s += f[ y * nu + x ]; n ++; } } o[ j * nu + i ] = s / n; } return o; };
+	const bu = blur( fu ), bv = blur( fv );
+
+	return {
+		at( u, v ) {
+
+			const gx = ( u - occ.u0 ) / occ.du - 0.5, gy = ( v - occ.v0 ) / occ.dv - 0.5;
+			if ( gx < 0 || gy < 0 || gx >= nu - 1 || gy >= nv - 1 ) return [ 0, 0 ];
+			const i = Math.floor( gx ), j = Math.floor( gy ), tx = gx - i, ty = gy - j;
+			const s = f => ( f[ j * nu + i ] * ( 1 - tx ) + f[ j * nu + i + 1 ] * tx ) * ( 1 - ty ) + ( f[ ( j + 1 ) * nu + i ] * ( 1 - tx ) + f[ ( j + 1 ) * nu + i + 1 ] * tx ) * ty;
+			return [ s( bu ), s( bv ) ];
+
+		},
+	};
+
+}
+
+/**
+ * Cuts the VRM's hair back where the photo shows no hair: a displacement toward the nearest hair of the photo, for the hair the
+ * photo can see (the front, and the sides beyond the head), below the crown. Hair behind the head is hidden in the photo, so it is left alone.
+ * @returns {[number, number, number]} displacement in model units
+ */
+export function carvePoint( field, m, strength, x, y, z, maxMove = 0.06 ) {
+
+	if ( ! field || strength <= 0 ) return [ 0, 0, 0 ];
+	const { eyeY, E, W, front, zc } = m;
+	const v = ( y - eyeY ) / E, u = uOf( x, m );
+	const zone = 1 - smooth( clamp( ( v - 0.55 ) / 0.3, 0, 1 ) );
+	if ( zone <= 0 ) return [ 0, 0, 0 ];
+	const seen = front * ( z - zc ) > 0 ? 1 : smooth( clamp( ( Math.abs( u ) - 0.42 ) / 0.12, 0, 1 ) );
+	if ( seen <= 0 ) return [ 0, 0, 0 ];
+	const [ du, dv ] = field.at( u, v );
+	if ( ! du && ! dv ) return [ 0, 0, 0 ];
+	const k = strength * zone * seen;
+	let dx = ( m.front < 0 ? - 1 : 1 ) * du * W * k, dy = dv * E * k;
+	const len = Math.hypot( dx, dy );
+	if ( len > maxMove ) { dx *= maxMove / len; dy *= maxMove / len; }
+	return [ dx, dy, 0 ];
+
+}
+
 // ── from the VRM ────────────────────────────────────────────────────────────
 
 /** Sideways position in head widths, positive toward the right of the picture. */

@@ -14,8 +14,8 @@ import { readFaceSource, CONVENTION_42 } from '../faceSource.js';
 import { bindVRM, buildBinding, assertRigSafe, ARKIT_52 } from '../bind.js';
 import { hairColorFromMask } from '../hair.js';
 import { faceProportions } from '../proportions.js';
-import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID } from '../hairShape.js';
-import { cardsOf, relayCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
+import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID, hairOccupancy, carveField, carvePoint, OCC } from '../hairShape.js';
+import { cardsOf, relayCards, widenCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -445,6 +445,50 @@ test( 'hair texture re-lay: the root stays on the scalp, the tips move, tighter 
 
 } );
 
+test( 'hair occupancy: cells say hair / not hair / unknown in the head frame, and a face stays empty', () => {
+
+	// a 400x400 picture, level eyes, ears at x 140 and 260, chin at y 260 (W = 120, E = 100 px), hair above y = 130 and down the sides
+	const W = 400, H = 400, lm = Array.from( { length: 478 }, () => ( { x: 0.5, y: 0.5 } ) );
+	const set = ( i, x, y ) => { lm[ i ] = { x: x / W, y: y / H }; };
+	set( 33, 170, 160 ); set( 133, 190, 160 ); set( 263, 230, 160 ); set( 362, 210, 160 ); set( 234, 140, 190 ); set( 454, 260, 190 ); set( 152, 200, 260 );
+	const mask = new Uint8Array( W * H );
+	for ( let y = 0; y < H; y ++ ) for ( let x = 0; x < W; x ++ ) if ( ( y < 130 && x > 120 && x < 280 ) || ( y >= 130 && y < 230 && ( x < 150 && x > 120 || x > 250 && x < 280 ) ) ) mask[ y * W + x ] = 1;
+	const occ = hairOccupancy( lm, mask, { width: W, height: H, hairValue: 1 } );
+	ok( occ && occ.cells.length === OCC.nu * OCC.nv, 'no grid' );
+	const at = ( u, v ) => occ.cells[ Math.floor( ( v - OCC.v0 ) / OCC.dv ) * OCC.nu + Math.floor( ( u - OCC.u0 ) / OCC.du ) ];
+	eq( at( 0, 1.3 ), '1', 'crown is hair' ); eq( at( 0, 0.2 ), '0', 'the face is not hair' ); eq( at( 0.6, 0.1 ), '1', 'hair beside the face' );
+	eq( at( 0, - 0.5 ), '0', 'below the chin line is not hair' );
+	eq( at( 0.95, 1.9 ), '2', 'outside the picture is unknown' );
+	ok( hairOccupancy( lm, new Uint8Array( W * H ), { width: W, height: H, hairValue: 1 } ) === null, 'no hair, no grid' );
+
+	// the cut-back field: nothing inside or next to hair, and a pull toward hair on the face
+	const field = carveField( occ );
+	eq( field.at( 0, 1.3 ), [ 0, 0 ] );
+	const [ du, dv ] = field.at( 0, 0.1 );
+	ok( dv > 0, 'a point on the forehead should be pulled up toward the hair: ' + dv );
+	const m = { eyeY: 0, E: 0.2, W: 0.15, front: - 1, zc: 0 };
+	const front = carvePoint( field, m, 1, 0, 0.1 * 0.2, - 0.1 );
+	ok( front[ 1 ] > 0.001 && front[ 2 ] === 0, 'forehead hair is cut back: ' + front );
+	eq( carvePoint( field, m, 1, 0, 0.1 * 0.2, 0.1 ), [ 0, 0, 0 ], 'hair behind the head is hidden in the photo and is left alone' );
+	eq( carvePoint( field, m, 0, 0, 0.1 * 0.2, - 0.1 ), [ 0, 0, 0 ], 'strength 0 moves nothing' );
+	eq( carvePoint( field, m, 1, 0, 1.5 * 0.2, - 0.1 ), [ 0, 0, 0 ], 'the crown is not carved' );
+	ok( Math.hypot( ...carvePoint( field, m, 1, 0, - 0.5 * 0.2, - 0.1 ) ) <= 0.0601, 'the move is capped' );
+	eq( carveField( null ), null ); eq( carveField( { ...occ, cells: occ.cells.replace( /1/g, '0' ) } ), null );
+
+} );
+
+test( 'widen cards: the ribbon gets wider across the strand, its length is unchanged, the root width too', () => {
+
+	const { positions, idx } = ribbon( 30, 0.01 );
+	const cards = cardsOf( [ idx ] );
+	const w = widenCards( positions, cards, 1.5 );
+	const width = ( p, r ) => Math.abs( p[ r * 6 ] - p[ r * 6 + 3 ] );
+	near( width( w, 10 ), 1.5 * width( positions, 10 ), 1e-6 );
+	for ( let i = 0; i < 30; i ++ ) near( w[ i * 6 + 1 ], positions[ i * 6 + 1 ], 1e-6, 'row ' + i + ' moved along the strand' );
+	ok( same( widenCards( positions, cards, 1 ), positions ), 'factor 1 changes nothing' );
+
+} );
+
 test( 'carryNormal: unit length kept and the rotation takes the old direction to the new one', () => {
 
 	const n = carryNormal( [ 0, 0, 1 ], [ 0, - 1, 0 ], [ 1, 0, 0 ] );
@@ -707,6 +751,21 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( same( parseGLB( flat.bytes ).chunks[ 0 ].data, a.chunks[ 0 ].data ), 'keep + straight must not touch the binary chunk' );
 		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { cut: 'mullet' } } ), 'BAD_HAIR_STYLE' );
 		throws( () => bindVRM( vrmBytes, faceBytes, { hairStyle: { texture: 'frizzy' } } ), 'BAD_HAIR_STYLE' );
+
+	} );
+	test( 'hair cut back to the photo: with an occupancy grid the hair near the face moves, the audit holds, it is deterministic, and no grid means no cut', () => {
+
+		const base = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference: { topV: 1.6, widthW: 1.3, lengthV: - 0.95, hairlineV: 0.4 } } } );
+		eq( base.report.hairShape.carved, null );
+		// a photo whose hair is only the top of the head: everything lower (sideburns, fringe, sides) must be pulled up
+		const cells = Array.from( { length: OCC.nu * OCC.nv }, ( _, k ) => { const j = Math.floor( k / OCC.nu ); return OCC.v0 + j * OCC.dv > 0.9 ? '1' : '0'; } ).join( '' );
+		const reference = { topV: 1.6, widthW: 1.3, lengthV: - 0.95, hairlineV: 0.4, occupancy: { ...OCC, cells } };
+		const a = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference } } );
+		ok( a.report.hairShape.carved > 100, 'vertices cut back: ' + a.report.hairShape.carved );
+		ok( ! same( a.bytes, base.bytes ) );
+		ok( same( a.bytes, bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference } } ).bytes ), 'not deterministic' );
+		const bad = { ...reference, occupancy: { ...OCC, cells: 'x' } };
+		eq( bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference: bad } } ).report.hairShape.carved, null );
 
 	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {
