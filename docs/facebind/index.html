@@ -5,11 +5,13 @@
 <title>Bind a face GLB to a VRM — Strata</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!--
-	Pure transform: (base VRM, face-blendshape GLB) -> bound VRM. Runs entirely on this device.
-	The face GLB is a local file only; the page makes GET requests only (the base VRM).
+	Pure transform: (base VRM, photo | face-blendshape GLB) -> bound VRM. Runs entirely on this device.
+	The photo / face GLB are local files only; the page makes GET requests only (static files + the base VRM).
+	The inline import map is allowed by its hash in the CSP below; change one and you must update the other
+	(see the check in docs/editor/js/facebind/__tests__/page.test.mjs).
 	connect-src lists the hosts a base VRM may be fetched from; add yours here if needed.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' https://raw.githubusercontent.com; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' https://raw.githubusercontent.com; form-action 'none'; base-uri 'none'">
 <style>
 	:root { color-scheme: dark; }
 	body { margin: 0; background: #14161a; color: #d9dde3; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -22,19 +24,22 @@
 	label { display: block; margin: 10px 0 4px; color: #c3cad4; }
 	select, input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; background: #14161a; color: inherit; border: 1px solid #343a45; border-radius: 6px; }
 	button, .btn { background: #3b6fd4; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 12px; }
+	#preview { display: block; max-width: 220px; max-height: 220px; border-radius: 8px; margin: 10px 0; }
+	summary { cursor: pointer; margin-top: 14px; }
 	#status { margin-top: 12px; min-height: 1.5em; } #status.ok { color: #7ddc9e; } #status.err { color: #ff8f8f; }
 	pre { background: #0f1115; padding: 10px; border-radius: 6px; overflow: auto; font-size: 12px; }
 	[hidden] { display: none !important; }
 	ul { margin: .2em 0; padding-left: 1.2em; } code { color: #9fc4ff; }
 </style>
 <script src="egressGuard.js"></script>
+<script type="importmap">{"imports":{"three":"../build/three.module.js","three/addons/":"../examples/jsm/","@mediapipe/tasks-vision":"./vendor/mediapipe/vision_bundle.mjs"}}</script>
 </head>
 <body>
 <main>
 	<h1>Bind a face GLB to a VRM</h1>
-	<p class="tagline">Drives a base VRM's expression blendshapes from the morphs of a face-blendshape GLB. A weight map only: the VRM's mesh, skeleton, skin weights and face shape are not changed.</p>
+	<p class="tagline">Start from a photo. The page reads the face on your device, makes a face-blendshape GLB from it, and drives a base VRM's expression blendshapes from that GLB's morphs. A weight map only: the VRM's mesh, skeleton, skin weights and face shape are not changed.</p>
 
-	<div class="box priv"><strong>Stays on this device.</strong> The face GLB is read from a local file and is never fetched from, or sent to, any server. This page makes GET requests only (the base VRM), and the binding works with the network off once the page has loaded.</div>
+	<div class="box priv"><strong>Stays on this device.</strong> Your photo, the face GLB made from it, and everything derived from them are processed in this page and are never sent to any server. The face model runs locally from files served with this page (nothing from a CDN). The page makes GET requests only, and the whole thing works with the network off once the page has loaded.</div>
 	<div class="box scope"><strong>Expression-bound, not a likeness.</strong> This makes the VRM's expressions drivable from the face source. It does not reshape the VRM into the person's face.</div>
 
 	<label for="base">Base VRM</label>
@@ -46,8 +51,17 @@
 	<input type="text" id="vrmUrl" placeholder="https://raw.githubusercontent.com/…/base.vrm">
 	<input type="file" id="vrmFile" accept=".vrm,.glb"> <span id="vrmName" class="muted"></span>
 
-	<label for="faceFile">Face-blendshape GLB — local file only</label>
-	<input type="file" id="faceFile" accept=".glb"> <span id="faceName" class="muted"></span>
+	<label for="imageFile">Photo of a face — local file only</label>
+	<input type="file" id="imageFile" accept="image/*">
+	<img id="preview" alt="Your photo (shown here only; it is not uploaded)" hidden>
+	<p class="muted">On-device face model: <span id="model">loading…</span></p>
+	<a id="faceGlbLink" class="btn" hidden>Download the face GLB made from your photo</a>
+
+	<details>
+		<summary class="muted">Already have a face-blendshape GLB? Use it instead of a photo</summary>
+		<label for="faceFile">Face-blendshape GLB — local file only</label>
+		<input type="file" id="faceFile" accept=".glb"> <span id="faceName" class="muted"></span>
+	</details>
 
 	<label><input type="checkbox" id="tint"> Also tint the VRM skin toward the face GLB's skin tone <span class="muted">(optional, approximate; a material change only)</span></label>
 
@@ -58,7 +72,7 @@
 
 	<h2>Network audit</h2>
 	<pre id="net">(no requests)</pre>
-	<p class="muted">Agent use: <code>?vrm=male|female|URL&amp;run=1</code> auto-runs once the face GLB is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, face, tint })</code> takes <code>'male'</code> (default), <code>'female'</code>, a URL or a File for <code>vrm</code> and a File or bytes — never a URL — for <code>face</code>.</p>
+	<p class="muted">Agent use: <code>?vrm=male|female|URL&amp;run=1</code> auto-runs once a photo (or face GLB) is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, image, tint })</code> takes <code>'male'</code> (default), <code>'female'</code>, a URL or a File for <code>vrm</code> and a File (or <code>face</code>: a face GLB's bytes) for the starting point — never a URL, for either.</p>
 </main>
 <script type="module" src="page.js"></script>
 </body>

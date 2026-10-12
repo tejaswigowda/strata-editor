@@ -1,15 +1,22 @@
 import { bindVRM, skinTextureOf, SCOPE } from '../editor/js/facebind/bind.js';
 
 // ── pure transform: (base VRM = url | local file, face GLB = LOCAL file only) -> bound VRM ──
-// window.__facebind.run({ vrm, face, tint })  -> window.__webcli_result
-// ?vrm=male|female|<url>&run=1   auto-runs as soon as a face GLB is supplied from local disk.
+// window.__facebind.run({ vrm, image | face, tint })  -> window.__webcli_result
+// The starting point is a photo: image -> on-device face landmarks -> face-blendshape GLB -> bind.
+// `face` (an existing face GLB) skips the photo step.
+// ?vrm=male|female|<url>&run=1   auto-runs as soon as a photo (or face GLB) is supplied from local disk.
 // The base VRM defaults to the bundled male model; 'male' / 'female' select the bundled bases.
-// The face GLB is never a URL: a `face=` parameter is refused, and a string passed as `face` is rejected.
+// The photo and the face GLB are identity data and are never URLs: `image=` / `face=` parameters are
+// refused, and a string passed as `image` or `face` is rejected.
 
 export const DEFAULT_BASES = {
 	male: 'base/VRoid_V110_Male_v1.1.3.vrm',
 	female: 'base/VRoid_V110_Female_v1.1.3.vrm',
 };
+
+// The photo pipeline (three.js + MediaPipe) loads in the background; binding an existing face GLB never waits on it.
+const autorig = import( './autorig/faceFromImage.js' );
+autorig.catch( e => console.warn( 'facebind: photo pipeline unavailable', e ) );
 
 const $ = id => document.getElementById( id );
 const params = new URLSearchParams( location.search );
@@ -39,16 +46,16 @@ async function meanOpaqueRGB( bytes, mime ) {
 
 }
 
-async function run( { vrm, face, tint = false, names } ) {
+async function run( { vrm, image, face, tint = false, names } ) {
 
 	try {
 
-		if ( typeof face === 'string' || ( face && face.href ) ) {
+		for ( const [ label, v, code ] of [ [ 'photo', image, 'IMAGE_MUST_BE_LOCAL' ], [ 'face GLB', face, 'FACE_MUST_BE_LOCAL' ] ] ) {
 
-			throw Object.assign( new Error( 'The face GLB must be a local file or bytes, never a URL (it is identity data and must not be fetched or sent anywhere).' ), { code: 'FACE_MUST_BE_LOCAL' } );
+			if ( typeof v === 'string' || ( v && v.href ) ) throw Object.assign( new Error( `The ${ label } must be a local file or bytes, never a URL (it is identity data and must not be fetched or sent anywhere).` ), { code } );
 
 		}
-		if ( ! face ) throw Object.assign( new Error( 'Choose the face-blendshape GLB from local disk.' ), { code: 'NO_FACE' } );
+		if ( ! image && ! face ) throw Object.assign( new Error( 'Choose a photo of a face (or a face-blendshape GLB) from local disk.' ), { code: 'NO_FACE' } );
 
 		say( 'Binding on this device…' );
 		vrm = vrm || 'male';
@@ -61,7 +68,16 @@ async function run( { vrm, face, tint = false, names } ) {
 			vrmBytes = new Uint8Array( await res.arrayBuffer() ); vrmName = fileBase( new URL( vrm, location.href ).pathname );
 
 		} else { vrmBytes = await readBytes( vrm, 'base VRM' ); vrmName = fileBase( vrm.name ); }
-		const faceBytes = await readBytes( face, 'face GLB' );
+		let faceBytes, faceGlbUrl = null;
+		if ( image ) {
+
+			say( 'Reading the face on this device…' );
+			const { glb } = await ( await autorig ).faceGLBFromImage( image );
+			faceBytes = glb;
+			faceGlbUrl = URL.createObjectURL( new Blob( [ glb ], { type: 'model/gltf-binary' } ) );
+			const f = $( 'faceGlbLink' ); f.href = faceGlbUrl; f.download = 'face-model-blendshapes.glb'; f.hidden = false;
+
+		} else faceBytes = await readBytes( face, 'face GLB' );
 
 		const opts = { names };
 		if ( tint ) {
@@ -78,7 +94,7 @@ async function run( { vrm, face, tint = false, names } ) {
 		const a = $( 'download' ); a.href = url; a.download = filename; a.hidden = false; a.textContent = `Download ${ filename } (${ ( bytes.length / 1048576 ).toFixed( 1 ) } MB)`;
 
 		render( report );
-		window.__webcli_result = { ok: true, filename, size: bytes.length, blobUrl: url, bytes, bind, report, scope: SCOPE };
+		window.__webcli_result = { ok: true, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, bytes, bind, report, scope: SCOPE };
 		say( `Bound ${ report.mapped } of ${ report.sourceMorphs } face morphs. ${ SCOPE }.`, 'ok' );
 		if ( params.has( 'run' ) && params.get( 'download' ) !== '0' ) a.click();
 		return window.__webcli_result;
@@ -113,19 +129,36 @@ function showNetwork() {
 
 }
 
-let vrmFile = null, faceFile = null;
-const ready = () => !! faceFile;
-const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, face: faceFile, tint: $( 'tint' ).checked } ).then( showNetwork );
+let vrmFile = null, faceFile = null, imageFile = null;
+const ready = () => !! ( imageFile || faceFile );
+const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, tint: $( 'tint' ).checked } ).then( showNetwork );
+
+function setImage( f ) {
+
+	imageFile = f || null;
+	const img = $( 'preview' );
+	if ( img.src ) URL.revokeObjectURL( img.src );
+	if ( imageFile ) { img.src = URL.createObjectURL( imageFile ); img.hidden = false; } else { img.removeAttribute( 'src' ); img.hidden = true; }
+
+}
+
+$( 'imageFile' ).addEventListener( 'change', e => { setImage( e.target.files[ 0 ] ); if ( params.has( 'run' ) && ready() ) go(); } );
 
 $( 'vrmFile' ).addEventListener( 'change', e => { vrmFile = e.target.files[ 0 ] || null; } );
 $( 'faceFile' ).addEventListener( 'change', e => { faceFile = e.target.files[ 0 ] || null; if ( params.has( 'run' ) && ready() ) go(); } );
-$( 'bind' ).addEventListener( 'click', () => ready() ? go() : say( 'Choose the face GLB first.', 'err' ) );
+$( 'bind' ).addEventListener( 'click', () => ready() ? go() : say( 'Choose a photo of a face first.', 'err' ) );
 
 document.addEventListener( 'dragover', e => e.preventDefault() );
 document.addEventListener( 'drop', e => {
 
 	e.preventDefault();
-	for ( const f of e.dataTransfer.files ) if ( /\.vrm$/i.test( f.name ) ) { vrmFile = f; $( 'vrmName' ).textContent = f.name; } else if ( /\.glb$/i.test( f.name ) ) { faceFile = f; $( 'faceName' ).textContent = f.name; }
+	for ( const f of e.dataTransfer.files ) {
+
+		if ( /\.vrm$/i.test( f.name ) ) { vrmFile = f; $( 'vrmName' ).textContent = f.name; }
+		else if ( /\.glb$/i.test( f.name ) ) { faceFile = f; $( 'faceName' ).textContent = f.name; }
+		else if ( /^image\//.test( f.type ) ) setImage( f );
+
+	}
 	if ( params.has( 'run' ) && ready() ) go();
 
 } );
@@ -136,7 +169,12 @@ if ( params.has( 'vrm' ) ) {
 	if ( DEFAULT_BASES[ v ] ) $( 'base' ).value = v; else $( 'vrmUrl' ).value = v;
 
 }
-if ( params.has( 'face' ) ) say( 'Ignoring ?face=: the face GLB is local-only and is never loaded from a URL.', 'err' );
+if ( params.has( 'face' ) || params.has( 'image' ) ) say( 'Ignoring ?image= / ?face=: the photo and the face GLB are local-only and are never loaded from a URL.', 'err' );
 
-window.__facebind = { run, network: () => window.__facebind_net };
+// load the on-device face model now, so the photo step also works with the network off afterwards
+const model = $( 'model' );
+const preload = async () => { model.textContent = 'loading…'; try { await ( await autorig ).loadLandmarker(); model.textContent = 'ready (runs on this device)'; return true; } catch ( e ) { model.textContent = 'unavailable: ' + e.message; return false; } };
+const preloaded = preload();
+
+window.__facebind = { run, preload: () => preloaded, network: () => window.__facebind_net };
 window.__webcli_result = null;
