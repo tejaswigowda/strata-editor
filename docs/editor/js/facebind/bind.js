@@ -2,22 +2,26 @@
 //
 //   bindVRM( vrmBytes, faceBytes, opts? ) -> { bytes, bind, report }
 //
-// Rig-safe by construction: the VRM's meshes, skeleton, skin weights, morph deltas and BIN chunk are
-// never touched. The only things written are
-//   · an `extensions.STRATA_face_bind` block (a weight map: face morph -> the VRM's own morph targets), and
-//   · optionally, a tint on the VRM's skin material(s) (a material change, off by default).
-// A face morph with no matching VRM target is skipped and listed; nothing is synthesised from geometry.
-// The face mesh is never copied into the VRM. This is expression binding, not a likeness: the VRM's
-// face shape is unchanged.
+// Rig-safe: the VRM's skeleton, skin weights, morph deltas, textures, hair and body are never touched, and
+// no byte of the binary chunk changes except (optionally) the face's POSITION data. The only things written are
+//   · an `extensions.STRATA_face_bind` block (a weight map: face morph -> the VRM's own morph targets),
+//   · optionally, a reshape of the face's base positions toward the photo's measured proportions, and
+//   · optionally, tints on the skin / hair / iris / brow materials toward colours read from the photo.
+// A face morph with no matching VRM target is skipped and listed; nothing is synthesised. The face GLB's mesh
+// is never copied into the VRM, and hair STYLE (geometry) is not changed. The reshape and tints are
+// approximate: this is expression binding with a photo-informed look, not a likeness guarantee.
 //
 // Pure and deterministic (no clock, no randomness, no network): same inputs + options -> same bytes.
 
 import { parseGLB, writeGLB, GLBError } from './glb.js';
 import { readFaceSource } from './faceSource.js';
-import { retintSkin, linearToSrgb } from '../face/FaceRefine.js';
+import { MIN_HAIR_COVERAGE } from './hair.js';
+import { reshapeFace, assertBinOnlyChanged } from './reshape.js';
+import { FACE_REFERENCE } from '../face/faceReference.js';
+import { retintSkin, linearToSrgb, srgbToLinear } from '../face/FaceRefine.js';
 
 export const BIND_EXTENSION = 'STRATA_face_bind';
-export const SCOPE = 'expression-bound; not a likeness; face shape unchanged';
+export const SCOPE = 'expression-bound; optional photo-informed face proportions and colours are approximate; not a likeness guarantee';
 
 export const ARKIT_52 = [
 	'browDownLeft', 'browDownRight', 'browInnerUp', 'browOuterUpLeft', 'browOuterUpRight', 'cheekPuff', 'cheekSquintLeft', 'cheekSquintRight',
@@ -90,58 +94,119 @@ export function buildBinding( source, vrmJson ) {
 
 }
 
-// ── optional look transfer ──────────────────────────────────────────────────
+// ── optional look transfer (rig-safe material tints) ────────────────────────
 
-function skinMaterialIndices( json ) {
+const ROLES = { skin: /_SKIN$/, hair: /_HAIR$/, iris: /_EyeIris_/, brow: /_FaceBrow_/ };
 
-	return ( json.materials || [] ).map( ( m, i ) => [ m, i ] ).filter( ( [ m ] ) => /_SKIN$/.test( m.name || '' ) && m.pbrMetallicRoughness ).map( ( [ , i ] ) => i );
+function materialIndices( json, role ) {
+
+	return ( json.materials || [] ).map( ( m, i ) => [ m, i ] ).filter( ( [ m ] ) => ROLES[ role ].test( m.name || '' ) && m.pbrMetallicRoughness ).map( ( [ , i ] ) => i );
 
 }
 
-/** glTF image bytes of the first skin material's base-colour texture, so a caller can decode it (on device) and pass its mean back as opts.tint.vrmSkinTextureRGB. */
-export function skinTextureOf( input ) {
+/**
+ * The base-colour texture of every skin / hair material, so a caller can decode them (on device) and pass each
+ * one's mean colour back as opts.look.textureMeans[materialIndex].
+ * @returns {{ index:number, name:string, role:string, bytes:Uint8Array, mime:string }[]}
+ */
+export function lookTexturesOf( input ) {
 
 	const { json, chunks } = parseGLB( input );
 	const bin = chunks.find( c => c.type === 0x004e4942 );
-	for ( const mi of skinMaterialIndices( json ) ) {
+	const out = [];
+	for ( const role of Object.keys( ROLES ) ) for ( const mi of materialIndices( json, role ) ) {
 
 		const tex = json.materials[ mi ].pbrMetallicRoughness.baseColorTexture;
 		const img = tex && json.images && json.images[ ( json.textures[ tex.index ] || {} ).source ];
 		if ( ! img || img.bufferView === undefined || ! bin ) continue;
 		const bv = json.bufferViews[ img.bufferView ];
-		return { bytes: bin.data.subarray( bv.byteOffset || 0, ( bv.byteOffset || 0 ) + bv.byteLength ), mime: img.mimeType };
+		out.push( { index: mi, name: json.materials[ mi ].name, role, bytes: bin.data.subarray( bv.byteOffset || 0, ( bv.byteOffset || 0 ) + bv.byteLength ), mime: img.mimeType } );
 
 	}
-	return null;
+	return out;
 
 }
 
-function applyTint( json, source, tint, report ) {
+const lin = srgbToLinear;
 
-	if ( ! source.skinColor ) { report.warnings.push( 'Skin tint skipped: the face GLB has no skin-colour hint.' ); return; }
-	if ( ! tint.vrmSkinTextureRGB ) { report.warnings.push( 'Skin tint skipped: the VRM skin texture mean was not supplied.' ); return; }
-	const strength = tint.strength === undefined ? 0.5 : tint.strength;
-	const target = [ source.skinColor.r, source.skinColor.g, source.skinColor.b ].map( v => v * 255 );
-	const changed = [];
+// New colour for a material so that texture × colour renders `strength` of the way to `target` (sRGB 0–255).
+// Returns the linear multiplier, and whether the target was out of reach (a multiplier can only darken).
+function retint( textureMean, current, target, strength ) {
 
-	for ( const mi of skinMaterialIndices( json ) ) {
+	const next = retintSkin( textureMean, current, target, strength ).map( v => +v.toFixed( 5 ) );
+	const goal = textureMean.map( ( t, c ) => linearToSrgb( lin( t ) * current[ c ] ) + ( target[ c ] - linearToSrgb( lin( t ) * current[ c ] ) ) * strength );
+	const reached = next.every( ( v, c ) => Math.abs( linearToSrgb( lin( textureMean[ c ] ) * v ) - goal[ c ] ) < 6 );
+	return { next, reached };
 
-		const pbr = json.materials[ mi ].pbrMetallicRoughness;
-		const old = pbr.baseColorFactor || [ 1, 1, 1, 1 ];
-		const lin = retintSkin( tint.vrmSkinTextureRGB, old.slice( 0, 3 ), target, strength ).map( v => +v.toFixed( 5 ) );
-		pbr.baseColorFactor = [ lin[ 0 ], lin[ 1 ], lin[ 2 ], old[ 3 ] === undefined ? 1 : old[ 3 ] ];
-		// VRM 0.x keeps the same colour in sRGB under materialProperties[_].vectorProperties._Color
-		const props = json.extensions.VRM && json.extensions.VRM.materialProperties && json.extensions.VRM.materialProperties[ mi ];
-		if ( props && props.vectorProperties && props.vectorProperties._Color ) {
+}
 
-			const c = props.vectorProperties._Color;
-			props.vectorProperties._Color = [ ...lin.map( v => +( linearToSrgb( v ) / 255 ).toFixed( 5 ) ), c[ 3 ] === undefined ? 1 : c[ 3 ] ];
+function setMaterialColor( json, mi, next, report ) {
 
-		}
-		changed.push( json.materials[ mi ].name );
+	const pbr = json.materials[ mi ].pbrMetallicRoughness;
+	const old = pbr.baseColorFactor || [ 1, 1, 1, 1 ];
+	const a = old[ 3 ] === undefined ? 1 : old[ 3 ];
+	pbr.baseColorFactor = [ next[ 0 ], next[ 1 ], next[ 2 ], a ];
+
+	// MToon's shaded side is its own colour, not multiplied by the base colour: scale it by the same ratio
+	// so the shadow side follows the tint instead of staying the old colour.
+	const ratio = next.map( ( v, c ) => old[ c ] > 1e-4 ? v / old[ c ] : 1 );
+	const vrm0 = json.extensions.VRM && json.extensions.VRM.materialProperties && json.extensions.VRM.materialProperties[ mi ];
+	if ( vrm0 && vrm0.vectorProperties ) {
+
+		const v = vrm0.vectorProperties; // VRM 0.x keeps these in sRGB
+		if ( v._Color ) v._Color = [ ...next.map( x => +( linearToSrgb( x ) / 255 ).toFixed( 5 ) ), v._Color[ 3 ] === undefined ? 1 : v._Color[ 3 ] ];
+		if ( v._ShadeColor ) v._ShadeColor = [ ...v._ShadeColor.slice( 0, 3 ).map( ( x, c ) => +( linearToSrgb( Math.min( 1, lin( x * 255 ) * ratio[ c ] ) ) / 255 ).toFixed( 5 ) ), v._ShadeColor[ 3 ] === undefined ? 1 : v._ShadeColor[ 3 ] ];
 
 	}
-	report.tint = { approximate: true, strength, materials: changed };
+	const mtoon = json.materials[ mi ].extensions && json.materials[ mi ].extensions.VRMC_materials_mtoon;
+	if ( mtoon && mtoon.shadeColorFactor ) mtoon.shadeColorFactor = mtoon.shadeColorFactor.map( ( x, c ) => +Math.min( 1, x * ratio[ c ] ).toFixed( 5 ) );
+
+}
+
+function applyLook( json, source, look, report ) {
+
+	const strength = look.strength === undefined ? 0.7 : look.strength;
+	const means = look.textureMeans || {};
+	const applied = [];
+	const jobs = [];
+
+	if ( look.skin ) {
+
+		if ( source.skinColor ) jobs.push( [ 'skin', [ source.skinColor.r, source.skinColor.g, source.skinColor.b ].map( v => v * 255 ) ] );
+		else report.warnings.push( 'Skin tint skipped: the face GLB has no skin-colour hint.' );
+
+	}
+	if ( look.hair ) {
+
+		if ( ! source.hair ) report.warnings.push( 'Hair colour skipped: the face GLB has no hair-colour hint (it was not made from a photo, or no hair model was available).' );
+		else if ( source.hair.coverage !== null && source.hair.coverage < MIN_HAIR_COVERAGE ) report.warnings.push( 'Hair colour skipped: little or no hair was detected in the photo. The VRM hair is unchanged.' );
+		else jobs.push( [ 'hair', [ source.hair.color.r, source.hair.color.g, source.hair.color.b ].map( v => v * 255 ) ] );
+
+	}
+	for ( const [ role, color, label ] of [ [ 'iris', source.irisColor, 'Eye colour' ], [ 'brow', source.browColor, 'Brow colour' ] ] ) {
+
+		if ( ! look[ role ] ) continue;
+		if ( color ) jobs.push( [ role, [ color.r, color.g, color.b ].map( v => v * 255 ) ] );
+		else report.warnings.push( `${ label } skipped: the face GLB has no ${ role } colour hint (it was not made from a photo).` );
+
+	}
+
+	for ( const [ role, target ] of jobs ) {
+
+		for ( const mi of materialIndices( json, role ) ) {
+
+			const mean = means[ mi ];
+			if ( ! mean ) { report.warnings.push( `${ role } colour skipped for ${ json.materials[ mi ].name }: its texture mean was not supplied.` ); continue; }
+			const old = ( json.materials[ mi ].pbrMetallicRoughness.baseColorFactor || [ 1, 1, 1, 1 ] ).slice( 0, 3 );
+			const { next, reached } = retint( mean, old, target, strength );
+			setMaterialColor( json, mi, next, report );
+			applied.push( { material: json.materials[ mi ].name, role, target: target.map( Math.round ), reached } );
+
+		}
+
+	}
+	report.look = applied.length ? { approximate: true, strength, applied } : null;
+	if ( applied.some( a => ! a.reached ) ) report.warnings.push( 'Some colours could not be fully reached: a tint can only darken the texture, so a lighter colour than the texture is as close as it gets.' );
 
 }
 
@@ -160,13 +225,19 @@ const ALLOWED_CHANGE = [
 	/^\/extensions\/STRATA_face_bind($|\/)/,
 	/^\/extensionsUsed($|\/)/,
 	/^\/materials\/\d+\/pbrMetallicRoughness\/baseColorFactor($|\/)/,
-	/^\/extensions\/VRM\/materialProperties\/\d+\/vectorProperties\/_Color($|\/)/,
+	/^\/materials\/\d+\/extensions\/VRMC_materials_mtoon\/shadeColorFactor($|\/)/,
+	/^\/extensions\/VRM\/materialProperties\/\d+\/vectorProperties\/(_Color|_ShadeColor)($|\/)/,
 ];
 
-/** Throws unless the only differences are the bind block, extensionsUsed and skin colours. */
-export function assertRigSafe( before, after ) {
+/**
+ * Throws unless the only differences are the bind block, extensionsUsed, look-transfer material colours and
+ * (when the face was reshaped) the bounds of the face POSITION accessors.
+ * @param {{ accessors?: number[] }} [shape] position accessors that a reshape rewrote
+ */
+export function assertRigSafe( before, after, shape = {} ) {
 
-	const bad = diffPaths( before, after ).filter( p => ! ALLOWED_CHANGE.some( re => re.test( p ) ) );
+	const allowed = [ ...ALLOWED_CHANGE, ...( shape.accessors || [] ).map( i => new RegExp( `^/accessors/${ i }/(min|max)($|/)` ) ) ];
+	const bad = diffPaths( before, after ).filter( p => ! allowed.some( re => re.test( p ) ) );
 	if ( bad.length ) throw new BindError( 'RIG_UNSAFE', `refusing to write: the bind would change ${ bad.slice( 0, 5 ).join( ', ' ) }` );
 
 }
@@ -174,7 +245,9 @@ export function assertRigSafe( before, after ) {
 /**
  * @param {ArrayBuffer|Uint8Array} vrmInput base VRM bytes
  * @param {ArrayBuffer|Uint8Array} faceInput LOCAL face-blendshape GLB bytes (never a URL)
- * @param {{ names?: string[], tint?: { vrmSkinTextureRGB?: number[], strength?: number } }} [opts]
+ * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
+ *   look = optional, approximate material tints (skin / hair colour). textureMeans[materialIndex] = the mean sRGB colour (0–255)
+ *   of that material's base texture, from lookTexturesOf().
  */
 export function bindVRM( vrmInput, faceInput, opts = {} ) {
 
@@ -191,15 +264,35 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		unmapped: bind.unmapped,
 		undriven: bind.undriven,
 		warnings: [ ...source.warnings ],
-		tint: null,
+		look: null,
+		shape: null,
 		egress: 'none: the face GLB was read from local bytes only; nothing derived from it left this process',
 	};
 
+	const origBin = ( vrm.chunks.find( c => c.type === 0x004e4942 ) || {} ).data;
+	let reshaped = null;
+	if ( opts.shape ) {
+
+		const strength = opts.shape.strength === undefined ? 0.7 : opts.shape.strength;
+		const p = source.proportions;
+		const reference = opts.shape.reference || ( p ? { ...FACE_REFERENCE, ...p, depth: p.depth || null } : null );
+		if ( ! reference ) report.warnings.push( 'Face shape skipped: the face GLB carries no measured proportions (it was not made from a photo).' );
+		else {
+
+			if ( p && ! p.depth ) report.warnings.push( 'Profile depth (nose, lips, chin) skipped: the head in the photo is turned too far to read it.' );
+			reshaped = reshapeFace( vrm, reference, strength );
+			report.shape = { approximate: true, strength, maxMoveMm: +( reshaped.maxMove * 1000 ).toFixed(1), vrmBefore: reshaped.measured, photo: reference };
+
+		}
+
+	}
+
 	vrm.json.extensions[ BIND_EXTENSION ] = bind;
 	vrm.json.extensionsUsed = [ ...new Set( [ ...( vrm.json.extensionsUsed || [] ), BIND_EXTENSION ] ) ];
-	if ( opts.tint ) applyTint( vrm.json, source, opts.tint, report );
+	if ( opts.look ) applyLook( vrm.json, source, opts.look, report );
 
-	assertRigSafe( before, vrm.json );
+	assertRigSafe( before, vrm.json, reshaped || {} );
+	if ( reshaped ) assertBinOnlyChanged( origBin, vrm.chunks.find( c => c.type === 0x004e4942 ).data, reshaped.ranges );
 	return { bytes: writeGLB( vrm ), bind, report };
 
 }

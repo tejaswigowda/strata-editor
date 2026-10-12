@@ -18,13 +18,21 @@ mocap / the `driveFace` shell global) animates the VRM's expressions.
 
 ## What it is and is not
 
-**Expression-bound, not a likeness.** It makes the VRM's expressions drivable from the face source. It does
-not reshape the VRM into the person's face: the face shape is geometry, which this never edits.
+**Expression binding first, a photo-informed look second, never a likeness guarantee.** The core is the weight
+map. On top, optionally, the face shape and some colours are nudged toward the photo ("Matching the photo", below).
+An anime base will still look like an anime character; this gets closer, it does not get identical.
 
-**Rig-safe.** The VRM's meshes, skeleton, skin weights, morph deltas and BIN chunk are carried through byte
-for byte. The face GLB's mesh is never grafted on. The only changes to the VRM are the bind block,
-`extensionsUsed`, and (optionally) skin material colours. `assertRigSafe` diffs the JSON before and after and
-refuses to write anything else, so a bound VRM still bakes with bodyrig unchanged.
+**Rig-safe.** The skeleton, skin weights, morph deltas, textures, hair and body are carried through byte for
+byte, and the face GLB's mesh is never grafted on. The only changes to the VRM are:
+
+- the bind block and `extensionsUsed`;
+- (optional) the face's base **POSITION** data, i.e. the face shape;
+- (optional) material colours (skin, hair, iris, brow) and their MToon shade colours.
+
+`bindVRM` audits this before it writes: the JSON diff may only touch those paths and the POSITION accessor's
+min/max, and every byte of the binary chunk outside the face POSITION range must be identical, or it refuses
+(`RIG_UNSAFE`). Because the morph targets are deltas, every existing blendshape keeps working on the reshaped
+face, and bodyrig still bakes the body unchanged.
 
 ## From a photo
 
@@ -108,17 +116,43 @@ driveFace(V, { jawOpen: 0.7, mouthSmileLeft: 1, mouthSmileRight: 1 }); // or by 
 `driveFace` sets morph influences only (clamped 0–1) and returns `{ applied, skipped }`. A facerig/mocap
 integration reads the same block from the file and writes the weights itself.
 
-## Optional skin tint
+## Matching the photo (optional, approximate)
 
-`tint` (checkbox, or `{ tint: true }`) moves the VRM's `_SKIN` materials halfway toward the skin-colour hint in the
-face GLB (from a photo, the average of five patches of the photo's face). It is approximate, a material change only, and off by default. MToon rendering is a separate look
-layer (`toon()`); binding does not touch it.
+All measured on device from the photo's 478 landmarks (and the vendored hair segmenter), embedded in the face
+GLB's node extras, and read back by the bind. Head roll and yaw are removed first.
+
+| What | Measured from the photo | Applied to the VRM |
+|---|---|---|
+| **Face shape** | eye spacing, eye width and openness, mouth width, jaw width, nose-tip / lip / chin depth (all as ratios of head width, so photo size drops out) | a smooth local warp of the face's base positions (`FaceRefine.js`); eyes, mouth, jaw and the nose / lips / chin profile. Limited (jaw ≤ ±12%, eyes ±25–30%, depth clamped to human ranges) and faded out before the head outline, so hair, ears and neck still meet the face |
+| **Skin tone** | average of five patches of the face | skin materials (face and body share one tint) |
+| **Hair colour** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
+| **Eye colour** | a disc inside each iris | iris material |
+| **Brow colour** | the darker half of the brow polygons | brow material |
+
+Notes:
+
+- Each colour is applied as a material tint **against the material's own texture mean** (decoded on device), so the
+  rendered colour moves toward the photo's. A tint can only darken, so a colour lighter than the texture is as close
+  as it gets, and the report says so (`reached: false`).
+- The MToon shade colour is scaled by the same ratio so the shadowed side follows.
+- Hair **style** is geometry and is not changed; only its colour is. A hairstyle change is a separate rig step.
+- Strength is 0–1 for shape and for colour (default 70%).
+- **Not used: the photo's texture itself.** The face GLB carries a UV-mapped crop of the photo. Painting it onto the
+  VRM's face texture would put a photographic face under the anime eyes, brows and mouth (which are separate meshes),
+  so it would not help; the useful parts of that texture (skin, iris and brow colour) are taken as colours instead.
+- Depth from a single photo is a rough estimate; a turned head (> 25°) skips profile depth.
+- Re-binding an already reshaped VRM measures it again and moves it further: bind from the base.
+
+## Skin tint without a photo
+
+With a face GLB instead of a photo, only the skin tone applies (the GLB has a skin-colour hint, but no measurements
+and no hair, eye or brow colours). It is approximate, a material change only, and off by default. 
 
 ## The page and agents
 
 ```
 /facebind/?vrm=male|female|<url>&run=1[&download=0]   auto-runs once a photo (or face GLB) is chosen from local disk
-window.__facebind.run({ vrm, image, tint })  vrm: 'male' (default) | 'female' | URL | File | bytes;  image: File | Blob (never a URL)
+window.__facebind.run({ vrm, image, shape, look })  shape: { strength } | omitted;  look: { skin, hair, iris, brow, strength } | omitted;  vrm: 'male' (default) | 'female' | URL | File | bytes;  image: File | Blob (never a URL)
 window.__facebind.run({ vrm, face, tint })   face: an existing face GLB, File | bytes (never a URL) — skips the photo step
 window.__facebind.preload()                  resolves when the on-device face model is loaded
 window.__webcli_result                       { ok, filename, size, bytes, blobUrl, faceGlbBlobUrl, bind, report }  or { ok:false, code, error }

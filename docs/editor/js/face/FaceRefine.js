@@ -80,7 +80,7 @@ export function measureFace( positions, sets ) {
 	const eyes = [ 1, - 1 ].map( sgn => {
 
 		const w = stats( positions, sets.white, x => Math.sign( x ) === sgn );
-		return { sgn, cx: w.cx, cy: w.cy, width: w.maxX - w.minX };
+		return { sgn, cx: w.cx, cy: w.cy, width: w.maxX - w.minX, height: w.maxY - w.minY };
 
 	} );
 
@@ -99,6 +99,14 @@ export function measureFace( positions, sets ) {
 
 	};
 
+	// head width at height y0 (the main face piece only, so ears stay out)
+	const widthAt = y0 => {
+
+		const s = stats( positions, sets.skin, ( x, y ) => Math.abs( y - y0 ) < 0.04 * E );
+		return s.n ? 2 * Math.max( Math.abs( s.minX ), Math.abs( s.maxX ) ) : 0;
+
+	};
+
 	const zRef = ( frontZ( eyes[ 0 ].cx, eyeY ) + frontZ( eyes[ 1 ].cx, eyeY ) ) / 2;
 	const dz = y => front * ( frontZ( 0, y ) - zRef ) / W;
 
@@ -106,6 +114,8 @@ export function measureFace( positions, sets ) {
 		front, W, E, eyeY, chinY, zRef, eyes,
 		eyeSeparationW: ( eyes[ 0 ].cx - eyes[ 1 ].cx ) / W,
 		eyeWidthW: ( eyes[ 0 ].width + eyes[ 1 ].width ) / 2 / W,
+		eyeOpenness: ( eyes[ 0 ].height + eyes[ 1 ].height ) / ( eyes[ 0 ].width + eyes[ 1 ].width ),
+		widthAt,
 		mouth: { cy: mouth.cy, width: mouth.maxX - mouth.minX, widthW: ( mouth.maxX - mouth.minX ) / W },
 		dz,
 	};
@@ -118,20 +128,32 @@ export function planFaceRefine( m, reference = FACE_REFERENCE, strength = 0.5 ) 
 	const s = clamp( strength, 0, 1 );
 	const { W, E, front } = m;
 
-	const eyeScale = clamp( lerp( 1, ( reference.eyeWidthW * W ) / ( ( m.eyes[ 0 ].width + m.eyes[ 1 ].width ) / 2 ), s ), 0.7, 1.3 );
+	const curEyeW = ( m.eyes[ 0 ].width + m.eyes[ 1 ].width ) / 2, curEyeH = ( m.eyes[ 0 ].height + m.eyes[ 1 ].height ) / 2;
+	const eyeScale = clamp( lerp( 1, ( reference.eyeWidthW * W ) / curEyeW, s ), 0.7, 1.3 );
+	// eye height follows the reference's openness (visible opening / width) when it has one
+	const eyeScaleY = reference.eyeOpenness ? clamp( lerp( 1, ( reference.eyeOpenness * reference.eyeWidthW * W ) / curEyeH, s ), 0.75, 1.25 ) : eyeScale;
 	const halfSepMove = s * ( reference.eyeSeparationW - m.eyeSeparationW ) * W / 2; // negative = toward the nose
 	const eyes = m.eyes.map( e => ( {
 		cx: e.cx, cy: e.cy,
 		shiftX: e.sgn * halfSepMove,
-		k: eyeScale,
+		kx: eyeScale, ky: eyeScaleY,
 		r0: 0.28 * W, r1: 0.53 * W, outlineFrom: 0.42 * W, outlineSpan: 0.08 * W,
 	} ) );
 
 	const mouthScale = clamp( lerp( 1, ( reference.mouthWidthW * W ) / m.mouth.width, s ), 0.7, 1.3 );
 	const mouth = { cy: m.mouth.cy, k: mouthScale, rx: 1.1 * m.mouth.width, ry: 0.26 * E };
 
+	// jaw: widen or narrow the lower face about the midline, fading out toward the ears and the neck
+	let jaw = null;
+	if ( reference.jawWidthW ) {
+
+		const cur = m.widthAt( m.chinY + ( reference.jawT || 0.25 ) * E );
+		if ( cur > 0 ) jaw = { k: clamp( lerp( 1, ( reference.jawWidthW * W ) / cur, s ), 0.9, 1.12 ), chinY: m.chinY, E };
+
+	}
+
 	const bumps = [];
-	for ( const [ key, ref ] of Object.entries( reference.depth ) ) {
+	for ( const [ key, ref ] of Object.entries( reference.depth || {} ) ) {
 
 		const y = m.chinY + ref.t * E + ( key === 'chin' ? 0.04 * E : 0 );
 		const amount = s * ( ref.dz - m.dz( y ) ) * W; // metres to move forward
@@ -139,7 +161,7 @@ export function planFaceRefine( m, reference = FACE_REFERENCE, strength = 0.5 ) 
 
 	}
 
-	return { eyes, mouth, bumps, sigmaX: 0.16 * W, sigmaY: 0.1 * E, strength: s };
+	return { eyes, mouth, jaw, bumps, sigmaX: 0.16 * W, sigmaY: 0.1 * E, strength: s };
 
 }
 
@@ -156,13 +178,21 @@ export function warpPoint( plan, x, y, z ) {
 		const side = smooth( clamp( Math.sign( e.cx ) * x / ( 0.4 * Math.abs( e.cx ) ), 0, 1 ) );
 		const w = side * falloff( Math.hypot( x - e.cx, ( y - e.cy ) * 1.6 ), e.r0, e.r1 ) * ( 1 - smooth( clamp( ( Math.abs( x ) - e.outlineFrom ) / e.outlineSpan, 0, 1 ) ) );
 		if ( ! w ) continue;
-		dx += w * ( e.shiftX + ( e.k - 1 ) * ( x - e.cx ) );
-		dy += w * ( e.k - 1 ) * ( y - e.cy );
+		dx += w * ( e.shiftX + ( e.kx - 1 ) * ( x - e.cx ) );
+		dy += w * ( e.ky - 1 ) * ( y - e.cy );
 
 	}
 
 	const mw = falloff( Math.hypot( x / plan.mouth.rx, ( y - plan.mouth.cy ) / plan.mouth.ry ), 0.55, 1 );
 	if ( mw ) dx += mw * ( plan.mouth.k - 1 ) * x;
+
+	if ( plan.jaw ) {
+
+		const t = ( y - plan.jaw.chinY ) / plan.jaw.E;
+		const wj = ( 1 - smooth( clamp( ( t - 0.25 ) / 0.2, 0, 1 ) ) ) * smooth( clamp( ( t - 0.03 ) / 0.12, 0, 1 ) );
+		if ( wj ) dx += wj * ( plan.jaw.k - 1 ) * x;
+
+	}
 
 	const gx = Math.exp( - 0.5 * ( x / plan.sigmaX ) ** 2 );
 	for ( const b of plan.bumps ) dz += b.amount * gx * Math.exp( - 0.5 * ( ( y - b.y ) / plan.sigmaY ) ** 2 );

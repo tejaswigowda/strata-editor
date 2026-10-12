@@ -1,6 +1,6 @@
 // Reads the *metadata* of a face-blendshape GLB (autorigger output: a standalone face mesh with N
-// morph targets, no skeleton). Only the JSON chunk is used — morph count, morph names and a
-// skin-tone hint. The face mesh's vertices, morph deltas and texture are never read, and nothing
+// morph targets, no skeleton). Only the JSON chunk is used — morph count, morph names, a skin-tone
+// hint and, when made from a photo, hair / iris / brow colour hints and the measured face proportions. The face mesh's vertices, morph deltas and texture are never read, and nothing
 // here touches the network: this module has no fetch / XHR / WebSocket.
 
 import { parseGLB, GLBError } from './glb.js';
@@ -23,7 +23,7 @@ const isIndexName = ( s, i ) => typeof s !== 'string' || s.trim() === '' || /^\d
 /**
  * @param {ArrayBuffer|Uint8Array} input local bytes of the face GLB
  * @param {{ names?: string[] }} [opts] explicit names (override the file's)
- * @returns {{ count:number, names:(string|null)[], resolution:string, warnings:string[], skinColor:{r:number,g:number,b:number}|null }}
+ * @returns {{ count:number, names:(string|null)[], resolution:string, warnings:string[], skinColor:{r:number,g:number,b:number}|null, hair:{color:{r:number,g:number,b:number}, coverage:number|null}|null }}
  */
 export function readFaceSource( input, opts = {} ) {
 
@@ -69,14 +69,20 @@ export function readFaceSource( input, opts = {} ) {
 
 	}
 
-	let skinColor = null;
+	const colour = c => c && [ c.r, c.g, c.b ].every( v => typeof v === 'number' ) ? { r: c.r, g: c.g, b: c.b } : null;
+	let skinColor = null, hair = null, irisColor = null, browColor = null, proportions = null;
 	for ( const node of json.nodes || [] ) {
 
-		const c = node.extras && node.extras.skinColor;
-		if ( c && [ c.r, c.g, c.b ].every( v => typeof v === 'number' ) ) { skinColor = { r: c.r, g: c.g, b: c.b }; break; }
+		const ex = node.extras;
+		if ( ! ex ) continue;
+		if ( ! skinColor ) skinColor = colour( ex.skinColor );
+		if ( ! irisColor ) irisColor = colour( ex.irisColor );
+		if ( ! browColor ) browColor = colour( ex.browColor );
+		if ( ! proportions && ex.faceProportions && typeof ex.faceProportions.eyeSeparationW === 'number' ) proportions = ex.faceProportions;
+		if ( ! hair && colour( ex.hairColor ) ) hair = { color: colour( ex.hairColor ), coverage: typeof ex.hairCoverage === 'number' ? ex.hairCoverage : null };
 
 	}
 
-	return { count, names, resolution, warnings, skinColor };
+	return { count, names, resolution, warnings, skinColor, hair, irisColor, browColor, proportions };
 
 }

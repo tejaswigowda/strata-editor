@@ -66,7 +66,7 @@ test( 'the page\'s only network call is a GET of the base VRM; photos and face G
 test( 'vendored MediaPipe files match their recorded SHA-256', () => {
 
 	const readme = read( 'vendor/mediapipe/README.md' );
-	for ( const f of [ 'vision_bundle.mjs', 'wasm/vision_wasm_internal.js', 'wasm/vision_wasm_internal.wasm', 'face_landmarker.task' ] ) {
+	for ( const f of [ 'vision_bundle.mjs', 'wasm/vision_wasm_internal.js', 'wasm/vision_wasm_internal.wasm', 'face_landmarker.task', 'hair_segmenter.tflite' ] ) {
 
 		const h = sha( 'vendor/mediapipe/' + f, 'hex' );
 		ok( readme.includes( `${ h }  ${ f }` ), `${ f }: hash ${ h } is not in the README` );

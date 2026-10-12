@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { parseGLB, writeGLB } from '../glb.js';
 import { readFaceSource, CONVENTION_42 } from '../faceSource.js';
 import { bindVRM, buildBinding, assertRigSafe, ARKIT_52 } from '../bind.js';
+import { hairColorFromMask } from '../hair.js';
+import { faceProportions } from '../proportions.js';
 import { applyFaceWeights } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -19,6 +21,7 @@ const test = ( name, fn ) => { try { fn(); passed ++; console.log( '  ✓ ' + na
 const ok = ( v, m ) => { if ( ! v ) throw new Error( m || 'expected truthy' ); };
 const eq = ( a, b, m ) => { if ( JSON.stringify( a ) !== JSON.stringify( b ) ) throw new Error( ( m || 'not equal' ) + `: ${ JSON.stringify( a ) } vs ${ JSON.stringify( b ) }` ); };
 const throws = ( fn, code ) => { try { fn(); } catch ( e ) { if ( code && e.code !== code ) throw new Error( `expected ${ code }, got ${ e.code }: ${ e.message }` ); return; } throw new Error( 'expected a throw' ); };
+const near = ( a, b, tol, m ) => { if ( Math.abs( a - b ) > tol ) throw new Error( `${ m || 'not near' }: ${ a } vs ${ b }` ); };
 const same = ( a, b ) => a.length === b.length && a.every( ( v, i ) => v === b[ i ] );
 
 // ── synthetic fixtures ──────────────────────────────────────────────────────
@@ -109,16 +112,39 @@ test( 'refuses a non-VRM base, a morph-less face, and a bind that would touch th
 
 } );
 
-test( 'optional tint changes only skin colours, and says it is approximate', () => {
+test( 'optional look: skin and hair tint change only material colours (base + shade), and say they are approximate', () => {
 
-	const base = glb( vrmJson() );
-	const r = bindVRM( base, glb( faceJson( [ 'jawOpen' ] ) ), { tint: { vrmSkinTextureRGB: [ 250, 232, 219 ], strength: 1 } } );
-	ok( r.report.tint && r.report.tint.approximate );
-	const j = parseGLB( r.bytes ).json;
-	ok( j.materials[ 0 ].pbrMetallicRoughness.baseColorFactor[ 0 ] < 1, 'tint not applied' );
-	ok( j.extensions.VRM.materialProperties[ 0 ].vectorProperties._Color[ 0 ] < 1, 'VRM0 _Color not applied' );
-	const noMean = bindVRM( base, glb( faceJson( [ 'jawOpen' ] ) ), { tint: {} } );
-	ok( noMean.report.tint === null && noMean.report.warnings.some( w => /skipped/.test( w ) ) );
+	const j = vrmJson();
+	j.materials.push( { name: 'Hair_HAIR', pbrMetallicRoughness: { baseColorFactor: [ 1, 1, 1, 1 ] } } );
+	j.extensions.VRM.materialProperties.push( { name: 'Hair_HAIR', vectorProperties: { _Color: [ 1, 1, 1, 1 ], _ShadeColor: [ 0.8, 0.8, 0.8, 1 ] } } );
+	const base = glb( j );
+	const face = glb( faceJson( [ 'jawOpen' ], { nodes: [ { name: 'faceMesh', mesh: 0, extras: { skinColor: { r: 0.8, g: 0.6, b: 0.5 }, hairColor: { r: 0.15, g: 0.1, b: 0.08 }, hairCoverage: 0.9 } } ] } ) );
+	const r = bindVRM( base, face, { look: { skin: true, hair: true, strength: 1, textureMeans: { 0: [ 250, 232, 219 ], 1: [ 180, 180, 180 ] } } } );
+	ok( r.report.look && r.report.look.approximate );
+	eq( r.report.look.applied.map( a => a.role ), [ 'skin', 'hair' ] );
+	const out = parseGLB( r.bytes ).json;
+	ok( out.materials[ 0 ].pbrMetallicRoughness.baseColorFactor[ 0 ] < 1, 'skin not tinted' );
+	ok( out.materials[ 1 ].pbrMetallicRoughness.baseColorFactor[ 0 ] < 0.2, 'hair not darkened' );
+	ok( out.extensions.VRM.materialProperties[ 1 ].vectorProperties._Color[ 0 ] < 0.6, 'VRM0 hair _Color not applied' );
+	ok( out.extensions.VRM.materialProperties[ 1 ].vectorProperties._ShadeColor[ 0 ] < 0.8, 'hair shade colour did not follow' );
+	ok( r.report.look.applied.every( a => a.reached ) );
+	// a hair colour lighter than the texture cannot be reached by a tint: it is reported, not faked
+	const blond = bindVRM( base, glb( faceJson( [ 'jawOpen' ], { nodes: [ { extras: { hairColor: { r: 0.9, g: 0.8, b: 0.5 }, hairCoverage: 0.9 } } ] } ) ), { look: { hair: true, strength: 1, textureMeans: { 1: [ 120, 120, 120 ] } } } );
+	ok( blond.report.look.applied[ 0 ].reached === false && blond.report.warnings.some( w => /could not be fully reached/.test( w ) ) );
+
+} );
+
+test( 'look is skipped, with a warning, when the data is missing: no hair in the photo, no hair hint, no texture mean', () => {
+
+	const j = vrmJson();
+	j.materials.push( { name: 'Hair_HAIR', pbrMetallicRoughness: { baseColorFactor: [ 1, 1, 1, 1 ] } } );
+	const base = glb( j );
+	const bald = bindVRM( base, glb( faceJson( [ 'jawOpen' ], { nodes: [ { extras: { hairColor: { r: 0.1, g: 0.1, b: 0.1 }, hairCoverage: 0.01 } } ] } ) ), { look: { hair: true, textureMeans: { 1: [ 180, 180, 180 ] } } } );
+	ok( bald.report.look === null && bald.report.warnings.some( w => /little or no hair/.test( w ) ) );
+	const noHint = bindVRM( base, glb( faceJson( [ 'jawOpen' ] ) ), { look: { hair: true, skin: true, textureMeans: {} } } );
+	ok( noHint.report.look === null && noHint.report.warnings.length >= 2 );
+	const noMean = bindVRM( base, glb( faceJson( [ 'jawOpen' ] ) ), { look: { skin: true } } );
+	ok( noMean.report.look === null && noMean.report.warnings.some( w => /texture mean was not supplied/.test( w ) ) );
 
 } );
 
@@ -143,6 +169,19 @@ test( 'zero-egress by construction: the bind modules have no network, storage or
 		ok( ! /\b(fetch|XMLHttpRequest|WebSocket|sendBeacon|EventSource|localStorage|indexedDB|importScripts)\b|import\s*\(/.test( src ), `${ f } references a network/storage API` );
 
 	}
+
+} );
+
+test( 'hair colour: reads the masked pixels, ignores highlights, shadows and the mask edge', () => {
+
+	const w = 20, h = 20, rgba = new Uint8ClampedArray( w * h * 4 ), mask = new Uint8Array( w * h );
+	for ( let i = 0; i < w * h; i ++ ) { rgba.set( [ 240, 240, 240, 255 ], i * 4 ); } // white background
+	for ( let y = 4; y < 16; y ++ ) for ( let x = 4; x < 16; x ++ ) { const i = y * w + x; mask[ i ] = 1; rgba.set( [ 60, 40, 30, 255 ], i * 4 ); }
+	rgba.set( [ 255, 255, 255, 255 ], ( 8 * w + 8 ) * 4 ); // a specular highlight inside the hair
+	const r = hairColorFromMask( rgba, mask, { width: w, height: h, faceArea: 100 } );
+	ok( Math.abs( r.color.r * 255 - 60 ) < 3 && Math.abs( r.color.g * 255 - 40 ) < 3 && Math.abs( r.color.b * 255 - 30 ) < 3, 'colour ' + JSON.stringify( r.color ) );
+	ok( r.pixels === 100 && r.coverage === 1, 'pixels/coverage ' + r.pixels );
+	eq( hairColorFromMask( rgba, new Uint8Array( w * h ), { width: w, height: h } ), null );
 
 } );
 
@@ -184,7 +223,75 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 
 		ok( r.bytes.length < vrmBytes.length + 20000, `output grew by ${ r.bytes.length - vrmBytes.length } bytes` );
 		ok( ! JSON.stringify( parseGLB( r.bytes ).json ).includes( 'faceMesh' ) );
-		ok( ! JSON.stringify( r.bind ).includes( 'skinColor' ), 'tint hint leaked without opting in' );
+		ok( ! JSON.stringify( r.bind ).includes( 'skinColor' ) && ! JSON.stringify( r.bind ).includes( 'hairColor' ), 'colour hints leaked into the bind block' );
+
+	} );
+	// a face GLB carrying the measured proportions, as a photo-made one does
+	const photoFace = () => { const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) ); j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, faceProportions: { eyeSeparationW: 0.43, eyeWidthW: 0.2023, eyeOpenness: 0.3322, mouthWidthW: 0.3706, jawWidthW: 0.8427, jawT: 0.2496, depth: { noseTip: { t: 0.65, dz: 0.182 }, lips: { t: 0.404, dz: 0.09 }, chin: { t: 0, dz: 0.035 } } }, irisColor: { r: 0.2, g: 0.12, b: 0.08 }, browColor: { r: 0.12, g: 0.09, b: 0.07 } }; return writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } ); };
+
+	test( 'face reshape: only the face POSITION bytes change; skeleton, weights, morph deltas, textures, hair are byte-identical', () => {
+
+		const out = bindVRM( vrmBytes, photoFace(), { shape: { strength: 1 } } );
+		ok( out.report.shape && out.report.shape.maxMoveMm > 0.5 && out.report.shape.maxMoveMm < 25, 'move ' + ( out.report.shape && out.report.shape.maxMoveMm ) );
+		const a = parseGLB( vrmBytes ), b = parseGLB( out.bytes );
+		const ja = a.json, jb = b.json;
+		const posAcc = new Set( ja.meshes[ 0 ].primitives.map( p => p.attributes.POSITION ) );
+		ok( posAcc.size === 1 );
+		const pa = ja.accessors[ [ ...posAcc ][ 0 ] ];
+		const start = ( ja.bufferViews[ pa.bufferView ].byteOffset || 0 ) + ( pa.byteOffset || 0 );
+		let outside = 0, inside = 0;
+		a.chunks[ 0 ].data.forEach( ( v, i ) => { if ( v !== b.chunks[ 0 ].data[ i ] ) { if ( i >= start && i < start + pa.count * 12 ) inside ++; else outside ++; } } );
+		ok( outside === 0, outside + ' bytes outside the POSITION data changed' ); ok( inside > 1000, 'positions barely changed: ' + inside );
+		// morph target accessors are untouched
+		ok( ja.meshes[ 0 ].primitives[ 0 ].targets.length === 122 && JSON.stringify( ja.meshes[ 0 ].primitives[ 0 ].targets ) === JSON.stringify( jb.meshes[ 0 ].primitives[ 0 ].targets ) );
+		// bounds updated, valid
+		const nb = jb.accessors[ [ ...posAcc ][ 0 ] ]; ok( nb.min.every( ( v, i ) => v <= nb.max[ i ] ) );
+
+	} );
+	test( 'face reshape: strength 0 leaves the binary chunk identical; same inputs give the same bytes', () => {
+
+		const none = bindVRM( vrmBytes, photoFace(), { shape: { strength: 0 } } );
+		ok( same( parseGLB( none.bytes ).chunks[ 0 ].data, parseGLB( vrmBytes ).chunks[ 0 ].data ) );
+		ok( same( bindVRM( vrmBytes, photoFace(), { shape: { strength: 0.7 } } ).bytes, bindVRM( vrmBytes, photoFace(), { shape: { strength: 0.7 } } ).bytes ) );
+
+	} );
+	test( 'face reshape is skipped, with a warning, when the face GLB has no measured proportions', () => {
+
+		const r = bindVRM( vrmBytes, faceBytes, { shape: { strength: 1 } } );
+		ok( r.report.shape === null && r.report.warnings.some( w => /no measured proportions/.test( w ) ) );
+		ok( same( parseGLB( r.bytes ).chunks[ 0 ].data, parseGLB( vrmBytes ).chunks[ 0 ].data ) );
+
+	} );
+	test( 'iris and brow colours tint the VRM eye and brow materials (and the shade colour follows)', () => {
+
+		const j = parseGLB( vrmBytes ).json;
+		const idx = ( re ) => j.materials.findIndex( m => re.test( m.name ) );
+		const means = { [ idx( /_EyeIris_/ ) ]: [ 200, 160, 120 ], [ idx( /_FaceBrow_/ ) ]: [ 180, 170, 160 ] };
+		const r = bindVRM( vrmBytes, photoFace(), { look: { iris: true, brow: true, strength: 1, textureMeans: means } } );
+		eq( r.report.look.applied.map( a => a.role ), [ 'iris', 'brow' ] );
+		const o = parseGLB( r.bytes ).json;
+		ok( o.materials[ idx( /_EyeIris_/ ) ].pbrMetallicRoughness.baseColorFactor[ 0 ] < 1 );
+
+	} );
+	test( 'proportions from landmarks match the reference measured on the sample, and survive a turned / tilted head', () => {
+
+		const { json, chunks } = parseGLB( faceBytes );
+		const a = json.accessors[ json.meshes[ 0 ].primitives[ 0 ].attributes.POSITION ], bv = json.bufferViews[ a.bufferView ];
+		const dv = new DataView( chunks[ 0 ].data.buffer, chunks[ 0 ].data.byteOffset + ( bv.byteOffset || 0 ) + ( a.byteOffset || 0 ) );
+		const raw = Array.from( { length: a.count }, ( _, i ) => [ dv.getFloat32( i * 12, true ), dv.getFloat32( i * 12 + 4, true ), dv.getFloat32( i * 12 + 8, true ) ] );
+		const toLm = ( rot = 0, tilt = 0 ) => raw.map( ( [ x, y, z ] ) => {
+
+			const c = Math.cos( rot ), s = Math.sin( rot ), x2 = x * c + z * s, z2 = - x * s + z * c; // yaw
+			const ct = Math.cos( tilt ), st = Math.sin( tilt );
+			return { x: ( x2 * ct - y * st ) * 0.25 + 0.5, y: - ( x2 * st + y * ct ) * 0.25 + 0.5, z: - z2 * 0.25 };
+
+		} );
+		const base = faceProportions( toLm(), { width: 1000, height: 1000 } );
+		near( base.eyeSeparationW, 0.43, 0.01 ); near( base.eyeWidthW, 0.2023, 0.01 ); near( base.mouthWidthW, 0.3706, 0.01 ); near( base.jawWidthW, 0.8427, 0.02 );
+		const turned = faceProportions( toLm( 0.25, 0.2 ), { width: 1000, height: 1000 } );
+		near( turned.eyeSeparationW, base.eyeSeparationW, 0.02 ); near( turned.mouthWidthW, base.mouthWidthW, 0.02 );
+		ok( faceProportions( toLm( 1.0 ), { width: 1000, height: 1000 } ).depth === null, 'a profile view should not report depth' );
+		eq( faceProportions( [], { width: 1, height: 1 } ), null );
 
 	} );
 	test( 'a bound VRM can be re-bound (bind block replaced, not duplicated)', () => {

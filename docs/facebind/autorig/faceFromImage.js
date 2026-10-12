@@ -9,10 +9,12 @@
 
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import { FaceLandmarker, FilesetResolver, ImageSegmenter } from '@mediapipe/tasks-vision';
 import { ARKitBlendshapeMapper } from './arkit-mapper.js';
 import { FaceMeshGenerator } from './face-mesh-generator.js';
 import { TextureMapper } from './texture-mapper.js';
+import { hairColorFromMask, trimmedMeanColor } from '../../editor/js/facebind/hair.js';
+import { faceProportions } from '../../editor/js/facebind/proportions.js';
 
 const VENDOR = new URL( '../vendor/mediapipe/', import.meta.url ).href;
 
@@ -54,6 +56,109 @@ export function loadLandmarker() {
 
 }
 
+let segmenter = null;
+
+/** Load the on-device hair segmenter (static, same-origin). */
+export function loadHairSegmenter() {
+
+	if ( ! segmenter ) {
+
+		segmenter = ( async () => {
+
+			const vision = await FilesetResolver.forVisionTasks( VENDOR + 'wasm' );
+			return ImageSegmenter.createFromOptions( vision, {
+				baseOptions: { modelAssetPath: VENDOR + 'hair_segmenter.tflite', delegate: 'CPU' },
+				runningMode: 'IMAGE',
+				outputCategoryMask: true,
+				outputConfidenceMasks: false,
+			} );
+
+		} )();
+		segmenter.catch( () => { segmenter = null; } );
+
+	}
+	return segmenter;
+
+}
+
+// Hair colour (sRGB 0–1) and how much of the frame is hair, relative to the face. null if the model is unavailable.
+async function readHair( bitmap, landmarks ) {
+
+	const seg = await loadHairSegmenter();
+	const scale = Math.min( 1, 1024 / Math.max( bitmap.width, bitmap.height ) );
+	const small = scale < 1 ? await createImageBitmap( bitmap, { resizeWidth: Math.round( bitmap.width * scale ), resizeHeight: Math.round( bitmap.height * scale ), resizeQuality: 'high' } ) : bitmap;
+
+	const result = seg.segment( small );
+	try {
+
+		const mask = result.categoryMask;
+		const { width, height } = mask;
+		const canvas = document.createElement( 'canvas' );
+		canvas.width = width; canvas.height = height;
+		const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+		ctx.drawImage( small, 0, 0, width, height );
+
+		const xs = landmarks.map( l => l.x ), ys = landmarks.map( l => l.y );
+		const faceArea = ( Math.max( ...xs ) - Math.min( ...xs ) ) * width * ( Math.max( ...ys ) - Math.min( ...ys ) ) * height;
+		const labels = seg.getLabels();
+		const hairValue = labels.indexOf( 'hair' ) >= 0 ? labels.indexOf( 'hair' ) : 1;
+		return hairColorFromMask( ctx.getImageData( 0, 0, width, height ).data, mask.getAsUint8Array(), { width, height, hairValue, faceArea } );
+
+	} finally {
+
+		result.close();
+		if ( small !== bitmap ) small.close();
+
+	}
+
+}
+
+// Iris and brow colour (sRGB 0–1) read at the landmarks: a disc inside each iris, and the polygon of each brow.
+const IRIS = [ [ 468, [ 469, 470, 471, 472 ] ], [ 473, [ 474, 475, 476, 477 ] ] ];
+const BROWS = [ [ 70, 63, 105, 66, 107, 55, 65, 52, 53, 46 ], [ 300, 293, 334, 296, 336, 285, 295, 282, 283, 276 ] ];
+
+async function readEyeAndBrow( bitmap, landmarks ) {
+
+	if ( landmarks.length < 478 ) return { iris: null, brow: null };
+	const scale = Math.min( 1, 1024 / Math.max( bitmap.width, bitmap.height ) );
+	const w = Math.round( bitmap.width * scale ), h = Math.round( bitmap.height * scale );
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = w; canvas.height = h;
+	const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+	ctx.drawImage( bitmap, 0, 0, w, h );
+	const rgba = ctx.getImageData( 0, 0, w, h ).data;
+	const P = i => [ landmarks[ i ].x * w, landmarks[ i ].y * h ];
+
+	const irisPx = [];
+	for ( const [ c, ring ] of IRIS ) {
+
+		const [ cx, cy ] = P( c );
+		const r = ring.map( i => Math.hypot( P( i )[ 0 ] - cx, P( i )[ 1 ] - cy ) ).reduce( ( a, b ) => a + b, 0 ) / ring.length;
+		for ( let y = Math.floor( cy - r ); y <= Math.ceil( cy + r ); y ++ ) for ( let x = Math.floor( cx - r ); x <= Math.ceil( cx + r ); x ++ ) {
+
+			if ( x >= 0 && y >= 0 && x < w && y < h && Math.hypot( x - cx, y - cy ) <= 0.8 * r ) irisPx.push( y * w + x );
+
+		}
+
+	}
+
+	// brows: rasterise the polygons on a scratch canvas, then keep the darker half (the hairs, not the skin between them)
+	const m = document.createElement( 'canvas' );
+	m.width = w; m.height = h;
+	const mctx = m.getContext( '2d', { willReadFrequently: true } );
+	mctx.fillStyle = '#fff';
+	for ( const poly of BROWS ) { mctx.beginPath(); poly.forEach( ( id, k ) => { const [ x, y ] = P( id ); k ? mctx.lineTo( x, y ) : mctx.moveTo( x, y ); } ); mctx.closePath(); mctx.fill(); }
+	const mask = mctx.getImageData( 0, 0, w, h ).data;
+	const browPx = [];
+	for ( let i = 0; i < w * h; i ++ ) if ( mask[ i * 4 + 3 ] > 200 ) browPx.push( i );
+
+	return {
+		iris: trimmedMeanColor( rgba, irisPx, { highTrim: 0.15 } ),
+		brow: trimmedMeanColor( rgba, browPx, { highTrim: 0.5 } ),
+	};
+
+}
+
 async function toBitmap( image ) {
 
 	if ( typeof image === 'string' || ( image && image.href ) ) throw new ImageError( 'IMAGE_MUST_BE_LOCAL', 'The photo must be a local file, never a URL.' );
@@ -69,7 +174,7 @@ async function toBitmap( image ) {
 
 /**
  * @param {Blob|File|ImageBitmap} image a LOCAL photo of one face
- * @returns {Promise<{ glb: Uint8Array, blendshapes: Object<string, number>, skinColor: {r:number,g:number,b:number} }>}
+ * @returns {Promise<{ glb: Uint8Array, blendshapes: Object<string, number>, skinColor: {r:number,g:number,b:number}, hair: {color:{r:number,g:number,b:number}, pixels:number, coverage:number}|null }>}
  */
 export async function faceGLBFromImage( image ) {
 
@@ -84,10 +189,22 @@ export async function faceGLBFromImage( image ) {
 	const blendshapes = new ARKitBlendshapeMapper().mapMediaPipeToARKit( categories, landmarks );
 	const transform = results.facialTransformationMatrixes && results.facialTransformationMatrixes[ 0 ];
 
+	let hair = null;
+	try { hair = await readHair( bitmap, landmarks ); } catch ( e ) { console.warn( 'facebind: hair segmentation unavailable', e ); }
+
+	let eyeBrow = { iris: null, brow: null };
+	try { eyeBrow = await readEyeAndBrow( bitmap, landmarks ); } catch ( e ) { console.warn( 'facebind: iris/brow colours unavailable', e ); }
+	const proportions = faceProportions( landmarks, { width: bitmap.width, height: bitmap.height } );
+
 	const texture = new TextureMapper().createFaceTexture( bitmap, landmarks );
 	const generator = new FaceMeshGenerator();
 	const mesh = generator.generateWithMorphTargets( landmarks, blendshapes, transform, texture );
 	mesh.name = 'faceMesh';
+	// travels in the face GLB's node extras next to skinColor, so the bind reads it from the GLB like everything else
+	if ( hair ) { mesh.userData.hairColor = hair.color; mesh.userData.hairCoverage = hair.coverage; }
+	if ( eyeBrow.iris ) mesh.userData.irisColor = eyeBrow.iris;
+	if ( eyeBrow.brow ) mesh.userData.browColor = eyeBrow.brow;
+	if ( proportions ) mesh.userData.faceProportions = proportions;
 
 	const group = new THREE.Group();
 	group.add( mesh );
@@ -100,6 +217,6 @@ export async function faceGLBFromImage( image ) {
 
 	mesh.geometry.dispose(); mesh.material.map.dispose(); mesh.material.dispose();
 	if ( bitmap.close && image !== bitmap ) bitmap.close();
-	return { glb, blendshapes, skinColor: generator.skinColor };
+	return { glb, blendshapes, skinColor: generator.skinColor, hair, iris: eyeBrow.iris, brow: eyeBrow.brow, proportions };
 
 }

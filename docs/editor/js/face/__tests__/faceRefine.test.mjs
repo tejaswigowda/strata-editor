@@ -99,6 +99,20 @@ test( 'the warp is smooth and small (no vertex jumps more than a centimetre)', (
 
 } );
 
+test( 'eye openness and jaw width follow the reference, within their limits', () => {
+
+	const m = measureFace( face.positions, face.sets );
+	const out = new Float32Array( face.positions.length );
+	const ref = { ...FACE_REFERENCE, eyeOpenness: 0.45, jawWidthW: 0.7, jawT: 0.25 };
+	applyPlan( planFaceRefine( m, ref, 1 ), face.positions, out );
+	const m2 = measureFace( out, face.sets );
+	ok( m2.eyes[ 0 ].height < m.eyes[ 0 ].height * 0.95, 'the eye was not made less tall' );
+	const before = m.widthAt( m.chinY + 0.25 * m.E ), after = m2.widthAt( m2.chinY + 0.25 * m2.E );
+	ok( Math.abs( after / m.W - 0.7 ) < Math.abs( before / m.W - 0.7 ) || before / m.W >= 0.7 - 0.01, 'jaw moved away from the reference' );
+	ok( after / before <= 1.13 && after / before >= 0.89, 'jaw change beyond its limits: ' + after / before );
+
+} );
+
 test( 'retintSkin: strength 0 keeps the render, 1 hits the target', () => {
 
 	const tex = [ 250, 232, 219 ], tint = [ 0.65, 0.4, 0.27 ];

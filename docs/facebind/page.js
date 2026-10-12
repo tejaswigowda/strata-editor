@@ -1,7 +1,7 @@
-import { bindVRM, skinTextureOf, SCOPE } from '../editor/js/facebind/bind.js';
+import { bindVRM, lookTexturesOf, SCOPE } from '../editor/js/facebind/bind.js';
 
 // ── pure transform: (base VRM = url | local file, face GLB = LOCAL file only) -> bound VRM ──
-// window.__facebind.run({ vrm, image | face, tint })  -> window.__webcli_result
+// window.__facebind.run({ vrm, image | face, look, shape })  -> window.__webcli_result
 // The starting point is a photo: image -> on-device face landmarks -> face-blendshape GLB -> bind.
 // `face` (an existing face GLB) skips the photo step.
 // ?vrm=male|female|<url>&run=1   auto-runs as soon as a photo (or face GLB) is supplied from local disk.
@@ -46,7 +46,7 @@ async function meanOpaqueRGB( bytes, mime ) {
 
 }
 
-async function run( { vrm, image, face, tint = false, names } ) {
+async function run( { vrm, image, face, look, shape, names } ) {
 
 	try {
 
@@ -80,10 +80,13 @@ async function run( { vrm, image, face, tint = false, names } ) {
 		} else faceBytes = await readBytes( face, 'face GLB' );
 
 		const opts = { names };
-		if ( tint ) {
+		if ( shape ) opts.shape = { strength: shape.strength };
+		if ( look && ( look.skin || look.hair || look.iris || look.brow ) ) {
 
-			const tex = skinTextureOf( vrmBytes );
-			opts.tint = { strength: 0.5, vrmSkinTextureRGB: tex ? await meanOpaqueRGB( tex.bytes, tex.mime ) : null };
+			// decode the VRM's skin / hair textures here, on device, and pass each one's mean colour to the bind
+			const textureMeans = {};
+			for ( const t of lookTexturesOf( vrmBytes ) ) if ( look[ t.role ] ) textureMeans[ t.index ] = await meanOpaqueRGB( t.bytes, t.mime );
+			opts.look = { skin: !! look.skin, hair: !! look.hair, iris: !! look.iris, brow: !! look.brow, strength: look.strength, textureMeans };
 
 		}
 		const { bytes, bind, report } = bindVRM( vrmBytes, faceBytes, opts );
@@ -94,7 +97,7 @@ async function run( { vrm, image, face, tint = false, names } ) {
 		const a = $( 'download' ); a.href = url; a.download = filename; a.hidden = false; a.textContent = `Download ${ filename } (${ ( bytes.length / 1048576 ).toFixed( 1 ) } MB)`;
 
 		render( report );
-		window.__webcli_result = { ok: true, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, bytes, bind, report, scope: SCOPE };
+		window.__webcli_result = { ok: true, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, faceGlb: image ? faceBytes : null, bytes, bind, report, scope: SCOPE };
 		say( `Bound ${ report.mapped } of ${ report.sourceMorphs } face morphs. ${ SCOPE }.`, 'ok' );
 		if ( params.has( 'run' ) && params.get( 'download' ) !== '0' ) a.click();
 		return window.__webcli_result;
@@ -118,7 +121,8 @@ function render( report ) {
 		<h3>Skipped — face morph with no VRM target</h3>${ list( report.unmapped, u => `#${ u.source } ${ u.name ?? '(unnamed)' } — ${ u.reason }` ) }
 		<h3>Not driven — VRM ARKit shapes the face GLB has no morph for</h3>${ list( report.undriven, n => n ) }
 		${ report.warnings.length ? `<h3>Warnings</h3>${ list( report.warnings, w => w ) }` : '' }
-		${ report.tint ? `<p class="muted">Skin tint applied to ${ report.tint.materials.join( ', ' ) } (approximate).</p>` : '' }`;
+		${ report.shape ? `<h3>Face shape <span class="muted">(approximate; the face's base positions moved by up to ${ report.shape.maxMoveMm } mm)</span></h3>` : '' }
+		${ report.look ? `<h3>Look transfer <span class="muted">(approximate; material tint only)</span></h3>${ list( report.look.applied, a => `${ a.role }: ${ a.material } → rgb(${ a.target.join( ', ' ) })${ a.reached ? '' : ' — not fully reachable' }` ) }` : '' }`;
 
 }
 
@@ -131,7 +135,9 @@ function showNetwork() {
 
 let vrmFile = null, faceFile = null, imageFile = null;
 const ready = () => !! ( imageFile || faceFile );
-const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, tint: $( 'tint' ).checked } ).then( showNetwork );
+const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked, strength: Number( $( 'lookStrength' ).value ) / 100 } );
+const shapeOptions = () => $( 'shapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
+const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions() } ).then( showNetwork );
 
 function setImage( f ) {
 
@@ -171,9 +177,12 @@ if ( params.has( 'vrm' ) ) {
 }
 if ( params.has( 'face' ) || params.has( 'image' ) ) say( 'Ignoring ?image= / ?face=: the photo and the face GLB are local-only and are never loaded from a URL.', 'err' );
 
+$( 'lookStrength' ).addEventListener( 'input', e => { $( 'lookStrengthValue' ).textContent = e.target.value + '%'; } );
+$( 'shapeStrength' ).addEventListener( 'input', e => { $( 'shapeStrengthValue' ).textContent = e.target.value + '%'; } );
+
 // load the on-device face model now, so the photo step also works with the network off afterwards
 const model = $( 'model' );
-const preload = async () => { model.textContent = 'loading…'; try { await ( await autorig ).loadLandmarker(); model.textContent = 'ready (runs on this device)'; return true; } catch ( e ) { model.textContent = 'unavailable: ' + e.message; return false; } };
+const preload = async () => { model.textContent = 'loading…'; try { const a = await autorig; await Promise.all( [ a.loadLandmarker(), a.loadHairSegmenter() ] ); model.textContent = 'ready (runs on this device)'; return true; } catch ( e ) { model.textContent = 'unavailable: ' + e.message; return false; } };
 const preloaded = preload();
 
 window.__facebind = { run, preload: () => preloaded, network: () => window.__facebind_net };
