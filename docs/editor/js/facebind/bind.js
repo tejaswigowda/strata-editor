@@ -302,7 +302,7 @@ export function assertRigSafe( before, after, shape = {} ) {
 /**
  * @param {ArrayBuffer|Uint8Array} vrmInput base VRM bytes
  * @param {ArrayBuffer|Uint8Array} faceInput LOCAL face-blendshape GLB bytes (never a URL)
- * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, reference?: object }, hairStyle?: { cut?: 'photo'|'keep'|'crop'|'bob'|'long'|'afro', texture?: 'auto'|'straight'|'wavy'|'curly'|'coily' }, textures?: { materialIndex: number, png: Uint8Array, label?: string }[], look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
+ * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, hug?: number, reference?: object }, hairStyle?: { cut?: 'photo'|'keep'|'crop'|'bob'|'long'|'afro', texture?: 'auto'|'straight'|'wavy'|'curly'|'coily' }, textures?: { materialIndex: number, png: Uint8Array, label?: string }[], look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
  *   look = optional, approximate material tints (skin / hair color). textureMeans[materialIndex] = the mean sRGB color (0–255)
  *   of that material's base texture, from lookTexturesOf().
  */
@@ -386,7 +386,7 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 				}
 
 			}
-			if ( ref || wantStyle ) what.hair = { reference: ref, strength: preset ? Math.max( strength, 0.9 ) : strength, texture, limits };
+			if ( ref || wantStyle ) what.hair = { reference: ref, strength: preset ? Math.max( strength, 0.9 ) : strength, texture, limits, hug: opts.hairShape ? opts.hairShape.hug : undefined };
 
 		}
 		if ( what.face || what.hair ) {

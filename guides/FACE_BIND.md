@@ -196,6 +196,23 @@ hair within about 9 mm RMS in height (doing nothing is 44 mm off). In units of E
 - Limits: the field was measured on one restyle of one base (the male; the female base has different hair, so the fit is approximate there), it was hand-made, so it
   is a look to copy and not something a photo measurement can derive, and the largest move is capped at 13 cm.
 
+### Scalp hug (so it does not look like a wig)
+
+The swept-up lift raises the crown by about 4.5 cm, which leaves the hair floating about 5 cm off the skull (median, measured on the male base)
+and reads as a wig. After the lift, hair that has come away from the skull is pulled back toward it:
+
+- **The skull** is estimated from the VRM itself: the face mesh covers only the front of the head, but the hair covers all of it, so the innermost points of
+  the hair and the face together trace the scalp. It is a smoothed height field of the smallest radius in every direction from a point inside the head
+  (`scalp.js`).
+- **The pull.** Each hair vertex remembers how far it was from the skull before the lift (its own thickness). Afterwards, only `1 - hug` of the extra distance is left:
+  the vertex is moved along the line from the center of the head so that it sits at its old thickness plus `(1 - hug)` of what the lift added. Hair that is not floating
+  is not moved. The pull fades in from the ear line (none below it, full from the brow up), because the hair below hangs free past the ears and the neck.
+- **Amount.** `hairShape.hug` (the page's "Scalp hug" slider, default 80%): 0 keeps the full lift, 1 puts the crown back at the stock distance. On the
+  male base the crown hair's distance from the scalp is 5 mm stock, 48 mm lifted without the hug, 14 mm at 80 percent and 5 mm at 100 percent.
+- The back-hair layer under the strands is held 20 percent closer than the strands, so the layers do not cross.
+- Limits: the skull is an estimate from the hair itself, so it cannot be more accurate than the stock hair's fit; a strong pull compresses the cards toward the head, which
+  can show as banding in the toon-lit preview; and the hug cannot add hair where the lift left the scalp uncovered.
+
 ### Hair style
 
 Two independent choices on the page (and `opts.hairStyle = { cut, texture }` in `bindVRM`):

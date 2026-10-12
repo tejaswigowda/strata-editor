@@ -18,6 +18,7 @@ import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan,
 import { cardsOf, relayCards, widenCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
 import { facialHairFromPhoto, paintFacialHair } from '../facialHair.js';
 import { shirtColorFromPhoto } from '../clothing.js';
+import { buildSkull, thicknessAt, hugScalp, hugWeight } from '../scalp.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -508,6 +509,32 @@ test( 'shirt color: the chest below the chin, cleaned of skin and background; no
 
 } );
 
+test( 'scalp: a skull from the innermost points, hair that floats is pulled back toward it, nothing else moves', () => {
+
+	// points on a sphere of radius 0.09 around (0, 1.65, 0): the skull
+	const pts = []; for ( let el = - 20; el <= 90; el += 4 ) for ( let az = 0; az < 360; az += 4 ) { const e = el * Math.PI / 180, a = az * Math.PI / 180; pts.push( 0.09 * Math.cos( e ) * Math.sin( a ), 1.65 + 0.09 * Math.sin( e ), 0.09 * Math.cos( e ) * Math.cos( a ) ); }
+	const sk = buildSkull( Float32Array.from( pts ), [ 0, 1.65, 0 ] );
+	for ( const [ x, y, z ] of [ [ 0, 1.65, 0.09 ], [ 0.09, 1.65, 0 ], [ 0, 1.74, 0 ], [ 0.05, 1.7, 0.06 ] ] ) {
+
+		const len = Math.hypot( x, y - 1.65, z ); // on or near the sphere
+		near( sk.radiusAt( x / len * 0.09, 1.65 + ( y - 1.65 ) / len * 0.09, z / len * 0.09 ), 0.09, 0.004, 'skull radius' );
+
+	}
+	// a point 0.01 over the crown, lifted by 0.05: it floats 0.05 more than it should
+	const t0 = thicknessAt( sk, 0, 1.75, 0 );
+	near( t0, 0.01, 0.004 );
+	const up = [ 0, 1.80, 0 ];
+	const full = hugScalp( sk, ...up, t0, 1, 1 ), none = hugScalp( sk, ...up, t0, 1, 0 ), half = hugScalp( sk, ...up, t0, 1, 0.5 );
+	near( full[ 1 ], 1.75, 0.003, 'full hug puts it back at its own distance from the skull' );
+	eq( none, up ); ok( half[ 1 ] < 1.80 && half[ 1 ] > 1.75, 'half hug is between: ' + half[ 1 ] );
+	// hair that is not floating, or is below the ear line, is not moved
+	eq( hugScalp( sk, 0, 1.74, 0, t0, 1, 1 ), [ 0, 1.74, 0 ] );
+	eq( hugScalp( sk, ...up, t0, hugWeight( - 0.5 ), 1 ), up );
+	ok( hugWeight( 0.8 ) === 1 && hugWeight( 0.1 ) === 0 && hugWeight( 0.35 ) > 0 && hugWeight( 0.35 ) < 1 );
+	ok( same( Float32Array.from( hugScalp( sk, 0.02, 1.8, 0.03, 0.01, 0.7, 0.8 ) ), Float32Array.from( hugScalp( sk, 0.02, 1.8, 0.03, 0.01, 0.7, 0.8 ) ) ) );
+
+} );
+
 test( 'carryNormal: unit length kept and the rotation takes the old direction to the new one', () => {
 
 	const n = carryNormal( [ 0, 0, 1 ], [ 0, - 1, 0 ], [ 1, 0, 0 ] );
@@ -810,6 +837,20 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( f[ 0 ] > f[ 1 ] && f[ 0 ] > f[ 2 ], 'the shirt should be reddish: ' + f );
 		ok( same( b.chunks[ 0 ].data, a.chunks[ 0 ].data ), 'a tint must not touch the binary chunk' );
 		ok( bindVRM( vrmBytes, faceBytes, { look: { top: true, textureMeans: { [ top ]: [ 240, 240, 240 ] } } } ).report.warnings.some( w => /Shirt color skipped/.test( w ) ), 'no shirt in the face GLB should warn' );
+
+	} );
+	test( 'scalp hug on the real VRM: the swept-up crown is pulled back toward the head, hug 0 keeps the full lift, the audit passes either way, deterministic', () => {
+
+		const shape = { topV: 1.2, widthW: 1.285, lengthV: - 0.25, hairlineV: 0.52, cropped: { top: false, side: false, bottom: false } };
+		const run = hug => bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, hug, reference: shape }, hairStyle: { cut: 'photo', texture: 'straight' } } );
+		const a = parseGLB( vrmBytes ), ja = a.json;
+		const mesh = ja.meshes.find( m => m.name.startsWith( 'Hair001' ) );
+		const readHair = bytes => { const v = parseGLB( bytes ), acc = v.json.accessors[ mesh.primitives[ 0 ].attributes.POSITION ], bv = v.json.bufferViews[ acc.bufferView ], d = v.chunks[ 0 ].data; return new Float32Array( d.buffer.slice( d.byteOffset + ( bv.byteOffset || 0 ) + ( acc.byteOffset || 0 ), d.byteOffset + ( bv.byteOffset || 0 ) + ( acc.byteOffset || 0 ) + acc.count * 12 ) ); };
+		const crown = h => { let top = - Infinity; for ( let i = 0; i < h.length; i += 3 ) top = Math.max( top, h[ i + 1 ] ); return top; };
+		const stock = crown( readHair( vrmBytes ) ), none = crown( readHair( run( 0 ).bytes ) ), hugged = crown( readHair( run( 0.8 ).bytes ) ), full = crown( readHair( run( 1 ).bytes ) );
+		ok( none - stock > 0.03, 'hug 0 keeps the lifted crown: ' + ( none - stock ) );
+		ok( hugged < none - 0.015 && hugged >= full - 1e-6, `the hugged crown is lower: stock ${ stock }, hug 0 ${ none }, 0.8 ${ hugged }, 1 ${ full }` );
+		ok( same( run( 0.8 ).bytes, run( 0.8 ).bytes ), 'not deterministic' );
 
 	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {

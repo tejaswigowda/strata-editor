@@ -122,7 +122,7 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 
 		const opts = { names };
 		if ( shape ) opts.shape = { strength: shape.strength };
-		if ( hairShape ) opts.hairShape = { strength: hairShape.strength };
+		if ( hairShape ) opts.hairShape = { strength: hairShape.strength, hug: hairShape.hug };
 		if ( hairStyle ) opts.hairStyle = hairStyle;
 		if ( look && ( look.skin || look.hair || look.iris || look.brow || look.top ) ) {
 
@@ -291,7 +291,7 @@ let vrmFile = null, faceFile = null, imageFile = null;
 const ready = () => !! ( imageFile || faceFile );
 const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked, top: $( 'lookTop' ).checked, strength: Number( $( 'lookStrength' ).value ) / 100 } );
 const shapeOptions = () => $( 'shapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
-const hairShapeOptions = () => $( 'hairShapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
+const hairShapeOptions = () => $( 'hairShapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100, hug: Number( $( 'hairHug' ).value ) / 100 } : null;
 const hairStyleOptions = () => ( { cut: $( 'hairCut' ).value, texture: $( 'hairTexture' ).value } );
 const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions(), hairShape: hairShapeOptions(), hairStyle: hairStyleOptions(), facialHair: $( 'facialHairOn' ).checked } ).then( showNetwork );
 

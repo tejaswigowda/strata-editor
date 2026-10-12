@@ -16,6 +16,7 @@
 
 import { measureFace, planFaceRefine, warpPoint } from '../face/FaceRefine.js';
 import { measureHair, planHair, warpHairPoint, summarizePlan } from './hairShape.js';
+import { buildSkull, thicknessAt, hugScalp, hugWeight } from './scalp.js';
 import { cardsOf, relayCards, widenCards, carryNormal, TEXTURES } from './hairStyle.js';
 import { GLBError } from './glb.js';
 
@@ -203,6 +204,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 	}
 	const m = measureFace( facePositions, sets );
 
+	let skullPositions = facePositions; // the head as it is after the face reshape, for the hair to sit on
 	const modified = new Map(); // accessor -> { positions, ids }
 	const jobs = []; // vertices whose NORMAL / TANGENT must follow their position
 	const result = { face: null, hair: null };
@@ -220,6 +222,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 			maxMove = Math.max( maxMove, Math.hypot( dx, dy, dz ) );
 
 		}
+		skullPositions = moved;
 		const count = json.accessors[ main ].count;
 		for ( const idx of faceAccessors ) if ( json.accessors[ idx ].count === count ) {
 
@@ -275,13 +278,36 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 		// 2. the silhouette (volume, height, length, fringe) toward the photo or a cut preset
 		const plan = planHair( cur, hair.reference || {}, m, hair.strength, hair.limits || {} );
+		// 3. hug the scalp: hair the lift has taken away from the skull is pulled back toward it (see scalp.js)
+		const around = [];
+		for ( const [ a, ids ] of byAccessor ) for ( const i of ids ) around.push( store.get( a )[ i * 3 ], store.get( a )[ i * 3 + 1 ], store.get( a )[ i * 3 + 2 ] );
+		const head = new Float32Array( skullPositions.length + around.length );
+		head.set( skullPositions ); head.set( around, skullPositions.length );
+		const skull = buildSkull( head, [ 0, m.eyeY + 0.35 * m.E, m.zc ] );
+		const hug = hair.hug === undefined ? 0.8 : Math.min( 1, Math.max( 0, hair.hug ) );
+		const thickness = new Map();
+		for ( const [ a, ids ] of byAccessor ) {
+
+			const mid = store.get( a ), t = new Float32Array( json.accessors[ a ].count );
+			for ( const i of ids ) t[ i ] = thicknessAt( skull, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ] );
+			thickness.set( a, t );
+
+		}
+		const warpFor = ( a, inner ) => ( i, x, y, z ) => {
+
+			const w = warpHairPoint( plan, x, y, z, inner.has( i ) );
+			const q = [ x + w[ 0 ], y + w[ 1 ], z + w[ 2 ] ];
+			const h = hugScalp( skull, q[ 0 ], q[ 1 ], q[ 2 ], thickness.get( a )[ i ] * ( inner.has( i ) ? 0.8 : 1 ), hugWeight( ( q[ 1 ] - m.eyeY ) / m.E ), hug );
+			return [ h[ 0 ] - x, h[ 1 ] - y, h[ 2 ] - z ];
+
+		};
 		let maxMove = 0;
 		for ( const [ a, ids ] of byAccessor ) {
 
-			const mid = store.get( a ), original = readPositions( json, bin, a ), dst = Float32Array.from( mid ), inner = innerOf.get( a );
+			const mid = store.get( a ), original = readPositions( json, bin, a ), dst = Float32Array.from( mid ), inner = innerOf.get( a ), wf = warpFor( a, inner );
 			for ( const i of ids ) {
 
-				const [ dx, dy, dz ] = warpHairPoint( plan, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ], inner.has( i ) );
+				const [ dx, dy, dz ] = wf( i, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ] );
 				dst[ i * 3 ] += dx; dst[ i * 3 + 1 ] += dy; dst[ i * 3 + 2 ] += dz;
 				maxMove = Math.max( maxMove, Math.hypot( dst[ i * 3 ] - original[ i * 3 ], dst[ i * 3 + 1 ] - original[ i * 3 + 1 ], dst[ i * 3 + 2 ] - original[ i * 3 + 2 ] ) );
 
@@ -289,7 +315,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 			modified.set( a, { positions: dst, ids: [ ...ids ] } );
 			const tg = tangents.get( a );
 			jobs.push( {
-				accessor: a, ids: [ ...ids ], positions: mid, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ), warpFor: ( i, x, y, z ) => warpHairPoint( plan, x, y, z, inner.has( i ) ),
+				accessor: a, ids: [ ...ids ], positions: mid, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ), warpFor: wf,
 				pre: tg ? ( i, n ) => { const t = tg.get( i ); return t ? carryNormal( n, t.from, t.to ) : n; } : null,
 				minCos: tg ? - 0.3 : 0.35,
 			} );
