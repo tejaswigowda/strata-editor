@@ -182,7 +182,7 @@ Two independent choices on the page (and `opts.hairStyle = { cut, texture }` in 
 
 How the texture works: the VRM's hair is made of ribbon "cards" (one per lock, 103 on the VRoid bases). Each card is
 found as a connected piece of mesh, its root is pinned to the scalp, and the rest of it is bent along a helix around
-the lock's own direction, with some shrinkage and an outward puff (more for tighter textures). Nothing is added: the same
+the lock's own direction, with a little shrinkage and a radial puff away from the middle of the skull (more for tighter textures). The helix phase varies smoothly over the scalp, so neighboring locks curl together and keep covering each other (random phases opened gaps). Nothing is added: the same
 vertices move, bone weights and UVs are untouched, normals are carried through the same bend and the warp, and the byte
 audit still passes (only the hair's own POSITION and NORMAL bytes change). It is deterministic (the phase of each lock
 is a hash of its first vertex id).
@@ -195,8 +195,7 @@ Limits, stated plainly:
 - The texture estimate (`hairTexture` in the face GLB extras) comes from how ordered the strand directions inside the
   hair mask are, plus how ragged the outline is. It is **uncalibrated** (tested on one photo of straight hair), and dark or
   low-contrast hair is reported as `unknown`, which binds as straight. Choose the texture by hand when it matters.
-- Curl and coil displacement is small and bounded (helix radius 5, 9 or 12 mm); tight textures shrink the locks, so the
-  hair reads shorter and the nape can show a little more skin than the straight version.
+- Curl and coil displacement is small and bounded (helix radius 5, 8 or 11 mm). Tight textures can leave a pinhole where the locks meet at the crown; the scalp does not show elsewhere in the views checked (front, back, below, above).
 - All of it is on-device geometry math on the bytes already in the page; it adds no network request and no new data
   leaves the device.
 

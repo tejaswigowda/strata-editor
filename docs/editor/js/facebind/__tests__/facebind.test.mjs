@@ -416,7 +416,7 @@ const ribbon = ( rows = 20, step = 0.01 ) => {
 };
 const frame = { eyeY: 0, E: 0.2, zc: 0 };
 
-test( 'hair texture re-lay: the root stays on the scalp, the tips move and shorten, it is deterministic and bounded', () => {
+test( 'hair texture re-lay: the root stays on the scalp, the tips move, tighter textures move more, it is deterministic and bounded', () => {
 
 	const { positions, idx } = ribbon( 40, 0.01 );
 	const cards = cardsOf( [ idx ] );
@@ -438,8 +438,8 @@ test( 'hair texture re-lay: the root stays on the scalp, the tips move and short
 
 	}
 	const tight = relayCards( positions, cards, frame, 'coily' ), loose = relayCards( positions, cards, frame, 'wavy' );
-	const lastY = p => p[ p.length / 3 * 3 - 2 ];
-	ok( lastY( tight.positions ) > lastY( loose.positions ), 'a tighter texture should shorten the lock more' );
+	const spread = p => { let s = 0; for ( let i = 0; i < p.length; i ++ ) s += Math.abs( p[ i ] - positions[ i ] ); return s; };
+	ok( spread( tight.positions ) > spread( loose.positions ), 'a tighter texture should move the lock more' );
 	eq( TEXTURES.straight, null );
 	ok( CUTS.afro.texture === 'coily' );
 

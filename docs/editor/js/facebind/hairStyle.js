@@ -20,9 +20,9 @@ const unit = a => { const l = len( a ); return l > 1e-9 ? [ a[ 0 ] / l, a[ 1 ] /
 /** Texture presets. turns = helix turns per meter of strand, amp = helix radius (m), shrink = how much shorter the curled lock is. */
 export const TEXTURES = {
 	straight: null,
-	wavy: { turns: 7, amp: 0.005, shrink: 0.03, puff: 1.02 },
-	curly: { turns: 14, amp: 0.009, shrink: 0.1, puff: 1.1 },
-	coily: { turns: 24, amp: 0.012, shrink: 0.18, puff: 1.2 },
+	wavy: { turns: 7, amp: 0.005, shrink: 0.02, puff: 1.02 },
+	curly: { turns: 14, amp: 0.008, shrink: 0.05, puff: 1.08 },
+	coily: { turns: 24, amp: 0.011, shrink: 0.08, puff: 1.15 },
 };
 
 /** Cut presets: reference silhouettes (the same units as a photo's) and the limits they may use. Applied by hairShape.js. */
@@ -50,8 +50,8 @@ export function cardsOf( triangleIndexLists ) {
 
 }
 
-// a deterministic phase per card, so the result is the same every run
-const phaseOf = id => { let h = ( id * 2654435761 ) >>> 0; h ^= h >>> 15; h = Math.imul( h, 2246822519 ) >>> 0; return ( h % 6283 ) / 1000; };
+// a deterministic phase that varies smoothly over the scalp, so neighboring locks curl together and keep covering each other
+const phaseAt = R => 2 * Math.PI * ( R[ 0 ] * 17 + R[ 1 ] * 11 + R[ 2 ] * 13 );
 
 /**
  * Re-lay every card as a helix around its own strand direction.
@@ -78,7 +78,7 @@ export function relayCards( positions, cards, m, texture ) {
 		const R = [ 0, 0, 0 ]; for ( const i of byRoot.slice( 0, nRoot ) ) { const p = P( i ); R[ 0 ] += p[ 0 ] / nRoot; R[ 1 ] += p[ 1 ] / nRoot; R[ 2 ] += p[ 2 ] / nRoot; }
 		let Lmax = 0; for ( const i of card ) Lmax = Math.max( Lmax, len( sub( P( i ), R ) ) );
 		if ( Lmax < 0.03 ) continue;
-		const phi0 = phaseOf( card[ 0 ] );
+		const phi0 = phaseAt( R );
 
 		for ( const i of card ) {
 
@@ -86,14 +86,14 @@ export function relayCards( positions, cards, m, texture ) {
 			const d = unit( v ); if ( ! d || s < 1e-4 ) continue;
 			let e1 = unit( cross( d, [ 0, 1, 0 ] ) ); if ( ! e1 || Math.abs( dot( d, [ 0, 1, 0 ] ) ) > 0.95 ) e1 = unit( cross( d, [ 1, 0, 0 ] ) );
 			const e2 = cross( d, e1 );
-			const ramp = smooth( clamp( s / 0.025, 0, 1 ) ); // the root stays on the scalp
+			const ramp = smooth( clamp( s / 0.04, 0, 1 ) ); // the root stays on the scalp
 			const sh = t.shrink * smooth( clamp( s / Lmax, 0, 1 ) );
 			const phi = 2 * Math.PI * t.turns * s + phi0;
 			const A = t.amp * ramp;
 			const q = [ R[ 0 ] + v[ 0 ] * ( 1 - sh ) + A * ( Math.cos( phi ) * e1[ 0 ] + Math.sin( phi ) * e2[ 0 ] ), R[ 1 ] + v[ 1 ] * ( 1 - sh ) + A * ( Math.cos( phi ) * e1[ 1 ] + Math.sin( phi ) * e2[ 1 ] ), R[ 2 ] + v[ 2 ] * ( 1 - sh ) + A * ( Math.cos( phi ) * e1[ 2 ] + Math.sin( phi ) * e2[ 2 ] ) ];
-			// outward puff away from the middle of the skull, growing toward the tips
+			// outward puff away from the middle of the skull (radial, so a lock keeps its place on the scalp), growing toward the tips
 			const k = 1 + ( t.puff - 1 ) * smooth( clamp( s / Lmax, 0, 1 ) );
-			const o = [ C[ 0 ] + ( q[ 0 ] - C[ 0 ] ) * k, q[ 1 ], C[ 2 ] + ( q[ 2 ] - C[ 2 ] ) * k ];
+			const o = [ C[ 0 ] + ( q[ 0 ] - C[ 0 ] ) * k, C[ 1 ] + ( q[ 1 ] - C[ 1 ] ) * k, C[ 2 ] + ( q[ 2 ] - C[ 2 ] ) * k ];
 			out[ i * 3 ] = o[ 0 ]; out[ i * 3 + 1 ] = o[ 1 ]; out[ i * 3 + 2 ] = o[ 2 ];
 
 			// the strand direction before and after (for carrying the normal along): the helix tilts it by amp * 2 pi * turns

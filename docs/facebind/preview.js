@@ -197,12 +197,11 @@ export function createPreview( container ) {
 
 		get expressionMode() { return mode; },
 
-		/** Turn the camera around the head: 0 = front, 180 = back. */
-		orbit( degrees ) {
+		/** Turn the camera around the head: 0 = front, 180 = back; elevation in degrees (positive looks from above). */
+		orbit( degrees, elevation = 0 ) {
 
-			const r = Math.hypot( camera.position.x - controls.target.x, camera.position.z - controls.target.z ), a = degrees * Math.PI / 180;
-			camera.position.x = controls.target.x + Math.sin( a ) * r;
-			camera.position.z = controls.target.z + Math.cos( a ) * r;
+			const t = controls.target, r = Math.hypot( camera.position.x - t.x, camera.position.y - t.y, camera.position.z - t.z ), a = degrees * Math.PI / 180, e = elevation * Math.PI / 180;
+			camera.position.set( t.x + Math.sin( a ) * Math.cos( e ) * r, t.y + Math.sin( e ) * r, t.z + Math.cos( a ) * Math.cos( e ) * r );
 			controls.update(); request();
 
 		},
