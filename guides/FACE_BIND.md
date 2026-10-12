@@ -26,11 +26,12 @@ An anime base will still look like an anime character; this gets closer, it does
 byte, and the face GLB's mesh is never grafted on. The only changes to the VRM are:
 
 - the bind block and `extensionsUsed`;
-- (optional) the face's base **POSITION** data, i.e. the face shape;
+- (optional) the base **POSITION** data of the face (its shape) and of the hair (its volume, height, length and fringe);
 - (optional) material colours (skin, hair, iris, brow) and their MToon shade colours.
 
-`bindVRM` audits this before it writes: the JSON diff may only touch those paths and the POSITION accessor's
-min/max, and every byte of the binary chunk outside the face POSITION range must be identical, or it refuses
+`bindVRM` audits this before it writes: the JSON diff may only touch those paths and the moved POSITION accessors'
+min/max, and every byte of the binary chunk outside the face's and the hair's own vertices must be identical (the body
+vertices that share an accessor with the back hair included), or it refuses
 (`RIG_UNSAFE`). Because the morph targets are deltas, every existing blendshape keeps working on the reshaped
 face, and bodyrig still bakes the body unchanged.
 
@@ -124,6 +125,7 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | What | Measured from the photo | Applied to the VRM |
 |---|---|---|
 | **Face shape** | eye spacing, eye width and openness, mouth width, jaw width, nose-tip / lip / chin depth (all as ratios of head width, so photo size drops out) | a smooth local warp of the face's base positions (`FaceRefine.js`); eyes, mouth, jaw and the nose / lips / chin profile. Limited (jaw ≤ ±12%, eyes ±25–30%, depth clamped to human ranges) and faded out before the head outline, so hair, ears and neck still meet the face |
+| **Hair shape** | from the hair mask, in the same head units: crown height, width at ear level, length below the ears, and where the fringe ends on the forehead | a smooth warp of the VRM's existing hair vertices: volume (×0.85–1.2), crown height (×0.8–1.25), length (×0.6–1.6), fringe edge (up to ±0.35 E), each move capped at 4 cm. Measurements the photo crops (top, sides, bottom of the frame) are skipped and listed as warnings |
 | **Skin tone** | average of five patches of the face | skin materials (face and body share one tint) |
 | **Hair colour** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
 | **Eye colour** | a disc inside each iris | iris material |
@@ -135,7 +137,8 @@ Notes:
   rendered colour moves toward the photo's. A tint can only darken, so a colour lighter than the texture is as close
   as it gets, and the report says so (`reached: false`).
 - The MToon shade colour is scaled by the same ratio so the shadowed side follows.
-- Hair **style** is geometry and is not changed; only its colour is. A hairstyle change is a separate rig step.
+- The hairstyle itself is **scaled and shifted, not replaced**. A different cut (curls, braids, a bob instead of an undercut) needs a different hair mesh, which is a separate rig step. A photo that crops the head can only give partial hair measurements, and a bald or shaved head (little hair found) leaves the hair unchanged.
+- Hair vertices keep their bone weights, so the hair still follows the head and the spring bones; the new shape is the new rest pose.
 - Strength is 0–1 for shape and for colour (default 70%).
 - **Not used: the photo's texture itself.** The face GLB carries a UV-mapped crop of the photo. Painting it onto the
   VRM's face texture would put a photographic face under the anime eyes, brows and mouth (which are separate meshes),
@@ -152,7 +155,7 @@ and no hair, eye or brow colours). It is approximate, a material change only, an
 
 ```
 /facebind/?vrm=male|female|<url>&run=1[&download=0]   auto-runs once a photo (or face GLB) is chosen from local disk
-window.__facebind.run({ vrm, image, shape, look })  shape: { strength } | omitted;  look: { skin, hair, iris, brow, strength } | omitted;  vrm: 'male' (default) | 'female' | URL | File | bytes;  image: File | Blob (never a URL)
+window.__facebind.run({ vrm, image, shape, look })  shape / hairShape: { strength } | omitted;  look: { skin, hair, iris, brow, strength } | omitted;  vrm: 'male' (default) | 'female' | URL | File | bytes;  image: File | Blob (never a URL)
 window.__facebind.run({ vrm, face, tint })   face: an existing face GLB, File | bytes (never a URL) — skips the photo step
 window.__facebind.preload()                  resolves when the on-device face model is loaded
 window.__webcli_result                       { ok, filename, size, bytes, blobUrl, faceGlbBlobUrl, bind, report }  or { ok:false, code, error }

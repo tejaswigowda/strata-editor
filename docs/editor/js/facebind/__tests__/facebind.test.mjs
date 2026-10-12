@@ -14,6 +14,7 @@ import { readFaceSource, CONVENTION_42 } from '../faceSource.js';
 import { bindVRM, buildBinding, assertRigSafe, ARKIT_52 } from '../bind.js';
 import { hairColorFromMask } from '../hair.js';
 import { faceProportions } from '../proportions.js';
+import { hairShapeFromMask, measureHair, planHair, warpHairPoint } from '../hairShape.js';
 import { applyFaceWeights } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -185,6 +186,45 @@ test( 'hair colour: reads the masked pixels, ignores highlights, shadows and the
 
 } );
 
+test( 'hair shape from a mask: measures a whole head, and refuses what the frame crops', () => {
+
+	// landmarks of a face centred in a 200x200 frame: eyes at y=.45, chin at .75, ears at x=.3/.7
+	const lm = Array.from( { length: 478 }, () => ( { x: 0.5, y: 0.5 } ) );
+	Object.assign( lm, { 33: { x: 0.38, y: 0.45 }, 133: { x: 0.46, y: 0.45 }, 362: { x: 0.54, y: 0.45 }, 263: { x: 0.62, y: 0.45 }, 234: { x: 0.3, y: 0.52 }, 454: { x: 0.7, y: 0.52 }, 152: { x: 0.5, y: 0.75 } } );
+	const w = 200, h = 200, mask = new Uint8Array( w * h );
+	const fill = ( x0, x1, y0, y1 ) => { for ( let y = y0; y < y1; y ++ ) for ( let x = x0; x < x1; x ++ ) mask[ y * w + x ] = 1; };
+	fill( 52, 148, 20, 70 ); // crown and sides above the brows
+	const full = hairShapeFromMask( lm, mask, { width: w, height: h } );
+	ok( full.topV > 1 && full.topV < 2.2, 'topV ' + full.topV ); ok( full.widthW > 1 && full.widthW < 1.6, 'widthW ' + full.widthW );
+	ok( ! full.cropped.top && ! full.cropped.side );
+	fill( 90, 110, 0, 20 ); // hair touching the top edge
+	const cropped = hairShapeFromMask( lm, mask, { width: w, height: h } );
+	ok( cropped.cropped.top && cropped.topV === null, 'a hair-on-the-edge photo must not report a height' );
+	eq( hairShapeFromMask( lm, new Uint8Array( w * h ), { width: w, height: h } ), null );
+
+} );
+
+test( 'hair plan and warp: moves toward the reference, stays within limits, is local to the hair frame', () => {
+
+	const m = { eyeY: 1.61, E: 0.11, W: 0.18, front: - 1, zc: - 0.04 };
+	const cur = { topV: 1.5, widthW: 1.2, lengthV: - 0.8, hairlineV: 0.5 };
+	const p = planHair( cur, { topV: 2.0, widthW: 1.6, lengthV: - 2.5, hairlineV: 0.9 }, m, 1 );
+	ok( p.volume === 1.2 && p.top === 1.25 && p.length === 1.6, JSON.stringify( p ) ); // all at their limits
+	ok( p.fringe.shift > 0 );
+	const none = planHair( cur, { topV: 2.0, widthW: 1.6, lengthV: - 2.5, hairlineV: 0.9 }, m, 0 );
+	ok( none.volume === 1 && none.top === 1 && none.length === 1 && none.fringe.shift === 0 );
+	const skip = planHair( cur, { topV: null, widthW: null, lengthV: null, hairlineV: null }, m, 1 );
+	ok( ! skip.volume && ! skip.top && ! skip.length && ! skip.fringe );
+	// crown goes up, the sides go out, the lower hair goes down; nothing moves more than 4 cm
+	ok( warpHairPoint( p, 0, 1.78, 0 )[ 1 ] > 0 );
+	ok( warpHairPoint( p, 0.11, 1.65, 0 )[ 0 ] > 0 );
+	ok( warpHairPoint( p, 0.1, 1.53, 0 )[ 1 ] < 0 );
+	for ( const pt of [ [ 0.2, 1.9, 0.3 ], [ 0.1, 1.5, - 0.1 ], [ 0, 1.7, - 0.2 ] ] ) ok( Math.hypot( ...warpHairPoint( p, ...pt ) ) <= 0.04 + 1e-9 );
+	const meas = measureHair( new Float32Array( [ 0, 1.78, 0, 0.11, 1.65, 0, - 0.11, 1.62, 0, 0, 1.52, 0.1 ] ), [ 0, 1, 2, 3 ], m );
+	ok( meas.topV > 1.4 && meas.widthW > 1.1 );
+
+} );
+
 // ── real files ──────────────────────────────────────────────────────────────
 const dl = path.join( os.homedir(), 'Downloads' );
 const vrmPath = process.env.VRM || path.join( dl, '52blendshapes-for-VRoid-face-main', 'VRoid_V110_Male_v1.1.3.vrm' );
@@ -292,6 +332,38 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		near( turned.eyeSeparationW, base.eyeSeparationW, 0.02 ); near( turned.mouthWidthW, base.mouthWidthW, 0.02 );
 		ok( faceProportions( toLm( 1.0 ), { width: 1000, height: 1000 } ).depth === null, 'a profile view should not report depth' );
 		eq( faceProportions( [], { width: 1, height: 1 } ), null );
+
+	} );
+	test( 'hair reshape: only the hair vertices move (the body sharing an accessor with the back hair does not), everything else is byte-identical', () => {
+
+		const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) );
+		j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, hairColor: { r: 0.1, g: 0.1, b: 0.1 }, hairCoverage: 0.5, hairShape: { topV: 1.9, widthW: 1.4, lengthV: - 1.6, hairlineV: 0.8, cropped: { top: false, side: false, bottom: false } } };
+		const face = writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } );
+		const out = bindVRM( vrmBytes, face, { hairShape: { strength: 1 } } );
+		ok( out.report.hairShape && out.report.hairShape.maxMoveMm > 2 && out.report.hairShape.maxMoveMm <= 40, 'move ' + ( out.report.hairShape && out.report.hairShape.maxMoveMm ) );
+		ok( out.report.shape === null, 'the face must not move when only the hair is asked for' );
+		const a = parseGLB( vrmBytes ), b = parseGLB( out.bytes ), ja = a.json;
+		// the vertices that belong to the hair
+		const hairVerts = new Map();
+		const readIdx = acc => { const x = ja.accessors[ acc ], bv = ja.bufferViews[ x.bufferView ], dv = new DataView( a.chunks[ 0 ].data.buffer, a.chunks[ 0 ].data.byteOffset + ( bv.byteOffset || 0 ) + ( x.byteOffset || 0 ) ); return Array.from( { length: x.count }, ( _, i ) => x.componentType === 5125 ? dv.getUint32( i * 4, true ) : dv.getUint16( i * 2, true ) ); };
+		ja.meshes.forEach( m => m.primitives.forEach( p => { if ( /_HAIR$/.test( ja.materials[ p.material ].name ) ) { const s = hairVerts.get( p.attributes.POSITION ) || new Set(); readIdx( p.indices ).forEach( i => s.add( i ) ); hairVerts.set( p.attributes.POSITION, s ); } } ) );
+		const allowed = new Set();
+		for ( const [ acc, ids ] of hairVerts ) { const x = ja.accessors[ acc ], st = ( ja.bufferViews[ x.bufferView ].byteOffset || 0 ) + ( x.byteOffset || 0 ); for ( const i of ids ) for ( let k = 0; k < 12; k ++ ) allowed.add( st + i * 12 + k ); }
+		let outside = 0, inside = 0;
+		a.chunks[ 0 ].data.forEach( ( v, i ) => { if ( v !== b.chunks[ 0 ].data[ i ] ) allowed.has( i ) ? inside ++ : outside ++; } );
+		ok( outside === 0, outside + ' bytes outside the hair vertices changed' ); ok( inside > 1000, 'hair barely moved: ' + inside );
+		ok( hairVerts.size >= 2, 'expected hair in more than one accessor (front hair + the back hair on the body mesh)' );
+
+	} );
+	test( 'hair reshape is skipped, with a warning, when the photo crops the hair on every side or has no hair data', () => {
+
+		const none = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1 } } );
+		ok( none.report.hairShape === null && none.report.warnings.some( w => /no hair measurements/.test( w ) ) );
+		const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) );
+		j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, hairShape: { topV: null, widthW: null, lengthV: null, hairlineV: null, cropped: { top: true, side: true, bottom: true } } };
+		const cropped = bindVRM( vrmBytes, writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } ), { hairShape: { strength: 1 } } );
+		ok( cropped.report.hairShape === null && cropped.report.warnings.some( w => /crops the hair on every side/.test( w ) ) );
+		ok( same( parseGLB( cropped.bytes ).chunks[ 0 ].data, parseGLB( vrmBytes ).chunks[ 0 ].data ) );
 
 	} );
 	test( 'a bound VRM can be re-bound (bind block replaced, not duplicated)', () => {

@@ -5,18 +5,19 @@
 // Rig-safe: the VRM's skeleton, skin weights, morph deltas, textures, hair and body are never touched, and
 // no byte of the binary chunk changes except (optionally) the face's POSITION data. The only things written are
 //   · an `extensions.STRATA_face_bind` block (a weight map: face morph -> the VRM's own morph targets),
-//   · optionally, a reshape of the face's base positions toward the photo's measured proportions, and
+//   · optionally, a reshape of the face's and the hair's base positions toward the photo's measurements, and
 //   · optionally, tints on the skin / hair / iris / brow materials toward colours read from the photo.
 // A face morph with no matching VRM target is skipped and listed; nothing is synthesised. The face GLB's mesh
-// is never copied into the VRM, and hair STYLE (geometry) is not changed. The reshape and tints are
-// approximate: this is expression binding with a photo-informed look, not a likeness guarantee.
+// is never copied into the VRM, and the hairstyle is only scaled, not replaced. The reshape and tints are
+// approximate: this is expression binding with a photo-informed look, not a likeness guarantee. The hair
+// reshape scales and shifts the VRM's existing hairstyle (volume, height, length, fringe); it cannot change the cut.
 //
 // Pure and deterministic (no clock, no randomness, no network): same inputs + options -> same bytes.
 
 import { parseGLB, writeGLB, GLBError } from './glb.js';
 import { readFaceSource } from './faceSource.js';
 import { MIN_HAIR_COVERAGE } from './hair.js';
-import { reshapeFace, assertBinOnlyChanged } from './reshape.js';
+import { reshapeVRM, assertBinOnlyChanged } from './reshape.js';
 import { FACE_REFERENCE } from '../face/faceReference.js';
 import { retintSkin, linearToSrgb, srgbToLinear } from '../face/FaceRefine.js';
 
@@ -245,7 +246,7 @@ export function assertRigSafe( before, after, shape = {} ) {
 /**
  * @param {ArrayBuffer|Uint8Array} vrmInput base VRM bytes
  * @param {ArrayBuffer|Uint8Array} faceInput LOCAL face-blendshape GLB bytes (never a URL)
- * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
+ * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, reference?: object }, look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
  *   look = optional, approximate material tints (skin / hair colour). textureMeans[materialIndex] = the mean sRGB colour (0–255)
  *   of that material's base texture, from lookTexturesOf().
  */
@@ -266,22 +267,49 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		warnings: [ ...source.warnings ],
 		look: null,
 		shape: null,
+		hairShape: null,
 		egress: 'none: the face GLB was read from local bytes only; nothing derived from it left this process',
 	};
 
 	const origBin = ( vrm.chunks.find( c => c.type === 0x004e4942 ) || {} ).data;
 	let reshaped = null;
-	if ( opts.shape ) {
+	if ( opts.shape || opts.hairShape ) {
 
-		const strength = opts.shape.strength === undefined ? 0.7 : opts.shape.strength;
-		const p = source.proportions;
-		const reference = opts.shape.reference || ( p ? { ...FACE_REFERENCE, ...p, depth: p.depth || null } : null );
-		if ( ! reference ) report.warnings.push( 'Face shape skipped: the face GLB carries no measured proportions (it was not made from a photo).' );
-		else {
+		const what = {};
+		if ( opts.shape ) {
 
-			if ( p && ! p.depth ) report.warnings.push( 'Profile depth (nose, lips, chin) skipped: the head in the photo is turned too far to read it.' );
-			reshaped = reshapeFace( vrm, reference, strength );
-			report.shape = { approximate: true, strength, maxMoveMm: +( reshaped.maxMove * 1000 ).toFixed(1), vrmBefore: reshaped.measured, photo: reference };
+			const strength = opts.shape.strength === undefined ? 0.7 : opts.shape.strength;
+			const p = source.proportions;
+			const reference = opts.shape.reference || ( p ? { ...FACE_REFERENCE, ...p, depth: p.depth || null } : null );
+			if ( ! reference ) report.warnings.push( 'Face shape skipped: the face GLB carries no measured proportions (it was not made from a photo).' );
+			else {
+
+				if ( p && ! p.depth ) report.warnings.push( 'Profile depth (nose, lips, chin) skipped: the head in the photo is turned too far to read it.' );
+				what.face = { reference, strength };
+
+			}
+
+		}
+		if ( opts.hairShape ) {
+
+			const strength = opts.hairShape.strength === undefined ? 0.7 : opts.hairShape.strength;
+			const ref = opts.hairShape.reference || source.hairShape;
+			if ( ! ref ) report.warnings.push( 'Hair shape skipped: the face GLB carries no hair measurements (it was not made from a photo, or no hair was found).' );
+			else if ( [ ref.topV, ref.widthW, ref.lengthV, ref.hairlineV ].every( v => v === null || v === undefined ) ) report.warnings.push( 'Hair shape skipped: the photo crops the hair on every side, so its size cannot be measured. Use a photo that shows the whole head.' );
+			else {
+
+				const cut = ref.cropped ? Object.entries( ref.cropped ).filter( ( [ , v ] ) => v ).map( ( [ k ] ) => k ) : [];
+				if ( cut.length ) report.warnings.push( `Part of the hair shape was skipped because the photo crops the hair (${ cut.join( ', ' ) }).` );
+				what.hair = { reference: ref, strength };
+
+			}
+
+		}
+		if ( what.face || what.hair ) {
+
+			reshaped = reshapeVRM( vrm, what );
+			if ( reshaped.face ) report.shape = { approximate: true, strength: what.face.strength, maxMoveMm: +( reshaped.face.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.face.measured, photo: what.face.reference };
+			if ( reshaped.hair ) report.hairShape = { approximate: true, strength: what.hair.strength, maxMoveMm: +( reshaped.hair.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.hair.measured, photo: what.hair.reference, applied: reshaped.hair.plan };
 
 		}
 

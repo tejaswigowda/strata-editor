@@ -111,7 +111,7 @@ export function measureFace( positions, sets ) {
 	const dz = y => front * ( frontZ( 0, y ) - zRef ) / W;
 
 	return {
-		front, W, E, eyeY, chinY, zRef, eyes,
+		front, W, E, eyeY, chinY, zRef, zc, eyes,
 		eyeSeparationW: ( eyes[ 0 ].cx - eyes[ 1 ].cx ) / W,
 		eyeWidthW: ( eyes[ 0 ].width + eyes[ 1 ].width ) / 2 / W,
 		eyeOpenness: ( eyes[ 0 ].height + eyes[ 1 ].height ) / ( eyes[ 0 ].width + eyes[ 1 ].width ),
