@@ -21,6 +21,7 @@ import { GLBError } from './glb.js';
 
 const FACE_MATERIAL = /_(FaceMouth|EyeIris|EyeHighlight|EyeWhite|FaceBrow|FaceEyelash|FaceEyeline|Face)_\d+_(FACE|EYE|SKIN)/;
 const HAIR_MATERIAL = /_HAIR$/;
+const INNER_HAIR = /_HairBack_/; // the layer of hair under the strands: lifted less than the strands, so it shows at the hairline
 const PARTS = [ [ 'iris', /_EyeIris_/ ], [ 'white', /_EyeWhite_/ ], [ 'mouth', /_FaceMouth_/ ], [ 'skin', /_Face_\d+_SKIN/ ] ];
 const BIN = 0x004e4942;
 
@@ -130,7 +131,7 @@ function transformAttributes( json, bin, prims, job ) {
 		for ( const i of ids ) {
 
 			const x = positions[ i * 3 ], y = positions[ i * 3 + 1 ], z = positions[ i * 3 + 2 ];
-			const J = jacobian( warp, x, y, z );
+			const J = jacobian( job.warpFor ? ( a, b, c ) => job.warpFor( i, a, b, c ) : warp, x, y, z );
 			const det = det3( J );
 			if ( ! ( det > 0.1 ) ) continue; // a vertex the warp folds flat: keep its normal
 			const o = start + i * stride;
@@ -240,12 +241,13 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 	// ── hair ──
 	if ( hair ) {
 
-		const byAccessor = new Map(), triLists = new Map();
-		for ( const { p } of prims.filter( q => HAIR_MATERIAL.test( q.name ) ) ) {
+		const byAccessor = new Map(), triLists = new Map(), innerOf = new Map();
+		for ( const { p, name } of prims.filter( q => HAIR_MATERIAL.test( q.name ) ) ) {
 
 			const a = p.attributes.POSITION;
-			if ( ! byAccessor.has( a ) ) { byAccessor.set( a, new Set() ); triLists.set( a, [] ); }
+			if ( ! byAccessor.has( a ) ) { byAccessor.set( a, new Set() ); triLists.set( a, [] ); innerOf.set( a, new Set() ); }
 			const idx = readIndices( json, bin, p.indices );
+			if ( INNER_HAIR.test( name ) ) for ( const i of idx ) innerOf.get( a ).add( i ); // the back-hair layer under the strands
 			for ( const i of idx ) byAccessor.get( a ).add( i );
 			triLists.get( a ).push( idx );
 
@@ -276,10 +278,10 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 		let maxMove = 0;
 		for ( const [ a, ids ] of byAccessor ) {
 
-			const mid = store.get( a ), original = readPositions( json, bin, a ), dst = Float32Array.from( mid );
+			const mid = store.get( a ), original = readPositions( json, bin, a ), dst = Float32Array.from( mid ), inner = innerOf.get( a );
 			for ( const i of ids ) {
 
-				const [ dx, dy, dz ] = warpHairPoint( plan, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ] );
+				const [ dx, dy, dz ] = warpHairPoint( plan, mid[ i * 3 ], mid[ i * 3 + 1 ], mid[ i * 3 + 2 ], inner.has( i ) );
 				dst[ i * 3 ] += dx; dst[ i * 3 + 1 ] += dy; dst[ i * 3 + 2 ] += dz;
 				maxMove = Math.max( maxMove, Math.hypot( dst[ i * 3 ] - original[ i * 3 ], dst[ i * 3 + 1 ] - original[ i * 3 + 1 ], dst[ i * 3 + 2 ] - original[ i * 3 + 2 ] ) );
 
@@ -287,7 +289,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 			modified.set( a, { positions: dst, ids: [ ...ids ] } );
 			const tg = tangents.get( a );
 			jobs.push( {
-				accessor: a, ids: [ ...ids ], positions: mid, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ),
+				accessor: a, ids: [ ...ids ], positions: mid, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ), warpFor: ( i, x, y, z ) => warpHairPoint( plan, x, y, z, inner.has( i ) ),
 				pre: tg ? ( i, n ) => { const t = tg.get( i ); return t ? carryNormal( n, t.from, t.to ) : n; } : null,
 				minCos: tg ? - 0.3 : 0.35,
 			} );

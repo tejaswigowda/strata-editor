@@ -191,7 +191,7 @@ export function measureHair( positions, ids, m ) {
 
 // The hair sits only a centimeter or two outside the skull, which is not moved, so it may not shrink much (that would sink
 // it into the head and show the scalp between the strands): the lower limits are small on purpose.
-const LIMITS_DEFAULT = { volume: [ 0.94, 1.2 ], top: [ 0.92, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.13, minSqueeze: 0.5 };
+const LIMITS_DEFAULT = { volume: [ 0.94, 1.2 ], top: [ 0.92, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.13 };
 
 // ratios (or shifts) per bin, with gaps filled by interpolating between the valid bins, flat past the ends
 // Beyond the measured range the value fades back to `restValue` (1 for ratios, 0 for shifts; null = stay flat) over `fade`, so a measurement taken at
@@ -233,7 +233,7 @@ export function planHair( cur, ref, m, strength, limits = {} ) {
 
 	const LIMITS = { ...LIMITS_DEFAULT, ...limits };
 	const s = clamp( strength, 0, 1 );
-	const plan = { m, strength: s, curBottomV: cur.lengthV, curLineV: cur.hairlineV, minSqueeze: LIMITS.minSqueeze, mode: 'scalar', volume: null, top: null, length: null, fringe: null, profile: null };
+	const plan = { m, strength: s, curBottomV: cur.lengthV, curLineV: cur.hairlineV, mode: 'scalar', volume: null, top: null, length: null, fringe: null, profile: null };
 	const rp = ref.profile, cp = cur.profile;
 
 	if ( rp && cp ) {
@@ -293,6 +293,24 @@ export function planHair( cur, ref, m, strength, limits = {} ) {
 		}
 
 	}
+	// the swept-up lift: how short the photo's hair is decides how much of it is used
+	const A = 0.15;
+	let need = 0;
+	const bottom = plan.curBottomV;
+	const cuts = plan.mode === 'silhouette' ? [ plan.profile.trimR, plan.profile.trimL ].filter( v => v !== null && v !== undefined ) : ( plan.trimV !== undefined && plan.trimV !== null ? [ plan.trimV ] : [] );
+	if ( cuts.length && bottom !== null && bottom !== undefined ) need = Math.max( 0, ( cuts.reduce( ( a, b ) => a + b, 0 ) / cuts.length ) - bottom );
+	const edgeLift = plan.mode === 'silhouette' ? plan.profile.edgeLift : ( plan.edgeV && plan.curLineV !== null && plan.curLineV !== undefined ? plan.edgeV - plan.curLineV : null );
+	const B = Math.min( SWEPT.max, need ), shortness = B / SWEPT.max;
+	const F = Math.min( SWEPT.fringeMax, Math.max( edgeLift > 0 ? edgeLift : 0, 1.15 * shortness ) );
+	plan.swept = B > 0.02 || F > 0.1 ? { B, T: B, F, shortness: +shortness.toFixed( 2 ) } : null;
+	// the swept-up look raises the crown, so a photo whose crown measures lower than the VRM's must not also shrink it
+	if ( plan.swept ) {
+
+		if ( plan.top && plan.top < 1 ) plan.top = 1;
+		if ( plan.profile && plan.profile.crown ) { const c = plan.profile.crown; plan.profile.crown = t => Math.max( 1, c( t ) ); }
+
+	}
+
 	return plan;
 
 }
@@ -304,43 +322,46 @@ export function summarizePlan( plan ) {
 	if ( plan.mode === 'silhouette' ) {
 
 		const p = plan.profile, at = ( fn, ts ) => fn ? ts.map( t => f( fn( t ) ) ) : null;
-		return { mode: 'silhouette', sides: { right: at( p.widthR, [ - 0.5, 0.25, 1.0 ] ), left: at( p.widthL, [ - 0.5, 0.25, 1.0 ] ) }, crown: at( p.crown, [ - 0.3, 0, 0.3 ] ), fringeShiftE: p.fringe ? [ - 0.3, 0, 0.3 ].map( t => +( p.fringe( t ) * s ).toFixed( 3 ) ) : null, length: { right: f( p.lengthR ), left: f( p.lengthL ) }, trim: { right: p.trimR, left: p.trimL, fringeLift: p.edgeLift ? +( p.edgeLift * s ).toFixed( 3 ) : null } };
+		return { mode: 'silhouette', sides: { right: at( p.widthR, [ - 0.5, 0.25, 1.0 ] ), left: at( p.widthL, [ - 0.5, 0.25, 1.0 ] ) }, crown: at( p.crown, [ - 0.3, 0, 0.3 ] ), fringeShiftE: p.fringe ? [ - 0.3, 0, 0.3 ].map( t => +( p.fringe( t ) * s ).toFixed( 3 ) ) : null, length: { right: f( p.lengthR ), left: f( p.lengthL ) }, trim: { right: p.trimR, left: p.trimL }, swept: plan.swept ? { bottomE: +( plan.swept.B * s ).toFixed( 2 ), topE: +( plan.swept.T * s ).toFixed( 2 ), fringeE: +( plan.swept.F * s ).toFixed( 2 ) } : null };
 
 	}
-	return { mode: 'scalar', volume: f( plan.volume ), top: f( plan.top ), length: f( plan.length ), trim: { right: plan.trimV ?? null, left: plan.trimV ?? null, fringeLift: plan.edgeV && plan.curLineV !== null && plan.curLineV !== undefined ? +( ( plan.edgeV - plan.curLineV ) * s ).toFixed( 3 ) : null }, fringeShiftE: plan.fringe ? +( plan.fringe.shift * s ).toFixed( 3 ) : null };
+	return { mode: 'scalar', volume: f( plan.volume ), top: f( plan.top ), length: f( plan.length ), trim: { right: plan.trimV ?? null, left: plan.trimV ?? null }, swept: plan.swept ? { bottomE: +( plan.swept.B * s ).toFixed( 2 ), topE: +( plan.swept.T * s ).toFixed( 2 ), fringeE: +( plan.swept.F * s ).toFixed( 2 ) } : null, fringeShiftE: plan.fringe ? +( plan.fringe.shift * s ).toFixed( 3 ) : null };
 
 }
 
 // ── the warp ────────────────────────────────────────────────────────────────
 
-// Hair is moved by lifting, never by folding. A fold squashes strands onto a line and tears gaps between neighbors; a lift moves a
-// strand as a whole and compresses it smoothly, so the cards keep their shape and keep covering each other.
+// The swept-up look, copied from a hand-made restyle of this VRoid base (measured vertex by vertex against the stock hair): the same
+// mesh with only a smooth vertical field applied, in head units (E = eye-to-chin height; the base's E is about 10 cm):
+//   - the hair is lifted by B at the bottom and by T at the top, and left where it meets the head (the ear line, v about 0.16):
+//       lift(v) = B or T times (1 - exp(-((v - 0.16) / s)^2)), with s = 0.55 on both sides
+//     so the sides and back come out shorter (the ears show) and the crown gets taller, and nothing is folded;
+//   - the fringe is lifted more, F at its lower edge (v about -0.25), falling off over 0.8 upward and 0.35 downward, leaving a small tail, strongest at the middle
+//     of the forehead and weaker toward the sideburns, and it moves back toward the head by 20 percent of its lift;
+//   - the top spreads sideways by 8 percent.
+// In the reference B = T = 0.44 and F = 1.15. Here they come from the photo: the shorter the photo's hair is than the VRM's, the
+// more of the lift is used.
+const SWEPT = { pinch: 0.16, sLow: 0.55, sUp: 0.55, fringeAt: - 0.25, fringeUp: 0.8, fringeDown: 0.35, tail: 0.15, back: 0.2, spread: 0.08, innerTop: 0.44, max: 0.44, fringeMax: 1.3 };
 
-// Shorter hair: the hair below the ear line is pulled up, more the lower it is, and squeezed to no less than minSqueeze of its length.
-// Returns the lift in E units for a point at height v.
-function lengthLift( v, cutV, bottomV, minSqueeze ) {
+const pinchProfile = v => { const s = v < SWEPT.pinch ? SWEPT.sLow : SWEPT.sUp; return 1 - Math.exp( - ( ( ( v - SWEPT.pinch ) / s ) ** 2 ) ); };
 
-	const A = 0.15; // the ear line: the hair above it stays attached
-	if ( cutV === null || cutV === undefined || bottomV === null || bottomV === undefined || ! ( bottomV < cutV ) ) return 0;
-	const ratio = clamp( ( A - cutV ) / ( A - bottomV ), minSqueeze, 1 );
-	const d = A - v;
-	// quadratic ease-in over the first 0.2, then linear: the slope never exceeds (1 - ratio), so the hair is squeezed to ratio at the most
-	return d > 0 ? ( 1 - ratio ) * ( d < 0.2 ? 2.5 * d * d : d - 0.1 ) : 0;
+/** The lift for a point at height v, in E units: { dv, extra } (extra = the fringe part, which also moves back). */
+function sweptLift( swept, v, u, gate, inner ) {
+
+	if ( ! swept ) return { dv: 0, extra: 0 };
+	// the back-hair layer under the strands (measured in the reference: its top is lifted 0.44 times as much, and it has no fringe lift)
+	// so it stays low and shows between the lifted fringe and the forehead
+	const base = ( v < SWEPT.pinch ? swept.B : swept.T * ( inner ? SWEPT.innerTop : 1 ) ) * pinchProfile( v );
+	if ( inner ) return { dv: base, extra: 0 };
+	const s = v < SWEPT.fringeAt ? SWEPT.fringeDown : SWEPT.fringeUp;
+	const lateral = 1 - smooth( clamp( Math.abs( u ) / 0.85, 0, 1 ) ); // measured: 1 at the middle, 0.8 at 0.27 head widths, 0.55 at 0.4, 0.3 at 0.53
+	// the fringe's own lift, plus a small lift that the front keeps all the way up to the crown
+	const extra = ( swept.F * Math.exp( - ( ( ( v - SWEPT.fringeAt ) / s ) ** 2 ) ) + SWEPT.tail * ( swept.F / 1.15 ) * smooth( clamp( ( v - 0.5 ) / 0.5, 0, 1 ) ) ) * lateral * gate;
+	return { dv: base + extra, extra };
 
 }
 
-// A fringe that has to come up: the strands at the fringe are lifted by `lift` (E units) and the lift fades out above, slowly enough
-// that nothing above is squeezed to less than minSqueeze.
-function fringeLift( v, lineV, lift, minSqueeze ) {
-
-	if ( ! ( lift > 0 ) ) return 0;
-	const fade = Math.max( 0.5, 1.5 * lift / ( 1 - minSqueeze ) ); // the smoothstep's slope peaks at 1.5 times its average
-	const below = smooth( clamp( ( v - ( lineV - 0.6 ) ) / 0.3, 0, 1 ) ); // the sideburns and anything far below the fringe stay put
-	return lift * below * ( 1 - smooth( clamp( ( v - ( lineV + 0.1 ) ) / fade, 0, 1 ) ) );
-
-}
-
-export function warpHairPoint( plan, x, y, z ) {
+export function warpHairPoint( plan, x, y, z, inner = false ) {
 
 	const { eyeY, E, W, front, zc } = plan.m;
 	const v = ( y - eyeY ) / E, u = uOf( x, plan.m );
@@ -370,27 +391,11 @@ export function warpHairPoint( plan, x, y, z ) {
 			dy += s * p.fringe( u ) * E * gate * Math.exp( - 0.5 * ( ( v - v0 ) / 0.18 ) ** 2 );
 
 		}
-		// shorter hair and a fringe that has to come up: lifted, not folded (see lengthLift / fringeLift)
-		let lift = 0;
-		if ( p.trimR !== null || p.trimL !== null ) {
-
-			const cut = lerp( p.trimL ?? p.trimR, p.trimR ?? p.trimL, mixR ); // a side the photo does not show follows the other
-			lift += lengthLift( ( y + dy - eyeY ) / E, cut, plan.curBottomV, plan.minSqueeze );
-
-		}
-		if ( p.edgeLift && gate && Math.abs( u ) < 0.6 ) {
-
-			const line0 = p.fringeAt ? p.fringeAt( u ) : null, base = line0 ?? plan.curLineV;
-			if ( p.edgeLift && base !== null && base !== undefined ) {
-
-				const f = fringeLift( ( y + dy - eyeY ) / E, base, p.edgeLift, plan.minSqueeze ) * ( 1 - smooth( clamp( ( Math.abs( u ) - 0.35 ) / 0.15, 0, 1 ) ) );
-				lift += f;
-				dz -= front * 0.17 * f * E * s; // the head's surface falls away as the strands rise: follow it so they do not float
-
-			}
-
-		}
-		dy += s * lift * E;
+		// shorter hair and a higher hairline: the swept-up lift (see sweptLift)
+		const sw = sweptLift( plan.swept, ( y + dy - eyeY ) / E, u, gate, inner );
+		dy += s * sw.dv * E;
+		dz -= front * SWEPT.back * sw.extra * E * s; // the head's surface falls away as the fringe rises: follow it so it does not float
+		if ( plan.swept && ! inner ) dx += s * SWEPT.spread * ( plan.swept.T / SWEPT.max ) * smooth( clamp( ( v - 0.5 ) / 0.6, 0, 1 ) ) * x;
 		const y1 = y + dy;
 		dy = y1 - y;
 
@@ -400,15 +405,10 @@ export function warpHairPoint( plan, x, y, z ) {
 		if ( plan.top ) dy += ( lerp( 1, plan.top, s ) - 1 ) * ( y - ( eyeY + 0.5 * E ) ) * smooth( clamp( ( v - 0.5 ) / 0.6, 0, 1 ) );
 		if ( plan.length ) dy += ( lerp( 1, plan.length, s ) - 1 ) * ( y - ( eyeY + 0.1 * E ) ) * smooth( clamp( ( 0.1 - v ) / 0.6, 0, 1 ) );
 		if ( plan.fringe ) dy += s * plan.fringe.shift * E * gate * Math.exp( - 0.5 * ( ( v - plan.fringe.v0 ) / 0.18 ) ** 2 ) * ( 1 - smooth( clamp( ( Math.abs( x ) / W - 0.45 ) / 0.25, 0, 1 ) ) );
-		let lift = lengthLift( ( y + dy - eyeY ) / E, plan.trimV, plan.curBottomV, plan.minSqueeze );
-		if ( plan.edgeV && gate && plan.curLineV !== null && plan.curLineV !== undefined ) {
-
-			const f = fringeLift( ( y + dy - eyeY ) / E, plan.curLineV, plan.edgeV - plan.curLineV, plan.minSqueeze ) * ( 1 - smooth( clamp( ( Math.abs( u ) - 0.35 ) / 0.15, 0, 1 ) ) );
-			lift += f;
-			dz -= front * 0.17 * f * E * s;
-
-		}
-		dy += s * lift * E;
+		const sw = sweptLift( plan.swept, ( y + dy - eyeY ) / E, u, gate, inner );
+		dy += s * sw.dv * E;
+		dz -= front * SWEPT.back * sw.extra * E * s;
+		if ( plan.swept && ! inner ) dx += s * SWEPT.spread * ( plan.swept.T / SWEPT.max ) * smooth( clamp( ( v - 0.5 ) / 0.6, 0, 1 ) ) * x;
 		const y1 = y + dy;
 		dy = y1 - y;
 

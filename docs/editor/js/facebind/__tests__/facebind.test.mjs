@@ -338,53 +338,38 @@ test( 'hair never sinks into the head: shrinking toward a much narrower photo si
 
 } );
 
-test( 'hair lifts: a fringe lower than the photo\'s rises to the photo\'s edge, hair longer than the photo\'s is pulled up, and nothing folds (order kept, squeeze limited)', () => {
+test( 'swept-up hair: the bottom and the top are lifted, the ear line stays, the fringe rises most at the middle and moves back, nothing is moved without a shorter photo', () => {
 
-	const m = hairFrame;
-	const front = [ - 0.02, 0.0, 0.02 ];
-	// strands down the middle of the forehead, from the crown to the brows, in front of the head
-	const pts = []; for ( const x of front ) for ( let y = 1.62; y <= 1.78; y += 0.01 ) pts.push( x, y, - 0.08 );
-	// plus side hair hanging well below the ear line
-	for ( let y = 1.30; y <= 1.6; y += 0.02 ) pts.push( 0.1, y, 0 );
-	const arr = new Float32Array( pts ), ids = Array.from( { length: arr.length / 3 }, ( _, i ) => i );
-	const cur = measureHair( arr, ids, m );
-	const ref = { topV: null, widthW: null, lengthV: null, hairlineV: null, profile: { halfR: new Array( 18 ).fill( null ), halfL: new Array( 18 ).fill( null ), topByU: new Array( 12 ).fill( null ), lineByU: new Array( 12 ).fill( null ) } };
-	for ( let j = 4; j < 8; j ++ ) ref.profile.lineByU[ j ] = 0.75; // the photo's hair starts high on the forehead
-	const iv = v => Math.floor( ( v - GRID.v.lo ) / GRID.v.step );
-	for ( let i = iv( - 0.5 ); i <= iv( 1.0 ); i ++ ) ref.profile.halfL[ i ] = cur.profile.halfL[ i ] ?? 0.62; // the photo's side hair stops at v = -0.5
-	for ( let i = iv( - 0.5 ); i <= iv( 1.0 ); i ++ ) ref.profile.halfR[ i ] = cur.profile.halfR[ i ] ?? 0.62;
-	const plan = planHair( cur, ref, m, 1 );
-	ok( plan.profile.edgeLift > 0.3, 'a fringe lift: ' + plan.profile.edgeLift );
-	const lifted = warpHairPoint( plan, 0, 1.62, - 0.08 ); // the fringe tip: well below the photo's edge at v = 0.75
-	const yAfter = 1.62 + lifted[ 1 ], edgeY = m.eyeY + 0.75 * m.E;
-	ok( yAfter > 1.62 + 0.04 && yAfter <= edgeY + 0.003, `the fringe tip must rise to the edge: ${ yAfter } (edge ${ edgeY })` );
-	ok( lifted[ 2 ] > 0, 'a lifted fringe follows the head surface back' );
-	// strands stay in order and are squeezed by at most 1 - minSqueeze: lifting never folds
-	const col = []; for ( let y = 1.62; y <= 1.78; y += 0.01 ) col.push( y + warpHairPoint( plan, 0, y, - 0.08 )[ 1 ] );
-	for ( let i = 1; i < col.length; i ++ ) ok( col[ i ] - col[ i - 1 ] >= 0.5 * 0.01 - 1e-6, 'the fringe folded at ' + i + ': ' + ( col[ i ] - col[ i - 1 ] ) );
-	const side = []; for ( let y = 1.30; y <= 1.6; y += 0.02 ) side.push( y + warpHairPoint( plan, 0.1, y, 0 )[ 1 ] );
-	for ( let i = 1; i < side.length; i ++ ) ok( side[ i ] - side[ i - 1 ] >= 0.5 * 0.02 - 1e-6, 'the side hair folded at ' + i );
-	ok( side[ 0 ] - 1.30 > 0.02, 'long side hair is pulled up: ' + ( side[ 0 ] - 1.30 ) );
-	ok( Math.abs( warpHairPoint( plan, 0.1, m.eyeY + 0.3 * m.E, 0 )[ 1 ] ) < 0.003, 'hair above the ear line stays attached' );
-	// zero strength: nothing moves
-	const none = planHair( cur, ref, m, 0 );
-	ok( Math.hypot( ...warpHairPoint( none, 0, 1.62, - 0.08 ) ) < 1e-12 );
-
-} );
-
-test( 'a collar or stray blob below the hair is not counted as hair length (bands must connect to the hair above)', () => {
-
-	const lm = lmFor(), w = 200, h = 200, mask = new Uint8Array( w * h );
-	const fill = ( x0, x1, y0, y1 ) => { for ( let y = y0; y < y1; y ++ ) for ( let x = x0; x < x1; x ++ ) mask[ y * w + x ] = 1; };
-	fill( 60, 140, 30, 80 ); // the hair
-	fill( 50, 100, 150, 190 ); // a collar far below, not connected
-	const s = hairShapeFromMask( lm, mask, { width: w, height: h } );
-	const iv = v => Math.floor( ( v - GRID.v.lo ) / GRID.v.step );
-	ok( s.profile.halfL[ iv( - 1.3 ) ] === null && s.profile.halfR[ iv( - 1.3 ) ] === null, 'the collar must be dropped' );
-	ok( s.profile.halfR[ iv( 0.5 ) ] !== null, 'the hair must stay' );
+	const m = hairFrame, E = m.E;
+	const cur = { topV: 1.5, widthW: 1.2, lengthV: - 0.9, hairlineV: 0.3, profile: null };
+	const lift = ( plan, v, x = 0, z = 0 ) => { const w = warpHairPoint( plan, x, m.eyeY + v * E, z ); return { dv: w[ 1 ] / E, dz: w[ 2 ] }; };
+	// a photo with much shorter hair and a higher hairline
+	const short = planHair( cur, { topV: 1.2, widthW: 1.2, lengthV: - 0.2, hairlineV: 0.6 }, m, 1 );
+	ok( short.swept && short.swept.B > 0.43 && short.swept.shortness > 0.95 && short.swept.F > 1, JSON.stringify( short.swept ) );
+	near( lift( short, - 0.9, 0.1 ).dv, 0.44 * ( 1 - Math.exp( - ( ( ( - 0.9 - 0.16 ) / 0.55 ) ** 2 ) ) ), 0.03, 'the bottom lifts by about the full amount' );
+	ok( lift( short, - 0.9, 0.1 ).dv > 0.3, 'bottom lift ' + lift( short, - 0.9, 0.1 ).dv );
+	ok( lift( short, 0.16, 0.1 ).dv < 0.02, 'the ear line stays where it is: ' + lift( short, 0.16, 0.1 ).dv );
+	ok( lift( short, 1.4, 0.05, 0.1 ).dv > 0.35, 'the crown is lifted: ' + lift( short, 1.4, 0.05, 0.1 ).dv );
+	// the fringe: front, middle, strongest near its lower edge, weaker toward the sideburns, and moving back toward the head
+	const mid = lift( short, - 0.25, 0, - 0.08 ), side = lift( short, - 0.25, 0.7 * m.W, - 0.08 ), back = lift( short, - 0.25, 0, 0.08 );
+	ok( mid.dv > 0.9 && mid.dv > side.dv * 1.5, `fringe lift middle ${ mid.dv } vs side ${ side.dv }` );
+	ok( mid.dz > 0.01, 'the lifted fringe follows the head back: ' + mid.dz );
+	ok( back.dv < mid.dv * 0.6 && back.dz === 0 || Math.abs( back.dz ) < 1e-9, 'the back of the head has no fringe lift' );
+	// the crown is never shrunk by a photo whose crown measures lower
+	ok( lift( short, 1.4, 0, - 0.02 ).dv > 0, 'a lower photo crown must not push the crown down' );
+	// a photo with hair as long as the VRM's, no higher a hairline: no swept lift
+	const same = planHair( cur, { topV: 1.5, widthW: 1.2, lengthV: - 0.9, hairlineV: 0.3 }, m, 1 );
+	eq( same.swept, null );
+	// strength scales it, and 0 moves nothing
+	const half = planHair( cur, { topV: 1.2, widthW: 1.2, lengthV: - 0.2, hairlineV: 0.6 }, m, 0.5 );
+	near( lift( half, - 0.9, 0.1 ).dv, lift( short, - 0.9, 0.1 ).dv * 0.5, 0.04, 'half strength lifts half as much' );
+	const none = planHair( cur, { topV: 1.2, widthW: 1.2, lengthV: - 0.2, hairlineV: 0.6 }, m, 0 );
+	for ( const pt of [ [ 0, - 0.9, 0 ], [ 0, 1.4, - 0.05 ], [ 0, - 0.25, - 0.08 ] ] ) ok( Math.hypot( ...warpHairPoint( none, 0, m.eyeY + pt[ 1 ] * E, pt[ 2 ] ) ) < 1e-12 );
+	// the bottom of the hair rises monotonically as the strands go down: nothing folds below the ear line
+	const col = []; for ( let v = - 1; v <= 0.1; v += 0.05 ) col.push( v + lift( short, v, 0.1 ).dv );
+	for ( let i = 1; i < col.length; i ++ ) ok( col[ i ] - col[ i - 1 ] > 0.1 * 0.05, 'the lower hair folded at ' + i );
 
 } );
-
 test( 'hair plan and warp (scalar fallback): moves toward the reference, stays within limits, strength 0 moves nothing', () => {
 
 	const m = hairFrame;

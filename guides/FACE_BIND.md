@@ -173,21 +173,28 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | **Shirt color** | the strip of chest just below the chin, cleaned of skin and plain background (trimmed mean) | the Tops material (the MToon shade color follows). Skipped when the photo stops at the chin or shows no shirt |
 | **Facial hair** | how much darker the area above the lip, the chin and the jaws are than the cheeks of the same face (three amounts, 0 to 1) | **dots painted into the face SKIN texture**, see [Facial hair](#facial-hair-painted-on-the-face-texture). Nothing is painted for a clean-shaven face |
 
-### How the length and fringe are moved (lifting, not folding)
+### The swept-up cut (how the length and fringe are moved)
 
-Hair that is longer than the photo's is **pulled up**, and a fringe that sits lower than the photo's hairline is **lifted**. It is a
-smooth vertical remap of the VRM's own hair, the same idea as a hand-made "swept up" restyle of a VRoid base (the whole hair
-lifted a few centimeters, the lower part squeezed, the front lifted a little more):
+When the photo's hair is shorter than the VRM's (or its hairline is higher), the VRM's hair gets the same smooth vertical field as a hand-made
+"swept-up" restyle of this VRoid male base. It is a field on the VRM's own hair vertices and nothing is folded or deleted. It was measured
+vertex by vertex from that restyle (the stock hair against the restyled hair, same mesh, same 8,650 vertices) and it reproduces the restyled
+hair within about 9 mm RMS in height (doing nothing is 44 mm off). In units of E (the eye-to-chin height, about 10 cm on the base):
 
-- **Length.** Everything below the ear line moves up, more the lower it is. The hair is squeezed to **no less than half** of its length
-  below the ear line, so a photo with much shorter hair gets a shorter cut but not the full cut; the strands never fold.
-- **Fringe.** The front is lifted as one piece by the amount the photo's hairline is higher than the VRM's (the median over the
-  middle of the forehead), fading out smoothly above, so the VRM's own fringe shape is kept. The lifted front also moves back a
-  little (17 percent of the lift) to follow the head's surface.
-- Lifting replaces an earlier approach that folded strands onto a line and cut hair back wherever the photo's mask showed skin.
-  Both left bald patches at the temples and tore gaps between neighboring strands; lifting keeps every card whole.
-- Limits: the hair is never squeezed below half, so the lowest hair of a very short photo cut stays longer than the photo's; a photo
-  cannot show the hair behind the head, so the back follows the same length lift as the sides.
+- **Pinch at the ear line.** The hair at the ear line (v about 0.16 above the eye line) stays where it is. Above and below it the lift grows as
+  `1 - exp(-((v - 0.16) / 0.55)^2)`: about **0.44 E at the bottom** (the sides and back come out shorter and the ears show) and about **0.44 E at the top**
+  (a taller crown). A photo with shorter hair uses more of it (`B = min(0.44, how much shorter)`); the top lift equals the bottom lift.
+- **Fringe.** The front is lifted more: about **1.15 E at its lower edge** (v about -0.25), falling off over 0.8 E upward and 0.35 E downward,
+  plus a small lift (0.15 E) that the front keeps up to the crown, strongest at the middle of the forehead and weaker toward the sideburns (1.0 at
+  the middle, 0.8 at 0.27 head widths, 0.3 at 0.53). The lifted fringe also moves **back toward the head by 20 percent of its lift**, to follow the
+  head's surface.
+- **Back-hair layer.** The layer of hair under the strands (the `HairBack` material) follows the same pinch, but its top is lifted only 0.44 times as much and it has no
+  fringe lift, so it stays low and shows as a band between the lifted fringe and the forehead, as in the restyle.
+- The top spreads sideways by 8 percent. The photo's crown measurement is not allowed to shrink the crown while this lift is used.
+- The amounts come from the photo (`hairShape.applied.swept` in the report, and the page lists them): no swept-up lift when the photo's hair is as long
+  as the VRM's. Strength scales all of it (the page now defaults to 100 percent, which is what the restyle used; 70 percent gives 70 percent of every lift).
+- Folding strands onto a line and cutting hair back where the mask shows skin, an earlier approach, left bald patches and gaps and is gone.
+- Limits: the field was measured on one restyle of one base (the male; the female base has different hair, so the fit is approximate there), it was hand-made, so it
+  is a look to copy and not something a photo measurement can derive, and the largest move is capped at 13 cm.
 
 ### Hair style
 
@@ -244,7 +251,7 @@ The tool now copies the ones that stay rig-safe and automatic:
 
 | Technique in the reference | In the tool |
 |---|---|
-| Hair lifted a few centimeters, lower part squeezed, front lifted more (no folding) | yes: [lifting](#how-the-length-and-fringe-are-moved-lifting-not-folding) |
+| Hair lifted at the top and bottom with the ear line pinned, front lifted more, back-hair layer lifted less (no folding) | yes: [swept-up cut](#the-swept-up-cut-how-the-length-and-fringe-are-moved) |
 | Hair, skin, iris and brow colors from the photo | yes (material tints) |
 | Eye openness and mouth width nudged a few millimeters to a centimeter | yes (face shape warp) |
 | Mustache and beard painted into the face texture | yes ([facial hair](#facial-hair-painted-on-the-face-texture)) |
@@ -265,7 +272,7 @@ Notes:
 - The page shades the hair the segmenter found on a small copy of your photo, so you can see what the hair shape is based on (it is drawn in the page and goes nowhere).
 - The hairstyle is the VRM's **own hair mesh**: it is scaled, shifted and, optionally, re-laid (see [Hair style](#hair-style)). Braids, buns, ponytails and any hair the mesh does not have are not possible. A photo that crops the head can only give partial hair measurements, and a bald or shaved head (little hair found) leaves the hair unchanged.
 - Hair vertices keep their bone weights, so the hair still follows the head and the spring bones; the new shape is the new rest pose.
-- Strength is 0–1 for shape and for color (default 70%).
+- Strength is 0–1 for shape and for color (default 100% for the page, 70% for `bindVRM`).
 - **Not used: the photo's texture itself.** The face GLB carries a UV-mapped crop of the photo. Painting it onto the
   VRM's face texture would put a photographic face under the anime eyes, brows and mouth (which are separate meshes),
   so it would not help; the useful parts of that texture (skin, iris and brow color) are taken as colors instead, and facial hair is painted

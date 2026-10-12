@@ -186,8 +186,7 @@ function describeHair( a ) {
 		if ( l ) lines.push( `left side reach (below ears / ear level / crown): ${ l }` );
 		if ( c ) lines.push( `crown height (left / middle / right): ${ c }` );
 		if ( a.length.right || a.length.left ) lines.push( `length (right / left): ${ x( a.length.right ) ?? 'n/a' } / ${ x( a.length.left ) ?? 'n/a' }` );
-		if ( a.trim && ( a.trim.right !== null || a.trim.left !== null ) ) lines.push( `hair pulled up toward the photo's length (right / left, height above the eye line in eye-to-chin heights; at most half the length below the ears is taken): ${ a.trim.right ?? 'no' } / ${ a.trim.left ?? 'no' }` );
-		if ( a.trim && a.trim.fringeLift ) lines.push( `fringe lifted toward the photo's hairline by ${ a.trim.fringeLift } eye-to-chin heights` );
+		if ( a.swept ) lines.push( `swept-up cut, because the photo's hair is shorter than the VRM's (in eye-to-chin heights): the hair below the ears is lifted ${ a.swept.bottomE }, the top ${ a.swept.topE }, the fringe ${ a.swept.fringeE }; the ear line stays` );
 		if ( a.fringeShiftE && a.fringeShiftE.some( v => v !== null && Math.abs( v ) > 0.005 ) ) lines.push( `fringe edge shift (left / middle / right, in eye-to-chin heights): ${ a.fringeShiftE.join( ' / ' ) }` );
 
 	} else {
