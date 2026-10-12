@@ -10,7 +10,7 @@
 // bindVRM() audits that, byte for byte, before it writes anything.
 
 import { measureFace, planFaceRefine, warpPoint } from '../face/FaceRefine.js';
-import { measureHair, planHair, warpHairPoint } from './hairShape.js';
+import { measureHair, planHair, warpHairPoint, summarizePlan } from './hairShape.js';
 import { GLBError } from './glb.js';
 
 const FACE_MATERIAL = /_(FaceMouth|EyeIris|EyeHighlight|EyeWhite|FaceBrow|FaceEyelash|FaceEyeline|Face)_\d+_(FACE|EYE|SKIN)/;
@@ -163,7 +163,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 			modified.set( a, { positions: dst, ids: [ ...ids ] } );
 
 		}
-		result.hair = { maxMove, measured: cur, plan: { volume: plan.volume, top: plan.top, length: plan.length, fringeShift: plan.fringe ? plan.fringe.shift : null } };
+		result.hair = { maxMove, measured: cur, plan: summarizePlan( plan ) };
 
 	}
 

@@ -90,7 +90,8 @@ async function run( { vrm, image, face, look, shape, hairShape, names } ) {
 		if ( image ) {
 
 			say( 'Reading the face on this device…' );
-			const { glb, blendshapes } = await ( await autorig ).faceGLBFromImage( image );
+			const { glb, blendshapes, hairMask } = await ( await autorig ).faceGLBFromImage( image );
+			showHairMask( image, hairMask );
 			faceBytes = glb; expression = blendshapes;
 			faceGlbUrl = makeUrl( new Blob( [ glb ], { type: 'model/gltf-binary' } ) );
 			const f = $( 'faceGlbLink' ); f.href = faceGlbUrl; f.download = 'face-model-blendshapes.glb'; f.hidden = false;
@@ -132,6 +133,30 @@ async function run( { vrm, image, face, look, shape, hairShape, names } ) {
 
 }
 
+// plain-language lines for the hair plan (ratios of 1 mean unchanged)
+function describeHair( a ) {
+
+	const x = v => v === null || v === undefined ? null : '×' + Number( v ).toFixed( 2 );
+	const row = arr => arr && arr.some( v => v !== null ) ? arr.map( v => x( v ) ?? 'n/a' ).join(' / ') : null;
+	const lines = [];
+	if ( a.mode === 'silhouette' ) {
+
+		const r = row( a.sides.right ), l = row( a.sides.left ), c = row( a.crown );
+		if ( r ) lines.push( `right side reach (below ears / ear level / crown): ${ r }` );
+		if ( l ) lines.push( `left side reach (below ears / ear level / crown): ${ l }` );
+		if ( c ) lines.push( `crown height (left / middle / right): ${ c }` );
+		if ( a.length.right || a.length.left ) lines.push( `length (right / left): ${ x( a.length.right ) ?? 'n/a' } / ${ x( a.length.left ) ?? 'n/a' }` );
+		if ( a.fringeShiftE && a.fringeShiftE.some( v => v !== null && Math.abs( v ) > 0.005 ) ) lines.push( `fringe edge shift (left / middle / right, in eye-to-chin heights): ${ a.fringeShiftE.join( ' / ' ) }` );
+
+	} else {
+
+		for ( const [ k, v ] of Object.entries( a ) ) if ( k !== 'mode' && v !== null && v !== undefined ) lines.push( `${ k }: ${ typeof v === 'number' ? ( k === 'fringeShiftE' ? v : x( v ) ) : v }` );
+
+	}
+	return lines.length ? lines : [ 'no change' ];
+
+}
+
 function render( report ) {
 
 	const list = ( items, fmt ) => items.length ? `<ul>${ items.map( i => `<li>${ fmt( i ) }</li>` ).join( '' ) }</ul>` : '<p class="muted">none</p>';
@@ -142,7 +167,7 @@ function render( report ) {
 		<h3>Not driven: VRM ARKit shapes the face GLB has no morph for</h3>${ list( report.undriven, n => esc( n ) ) }
 		${ report.warnings.length ? `<h3>Warnings</h3>${ list( report.warnings, w => esc( w ) ) }` : '' }
 		${ report.shape ? `<h3>Face shape <span class="muted">(approximate; the face's base positions moved by up to ${ report.shape.maxMoveMm } mm)</span></h3>` : '' }
-		${ report.hairShape ? `<h3>Hair shape <span class="muted">(approximate; the existing hairstyle scaled and shifted, by up to ${ report.hairShape.maxMoveMm } mm)</span></h3>${ list( Object.entries( report.hairShape.applied ).filter( ( [ , v ] ) => v !== null ), ( [ k, v ] ) => `${ esc( k ) }: ${ k === 'fringeShift' ? ( v * 1000 ).toFixed( 1 ) + ' mm' : '×' + v.toFixed( 2 ) }` ) }` : '' }
+		${ report.hairShape ? `<h3>Hair shape <span class="muted">(approximate; the existing hairstyle scaled and shifted to the photo's hair silhouette, by up to ${ report.hairShape.maxMoveMm } mm)</span></h3>${ list( describeHair( report.hairShape.applied ), l => esc( l ) ) }` : '' }
 		${ report.look ? `<h3>Look transfer <span class="muted">(approximate; material tint only)</span></h3>${ list( report.look.applied, a => `${ esc( a.role ) }: ${ esc( a.material ) } → rgb(${ a.target.map( esc ).join( ', ' ) })${ a.reached ? '' : ' (not fully reachable)' }` ) }` : '' }`;
 
 }
@@ -154,6 +179,30 @@ function showNetwork() {
 	const lines = log.filter( r => ! /^blob:|^data:/.test( r.url || '' ) ).map( r => `${ r.blocked ? 'BLOCKED ' : '' }${ r.method || '' } ${ r.url || r.kind }`.trim() );
 	if ( blobs ) lines.push( `${ blobs } read(s) of in-memory data (blob:), never leaves this page` );
 	$( 'net' ).textContent = lines.length ? lines.join( '\n' ) : '(no requests)';
+
+}
+
+// Shade the hair the segmenter found on a small copy of the photo, so you can see what the hair shape is based on.
+async function showHairMask( image, hair ) {
+
+	const canvas = $( 'maskCanvas' );
+	if ( ! hair ) { canvas.hidden = true; $( 'maskNote' ).hidden = true; return; }
+	try {
+
+		const bmp = await createImageBitmap( image, { imageOrientation: 'from-image' } );
+		const scale = Math.min( 1, 220 / Math.max( hair.width, hair.height ) );
+		canvas.width = Math.max( 1, Math.round( hair.width * scale ) ); canvas.height = Math.max( 1, Math.round( hair.height * scale ) );
+		const ctx = canvas.getContext( '2d' );
+		ctx.drawImage( bmp, 0, 0, canvas.width, canvas.height );
+		const over = document.createElement( 'canvas' ); over.width = hair.width; over.height = hair.height;
+		const oc = over.getContext( '2d' ), img = oc.createImageData( hair.width, hair.height );
+		for ( let i = 0; i < hair.data.length; i ++ ) if ( hair.data[ i ] === hair.hairValue ) { img.data[ i * 4 ] = 255; img.data[ i * 4 + 1 ] = 60; img.data[ i * 4 + 2 ] = 120; img.data[ i * 4 + 3 ] = 140; }
+		oc.putImageData( img, 0, 0 );
+		ctx.drawImage( over, 0, 0, canvas.width, canvas.height );
+		canvas.hidden = false; $( 'maskNote' ).hidden = false;
+		bmp.close();
+
+	} catch ( e ) { canvas.hidden = true; $( 'maskNote' ).hidden = true; }
 
 }
 

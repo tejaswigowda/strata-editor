@@ -155,7 +155,7 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 | What | Measured from the photo | Applied to the VRM |
 |---|---|---|
 | **Face shape** | eye spacing, eye width and openness, mouth width, jaw width, nose-tip / lip / chin depth (all as ratios of head width, so photo size drops out) | a smooth local warp of the face's base positions (`FaceRefine.js`); eyes, mouth, jaw and the nose / lips / chin profile. Limited (jaw ≤ ±12%, eyes ±25–30%, depth clamped to human ranges) and faded out before the head outline, so hair, ears and neck still meet the face |
-| **Hair shape** | from the hair mask, in the same head units: crown height, width at ear level, length below the ears, and where the fringe ends on the forehead | a smooth warp of the VRM's existing hair vertices: volume (×0.85–1.2), crown height (×0.8–1.25), length (×0.6–1.6), fringe edge (up to ±0.35 E), each move capped at 4 cm. Measurements the photo crops (top, sides, bottom of the frame) are skipped and listed as warnings |
+| **Hair shape** | the **silhouette of the hair mask** in head units: how far the hair reaches out on the image-right and image-left at each height (18 bands), how high it reaches over each sideways band (12 columns), and where its lower edge sits over the forehead per column (the fringe), plus a scalar summary | a smooth warp of the VRM's existing hair vertices toward that silhouette: each side's reach (ratio 0.85 to 1.2 per height), crown height per column (0.8 to 1.25), length below the ears per side (0.6 to 1.6), and the fringe edge per column (up to 0.35 E), each move capped at 4 cm. The same silhouette is measured on the VRM's hair mesh, so the warp is the difference between the two. Bands the photo crops, and bands with no hair on either side, are skipped, and a measurement fades back to "no change" away from where it was taken. Without a profile the scalar summary is used |
 | **Skin tone** | average of five patches of the face | skin materials (face and body share one tint) |
 | **Hair color** | the hair segmenter's mask, trimmed of shadows and highlights | hair materials. Skipped if little hair is found |
 | **Eye color** | a disc inside each iris | iris material |
@@ -167,6 +167,7 @@ Notes:
   rendered color moves toward the photo's. A tint can only darken, so a color lighter than the texture is as close
   as it gets, and the report says so (`reached: false`).
 - The MToon shade color is scaled by the same ratio so the shadowed side follows.
+- The page shades the hair the segmenter found on a small copy of your photo, so you can see what the hair shape is based on (it is drawn in the page and goes nowhere).
 - The hairstyle itself is **scaled and shifted, not replaced**. A different cut (curls, braids, a bob instead of an undercut) needs a different hair mesh, which is a separate rig step. A photo that crops the head can only give partial hair measurements, and a bald or shaved head (little hair found) leaves the hair unchanged.
 - Hair vertices keep their bone weights, so the hair still follows the head and the spring bones; the new shape is the new rest pose.
 - Strength is 0–1 for shape and for color (default 70%).

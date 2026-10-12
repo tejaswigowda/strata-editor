@@ -14,7 +14,7 @@ import { readFaceSource, CONVENTION_42 } from '../faceSource.js';
 import { bindVRM, buildBinding, assertRigSafe, ARKIT_52 } from '../bind.js';
 import { hairColorFromMask } from '../hair.js';
 import { faceProportions } from '../proportions.js';
-import { hairShapeFromMask, measureHair, planHair, warpHairPoint } from '../hairShape.js';
+import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan, GRID } from '../hairShape.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -215,24 +215,81 @@ test( 'hair shape from a mask: measures a whole head, and refuses what the frame
 
 } );
 
-test( 'hair plan and warp: moves toward the reference, stays within limits, is local to the hair frame', () => {
+const hairFrame = { eyeY: 1.61, E: 0.11, W: 0.18, front: - 1, zc: - 0.04 };
+const lmFor = () => {
 
-	const m = { eyeY: 1.61, E: 0.11, W: 0.18, front: - 1, zc: - 0.04 };
-	const cur = { topV: 1.5, widthW: 1.2, lengthV: - 0.8, hairlineV: 0.5 };
-	const p = planHair( cur, { topV: 2.0, widthW: 1.6, lengthV: - 2.5, hairlineV: 0.9 }, m, 1 );
-	ok( p.volume === 1.2 && p.top === 1.25 && p.length === 1.6, JSON.stringify( p ) ); // all at their limits
+	const lm = Array.from( { length: 478 }, () => ( { x: 0.5, y: 0.5 } ) );
+	Object.assign( lm, { 33: { x: 0.38, y: 0.45 }, 133: { x: 0.46, y: 0.45 }, 362: { x: 0.54, y: 0.45 }, 263: { x: 0.62, y: 0.45 }, 234: { x: 0.3, y: 0.52 }, 454: { x: 0.7, y: 0.52 }, 152: { x: 0.5, y: 0.75 } } );
+	return lm;
+
+};
+
+test( 'hair silhouette from a mask: image-right and image-left reach separately, crown and fringe per column, cropped bands dropped', () => {
+
+	const w = 200, h = 200, mask = new Uint8Array( w * h );
+	const fill = ( x0, x1, y0, y1 ) => { for ( let y = y0; y < y1; y ++ ) for ( let x = x0; x < x1; x ++ ) mask[ y * w + x ] = 1; };
+	fill( 60, 150, 30, 60 ); // wider to the image-right (x > 100) than to the left
+	fill( 60, 80, 100, 130 ); // a lock hanging below the eye line on the image-left
+	const s = hairShapeFromMask( lmFor(), mask, { width: w, height: h } );
+	const iv = v => Math.floor( ( v - GRID.v.lo ) / GRID.v.step );
+	ok( s.profile.halfR[ iv( 0.5 ) ] > s.profile.halfL[ iv( 0.5 ) ], 'right reach should exceed left: ' + s.profile.halfR[ iv( 0.5 ) ] + ' vs ' + s.profile.halfL[ iv( 0.5 ) ] );
+	ok( s.profile.halfL[ iv( - 0.4 ) ] !== null && s.profile.halfR[ iv( - 0.4 ) ] === null, 'the hanging lock is on the image-left only' );
+	ok( s.profile.topByU.some( v => v !== null ) && s.profile.lineByU.some( v => v !== null ) );
+	fill( 90, 110, 0, 30 ); // touches the top edge
+	const cropped = hairShapeFromMask( lmFor(), mask, { width: w, height: h } );
+	ok( cropped.cropped.top && cropped.profile.topByU.some( v => v === null ), 'the columns at the top edge must be dropped' );
+
+} );
+
+test( 'VRM hair silhouette uses the same sides: on a VRM facing -z, image-right is model -x', () => {
+
+	const pts = new Float32Array( [ - 0.1, 1.65, 0, 0.05, 1.65, 0, 0, 1.78, 0, 0, 1.7, - 0.1 ] );
+	const m = measureHair( pts, [ 0, 1, 2, 3 ], hairFrame );
+	const i = Math.floor( ( ( 1.65 - hairFrame.eyeY ) / hairFrame.E - GRID.v.lo ) / GRID.v.step );
+	ok( Math.abs( m.profile.halfR[ i ] - 0.1 / 0.18 ) < 1e-6, 'right reach ' + m.profile.halfR[ i ] );
+	ok( Math.abs( m.profile.halfL[ i ] - 0.05 / 0.18 ) < 1e-6, 'left reach ' + m.profile.halfL[ i ] );
+	const flipped = measureHair( pts, [ 0, 1, 2, 3 ], { ...hairFrame, front: 1 } );
+	ok( flipped.profile.halfL[ i ] > flipped.profile.halfR[ i ], 'a +z-facing VRM mirrors it' );
+
+} );
+
+test( 'hair plan and warp (silhouette): each side, the crown and the fringe follow the photo; strength 0 moves nothing; limits hold', () => {
+
+	const m = hairFrame;
+	const iv = v => Math.floor( ( v - GRID.v.lo ) / GRID.v.step );
+	const cur = measureHair( new Float32Array( [ - 0.1, 1.65, 0, 0.1, 1.65, 0, - 0.1, 1.55, 0, 0.1, 1.55, 0, 0, 1.78, 0, 0.03, 1.72, 0, - 0.03, 1.72, 0 ] ), [ 0, 1, 2, 3, 4, 5, 6 ], m );
+	// the photo's hair reaches much further to the image-right (model -x) than the VRM's, and the same to the left
+	const half = a => Array.from( { length: 18 }, ( _, i ) => a[ i ] ?? null );
+	const refProfile = { halfR: half( cur.profile.halfR.map( v => v === null ? null : v * 1.2 ) ), halfL: half( cur.profile.halfL ), topByU: cur.profile.topByU.map( v => v === null ? null : v * 1.2 ), lineByU: new Array( 12 ).fill( null ) };
+	refProfile.lineByU[ 7 ] = 0.9; // a fringe edge over the right of the forehead only
+	const plan = planHair( { ...cur }, { profile: refProfile, topV: null, widthW: null, lengthV: null, hairlineV: null }, m, 1 );
+	eq( plan.mode, 'silhouette' );
+	const right = warpHairPoint( plan, - 0.1, 1.65, 0 ), left = warpHairPoint( plan, 0.1, 1.65, 0 );
+	ok( right[ 0 ] < - 1e-4, 'the image-right side (model -x) must move out: ' + right[ 0 ] );
+	ok( Math.abs( left[ 0 ] ) < 1e-4, 'the unchanged side must not move: ' + left[ 0 ] );
+	ok( warpHairPoint( plan, 0.02, 1.78, 0 )[ 1 ] > 0, 'the crown rises' );
+	const zero = planHair( cur, { profile: refProfile }, m, 0 );
+	for ( const pt of [ [ - 0.1, 1.65, 0 ], [ 0, 1.78, 0 ], [ 0.05, 1.7, - 0.1 ] ] ) ok( Math.hypot( ...warpHairPoint( zero, ...pt ) ) < 1e-12, 'strength 0 must not move anything' );
+	for ( const pt of [ [ 0.3, 1.9, 0.3 ], [ - 0.2, 1.5, - 0.1 ] ] ) ok( Math.hypot( ...warpHairPoint( plan, ...pt ) ) <= 0.04 + 1e-9 );
+	const sum = summarizePlan( plan );
+	ok( sum.mode === 'silhouette' && sum.sides.right && sum.sides.right.some( v => v !== null && v > 1 ) );
+
+} );
+
+test( 'hair plan and warp (scalar fallback): moves toward the reference, stays within limits, strength 0 moves nothing', () => {
+
+	const m = hairFrame;
+	const cur = { topV: 1.5, widthW: 1.2, lengthV: - 0.8, hairlineV: 0.5, profile: null };
+	const ref = { topV: 2.0, widthW: 1.6, lengthV: - 2.5, hairlineV: 0.9 };
+	const p = planHair( cur, ref, m, 1 );
+	ok( p.mode === 'scalar' && p.volume === 1.2 && p.top === 1.25 && p.length === 1.6, JSON.stringify( p ) ); // all at their limits
 	ok( p.fringe.shift > 0 );
-	const none = planHair( cur, { topV: 2.0, widthW: 1.6, lengthV: - 2.5, hairlineV: 0.9 }, m, 0 );
-	ok( none.volume === 1 && none.top === 1 && none.length === 1 && none.fringe.shift === 0 );
 	const skip = planHair( cur, { topV: null, widthW: null, lengthV: null, hairlineV: null }, m, 1 );
 	ok( ! skip.volume && ! skip.top && ! skip.length && ! skip.fringe );
-	// crown goes up, the sides go out, the lower hair goes down; nothing moves more than 4 cm
-	ok( warpHairPoint( p, 0, 1.78, 0 )[ 1 ] > 0 );
-	ok( warpHairPoint( p, 0.11, 1.65, 0 )[ 0 ] > 0 );
-	ok( warpHairPoint( p, 0.1, 1.53, 0 )[ 1 ] < 0 );
+	ok( warpHairPoint( p, 0, 1.78, 0 )[ 1 ] > 0 ); ok( warpHairPoint( p, 0.11, 1.65, 0 )[ 0 ] > 0 ); ok( warpHairPoint( p, 0.1, 1.53, 0 )[ 1 ] < 0 );
 	for ( const pt of [ [ 0.2, 1.9, 0.3 ], [ 0.1, 1.5, - 0.1 ], [ 0, 1.7, - 0.2 ] ] ) ok( Math.hypot( ...warpHairPoint( p, ...pt ) ) <= 0.04 + 1e-9 );
-	const meas = measureHair( new Float32Array( [ 0, 1.78, 0, 0.11, 1.65, 0, - 0.11, 1.62, 0, 0, 1.52, 0.1 ] ), [ 0, 1, 2, 3 ], m );
-	ok( meas.topV > 1.4 && meas.widthW > 1.1 );
+	const zero = planHair( cur, ref, m, 0 );
+	for ( const pt of [ [ 0.1, 1.65, 0 ], [ 0, 1.78, 0 ] ] ) ok( Math.hypot( ...warpHairPoint( zero, ...pt ) ) < 1e-12 );
 
 } );
 
@@ -364,6 +421,22 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		a.chunks[ 0 ].data.forEach( ( v, i ) => { if ( v !== b.chunks[ 0 ].data[ i ] ) allowed.has( i ) ? inside ++ : outside ++; } );
 		ok( outside === 0, outside + ' bytes outside the hair vertices changed' ); ok( inside > 1000, 'hair barely moved: ' + inside );
 		ok( hairVerts.size >= 2, 'expected hair in more than one accessor (front hair + the back hair on the body mesh)' );
+
+	} );
+	test( 'hair silhouette on the real VRM: the hair moves toward the photo silhouette, measured again on the output', () => {
+
+		const base = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 0, reference: { profile: null, topV: 1, widthW: 1, lengthV: -1, hairlineV: 0.5 } } } );
+		const cur = base.report.hairShape.vrmBefore.profile;
+		const ref = { halfR: cur.halfR.map( v => v === null ? null : v * 1.15 ), halfL: cur.halfL.slice(), topByU: cur.topByU.map( v => v === null ? null : v * 1.15 ), lineByU: cur.lineByU.slice(), };
+		const refShape = { topV: null, widthW: null, lengthV: null, hairlineV: null, profile: ref };
+		const out = bindVRM( vrmBytes, faceBytes, { hairShape: { strength: 1, reference: refShape } } );
+		ok( out.report.hairShape.applied.mode === 'silhouette' && out.report.hairShape.maxMoveMm > 1 && out.report.hairShape.maxMoveMm <= 40, JSON.stringify( out.report.hairShape.applied ).slice( 0, 160 ) );
+		const after = bindVRM( out.bytes, faceBytes, { hairShape: { strength: 0, reference: refShape } } ).report.hairShape.vrmBefore.profile;
+		const err = p => p.halfR.reduce( ( s, v, i ) => v !== null && ref.halfR[ i ] !== null ? s + Math.abs( v - ref.halfR[ i ] ) : s, 0 );
+		ok( err( after ) < err( cur ) * 0.7, `the right-side reach did not move toward the reference: ${ err( cur ).toFixed( 3 ) } -> ${ err( after ).toFixed( 3 ) }` );
+		// the side that was meant to stay put moves far less than the side that was meant to move
+		const moved = ( a, b, side ) => a[ side ].reduce( ( s, v, i ) => v !== null && b[ side ][ i ] !== null ? s + Math.abs( v - b[ side ][ i ] ) : s, 0 );
+		ok( moved( after, cur, 'halfL' ) < 0.6 * moved( after, cur, 'halfR' ), `left moved ${ moved( after, cur, 'halfL' ).toFixed( 3 ) }, right ${ moved( after, cur, 'halfR' ).toFixed( 3 ) }` );
 
 	} );
 	test( 'hair reshape is skipped, with a warning, when the photo crops the hair on every side or has no hair data', () => {

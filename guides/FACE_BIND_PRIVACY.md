@@ -15,7 +15,7 @@ do with the files you download. Those are listed under [Threat model](#threat-mo
 | Data | Where it exists | Leaves the page? |
 |---|---|---|
 | **Photo** (File) | Read with `createImageBitmap`, drawn on canvases (a 1024 px face crop, a downscaled copy for the hair model and color sampling), shown in the `<img>` preview through an in-page object URL | No |
-| **Landmarks, hair mask, expression scores** | MediaPipe (wasm, CPU) memory, then plain JS arrays. The expression scores also drive the preview and are in `window.__webcli_result.expression` | No |
+| **Landmarks, hair mask (also shaded on a small canvas copy of the photo), expression scores** | MediaPipe (wasm, CPU) memory, then plain JS arrays. The expression scores also drive the preview and are in `window.__webcli_result.expression` | No |
 | **Measurements and colors** (face proportions, hair shape, skin, hair, iris and brow color) | JS objects, then the face GLB's node `extras` | No |
 | **Face GLB** | In memory, optional local download. **Contains the photo crop as its texture**, a 478-point face mesh, the photo's expression as morph weights, and the measurements above | Only if you download it and share it |
 | **Bound VRM** | In memory, local download. Contains the base VRM, the bind block (generic morph names and counts only) and, if you left them on, **reshaped face and hair geometry and tinted colors derived from the photo** | Only if you download it and share it |

@@ -295,7 +295,7 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 			const strength = opts.hairShape.strength === undefined ? 0.7 : opts.hairShape.strength;
 			const ref = opts.hairShape.reference || source.hairShape;
 			if ( ! ref ) report.warnings.push( 'Hair shape skipped: the face GLB carries no hair measurements (it was not made from a photo, or no hair was found).' );
-			else if ( [ ref.topV, ref.widthW, ref.lengthV, ref.hairlineV ].every( v => v === null || v === undefined ) ) report.warnings.push( 'Hair shape skipped: the photo crops the hair on every side, so its size cannot be measured. Use a photo that shows the whole head.' );
+			else if ( [ ref.topV, ref.widthW, ref.lengthV, ref.hairlineV ].every( v => v === null || v === undefined ) && ! ( ref.profile && Object.values( ref.profile ).some( a => a.some( v => v !== null ) ) ) ) report.warnings.push( 'Hair shape skipped: the photo crops the hair on every side, so its size cannot be measured. Use a photo that shows the whole head.' );
 			else {
 
 				const cut = ref.cropped ? Object.entries( ref.cropped ).filter( ( [ , v ] ) => v ).map( ( [ k ] ) => k ) : [];

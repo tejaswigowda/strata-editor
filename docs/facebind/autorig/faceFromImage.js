@@ -105,7 +105,7 @@ async function readHair( bitmap, landmarks ) {
 		const hairValue = labels.indexOf( 'hair' ) >= 0 ? labels.indexOf( 'hair' ) : 1;
 		const data = mask.getAsUint8Array();
 		const stats = hairColorFromMask( ctx.getImageData( 0, 0, width, height ).data, data, { width, height, hairValue, faceArea } );
-		return stats && { ...stats, shape: hairShapeFromMask( landmarks, data, { width, height, hairValue } ) };
+		return stats && { ...stats, shape: hairShapeFromMask( landmarks, data, { width, height, hairValue } ), mask: { width, height, hairValue, data: data.slice() } };
 
 	} finally {
 
@@ -220,6 +220,6 @@ export async function faceGLBFromImage( image ) {
 
 	mesh.geometry.dispose(); mesh.material.map.dispose(); mesh.material.dispose();
 	if ( bitmap.close && image !== bitmap ) bitmap.close();
-	return { glb, blendshapes, skinColor: generator.skinColor, hair, iris: eyeBrow.iris, brow: eyeBrow.brow, proportions };
+	return { glb, blendshapes, skinColor: generator.skinColor, hair, hairMask: hair ? hair.mask : null, iris: eyeBrow.iris, brow: eyeBrow.brow, proportions };
 
 }
