@@ -1,0 +1,10 @@
+name = "facebind-headers"
+main = "facebind-headers.worker.js"
+compatibility_date = "2026-10-01"
+
+# Fill in your zone and route, then `npx wrangler deploy`.
+# The route must match the facebind path on the proxied domain.
+routes = [
+  { pattern = "tejaswigowda.com/strata-editor/facebind/*", zone_name = "tejaswigowda.com" },
+  { pattern = "tejaswigowda.com/strata-editor/facebind", zone_name = "tejaswigowda.com" },
+]

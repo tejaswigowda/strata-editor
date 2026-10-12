@@ -3,10 +3,15 @@
 //   · face: eyes, mouth, jaw and the nose / lips / chin profile (FaceRefine.js)
 //   · hair: volume, height, length and fringe of the existing hairstyle (hairShape.js)
 //
-// What is touched: the POSITION accessors of the face and hair primitives (only the face's and the hair's
-// own vertices; the body vertices that share an accessor with the back hair are left alone), plus those
-// accessors' min/max. What is not: indices, UVs, normals, the 100+ morph targets (deltas, so every
-// existing blendshape keeps working on the new base), skeleton, skin weights, textures, body.
+// What is touched: the POSITION of the face and hair vertices, and the NORMAL (and TANGENT, if present) of exactly
+// those same vertices, plus those accessors' min/max. The body vertices that share an accessor with the back hair
+// are left alone. What is not: indices, UVs, other vertices' attributes, the 100+ morph targets (deltas, so every
+// existing blendshape keeps working on the new base, and their normal deltas are relative), skeleton, skin weights,
+// textures, body.
+//
+// Normals are not recomputed from the triangles (that would flatten the artist's hard edges and seams, which are
+// split vertices). Each warped vertex's own normal is carried through the warp with the inverse transpose of the
+// warp's Jacobian, the correct transform for a normal, so seams stay and shading follows the new surface.
 // bindVRM() audits that, byte for byte, before it writes anything.
 
 import { measureFace, planFaceRefine, warpPoint } from '../face/FaceRefine.js';
@@ -51,16 +56,109 @@ function readPositions( json, bin, accessorIndex ) {
 }
 
 // merge consecutive vertex indices into byte ranges
-function rangesOf( start, ids ) {
+function rangesOf( start, ids, stride = 12, size = 12 ) {
 
 	const sorted = [ ...ids ].sort( ( p, q ) => p - q ), out = [];
 	for ( const i of sorted ) {
 
-		const s = start + i * 12, last = out[ out.length - 1 ];
-		if ( last && last.end === s ) last.end = s + 12; else out.push( { start: s, end: s + 12 } );
+		const s = start + i * stride, last = out[ out.length - 1 ];
+		if ( last && last.end === s ) last.end = s + size; else out.push( { start: s, end: s + size } );
 
 	}
 	return out;
+
+}
+
+// Jacobian of p -> p + d(p), by central differences (h = 0.2 mm)
+function jacobian( warp, x, y, z ) {
+
+	const h = 2e-4, J = [ [ 1, 0, 0 ], [ 0, 1, 0 ], [ 0, 0, 1 ] ];
+	const axes = [ [ h, 0, 0 ], [ 0, h, 0 ], [ 0, 0, h ] ];
+	for ( let c = 0; c < 3; c ++ ) {
+
+		const a = warp( x + axes[ c ][ 0 ], y + axes[ c ][ 1 ], z + axes[ c ][ 2 ] ), b = warp( x - axes[ c ][ 0 ], y - axes[ c ][ 1 ], z - axes[ c ][ 2 ] );
+		for ( let r = 0; r < 3; r ++ ) J[ r ][ c ] += ( a[ r ] - b[ r ] ) / ( 2 * h );
+
+	}
+	return J;
+
+}
+
+const det3 = J => J[ 0 ][ 0 ] * ( J[ 1 ][ 1 ] * J[ 2 ][ 2 ] - J[ 1 ][ 2 ] * J[ 2 ][ 1 ] ) - J[ 0 ][ 1 ] * ( J[ 1 ][ 0 ] * J[ 2 ][ 2 ] - J[ 1 ][ 2 ] * J[ 2 ][ 0 ] ) + J[ 0 ][ 2 ] * ( J[ 1 ][ 0 ] * J[ 2 ][ 1 ] - J[ 1 ][ 1 ] * J[ 2 ][ 0 ] );
+
+// cofactor matrix: det(J) * inverse-transpose(J), so n' ~ cof(J) n for a surface normal under the map J (for det > 0)
+function cofactor( J ) {
+
+	const c = ( r0, c0, r1, c1 ) => J[ r0 ][ c0 ] * J[ r1 ][ c1 ] - J[ r0 ][ c1 ] * J[ r1 ][ c0 ];
+	return [
+		[ c( 1, 1, 2, 2 ), - c( 1, 0, 2, 2 ), c( 1, 0, 2, 1 ) ],
+		[ - c( 0, 1, 2, 2 ), c( 0, 0, 2, 2 ), - c( 0, 0, 2, 1 ) ],
+		[ c( 0, 1, 1, 2 ), - c( 0, 0, 1, 2 ), c( 0, 0, 1, 1 ) ],
+	];
+
+}
+
+const mulv = ( M, v ) => [ M[ 0 ][ 0 ] * v[ 0 ] + M[ 0 ][ 1 ] * v[ 1 ] + M[ 0 ][ 2 ] * v[ 2 ], M[ 1 ][ 0 ] * v[ 0 ] + M[ 1 ][ 1 ] * v[ 1 ] + M[ 1 ][ 2 ] * v[ 2 ], M[ 2 ][ 0 ] * v[ 0 ] + M[ 2 ][ 1 ] * v[ 1 ] + M[ 2 ][ 2 ] * v[ 2 ] ];
+const unit = v => { const l = Math.hypot( ...v ); return l > 1e-12 ? v.map( c => c / l ) : null; };
+
+/**
+ * Carry the NORMAL (and TANGENT) of the moved vertices through the warp. Returns the byte ranges written and how many
+ * vertices changed. Only vertices whose attribute actually changes are written.
+ */
+function transformAttributes( json, bin, prims, job ) {
+
+	const { accessor, ids, warp, positions } = job;
+	const out = new DataView( bin.data.buffer, bin.data.byteOffset );
+	const ranges = [], touched = [];
+	let changed = 0, maxAngle = 0;
+
+	const attrs = new Map(); // attribute accessor -> 'NORMAL' | 'TANGENT'
+	for ( const { p } of prims ) {
+
+		if ( p.attributes.POSITION !== accessor ) continue;
+		for ( const k of [ 'NORMAL', 'TANGENT' ] ) if ( p.attributes[ k ] !== undefined ) attrs.set( p.attributes[ k ], k );
+
+	}
+
+	for ( const [ idx, kind ] of attrs ) {
+
+		const { a, bv, start } = viewOf( json, idx );
+		const comps = kind === 'NORMAL' ? 3 : 4, stride = bv.byteStride || comps * 4;
+		if ( a.componentType !== 5126 || a.count !== json.accessors[ accessor ].count || stride !== comps * 4 ) continue; // not the float, tight layout this handles: left as it is
+		const writtenIds = [];
+		for ( const i of ids ) {
+
+			const x = positions[ i * 3 ], y = positions[ i * 3 + 1 ], z = positions[ i * 3 + 2 ];
+			const J = jacobian( warp, x, y, z );
+			const det = det3( J );
+			if ( ! ( det > 0.1 ) ) continue; // a vertex the warp folds flat: keep its normal
+			const o = start + i * stride;
+			const v = [ out.getFloat32( o, true ), out.getFloat32( o + 4, true ), out.getFloat32( o + 8, true ) ];
+			const t = unit( kind === 'NORMAL' ? mulv( cofactor( J ), v ) : mulv( J, v ) );
+			if ( ! t ) continue;
+			const before = unit( v );
+			const cos = before ? before[ 0 ] * t[ 0 ] + before[ 1 ] * t[ 1 ] + before[ 2 ] * t[ 2 ] : 1;
+			if ( cos < 0.35 ) continue; // more than ~70 degrees: not a believable change, keep the original
+			if ( Math.abs( t[ 0 ] - v[ 0 ] ) + Math.abs( t[ 1 ] - v[ 1 ] ) + Math.abs( t[ 2 ] - v[ 2 ] ) < 1e-3 ) continue; // under ~0.06 degrees: not worth a write
+			out.setFloat32( o, t[ 0 ], true ); out.setFloat32( o + 4, t[ 1 ], true ); out.setFloat32( o + 8, t[ 2 ], true );
+			maxAngle = Math.max( maxAngle, Math.acos( Math.min( 1, cos ) ) * 180 / Math.PI );
+			writtenIds.push( i ); changed ++;
+
+		}
+		if ( writtenIds.length ) {
+
+			if ( a.min || a.max ) { // keep any declared bounds true
+				const mn = [ Infinity, Infinity, Infinity ], mx = [ - Infinity, - Infinity, - Infinity ];
+				for ( let i = 0; i < a.count; i ++ ) for ( let c = 0; c < 3; c ++ ) { const v = out.getFloat32( start + i * stride + c * 4, true ); mn[ c ] = Math.min( mn[ c ], v ); mx[ c ] = Math.max( mx[ c ], v ); }
+				if ( a.min ) a.min = a.min.length === 3 ? mn : [ ...mn, a.min[ 3 ] ]; if ( a.max ) a.max = a.max.length === 3 ? mx : [ ...mx, a.max[ 3 ] ];
+			}
+			for ( const r of rangesOf( start, writtenIds, stride, comps * 4 ) ) ranges.push( r );
+			touched.push( idx );
+
+		}
+
+	}
+	return { ranges, touched, changed, maxAngle };
 
 }
 
@@ -102,6 +200,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 	const m = measureFace( facePositions, sets );
 
 	const modified = new Map(); // accessor -> { positions, ids }
+	const jobs = []; // vertices whose NORMAL / TANGENT must follow their position
 	const result = { face: null, hair: null };
 
 	// ── face ──
@@ -118,7 +217,13 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 		}
 		const count = json.accessors[ main ].count;
-		for ( const idx of faceAccessors ) if ( json.accessors[ idx ].count === count ) modified.set( idx, { positions: moved, ids: Array.from( { length: count }, ( _, i ) => i ) } );
+		for ( const idx of faceAccessors ) if ( json.accessors[ idx ].count === count ) {
+
+			const ids = Array.from( { length: count }, ( _, i ) => i );
+			modified.set( idx, { positions: moved, ids } );
+			jobs.push( { accessor: idx, ids, positions: facePositions, warp: ( x, y, z ) => warpPoint( plan, x, y, z ) } );
+
+		}
 		result.face = {
 			maxMove,
 			measured: {
@@ -161,6 +266,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 			}
 			modified.set( a, { positions: dst, ids: [ ...ids ] } );
+			jobs.push( { accessor: a, ids: [ ...ids ], positions: src, warp: ( x, y, z ) => warpHairPoint( plan, x, y, z ) } );
 
 		}
 		result.hair = { maxMove, measured: cur, plan: summarizePlan( plan ) };
@@ -186,8 +292,20 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 	}
 
+	// normals / tangents of the same vertices, carried through the same warp
+	const normals = { updated: 0, maxAngleDeg: 0 };
+	const accessors = [ ...modified.keys() ];
+	for ( const job of jobs ) {
+
+		const r = transformAttributes( json, bin, prims, job );
+		ranges.push( ...r.ranges ); accessors.push( ...r.touched );
+		normals.updated += r.changed; normals.maxAngleDeg = Math.max( normals.maxAngleDeg, r.maxAngle );
+
+	}
+	normals.maxAngleDeg = +normals.maxAngleDeg.toFixed( 1 );
+
 	vrm.chunks[ binIndex ] = bin;
-	return { ranges, accessors: [ ...modified.keys() ], ...result };
+	return { ranges, accessors: [ ...new Set( accessors ) ], normals, ...result };
 
 }
 
@@ -197,6 +315,6 @@ export function assertBinOnlyChanged( before, after, ranges ) {
 	if ( before.length !== after.length ) throw new GLBError( 'RIG_UNSAFE', 'refusing to write: the binary chunk changed size' );
 	const allowed = new Uint8Array( before.length );
 	for ( const r of ranges ) allowed.fill( 1, r.start, r.end );
-	for ( let i = 0; i < before.length; i ++ ) if ( before[ i ] !== after[ i ] && ! allowed[ i ] ) throw new GLBError( 'RIG_UNSAFE', `refusing to write: byte ${ i } outside the face / hair POSITION data changed` );
+	for ( let i = 0; i < before.length; i ++ ) if ( before[ i ] !== after[ i ] && ! allowed[ i ] ) throw new GLBError( 'RIG_UNSAFE', `refusing to write: byte ${ i } outside the face / hair vertex data changed` );
 
 }

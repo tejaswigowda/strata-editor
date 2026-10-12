@@ -31,6 +31,12 @@ export function createPreview( container ) {
 	controls.enablePan = false;
 	controls.enableDamping = false;
 
+	const light = new THREE.DirectionalLight( 0xffffff, 2.2 );
+	light.position.set( - 0.6, 0.8, 1 ); // from the upper left, in front
+	const ambient = new THREE.AmbientLight( 0xffffff, 0.9 );
+	let shading = 'flat';
+	const toonRamp = ( () => { const t = new THREE.DataTexture( new Uint8Array( [ 90, 90, 90, 255, 170, 170, 170, 255, 255, 255, 255, 255 ] ), 3, 1, THREE.RGBAFormat ); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; } )();
+
 	const models = { base: null, bound: null };
 	let view = 'bound', bind = null, weights = {}, disposed = false, raf = 0;
 	let mode = 'manual', photo = null, touched = new Set(), info = { mapped: 0, extra: 0 };
@@ -78,6 +84,29 @@ export function createPreview( container ) {
 		if ( gltf.parser.json.extensions && gltf.parser.json.extensions.VRM ) root.rotation.y = Math.PI; // VRM 0.x faces -Z
 		root.updateMatrixWorld( true );
 		return root;
+
+	}
+
+	// 'flat': the VRM's own unlit materials. 'lit': a stand-in toon shader driven by the vertex normals, so the shading shows
+	// whether the normals follow a reshaped face and hair (it is not MToon, but it reads the same normals).
+	function applyShading( root ) {
+
+		if ( ! root ) return;
+		root.traverse( o => {
+
+			if ( ! o.isMesh ) return;
+			if ( ! o.userData.flatMaterial ) o.userData.flatMaterial = o.material;
+			if ( shading === 'flat' ) { o.material = o.userData.flatMaterial; return; }
+			if ( ! o.userData.litMaterial ) {
+
+				const m = o.userData.flatMaterial;
+				o.userData.litMaterial = new THREE.MeshToonMaterial( { map: m.map || null, color: m.color ? m.color.clone() : 0xffffff, gradientMap: toonRamp, transparent: m.transparent, alphaTest: m.alphaTest, opacity: m.opacity, side: m.side } );
+
+			}
+			o.material = o.userData.litMaterial;
+
+		} );
+		root.traverse( o => { if ( o.material ) o.material.needsUpdate = true; } );
 
 	}
 
@@ -138,9 +167,19 @@ export function createPreview( container ) {
 			mode = photo ? 'photo' : 'manual';
 			touched = new Set();
 			scene.add( models.base, models.bound );
+			applyShading( models.base ); applyShading( models.bound );
 			this.setView( view );
 			frame( models.bound );
 			applyWeights();
+
+		},
+
+		/** 'flat' | 'lit' */
+		setShading( s ) {
+
+			shading = s;
+			if ( s === 'lit' ) { scene.add( light, ambient ); } else { scene.remove( light, ambient ); }
+			applyShading( models.base ); applyShading( models.bound ); request();
 
 		},
 

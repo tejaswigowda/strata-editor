@@ -12,6 +12,7 @@ const sha = ( f, enc ) => crypto.createHash( 'sha256' ).update( fs.readFileSync(
 
 let passed = 0, failed = 0;
 const test = ( name, fn ) => { try { fn(); passed ++; console.log( '  ✓ ' + name ); } catch ( e ) { failed ++; console.log( '  ✗ ' + name + '\n      ' + e.message ); } };
+const eq2 = ( a, b, m ) => { if ( a !== b ) throw new Error( ( m || 'not equal' ) + `: ${ a } vs ${ b }` ); };
 const ok = ( v, m ) => { if ( ! v ) throw new Error( m || 'expected truthy' ); };
 const strip = s => s.replace( /\/\*[\s\S]*?\*\//g, '' ).replace( /^\s*\/\/.*$/gm, '' ).replace( /\s\/\/ .*$/gm, '' );
 
@@ -28,6 +29,17 @@ test( 'CSP: no remote scripts, no inline script except the import map (by hash),
 	ok( connect.every( c => [ "'self'", 'blob:', 'https://raw.githubusercontent.com' ].includes( c ) ), 'unexpected connect-src: ' + connect.join( ' ' ) );
 	ok( /name="referrer" content="no-referrer"/.test( html ), 'no no-referrer policy' );
 	ok( /form-action 'none'/.test( csp ) );
+	ok( /worker-src 'none'/.test( csp ), "worker-src 'none' is missing: workers would bypass the egress guard" );
+
+} );
+
+test( 'the Cloudflare header policy is the page\'s <meta> CSP plus frame-ancestors, and sets Referrer-Policy and nosniff', () => {
+
+	const ops = JSON.parse( fs.readFileSync( path.join( root, '..', '..', 'ops', 'cloudflare', 'facebind-headers.json' ), 'utf8' ) );
+	eq2( ops.headers[ 'Content-Security-Policy' ], csp + "; frame-ancestors 'none'", 'header CSP drifted from the <meta> CSP: update ops/cloudflare/facebind-headers.json' );
+	eq2( ops.headers[ 'Referrer-Policy' ], 'no-referrer' ); eq2( ops.headers[ 'X-Content-Type-Options' ], 'nosniff' );
+	ok( ops.path === '/strata-editor/facebind/' );
+	for ( const f of [ 'facebind-headers.worker.js', 'wrangler.toml', 'README.md' ] ) ok( fs.existsSync( path.join( root, '..', '..', 'ops', 'cloudflare', f ) ), f + ' is missing' );
 
 } );
 
@@ -75,7 +87,7 @@ test( 'no network, storage or dynamic-import-by-URL API anywhere else in the fac
 	for ( const f of files ) {
 
 		const src = strip( fs.readFileSync( f, 'utf8' ) );
-		const hit = src.match( /\b(fetch|XMLHttpRequest|WebSocket|sendBeacon|EventSource|RTCPeerConnection|WebTransport|localStorage|sessionStorage|indexedDB|caches|importScripts|serviceWorker|postMessage|BroadcastChannel)\b/ );
+		const hit = src.match( /\b(fetch|XMLHttpRequest|WebSocket|sendBeacon|EventSource|RTCPeerConnection|WebTransport|localStorage|sessionStorage|indexedDB|caches|importScripts|serviceWorker|postMessage|BroadcastChannel|Worker|SharedWorker|Worklet)\b/ );
 		ok( ! hit, `${ path.relative( root, f ) } uses ${ hit && hit[ 0 ] }` );
 		ok( ! /\bimport\s*\(\s*[^'"\s]/.test( src ), `${ path.relative( root, f ) } has a dynamic import with a computed URL` );
 
@@ -88,7 +100,7 @@ test( 'the egress guard allows only same-origin / blob / data / the user-registe
 	const g = strip( read( 'egressGuard.js' ) );
 	ok( /destinationOk/.test( g ) && /u\.origin === location\.origin/.test( g ) && /allowed\.has\( u\.href \)/.test( g ), 'destination allow-list is missing' );
 	ok( /method !== 'GET'/.test( g ) && /hasBody/.test( g ), 'GET / no-body check is missing' );
-	for ( const name of [ 'sendBeacon', 'WebSocket', 'EventSource', 'RTCPeerConnection', 'WebTransport', 'window.open' ] ) ok( g.includes( name ), `${ name } is not blocked` );
+	for ( const name of [ 'sendBeacon', 'WebSocket', 'EventSource', 'RTCPeerConnection', 'WebTransport', 'window.open', 'Worker', 'SharedWorker', 'serviceWorker' ] ) ok( g.includes( name ), `${ name } is not blocked` );
 
 } );
 

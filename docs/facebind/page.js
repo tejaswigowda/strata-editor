@@ -117,9 +117,12 @@ async function run( { vrm, image, face, look, shape, hairShape, names } ) {
 		const a = $( 'download' ); a.href = url; a.download = filename; a.hidden = false; a.textContent = `Download ${ filename } (${ ( bytes.length / 1048576 ).toFixed( 1 ) } MB)`;
 
 		render( report );
+		const risky = bind.source.nameResolution === 'convention' || bind.source.nameResolution === 'unresolved';
+		$( 'resolutionWarn' ).hidden = ! risky;
+		if ( risky ) $( 'resolutionWarn' ).textContent = 'Check the mapping: ' + bind.warnings.join( ' ' );
 		showPreview( vrmBytes, bytes, bind, expression );
-		window.__webcli_result = { ok: true, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, faceGlb: image ? faceBytes : null, expression, bytes, bind, report, scope: SCOPE };
-		say( `Bound ${ report.mapped } of ${ report.sourceMorphs } face morphs. ${ SCOPE }.`, 'ok' );
+		window.__webcli_result = { ok: true, nameResolution: report.nameResolution, warnings: report.warnings, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, faceGlb: image ? faceBytes : null, expression, bytes, bind, report, scope: SCOPE };
+		say( `Bound ${ report.mapped } of ${ report.sourceMorphs } face morphs${ risky ? ' (names ASSUMED, see the warning below)' : '' }. ${ SCOPE }.`, risky ? 'err' : 'ok' );
 		if ( params.has( 'run' ) && params.get( 'download' ) !== '0' ) a.click();
 		return window.__webcli_result;
 
@@ -292,6 +295,7 @@ if ( params.has( 'vrm' ) ) {
 if ( params.has( 'face' ) || params.has( 'image' ) ) say( 'Ignoring ?image= / ?face=: the photo and the face GLB are local-only and are never loaded from a URL.', 'err' );
 
 for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).addEventListener( 'input', e => { if ( ! preview ) return; $( 'expr_manual' ).checked = true; preview.setExpression( id, Number( e.target.value ) / 100 ); updateExpressionNote(); } );
+for ( const m of [ 'flat', 'lit' ] ) $( 'shade_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) preview.setShading( m ); } );
 for ( const m of [ 'photo', 'neutral', 'manual' ] ) $( 'expr_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) { preview.setExpressionMode( m ); updateExpressionNote(); } } );
 for ( const v of [ 'bound', 'base' ] ) $( 'view_' + v ).addEventListener( 'change', e => e.target.checked && preview && preview.setView( v ) );
 $( 'xReset' ).addEventListener( 'click', () => { for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).value = 0; if ( preview ) { preview.resetExpressions(); $( 'expr_neutral' ).checked = true; updateExpressionNote(); } } );

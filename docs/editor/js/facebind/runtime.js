@@ -17,7 +17,7 @@ export function readBinding( root ) {
  * @param {THREE.Object3D} root the loaded, bound VRM
  * @param {number[]|Object<string|number, number>} weights per face-morph: an array by source index, or an
  *   object keyed by source index or morph name. Missing entries leave the VRM morph as it is.
- * @returns {{ applied:number, skipped:string[] }}
+ * @returns {{ applied:number, skipped:string[], warnings:string[] }} warnings: how the bind's names were resolved, if not certain. Show them.
  */
 export function applyFaceWeights( root, weights, opts = {} ) {
 
@@ -52,7 +52,8 @@ export function applyFaceWeights( root, weights, opts = {} ) {
 		if ( hit ) applied ++; else skipped.push( entry.name );
 
 	}
-	return { applied, skipped };
+	// the bind's own warnings (for example `convention`: the names were assumed) ride along so a consumer cannot miss them
+	return { applied, skipped, warnings: bind.warnings || [] };
 
 }
 

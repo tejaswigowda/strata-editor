@@ -2,8 +2,8 @@
 //
 //   bindVRM( vrmBytes, faceBytes, opts? ) -> { bytes, bind, report }
 //
-// Rig-safe: the VRM's skeleton, skin weights, morph deltas, textures, hair and body are never touched, and
-// no byte of the binary chunk changes except (optionally) the face's POSITION data. The only things written are
+// Rig-safe: the VRM's skeleton, skin weights, morph deltas, textures and body are never touched, and no byte of
+// the binary chunk changes except (optionally) the POSITION, NORMAL and TANGENT of the face's and hair's own vertices. The only things written are
 //   · an `extensions.STRATA_face_bind` block (a weight map: face morph -> the VRM's own morph targets),
 //   · optionally, a reshape of the face's and the hair's base positions toward the photo's measurements, and
 //   · optionally, tints on the skin / hair / iris / brow materials toward colors read from the photo.
@@ -88,6 +88,8 @@ export function buildBinding( source, vrmJson ) {
 		version: 1,
 		scope: SCOPE,
 		source: { morphCount: source.count, nameResolution: source.resolution, names: source.names },
+		// how the names were resolved, if that was not certain: consumers (facerig, mocap, the preview) must show these
+		warnings: source.resolution === 'primitive.extras.targetNames' || source.resolution === 'mesh.extras.targetNames' || source.resolution === 'explicit names' ? [] : source.warnings.slice(),
 		map,
 		unmapped,
 		undriven,
@@ -268,6 +270,7 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		look: null,
 		shape: null,
 		hairShape: null,
+		normals: null,
 		egress: 'none: the face GLB was read from local bytes only; nothing derived from it left this process',
 	};
 
@@ -309,6 +312,7 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 
 			reshaped = reshapeVRM( vrm, what );
 			if ( reshaped.face ) report.shape = { approximate: true, strength: what.face.strength, maxMoveMm: +( reshaped.face.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.face.measured, photo: what.face.reference };
+			report.normals = reshaped.normals;
 			if ( reshaped.hair ) report.hairShape = { approximate: true, strength: what.hair.strength, maxMoveMm: +( reshaped.hair.maxMove * 1000 ).toFixed( 1 ), vrmBefore: reshaped.hair.measured, photo: what.hair.reference, applied: reshaped.hair.plan };
 
 		}

@@ -82,15 +82,50 @@ test( 'deterministic: same inputs give the same bytes', () => {
 
 } );
 
-test( 'index-named morphs: 42 use the documented convention (flagged); other counts are unresolved and map nothing', () => {
+// the autorigger's own structure with index-only names (the primitive's semantic names removed)
+const autorigger42 = ( idxNames = true ) => {
 
+	const j = faceJson( Array.from( { length: 42 }, ( _, i ) => String( i ) ) );
+	j.asset = { version: '2.0', generator: 'THREE.GLTFExporter r185dev' };
+	j.nodes = [ { name: 'faceMesh', mesh: 0, extras: { faceWidth: 2, faceHeight: 2, aspectRatio: 0.85, skinColor: { r: 0.8, g: 0.6, b: 0.5 } } } ];
+	j.meshes[ 0 ].extras = { targetNames: Array.from( { length: 42 }, ( _, i ) => String( i ) ) };
+	j.meshes[ 0 ].primitives[ 0 ].extras = undefined;
+	j.accessors = [ { count: 478 } ]; j.meshes[ 0 ].primitives[ 0 ].attributes = { POSITION: 0 };
+	return j;
+
+};
+
+test( 'index-only morphs: the 42-order is assumed ONLY for the autorigger\'s own structure, flagged `convention` with a loud warning; any other 42-morph file is `unresolved` and maps nothing', () => {
+
+	const sig = readFaceSource( glb( autorigger42() ) );
+	eq( sig.names, CONVENTION_42 ); eq( sig.resolution, 'convention' ); ok( sig.warnings.length === 1 && /check them/.test( sig.warnings[ 0 ] ) );
+	const r = bindVRM( glb( vrmJson() ), glb( autorigger42() ) );
+	eq( r.bind.source.nameResolution, 'convention' ); ok( r.bind.warnings.length === 1, 'the warning must ride in the STRATA_face_bind block' ); ok( r.report.warnings.some( w => /check them/.test( w ) ) );
+	// the same 42 index-only morphs from any other source (no autorigger structure), in any order: nothing is mapped
+	for ( const mutate of [ j => { j.nodes[ 0 ].name = 'head'; }, j => { delete j.nodes[ 0 ].extras.faceWidth; }, j => { j.asset.generator = 'Blender'; }, j => { j.accessors[ 0 ].count = 468; }, j => { j.meshes[ 0 ].extras.targetNames = j.meshes[ 0 ].extras.targetNames.slice().reverse(); } ] ) {
+
+		const j = autorigger42(); mutate( j );
+		const s = readFaceSource( glb( j ) );
+		eq( s.resolution, 'unresolved', 'a lookalike must not be assumed' ); ok( s.names.every( n => n === null ) && s.warnings.length === 1 );
+		const bound = bindVRM( glb( vrmJson() ), glb( j ) );
+		eq( bound.bind.map, [] ); eq( bound.bind.unmapped.length, 42 );
+
+	}
 	const idx = n => Array.from( { length: n }, ( _, i ) => String( i ) );
-	const s42 = readFaceSource( glb( faceJson( idx( 42 ) ) ) );
-	eq( s42.names, CONVENTION_42 ); ok( s42.resolution.startsWith( 'convention' ) && s42.warnings.length );
 	const s5 = readFaceSource( glb( faceJson( idx( 5 ) ) ) );
 	ok( s5.resolution === 'unresolved' && s5.names.every( n => n === null ) );
-	const r = bindVRM( glb( vrmJson() ), glb( faceJson( idx( 5 ) ) ) );
-	eq( r.bind.map, [] ); eq( r.bind.unmapped.length, 5 );
+	eq( bindVRM( glb( vrmJson() ), glb( faceJson( idx( 5 ) ) ) ).bind.map, [] );
+
+} );
+
+test( 'a bind resolved by real names carries no resolution warning; runtime hands the bind\'s warnings to the caller', () => {
+
+	const clean = bindVRM( glb( vrmJson() ), glb( faceJson( [ 'jawOpen' ] ) ) );
+	eq( clean.bind.warnings, [] );
+	const conv = bindVRM( glb( vrmJson() ), glb( autorigger42() ) );
+	const mesh = { morphTargetDictionary: { eyeBlinkLeft: 0 }, morphTargetInfluences: [ 0 ] };
+	const res = applyFaceWeights( { traverse: f => f( mesh ), userData: {} }, { eyeBlinkLeft: 0.5 }, { bind: conv.bind } );
+	ok( res.warnings.length === 1, 'driving a convention bind must hand back the warning' );
 
 } );
 
@@ -401,23 +436,56 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 	// a face GLB carrying the measured proportions, as a photo-made one does
 	const photoFace = () => { const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) ); j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, faceProportions: { eyeSeparationW: 0.43, eyeWidthW: 0.2023, eyeOpenness: 0.3322, mouthWidthW: 0.3706, jawWidthW: 0.8427, jawT: 0.2496, depth: { noseTip: { t: 0.65, dz: 0.182 }, lips: { t: 0.404, dz: 0.09 }, chin: { t: 0, dz: 0.035 } } }, irisColor: { r: 0.2, g: 0.12, b: 0.08 }, browColor: { r: 0.12, g: 0.09, b: 0.07 } }; return writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } ); };
 
-	test( 'face reshape: only the face POSITION bytes change; skeleton, weights, morph deltas, textures, hair are byte-identical', () => {
+	// byte offsets of an accessor's vertex i attribute (tight layout)
+	const attrRange = ( json, acc, ids, size = 12 ) => { const x = json.accessors[ acc ], st = ( json.bufferViews[ x.bufferView ].byteOffset || 0 ) + ( x.byteOffset || 0 ); const s = new Set(); for ( const i of ids ) for ( let k = 0; k < size; k ++ ) s.add( st + i * size + k ); return s; };
+	const allIds = n => Array.from( { length: n }, ( _, i ) => i );
+
+	test( 'face reshape: only the face POSITION and NORMAL bytes of the face vertices change; skeleton, weights, morph deltas, textures, hair, body are byte-identical', () => {
 
 		const out = bindVRM( vrmBytes, photoFace(), { shape: { strength: 1 } } );
 		ok( out.report.shape && out.report.shape.maxMoveMm > 0.5 && out.report.shape.maxMoveMm < 25, 'move ' + ( out.report.shape && out.report.shape.maxMoveMm ) );
+		ok( out.report.normals && out.report.normals.updated > 100 && out.report.normals.maxAngleDeg < 70, JSON.stringify( out.report.normals ) );
 		const a = parseGLB( vrmBytes ), b = parseGLB( out.bytes );
 		const ja = a.json, jb = b.json;
-		const posAcc = new Set( ja.meshes[ 0 ].primitives.map( p => p.attributes.POSITION ) );
-		ok( posAcc.size === 1 );
-		const pa = ja.accessors[ [ ...posAcc ][ 0 ] ];
-		const start = ( ja.bufferViews[ pa.bufferView ].byteOffset || 0 ) + ( pa.byteOffset || 0 );
+		const prim = ja.meshes[ 0 ].primitives[ 0 ], count = ja.accessors[ prim.attributes.POSITION ].count;
+		const allowed = new Set( [ ...attrRange( ja, prim.attributes.POSITION, allIds( count ) ), ...attrRange( ja, prim.attributes.NORMAL, allIds( count ) ) ] );
 		let outside = 0, inside = 0;
-		a.chunks[ 0 ].data.forEach( ( v, i ) => { if ( v !== b.chunks[ 0 ].data[ i ] ) { if ( i >= start && i < start + pa.count * 12 ) inside ++; else outside ++; } } );
-		ok( outside === 0, outside + ' bytes outside the POSITION data changed' ); ok( inside > 1000, 'positions barely changed: ' + inside );
-		// morph target accessors are untouched
+		a.chunks[ 0 ].data.forEach( ( v, i ) => { if ( v !== b.chunks[ 0 ].data[ i ] ) { if ( allowed.has( i ) ) inside ++; else outside ++; } } );
+		ok( outside === 0, outside + ' bytes outside the face POSITION / NORMAL data changed' ); ok( inside > 1000, 'positions barely changed: ' + inside );
+		// morph target accessors (and their normal deltas) are untouched
 		ok( ja.meshes[ 0 ].primitives[ 0 ].targets.length === 122 && JSON.stringify( ja.meshes[ 0 ].primitives[ 0 ].targets ) === JSON.stringify( jb.meshes[ 0 ].primitives[ 0 ].targets ) );
-		// bounds updated, valid
-		const nb = jb.accessors[ [ ...posAcc ][ 0 ] ]; ok( nb.min.every( ( v, i ) => v <= nb.max[ i ] ) );
+		const nb = jb.accessors[ prim.attributes.POSITION ]; ok( nb.min.every( ( v, i ) => v <= nb.max[ i ] ) );
+
+	} );
+	test( 'face reshape: normals follow the surface (not stale, not recomputed flat): unit length, seams kept, and their change matches the true change of the geometry', () => {
+
+		const out = bindVRM( vrmBytes, photoFace(), { shape: { strength: 1 } } );
+		const A = parseGLB( vrmBytes ), B = parseGLB( out.bytes ), j = A.json;
+		const read = ( c, acc, n ) => { const x = j.accessors[ acc ], st = ( j.bufferViews[ x.bufferView ].byteOffset || 0 ) + ( x.byteOffset || 0 ), dv = new DataView( c.data.buffer, c.data.byteOffset + st ); return Array.from( { length: x.count * n }, ( _, i ) => dv.getFloat32( i * 4, true ) ); };
+		const mesh = j.meshes[ 0 ], pAcc = mesh.primitives[ 0 ].attributes.POSITION, nAcc = mesh.primitives[ 0 ].attributes.NORMAL;
+		const P0 = read( A.chunks[ 0 ], pAcc, 3 ), P1 = read( B.chunks[ 0 ], pAcc, 3 ), N0 = read( A.chunks[ 0 ], nAcc, 3 ), N1 = read( B.chunks[ 0 ], nAcc, 3 );
+		const nv = P0.length / 3;
+		// geometric normals from the triangles (area weighted), before and after
+		const idxOf = p => { const x = j.accessors[ p.indices ], bv = j.bufferViews[ x.bufferView ], dv = new DataView( A.chunks[ 0 ].data.buffer, A.chunks[ 0 ].data.byteOffset + ( bv.byteOffset || 0 ) + ( x.byteOffset || 0 ) ); const sz = x.componentType === 5125 ? 4 : 2; return Array.from( { length: x.count }, ( _, i ) => sz === 4 ? dv.getUint32( i * 4, true ) : dv.getUint16( i * 2, true ) ); };
+		const geo = P => { const N = new Float64Array( nv * 3 ); for ( const p of mesh.primitives ) { const ix = idxOf( p ); for ( let t = 0; t < ix.length; t += 3 ) { const [ a, b, c ] = [ ix[ t ], ix[ t + 1 ], ix[ t + 2 ] ]; const u = [ 0, 1, 2 ].map( k => P[ b * 3 + k ] - P[ a * 3 + k ] ), w = [ 0, 1, 2 ].map( k => P[ c * 3 + k ] - P[ a * 3 + k ] ); const n = [ u[ 1 ] * w[ 2 ] - u[ 2 ] * w[ 1 ], u[ 2 ] * w[ 0 ] - u[ 0 ] * w[ 2 ], u[ 0 ] * w[ 1 ] - u[ 1 ] * w[ 0 ] ]; for ( const v of [ a, b, c ] ) for ( let k = 0; k < 3; k ++ ) N[ v * 3 + k ] += n[ k ]; } } return N; };
+		const G0 = geo( P0 ), G1 = geo( P1 );
+		const norm = ( A, i ) => { const l = Math.hypot( A[ i * 3 ], A[ i * 3 + 1 ], A[ i * 3 + 2 ] ) || 1; return [ A[ i * 3 ] / l, A[ i * 3 + 1 ] / l, A[ i * 3 + 2 ] / l ]; };
+		let n = 0, cosSum = 0, unitBad = 0, unmovedChanged = 0, unmoved = 0, staleBetter = 0;
+		for ( let i = 0; i < nv; i ++ ) {
+
+			const l1 = Math.hypot( N1[ i * 3 ], N1[ i * 3 + 1 ], N1[ i * 3 + 2 ] ); if ( Math.abs( l1 - 1 ) > 1e-3 ) unitBad ++;
+			if ( P0[ i * 3 ] === P1[ i * 3 ] && P0[ i * 3 + 1 ] === P1[ i * 3 + 1 ] && P0[ i * 3 + 2 ] === P1[ i * 3 + 2 ] ) { unmoved ++; if ( N0[ i * 3 ] !== N1[ i * 3 ] || N0[ i * 3 + 1 ] !== N1[ i * 3 + 1 ] || N0[ i * 3 + 2 ] !== N1[ i * 3 + 2 ] ) unmovedChanged ++; }
+			const g0 = norm( G0, i ), g1 = norm( G1, i );
+			const dTrue = [ 0, 1, 2 ].map( k => g1[ k ] - g0[ k ] ), dOurs = [ 0, 1, 2 ].map( k => N1[ i * 3 + k ] - N0[ i * 3 + k ] );
+			const lt = Math.hypot( ...dTrue ), lo = Math.hypot( ...dOurs );
+			if ( lt > 0.06 && lo > 0.003 ) { n ++; cosSum += ( dTrue[ 0 ] * dOurs[ 0 ] + dTrue[ 1 ] * dOurs[ 1 ] + dTrue[ 2 ] * dOurs[ 2 ] ) / ( lt * lo ); }
+			else if ( lt > 0.15 && lo <= 0.003 ) staleBetter ++;
+
+		}
+		ok( unitBad === 0, unitBad + ' normals are not unit length' );
+		ok( unmoved > 0 && unmovedChanged <= unmoved * 0.03, `a vertex that did not move keeps its exact normal (a few at the very edge of the warp may tilt): ${ unmovedChanged } of ${ unmoved } changed` );
+		ok( n > 50 && cosSum / n > 0.5, `the change of the normals must match the true change of the surface: mean cosine ${ ( cosSum / n ).toFixed( 2 ) } over ${ n }` );
+		ok( staleBetter < n * 0.5, `too many warped vertices kept a stale normal: ${ staleBetter } vs ${ n } updated` );
 
 	} );
 	test( 'face reshape: strength 0 leaves the binary chunk identical; same inputs give the same bytes', () => {
@@ -480,7 +548,8 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		const readIdx = acc => { const x = ja.accessors[ acc ], bv = ja.bufferViews[ x.bufferView ], dv = new DataView( a.chunks[ 0 ].data.buffer, a.chunks[ 0 ].data.byteOffset + ( bv.byteOffset || 0 ) + ( x.byteOffset || 0 ) ); return Array.from( { length: x.count }, ( _, i ) => x.componentType === 5125 ? dv.getUint32( i * 4, true ) : dv.getUint16( i * 2, true ) ); };
 		ja.meshes.forEach( m => m.primitives.forEach( p => { if ( /_HAIR$/.test( ja.materials[ p.material ].name ) ) { const s = hairVerts.get( p.attributes.POSITION ) || new Set(); readIdx( p.indices ).forEach( i => s.add( i ) ); hairVerts.set( p.attributes.POSITION, s ); } } ) );
 		const allowed = new Set();
-		for ( const [ acc, ids ] of hairVerts ) { const x = ja.accessors[ acc ], st = ( ja.bufferViews[ x.bufferView ].byteOffset || 0 ) + ( x.byteOffset || 0 ); for ( const i of ids ) for ( let k = 0; k < 12; k ++ ) allowed.add( st + i * 12 + k ); }
+		const normalOf = new Map(); ja.meshes.forEach( m => m.primitives.forEach( p => { if ( /_HAIR$/.test( ja.materials[ p.material ].name ) ) normalOf.set( p.attributes.POSITION, p.attributes.NORMAL ); } ) );
+		for ( const [ acc, ids ] of hairVerts ) { for ( const s of [ attrRange( ja, acc, ids ), attrRange( ja, normalOf.get( acc ), ids ) ] ) for ( const o of s ) allowed.add( o ); }
 		let outside = 0, inside = 0;
 		a.chunks[ 0 ].data.forEach( ( v, i ) => { if ( v !== b.chunks[ 0 ].data[ i ] ) allowed.has( i ) ? inside ++ : outside ++; } );
 		ok( outside === 0, outside + ' bytes outside the hair vertices changed' ); ok( inside > 1000, 'hair barely moved: ' + inside );
@@ -512,6 +581,18 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		const cropped = bindVRM( vrmBytes, writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } ), { hairShape: { strength: 1 } } );
 		ok( cropped.report.hairShape === null && cropped.report.warnings.some( w => /crops the hair on every side/.test( w ) ) );
 		ok( same( parseGLB( cropped.bytes ).chunks[ 0 ].data, parseGLB( vrmBytes ).chunks[ 0 ].data ) );
+
+	} );
+	test( 'the real sample with its semantic names removed binds 42 of 42 as `convention`, with the warning; a shuffled copy does not', () => {
+
+		const g = parseGLB( faceBytes ), j = JSON.parse( JSON.stringify( g.json ) );
+		j.meshes[ 0 ].primitives.forEach( p => { delete p.extras; } );
+		const stripped = writeGLB( { json: j, chunks: g.chunks } );
+		const r = bindVRM( vrmBytes, stripped );
+		eq( r.report.mapped, 42 ); eq( r.bind.source.nameResolution, 'convention' ); ok( r.bind.warnings.length === 1 && r.report.warnings.length >= 1 );
+		const shuffled = JSON.parse( JSON.stringify( j ) ); shuffled.nodes[ 0 ].name = 'someHead';
+		const bad = bindVRM( vrmBytes, writeGLB( { json: shuffled, chunks: g.chunks } ) );
+		eq( bad.report.mapped, 0 ); eq( bad.bind.source.nameResolution, 'unresolved' );
 
 	} );
 	test( 'a bound VRM can be re-bound (bind block replaced, not duplicated)', () => {

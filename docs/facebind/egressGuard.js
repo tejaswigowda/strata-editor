@@ -60,6 +60,12 @@
 
 	if ( navigator.sendBeacon ) navigator.sendBeacon = function () { refuse( 'sendBeacon', {} ); return false; };
 	window.open = function () { refuse( 'window.open', {} ); return null; };
+	// No workers at all. Network calls made inside a worker would not pass through this guard (it only wraps the page's
+	// own fetch / XHR), so workers are refused here and by the CSP (`worker-src 'none'`). The face and hair models run on
+	// the main thread (CPU, SIMD wasm), so the request log below is complete.
+	for ( const name of [ 'Worker', 'SharedWorker' ] ) if ( name in window ) window[ name ] = function () { throw refuse( name, {} ); };
+	if ( navigator.serviceWorker ) navigator.serviceWorker.register = () => Promise.reject( refuse( 'serviceWorker.register', {} ) );
+
 	for ( const name of [ 'WebSocket', 'EventSource', 'RTCPeerConnection', 'webkitRTCPeerConnection', 'WebTransport' ] ) {
 
 		if ( name in window ) window[ name ] = function () { throw refuse( name, {} ); };

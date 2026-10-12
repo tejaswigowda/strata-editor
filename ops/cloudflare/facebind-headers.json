@@ -1,0 +1,10 @@
+{
+  "_comment": "Single source for the response headers of /strata-editor/facebind/. The Content-Security-Policy is the page's <meta> policy plus frame-ancestors (which only works as a header). page.test.mjs fails if this drifts from the <meta>.",
+  "path": "/strata-editor/facebind/",
+  "headers": {
+    "Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; worker-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+  }
+}

@@ -12,7 +12,7 @@
 	(see the check in docs/editor/js/facebind/__tests__/page.test.mjs).
 	connect-src lists the hosts a base VRM may be fetched from; add yours here if needed.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; worker-src 'none'; form-action 'none'; base-uri 'none'">
 <style>
 	:root { color-scheme: dark; }
 	body { margin: 0; background: #14161a; color: #d9dde3; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -21,7 +21,9 @@
 	h2 { font-size: 1.1rem; margin: 1.6em 0 .4em; color: #f3f5f8; } h3 { font-size: .95rem; margin: 1.2em 0 .2em; color: #c3cad4; }
 	.tagline, .muted { color: #9aa4b2; }
 	.box { background: #1b1e24; border: 1px solid #2a2f38; border-radius: 8px; padding: 14px 16px; margin: 14px 0; }
+	.warn { border-color: #b3541e; background: #2a1b12; color: #ffd9c2; }
 	.priv { border-color: #2f5d46; } .scope { border-color: #5d4f2f; }
+	.warn { border-color: #b3541e; background: #2a1b12; color: #ffd9c2; }
 	label { display: block; margin: 10px 0 4px; color: #c3cad4; }
 	select, input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; background: #14161a; color: inherit; border: 1px solid #343a45; border-radius: 6px; }
 	button, .btn { background: #3b6fd4; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 12px; }
@@ -84,12 +86,18 @@
 
 	<button id="bind">Bind</button>
 	<div id="status"></div>
+	<div id="resolutionWarn" class="box warn" hidden></div>
 	<a id="download" class="btn" hidden>Download</a>
 	<div id="previewBox" class="box" hidden>
 		<strong>Preview</strong>
 		<label><input type="radio" name="view" id="view_bound" checked> Bound (reshaped, recolored)</label>
 		<label><input type="radio" name="view" id="view_base"> Base VRM</label>
 		<div id="preview3d"></div>
+		<div>
+			<strong>Shading</strong>
+			<label><input type="radio" name="shade" id="shade_flat" checked> Flat (the VRM's own unlit materials)</label>
+			<label><input type="radio" name="shade" id="shade_lit"> Toon-lit (shows the normals)</label>
+		</div>
 		<div>
 			<strong>Expression</strong>
 			<label><input type="radio" name="expr" id="expr_photo"> From the photo</label>

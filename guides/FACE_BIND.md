@@ -27,8 +27,10 @@ An anime base will still look like an anime character; this gets closer, it does
 byte, and the face GLB's mesh is never grafted on. The only changes to the VRM are:
 
 - the bind block and `extensionsUsed`;
-- (optional) the base **POSITION** data of the face (its shape) and of the hair (its volume, height, length and fringe);
+- (optional) the base **POSITION**, **NORMAL** and **TANGENT** (if present) data of the face's and the hair's own vertices (shape, volume, height, length, fringe);
 - (optional) material colors (skin, hair, iris, brow) and their MToon shade colors.
+
+The normals of a warped vertex are not recomputed from the triangles (that would flatten the artist's hard edges and seams, which are split vertices). Each one is carried through the warp with the inverse transpose of the warp's Jacobian, so seams stay and the shading follows the new surface; vertices the warp does not move keep their exact normals, and the morph targets' normal deltas are relative and left alone.
 
 `bindVRM` audits this before it writes: the JSON diff may only touch those paths and the moved POSITION accessors'
 min/max, and every byte of the binary chunk outside the face's and the hair's own vertices must be identical (the body
@@ -64,6 +66,8 @@ audit (data inventory, every network request, threat model, findings and how to 
 - **No network code touches them.** The bind, face, hair, reshape, preview and autorigger modules contain no
   `fetch`, XHR, WebSocket, beacon, storage, `postMessage` or computed dynamic import. `page.test.mjs` scans every
   file and fails the build if one appears.
+- **No workers.** The models run on the main thread, so the request log is complete; workers are refused by the guard and by `worker-src 'none'`.
+- **Real headers.** `ops/cloudflare/` has the response headers (CSP, Referrer-Policy, nosniff) for Cloudflare; they are prepared but not live, because the site is served directly by GitHub Pages today.
 - **GET only, same origin.** The page's Content-Security-Policy allows scripts only from this origin (plus the hash
   of its one import map), and [`egressGuard.js`](../docs/facebind/egressGuard.js) refuses everything except GET
   without a body to this origin, in-memory `blob:` data, or the one base-VRM URL you typed. Every request is logged
@@ -85,7 +89,9 @@ panel. A desktop (Electron) shell has no such sandbox, so there it is policy plu
 ## Preview
 
 After a bind, the page shows a 3D preview (three.js, drawn on this device from the bytes in the page). Switch
-between the **bound** VRM and the **base** to compare, and drag to rotate.
+between the **bound** VRM and the **base** to compare, and drag to rotate. **Shading** has a flat mode (the VRM's own
+unlit materials) and a toon-lit mode that shades from the vertex normals, so you can see that the reshaped face and hair
+shade smoothly (it is a stand-in for MToon, which needs the editor's WebGPU renderer, and reads the same normals).
 
 **Expression.** From a photo, the preview starts with the **expression in the photo**: MediaPipe's 52 face
 blendshape scores for the photo (jaw open, smile, squint, brow raise, gaze and so on) are mapped to ARKit names and
@@ -109,10 +115,14 @@ expression. The page does not use them; it uses the named scores directly.
 ## The binding
 
 1. **Names.** The autorigger's morphs are named by bare index on the mesh. The sample also carries semantic ARKit
-   names on `primitive.extras.targetNames`, which are used when present. If the file has only index names and
-   exactly 42 morphs, the standard 42-morph order (the sample's) is assumed and the bind is flagged
-   `convention` with a warning. Any other index-only file is `unresolved`: nothing is mapped. You can pass
-   `names` to override.
+   names on `primitive.extras.targetNames`, which are used when present (`nameResolution: "primitive.extras.targetNames"`).
+   If a file has **the autorigger's own structure** (a `faceMesh` node with its `faceWidth` / `faceHeight` /
+   `aspectRatio` extras, 478 vertices, a three.js export, mesh-level names exactly `0` to `41`) but no semantic names,
+   the standard 42-morph order is assumed and the bind is flagged **`convention`**. That flag is loud on purpose: the
+   warning is in the `STRATA_face_bind` block (`warnings`), in `window.__webcli_result.warnings`, in a banner on the page,
+   and in the result of `applyFaceWeights` / `driveFace`, and a facerig or mocap consumer must show it. **Any other
+   index-only file, even with 42 morphs, is `unresolved`: nothing is mapped** (a different tool's order would map to
+   plausible but wrong expressions). Pass `names` to bind it.
 2. **Map.** Face morph → ARKit name → the VRM's morph target of the same name (the VRoid/hinzka bases have all 52).
    Weight 1.
 3. **Gaps are logged, never synthesised.**
@@ -163,6 +173,10 @@ GLB's node extras, and read back by the bind. Head roll and yaw are removed firs
 
 Notes:
 
+- **Morph-delta fidelity.** The morph targets are deltas tuned to the original base, and they are not rescaled. A reshape
+  near the clamps (jaw ±12%, eyes ±25–30%) therefore slightly distorts expression travel: a widened jaw still opens by the
+  original `jawOpen` delta. The clamps bound the effect and no geometry change is needed to ship it. If a reshaped
+  expression ever reads wrong in practice, scale each morph's delta by the local warp ratio (a later, optional step).
 - Each color is applied as a material tint **against the material's own texture mean** (decoded on device), so the
   rendered color moves toward the photo's. A tint can only darken, so a color lighter than the texture is as close
   as it gets, and the report says so (`reached: false`).
