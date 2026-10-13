@@ -1277,7 +1277,7 @@ export function showPlayOverlay( editor ) {
 
 	const overlay = document.createElement( 'div' );
 	overlay.style.cssText = [
-		'position:fixed', 'inset:0', 'display:flex', 'align-items:center', 'justify-content:center',
+		'position:fixed', 'inset:0', 'display:flex', 'flex-direction:column', 'gap:22px', 'align-items:center', 'justify-content:center',
 		'background:rgba(0,0,0,0.25)', 'z-index:99998', 'cursor:pointer',
 	].join( ';' );
 	overlay.title = 'Play';
@@ -1292,13 +1292,45 @@ export function showPlayOverlay( editor ) {
 	button.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg>';
 	overlay.appendChild( button );
 
+	// Dismiss without playing (Esc does the same).
+	const cancel = document.createElement( 'button' );
+	cancel.type = 'button';
+	cancel.textContent = 'Cancel';
+	cancel.title = 'Close without playing (Esc)';
+	cancel.style.cssText = [
+		'padding:7px 22px', 'font:600 13px sans-serif', 'color:#fff', 'cursor:pointer',
+		'background:rgba(20,20,20,0.85)', 'border:2px solid rgba(255,255,255,0.7)', 'border-radius:18px',
+	].join( ';' );
+
+	function dismiss() {
+
+		document.removeEventListener( 'keydown', onKey, true );
+		overlay.remove();
+
+	}
+
+	function onKey( event ) {
+
+		if ( event.key === 'Escape' ) dismiss();
+
+	}
+
+	cancel.addEventListener( 'click', event => {
+
+		event.stopPropagation(); // the overlay itself plays on click
+		dismiss();
+
+	} );
+	overlay.appendChild( cancel );
+	document.addEventListener( 'keydown', onKey, true );
+
 	overlay.addEventListener( 'mouseenter', () => { button.style.transform = 'scale(1.08)'; } );
 	overlay.addEventListener( 'mouseleave', () => { button.style.transform = 'scale(1)'; } );
 
 	overlay.addEventListener( 'click', () => {
 
 		editor.signals.timelinePlayRequested.dispatch();
-		overlay.remove();
+		dismiss();
 
 	}, { once: true } );
 
