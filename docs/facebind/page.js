@@ -265,7 +265,7 @@ function showNetwork() {
 async function showHairMask( image, hair ) {
 
 	const canvas = $( 'maskCanvas' );
-	if ( ! hair ) { canvas.hidden = true; $( 'maskNote' ).hidden = true; return; }
+	if ( ! hair ) { canvas.hidden = true; $( 'maskNote' ).hidden = true; $( 'maskFig' ).hidden = true; return; }
 	try {
 
 		const bmp = await createImageBitmap( image, { imageOrientation: 'from-image' } );
@@ -278,10 +278,10 @@ async function showHairMask( image, hair ) {
 		for ( let i = 0; i < hair.data.length; i ++ ) if ( hair.data[ i ] === hair.hairValue ) { img.data[ i * 4 ] = 255; img.data[ i * 4 + 1 ] = 60; img.data[ i * 4 + 2 ] = 120; img.data[ i * 4 + 3 ] = 140; }
 		oc.putImageData( img, 0, 0 );
 		ctx.drawImage( over, 0, 0, canvas.width, canvas.height );
-		canvas.hidden = false; $( 'maskNote' ).hidden = false;
+		canvas.hidden = false; $( 'maskNote' ).hidden = false; $( 'maskFig' ).hidden = false;
 		bmp.close();
 
-	} catch ( e ) { canvas.hidden = true; $( 'maskNote' ).hidden = true; }
+	} catch ( e ) { canvas.hidden = true; $( 'maskNote' ).hidden = true; $( 'maskFig' ).hidden = true; }
 
 }
 
@@ -337,8 +337,13 @@ function setImage( f ) {
 	const img = $( 'preview' );
 	if ( img.src ) URL.revokeObjectURL( img.src );
 	if ( imageFile ) { img.src = URL.createObjectURL( imageFile ); img.hidden = false; } else { img.removeAttribute( 'src' ); img.hidden = true; }
+	$( 'previewCap' ).hidden = img.hidden;
+	$( 'maskFig' ).hidden = true;
 
 }
+
+// the two info boxes at the top are an accordion (one open at a time; the name attribute does this natively in newer browsers)
+for ( const d of document.querySelectorAll( 'details[name=info]' ) ) d.addEventListener( 'toggle', () => { if ( d.open ) for ( const o of document.querySelectorAll( 'details[name=info]' ) ) if ( o !== d ) o.open = false; } );
 
 // webcam selfie (selfie.js): the frame becomes an in-memory File and goes the same way as a chosen photo
 const selfie = createSelfie( $( 'camVideo' ) );

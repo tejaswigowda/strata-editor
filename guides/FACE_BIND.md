@@ -55,6 +55,7 @@ photo (local File) -> MediaPipe Face Landmarker (on device, CPU) -> face-blendsh
   files are static, same-origin, and loaded once when the page opens (the model status line says when it is ready).
 - The autorigger is vendored unmodified in [`docs/facebind/autorig/`](../docs/facebind/autorig/README.md); the glue is
   `faceFromImage.js`. The generated face GLB is kept in memory and offered as a local download.
+- **Input card.** Step 1 is the face photo (choose a photo or use the webcam, with the photo and the hair-segmentation preview side by side), step 2 the base VRM (the bundled male or female, or your own file or URL under a fold). The two notes at the top (stays on this device, approximate) are an accordion that starts closed.
 - **Progress and layout.** A progress bar in the Bind box shows each step (loading, reading the face, binding, building the download, drawing the preview, baking edits from the editor, starting a download); the editor shows one while it bakes for Download VRM. On wide screens the Bind box is in the right column above the network audit and stays in view while you scroll; on narrow screens it follows the inputs.
 - **Webcam:** "Use the webcam instead" shows a mirrored live view; "Take selfie" grabs one unmirrored frame as an in-memory PNG, switches the camera off and uses it like a chosen photo. Video only, nothing recorded or uploaded ([`selfie.js`](../docs/facebind/selfie.js)). It needs https or localhost and the browser's camera permission.
 - The photo needs a clear, front-facing face. No face found → `NO_FACE_DETECTED`.
