@@ -55,6 +55,17 @@ index 256fd8b..f6cf163 100755
 -    </script>
    </body>
  </html>
+diff --git a/app/src/@types/three.d.ts b/app/src/@types/three.d.ts
+index 398e3d5..ea2f6f1 100755
+--- a/app/src/@types/three.d.ts
++++ b/app/src/@types/three.d.ts
+@@ -1,4 +1,4 @@
+ declare module 'three';
+ declare module 'three/examples/jsm/loaders/GLTFLoader.js';
+ declare module 'three/examples/jsm/controls/OrbitControls';
+-declare module 'three/examples/jsm/controls/TransformControls.js';
+\ No newline at end of file
++declare module 'three/examples/jsm/controls/TransformControls.js';declare module 'three/examples/jsm/exporters/GLTFExporter.js';
 diff --git a/app/src/App.vue b/app/src/App.vue
 index 0424231..8506188 100755
 --- a/app/src/App.vue
@@ -181,6 +192,325 @@ index 23d5e3f..0458b27 100755
      const urlParams = new URLSearchParams(window.location.search);
      const paramVrm = urlParams.get('vrm');
      if (paramVrm) {
+diff --git a/app/src/components/VRMParserViewTabs/TabAccessory.vue b/app/src/components/VRMParserViewTabs/TabAccessory.vue
+index d9128fe..6ad4482 100644
+--- a/app/src/components/VRMParserViewTabs/TabAccessory.vue
++++ b/app/src/components/VRMParserViewTabs/TabAccessory.vue
+@@ -4,6 +4,18 @@
+       <h3>🧩 {{ $t('accessory.title') }}</h3>
+     </div>
+ 
++    <!-- Free accessories: built in code (CC0), nothing is downloaded -->
++    <div class="free-accessories">
++      <div class="section-title"><span>🎁 Free accessories</span> <span class="free-note">built in, CC0, no download</span></div>
++      <div class="free-grid">
++        <button v-for="f in freeList" :key="f.id" type="button" class="free-card" :title="'Add ' + f.label" @click="addFree(f.id)">
++          <span class="free-icon">{{ f.icon }}</span>
++          <span class="free-label">{{ f.label }}</span>
++        </button>
++      </div>
++      <label class="free-color">Color <input type="color" v-model="freeColor" /> <button type="button" class="free-reset" @click="freeColor = ''" v-if="freeColor">default</button></label>
++    </div>
++
+     <!-- ファイルアップロードエリア -->
+     <div
+       class="upload-dropzone"
+@@ -303,6 +315,7 @@
+ <script lang="ts">
+ import { Component, Vue, Prop, Watch } from 'vue-property-decorator';
+ import VRMParser from '@/module/VRMParser';
++import { FREE_ACCESSORIES, buildFreeAccessory } from '@/module/FreeAccessories';
+ 
+ export interface AccessoryItem {
+   id: string;
+@@ -324,6 +337,8 @@ export default class TabAccessory extends Vue {
+   @Prop() json!: any;
+   @Prop() vrmVersion!: any;
+ 
++  freeList = FREE_ACCESSORIES;
++  freeColor = '';
+   accessories: AccessoryItem[] = [];
+   activeAccessoryId: string | null = null;
+   transformMode: 'translate' | 'rotate' | 'scale' = 'translate';
+@@ -435,49 +450,59 @@ export default class TabAccessory extends Vue {
+       alert('GLB または GLTF ファイルを選択してください。');
+       return;
+     }
+-
+     try {
+-      const buffer = await file.arrayBuffer();
+-      // デフォルトの配置先ボーンを決定（Head または Hips または最初のノード）
+-      let targetBoneName = 'head';
+-      let targetNodeIndex = 0;
+-
+-      const headBone = this.humanoidBones.find(b => b.name.toLowerCase() === 'head' && b.isMapped);
+-      if (headBone) {
+-        targetBoneName = headBone.nodeName;
+-        targetNodeIndex = headBone.nodeIndex;
+-      } else if (this.allNodes.length > 0) {
+-        targetBoneName = this.allNodes[0].name;
+-        targetNodeIndex = this.allNodes[0].index;
+-      }
+-
+-      const newAccessory: AccessoryItem = {
+-        id: `acc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+-        name: file.name,
+-        file: file,
+-        glbData: buffer,
+-        targetBoneName: targetBoneName,
+-        targetNodeIndex: targetNodeIndex,
+-        position: { x: 0, y: 0, z: 0 },
+-        rotation: { x: 0, y: 0, z: 0 },
+-        scale: { x: 1, y: 1, z: 1 },
+-        visible: true,
+-        isMerged: false
+-      };
+-
+-      this.accessories.push(newAccessory);
+-      this.activeAccessoryId = newAccessory.id;
+-
+-      this.$emit('load-accessory', {
+-        item: newAccessory,
+-        buffer: buffer
+-      });
++      this.addAccessory(file.name, await file.arrayBuffer(), 'head', file);
+     } catch (err) {
+       console.error('Failed to load GLB accessory', err);
+       alert('GLBファイルの読み込みに失敗しました。');
+     }
+   }
+ 
++  // A free accessory: built in code, placed on its bone, turned to face front (VRM 0.x files face -Z).
++  async addFree(id: string) {
++    try {
++      const { name, buffer, def } = await buildFreeAccessory(id, this.freeColor || undefined);
++      const v: any = VRMParser.getVRMVersion();
++      const isV0 = !v || v.version !== 1;
++      this.addAccessory(def.label, buffer, def.bone, new File([buffer], name), isV0 ? 180 : 0);
++    } catch (err) {
++      console.error('Failed to build the accessory', err);
++      alert('Could not build the accessory.');
++    }
++  }
++
++  addAccessory(name: string, buffer: ArrayBuffer, boneKey: string, file?: File, rotationY = 0) {
++    // the bone to attach to: the humanoid bone named boneKey (head by default), else the first node
++    let targetBoneName = boneKey;
++    let targetNodeIndex = 0;
++    const bone = this.humanoidBones.find(b => b.name.toLowerCase() === boneKey.toLowerCase() && b.isMapped);
++    if (bone) {
++      targetBoneName = bone.nodeName;
++      targetNodeIndex = bone.nodeIndex;
++    } else if (this.allNodes.length > 0) {
++      targetBoneName = this.allNodes[0].name;
++      targetNodeIndex = this.allNodes[0].index;
++    }
++
++    const newAccessory: AccessoryItem = {
++      id: `acc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
++      name,
++      file,
++      glbData: buffer,
++      targetBoneName,
++      targetNodeIndex,
++      position: { x: 0, y: 0, z: 0 },
++      rotation: { x: 0, y: rotationY, z: 0 },
++      scale: { x: 1, y: 1, z: 1 },
++      visible: true,
++      isMerged: false
++    };
++
++    this.accessories.push(newAccessory);
++    this.activeAccessoryId = newAccessory.id;
++    this.$emit('load-accessory', { item: newAccessory, buffer });
++  }
++
+   selectAccessory(id: string) {
+     this.activeAccessoryId = id;
+     this.$emit('select-accessory', id);
+@@ -627,6 +652,16 @@ export default class TabAccessory extends Vue {
+ </script>
+ 
+ <style scoped lang="scss">
++.free-accessories { margin: 8px 0 12px; }
++.free-accessories .section-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
++.free-note { font-size: 11px; color: #64748b; font-weight: normal; }
++.free-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
++.free-card { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; color: #1e293b; }
++.free-card:hover { border-color: #0284c7; background: #f0f9ff; }
++.free-icon { font-size: 22px; line-height: 1; }
++.free-label { font-size: 12px; }
++.free-color { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; color: #475569; }
++.free-reset { font-size: 12px; padding: 2px 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; cursor: pointer; }
+ $primary: #0284c7;
+ $primary-dark: #0369a1;
+ $bg-card: #f8fafc;
+diff --git a/app/src/module/FreeAccessories.ts b/app/src/module/FreeAccessories.ts
+new file mode 100644
+index 0000000..1a5c087
+--- /dev/null
++++ b/app/src/module/FreeAccessories.ts
+@@ -0,0 +1,160 @@
++// Free accessories: small models built in code with three.js primitives and exported as GLB when you click one.
++// They are not downloaded and carry no third-party asset, texture or license: they are released as CC0 with this repository.
++//
++// Everything is modeled facing +Z with the origin at the bone it attaches to and sizes in meters, for a VRoid-sized head
++// (the head bone sits at the base of the skull: the eyes are about 6.6 cm above it, the top of the head about 20 cm). VRM 0.x files face -Z, so
++// those get a 180 degree turn about Y at placement (see defaultsFor). Move, rotate and scale with the gizmo afterwards.
++import * as THREE from 'three'
++import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
++
++export interface FreeAccessoryDef {
++  id: string
++  label: string
++  icon: string
++  bone: 'head' | 'neck'
++  color: string // default color (hex)
++  build: (color: any) => any
++}
++
++const mat = (c: any, rough = 0.55, metal = 0) =>
++  new THREE.MeshStandardMaterial({ color: new THREE.Color(c as any), roughness: rough, metalness: metal, side: THREE.DoubleSide })
++
++const mesh = (g: any, m: any, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
++  const o = new THREE.Mesh(g, m)
++  o.position.set(x, y, z)
++  o.rotation.set(rx, ry, rz)
++  return o
++}
++
++const EYE_Y = 0.066 // eye height over the head bone
++const FRONT = 0.108 // how far in front of the bone the face is at eye height
++
++function glasses(color: any, square: boolean, dark: boolean): any {
++  const g = new THREE.Group()
++  const frame = mat(color, 0.4, 0.2)
++  const lens = new THREE.MeshStandardMaterial({ color: dark ? 0x111111 : 0xbfe3ff, roughness: 0.1, metalness: 0, transparent: true, opacity: dark ? 0.85 : 0.25, side: THREE.DoubleSide })
++  for (const s of [-1, 1]) {
++    const x = s * 0.034
++    if (square) {
++      const shape = new THREE.Shape()
++      const w = 0.026, h = 0.019, r = 0.006
++      shape.moveTo(-w + r, -h); shape.lineTo(w - r, -h); shape.quadraticCurveTo(w, -h, w, -h + r); shape.lineTo(w, h - r); shape.quadraticCurveTo(w, h, w - r, h)
++      shape.lineTo(-w + r, h); shape.quadraticCurveTo(-w, h, -w, h - r); shape.lineTo(-w, -h + r); shape.quadraticCurveTo(-w, -h, -w + r, -h)
++      const hole = new THREE.Path(); const w2 = w - 0.003, h2 = h - 0.003
++      hole.moveTo(-w2, -h2); hole.lineTo(w2, -h2); hole.lineTo(w2, h2); hole.lineTo(-w2, h2); hole.lineTo(-w2, -h2)
++      shape.holes.push(hole)
++      g.add(mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.004, bevelEnabled: false }), frame, x, EYE_Y, FRONT))
++      g.add(mesh(new THREE.PlaneGeometry(2 * w2, 2 * h2), lens, x, EYE_Y, FRONT + 0.002))
++    } else {
++      g.add(mesh(new THREE.TorusGeometry(0.025, 0.0026, 10, 40), frame, x, EYE_Y, FRONT + 0.002))
++      g.add(mesh(new THREE.CircleGeometry(0.0245, 32), lens, x, EYE_Y, FRONT + 0.002))
++    }
++    // temple arm from the lens edge back to the ear
++    const len = FRONT - (-0.02)
++    g.add(mesh(new THREE.CylinderGeometry(0.0017, 0.0017, len, 8), frame, s * 0.072, EYE_Y + 0.004, FRONT - len / 2, Math.PI / 2))
++  }
++  g.add(mesh(new THREE.TorusGeometry(0.008, 0.0022, 8, 16, Math.PI), frame, 0, EYE_Y + 0.006, FRONT + 0.002)) // bridge
++  return g
++}
++
++function dome(color: any, r: number, y: number, z: number, from = 0, to = Math.PI / 2) {
++  return mesh(new THREE.SphereGeometry(r, 36, 18, 0, Math.PI * 2, from, to), mat(color), 0, y, z)
++}
++
++export const FREE_ACCESSORIES: FreeAccessoryDef[] = [
++  { id: 'glasses-round', label: 'Round glasses', icon: '👓', bone: 'head', color: '#2b2b2b', build: c => glasses(c, false, false) },
++  { id: 'glasses-square', label: 'Square glasses', icon: '🤓', bone: 'head', color: '#111111', build: c => glasses(c, true, false) },
++  { id: 'sunglasses', label: 'Sunglasses', icon: '🕶️', bone: 'head', color: '#111111', build: c => glasses(c, true, true) },
++  {
++    id: 'cap', label: 'Cap', icon: '🧢', bone: 'head', color: '#2f5fd0', build: c => {
++      const g = new THREE.Group()
++      g.add(dome(c, 0.136, 0.09, -0.012, 0, Math.PI / 2))
++      g.add(mesh(new THREE.CylinderGeometry(0.136, 0.136, 0.014, 36, 1, true), mat(c), 0, 0.09, -0.012))
++      // the brim: a half disc in front, tilted down a little
++      const brim = mesh(new THREE.CircleGeometry(0.1, 28, 0, Math.PI), mat(c), 0, 0.094, 0.108, Math.PI / 2 + 0.12)
++      brim.scale.set(1.05, 0.7, 1)
++      g.add(brim)
++      return g
++    }
++  },
++  {
++    id: 'top-hat', label: 'Top hat', icon: '🎩', bone: 'head', color: '#1a1a1f', build: c => {
++      const g = new THREE.Group()
++      g.add(mesh(new THREE.CylinderGeometry(0.098, 0.1, 0.13, 36), mat(c, 0.5), 0, 0.29, -0.012))
++      g.add(mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.008, 40), mat(c, 0.5), 0, 0.226, -0.012))
++      g.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.03, 36, 1, true), mat('#b02a3a', 0.6), 0, 0.245, -0.012))
++      return g
++    }
++  },
++  {
++    id: 'cat-ears', label: 'Cat ears', icon: '🐱', bone: 'head', color: '#f4a8c8', build: c => {
++      const g = new THREE.Group(); const band = mat('#222222')
++      g.add(mesh(new THREE.TorusGeometry(0.118, 0.005, 8, 40, Math.PI), band, 0, 0.1, -0.012, 0, 0, 0))
++      for (const s of [-1, 1]) {
++        g.add(mesh(new THREE.ConeGeometry(0.036, 0.075, 3), mat(c), s * 0.072, 0.232, -0.01, 0, 0, -s * 0.32))
++        g.add(mesh(new THREE.ConeGeometry(0.022, 0.05, 3), mat('#ffd7e6'), s * 0.07, 0.228, -0.003, 0, 0, -s * 0.32))
++      }
++      return g
++    }
++  },
++  {
++    id: 'bunny-ears', label: 'Bunny ears', icon: '🐰', bone: 'head', color: '#ffffff', build: c => {
++      const g = new THREE.Group()
++      g.add(mesh(new THREE.TorusGeometry(0.118, 0.005, 8, 40, Math.PI), mat('#dddddd'), 0, 0.1, -0.012))
++      for (const s of [-1, 1]) {
++        const e = mesh(new THREE.CapsuleGeometry(0.026, 0.12, 6, 16), mat(c), s * 0.055, 0.31, -0.01, 0, 0, -s * 0.16); e.scale.set(1, 1, 0.55)
++        g.add(e)
++        const i = mesh(new THREE.CapsuleGeometry(0.014, 0.09, 6, 12), mat('#ffb6cb'), s * 0.055, 0.31, 0.003, 0, 0, -s * 0.16); i.scale.set(1, 1, 0.4)
++        g.add(i)
++      }
++      return g
++    }
++  },
++  {
++    id: 'headband', label: 'Headband', icon: '🎀', bone: 'head', color: '#e0415a', build: c => {
++      const g = new THREE.Group()
++      const b = mesh(new THREE.TorusGeometry(0.118, 0.008, 8, 48), mat(c), 0, 0.15, -0.012, Math.PI / 2, 0, 0)
++      b.scale.set(1, 1.07, 1.4)
++      g.add(b)
++      return g
++    }
++  },
++  {
++    id: 'crown', label: 'Crown', icon: '👑', bone: 'head', color: '#f2c230', build: c => {
++      const g = new THREE.Group(); const m = mat(c, 0.25, 0.8)
++      g.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 32, 1, true), m, 0, 0.225, -0.012))
++      for (let i = 0; i < 6; i++) {
++        const a = (i / 6) * Math.PI * 2
++        g.add(mesh(new THREE.ConeGeometry(0.014, 0.05, 6), m, Math.sin(a) * 0.1, 0.268, -0.012 + Math.cos(a) * 0.1))
++        g.add(mesh(new THREE.SphereGeometry(0.007, 10, 8), mat('#d4233a', 0.2), Math.sin(a) * 0.1, 0.298, -0.012 + Math.cos(a) * 0.1))
++      }
++      return g
++    }
++  },
++  {
++    id: 'halo', label: 'Halo', icon: '😇', bone: 'head', color: '#ffe27a', build: c => {
++      const m = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.4 })
++      return mesh(new THREE.TorusGeometry(0.08, 0.006, 10, 48), m, 0, 0.34, -0.012, Math.PI / 2)
++    }
++  },
++  {
++    id: 'bow-tie', label: 'Bow tie', icon: '🎀', bone: 'neck', color: '#b02a3a', build: c => {
++      const g = new THREE.Group(); const m = mat(c)
++      for (const s of [-1, 1]) g.add(mesh(new THREE.ConeGeometry(0.026, 0.042, 4), m, s * 0.026, -0.015, 0.058, 0, 0, s * Math.PI / 2))
++      g.add(mesh(new THREE.SphereGeometry(0.01, 12, 10), m, 0, -0.015, 0.06))
++      return g
++    }
++  },
++]
++
++/** Builds the GLB bytes for one accessory. */
++export function buildFreeAccessory(id: string, colorHex?: string): Promise<{ name: string; buffer: ArrayBuffer; def: FreeAccessoryDef }> {
++  const def = FREE_ACCESSORIES.find(a => a.id === id)
++  if (!def) return Promise.reject(new Error('unknown accessory ' + id))
++  const root = def.build(new THREE.Color(colorHex || def.color))
++  const scene = new THREE.Scene()
++  scene.add(root)
++  return new Promise((resolve, reject) => {
++    new GLTFExporter().parse(scene, (r: any) => r instanceof ArrayBuffer ? resolve({ name: def.id + '.glb', buffer: r, def }) : reject(new Error('GLB export did not return binary')), reject, { binary: true })
++  })
++}
 diff --git a/app/src/router/index.ts b/app/src/router/index.ts
 index 367f2a3..ff784d9 100755
 --- a/app/src/router/index.ts

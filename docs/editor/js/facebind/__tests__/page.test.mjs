@@ -68,6 +68,8 @@ test( 'the embedded VRM editor (docs/facebind/editor, built from cecil-tools/VRM
 	ok( js.length > 1e6, 'the editor bundle is missing' );
 	ok( ! /googletagmanager|G-Y2SF4RRHYB|js\.stripe\.com|firebaseio|firebaseapp|sendBeacon/.test( js ), 'the editor bundle talks to analytics, Stripe or Firebase' );
 	ok( files.some( f => /LICENSE/.test( f ) ), 'the MIT license of VRMEditorTools must ship with the build' );
+	// the free accessories are built in code (no downloads) and only referenced by name
+	ok( /Free accessories/.test( js ) && /bow-tie|Bow tie/.test( js ), 'the free accessories are missing from the editor bundle' );
 	ok( ! fs.existsSync( path.join( dir, 'res' ) ), 'the editor ships sample VRMs it does not need' );
 	// the page frames it only from this origin and talks to it only by origin-checked messages
 	const pg = read( 'index.html' ), code = read( 'page.js' );

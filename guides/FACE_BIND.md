@@ -335,6 +335,7 @@ bound VRM in the preview, in the download and in `window.__webcli_result` (`edit
 - **Zero egress is kept.** The build is not the upstream site: analytics, share widgets, Firebase, Stripe and sample files are removed, and a strict CSP allows only this origin and in-memory data
   (a test checks the policy and scans the bundle). The VRM goes in and out by `postMessage` between the page and the iframe, with the origin and the window checked at both ends; it is never put in a URL.
 - **What the audit covers.** The editor re-exports the VRM with its own writer, so after Apply the file is the editor's output; the face-and-hair byte audit applies to the bind, not to editor edits.
+- **Free accessories.** The Add Accessory tab has a grid of 11 built-in accessories (glasses, cap, top hat, cat and bunny ears, headband, crown, halo, bow tie) with a color picker. They are generated in code, so nothing is downloaded and there is no third-party license; click one, move it with the gizmo, and merge it into the VRM. Accessories are not part of the byte-audited bind: they only exist in the editor's output. Clothing-style items are not included (facebind never changes the outfit).
 - **Binding again starts over** from the base VRM and discards the edits.
 - How it was built, what was patched and how to rebuild: `ops/vrmeditor/README.md`.
 
