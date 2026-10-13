@@ -289,7 +289,7 @@ function updateExpressionNote() {
 
 let vrmFile = null, faceFile = null, imageFile = null;
 const ready = () => !! ( imageFile || faceFile );
-const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked strength: Number( $( 'lookStrength' ).value ) / 100 } );
+const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair' ).checked, iris: $( 'lookIris' ).checked, brow: $( 'lookBrow' ).checked, strength: Number( $( 'lookStrength' ).value ) / 100 } );
 const shapeOptions = () => $( 'shapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
 const hairShapeOptions = () => $( 'hairShapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100, hug: Number( $( 'hairHug' ).value ) / 100 } : null;
 const hairStyleOptions = () => ( { cut: $( 'hairCut' ).value, texture: $( 'hairTexture' ).value } );

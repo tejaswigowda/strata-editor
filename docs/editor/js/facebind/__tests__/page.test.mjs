@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join( path.dirname( fileURLToPath( import.meta.url ) ), '..', '..', '..', '..', 'facebind' );
@@ -17,6 +18,22 @@ const ok = ( v, m ) => { if ( ! v ) throw new Error( m || 'expected truthy' ); }
 const strip = s => s.replace( /\/\*[\s\S]*?\*\//g, '' ).replace( /^\s*\/\/.*$/gm, '' ).replace( /\s\/\/ .*$/gm, '' );
 
 console.log( 'face bind page (static)' );
+
+test( 'every script the page loads parses (a stray edit in page.js broke the whole page once)', () => {
+
+	const dirs = [ root, path.join( root, 'autorig' ), path.join( root, '..', 'editor', 'js', 'facebind' ), path.join( root, '..', 'editor', 'js', 'face' ) ];
+	let n = 0;
+	for ( const d of dirs ) for ( const f of fs.readdirSync( d ).filter( f => f.endsWith( '.js' ) ) ) {
+
+		const r = spawnSync( process.execPath, [ '--input-type=module', '--check' ], { input: fs.readFileSync( path.join( d, f ) ) } );
+		ok( r.status === 0, `${ f } does not parse: ${ String( r.stderr ).split( '\n' ).slice( 0, 4 ).join( ' ' ) }` );
+		n ++;
+
+	}
+	ok( n >= 15, 'checked ' + n + ' files' );
+
+} );
+
 const html = read( 'index.html' );
 const csp = ( html.match( /Content-Security-Policy" content="([^"]*)"/ ) || [] )[ 1 ] || '';
 
