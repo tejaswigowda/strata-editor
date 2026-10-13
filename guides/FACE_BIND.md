@@ -278,6 +278,14 @@ The tool now copies the ones that stay rig-safe and automatic:
 | A shirt recolored to the photo's, a collar mesh added to it, trousers recolored black, the body texture cut for them, clothes cut | **no**: facebind changes the face and hair only and never the outfit (no garment color, texture or geometry) |
 | Transparent texels of the back hair texture turned black | no effect worth the extra edit; it was a side effect of re-saving the texture through a canvas |
 
+### The neck stays attached
+
+The bottom of the VRoid face mesh is an open tube that sits on the neck of the body mesh, and the body never moves. A warp that moved the jaw, the chin or the
+mouth corners there (a wider jaw, a chin pushed forward) pulled the tube away from the neck and opened a gap under the jaw, through which the inside of the mouth
+showed. The face warp is therefore **faded to zero toward the neck**: the lowest 0.3 eye-to-chin heights above the rim of the face mesh (about 3.5 cm) do not move at all, and the warp
+comes in smoothly over the next 0.45 (`NECK_PIN`, `NECK_FADE` in `reshape.js`). The normals follow the same field. The cost: the chin tip and the jaw angle sit just
+above that zone, so a jaw widening or a chin pushed forward is a little weaker at their lower edge. A test checks that the neck zone moves less than 0.5 mm.
+
 Notes:
 
 - **Morph-delta fidelity.** The morph targets are deltas tuned to the original base, and they are not rescaled. A reshape

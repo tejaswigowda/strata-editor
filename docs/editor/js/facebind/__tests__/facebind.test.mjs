@@ -819,6 +819,20 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( checked > 1000, 'checked clothing vertex data: ' + checked );
 
 	} );
+	test( 'the neck stays attached: the lowest part of the face mesh (the open tube that sits on the body neck) does not move, and the warp comes in smoothly above it', () => {
+
+		const a = parseGLB( vrmBytes ), out = parseGLB( bindVRM( vrmBytes, photoFace(), { shape: { strength: 1 } } ).bytes );
+		const read = v => { const acc = v.json.accessors[ 0 ], bv = v.json.bufferViews[ acc.bufferView ], d = v.chunks[ 0 ].data; return new Float32Array( d.buffer.slice( d.byteOffset + ( bv.byteOffset || 0 ) + ( acc.byteOffset || 0 ), d.byteOffset + ( bv.byteOffset || 0 ) + ( acc.byteOffset || 0 ) + acc.count * 12 ) ); };
+		const f0 = read( a ), f1 = read( out );
+		let rim = Infinity; for ( let i = 1; i < f0.length; i += 3 ) rim = Math.min( rim, f0[ i ] );
+		const move = i => Math.hypot( f1[ i ] - f0[ i ], f1[ i + 1 ] - f0[ i + 1 ], f1[ i + 2 ] - f0[ i + 2 ] );
+		let low = 0, lowMax = 0, up = 0, upMax = 0;
+		for ( let i = 0; i < f0.length; i += 3 ) { const h = f0[ i + 1 ] - rim; if ( h < 0.03 ) { low ++; lowMax = Math.max( lowMax, move( i ) ); } else if ( h > 0.07 ) { up ++; upMax = Math.max( upMax, move( i ) ); } }
+		ok( low > 100, 'vertices in the neck zone: ' + low );
+		ok( lowMax < 0.0005, 'the neck zone moved by ' + ( lowMax * 1000 ).toFixed( 2 ) + ' mm' );
+		ok( upMax > 0.008, 'the face above the neck must still move: ' + ( upMax * 1000 ).toFixed( 1 ) + ' mm' );
+
+	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {
 
 		const mk = kind => { const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) ); j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, hairTexture: { kind, coherence: 0.3, contrast: 9, roughness: 3 } }; return writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } ); };

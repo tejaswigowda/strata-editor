@@ -22,6 +22,7 @@ import { GLBError } from './glb.js';
 
 const FACE_MATERIAL = /_(FaceMouth|EyeIris|EyeHighlight|EyeWhite|FaceBrow|FaceEyelash|FaceEyeline|Face)_\d+_(FACE|EYE|SKIN)/;
 const HAIR_MATERIAL = /_HAIR$/;
+const NECK_PIN = 0.3, NECK_FADE = 0.45; // eye-to-chin heights above the rim of the face mesh: not moved, then faded in
 const INNER_HAIR = /_HairBack_/; // the layer of hair under the strands: lifted less than the strands, so it shows at the hairline
 const PARTS = [ [ 'iris', /_EyeIris_/ ], [ 'white', /_EyeWhite_/ ], [ 'mouth', /_FaceMouth_/ ], [ 'skin', /_Face_\d+_SKIN/ ] ];
 const BIN = 0x004e4942;
@@ -214,10 +215,18 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 		const plan = planFaceRefine( m, face.reference, face.strength );
 		let maxMove = 0;
+		// The neck. The bottom of the face mesh is an open tube that sits on the neck of the body mesh, which does not move. If the jaw, the chin or the
+		// mouth corners moved there, the tube would pull away from the neck and open a gap into the head. So the lowest part of the face does not move at all
+		// (the bottom NECK_PIN of the eye-to-chin height above the rim of the mesh) and the warp comes in smoothly over the next NECK_FADE. The chin
+		// tip and the jaw angle sit above that, so they still move, a little less near their bottom edge.
+		let rimY = Infinity;
+		for ( let i = 1; i < facePositions.length; i += 3 ) if ( facePositions[ i ] < rimY ) rimY = facePositions[ i ];
+		const seam = ( x, y, z ) => { const t = Math.min( 1, Math.max( 0, ( y - rimY - NECK_PIN * m.E ) / ( NECK_FADE * m.E ) ) ); return t * t * ( 3 - 2 * t ); };
+		const warpFace = ( x, y, z ) => { const w = seam( x, y, z ), d = warpPoint( plan, x, y, z ); return [ d[ 0 ] * w, d[ 1 ] * w, d[ 2 ] * w ]; };
 		const moved = new Float32Array( facePositions.length );
 		for ( let i = 0; i < facePositions.length; i += 3 ) {
 
-			const [ dx, dy, dz ] = warpPoint( plan, facePositions[ i ], facePositions[ i + 1 ], facePositions[ i + 2 ] );
+			const [ dx, dy, dz ] = warpFace( facePositions[ i ], facePositions[ i + 1 ], facePositions[ i + 2 ] );
 			moved[ i ] = facePositions[ i ] + dx; moved[ i + 1 ] = facePositions[ i + 1 ] + dy; moved[ i + 2 ] = facePositions[ i + 2 ] + dz;
 			maxMove = Math.max( maxMove, Math.hypot( dx, dy, dz ) );
 
@@ -228,7 +237,7 @@ export function reshapeVRM( vrm, { face = null, hair = null } ) {
 
 			const ids = Array.from( { length: count }, ( _, i ) => i );
 			modified.set( idx, { positions: moved, ids } );
-			jobs.push( { accessor: idx, ids, positions: facePositions, warp: ( x, y, z ) => warpPoint( plan, x, y, z ) } );
+			jobs.push( { accessor: idx, ids, positions: facePositions, warp: warpFace } );
 
 		}
 		result.face = {
