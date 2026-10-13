@@ -229,7 +229,7 @@ index 4cadc4c..51b5d6a 100755
      TabMotion,
      TabReduce
 diff --git a/app/src/components/VRMParserViewTabs/TabAccessory.vue b/app/src/components/VRMParserViewTabs/TabAccessory.vue
-index d9128fe..6ad4482 100644
+index d9128fe..dcfdc80 100644
 --- a/app/src/components/VRMParserViewTabs/TabAccessory.vue
 +++ b/app/src/components/VRMParserViewTabs/TabAccessory.vue
 @@ -4,6 +4,18 @@
@@ -268,7 +268,18 @@ index d9128fe..6ad4482 100644
    accessories: AccessoryItem[] = [];
    activeAccessoryId: string | null = null;
    transformMode: 'translate' | 'rotate' | 'scale' = 'translate';
-@@ -435,49 +450,59 @@ export default class TabAccessory extends Vue {
+@@ -367,6 +382,10 @@ export default class TabAccessory extends Vue {
+     });
+   }
+ 
++  created() {
++    VRMParser.accessorySource = () => this.accessories;
++  }
++
+   @Watch('json', { immediate: true })
+   onJsonChanged() {
+     this.refreshBoneData();
+@@ -435,49 +454,59 @@ export default class TabAccessory extends Vue {
        alert('GLB または GLTF ファイルを選択してください。');
        return;
      }
@@ -364,7 +375,15 @@ index d9128fe..6ad4482 100644
    selectAccessory(id: string) {
      this.activeAccessoryId = id;
      this.$emit('select-accessory', id);
-@@ -627,6 +652,16 @@ export default class TabAccessory extends Vue {
+@@ -499,6 +528,7 @@ export default class TabAccessory extends Vue {
+     const confirmed = confirm(this.$t('accessory.confirmRemove') as string);
+     if (!confirmed) return;
+ 
++    VRMParser.unmergeAccessory(id);
+     this.accessories = this.accessories.filter(a => a.id !== id);
+     if (this.activeAccessoryId === id) {
+       this.activeAccessoryId = this.accessories.length > 0 ? this.accessories[0].id : null;
+@@ -627,6 +657,16 @@ export default class TabAccessory extends Vue {
  </script>
  
  <style scoped lang="scss">
@@ -1164,6 +1183,160 @@ index 0000000..8dbf4b1
 +  if (!applied.length) return { file: null, applied }
 +  return { file: await rebuild(), applied }
 +}
+diff --git a/app/src/module/VRMParser.ts b/app/src/module/VRMParser.ts
+index ecc80b4..6ab4868 100755
+--- a/app/src/module/VRMParser.ts
++++ b/app/src/module/VRMParser.ts
+@@ -34,10 +34,16 @@ class VRMParser {
+ 
+     static callback: (json: any, images: any[]) => void
+ 
++    // Accessories already merged into the JSON (id -> wrapper node index), so a moved accessory is updated, never duplicated.
++    static mergedAccessories: Map<string, number> = new Map()
++    // The accessory tab registers itself here so an export always carries what the preview shows.
++    static accessorySource?: () => any[]
++
+     //VRM パース
+     public static parse = (file: File, callback: (json: any, images: any[]) => void) => {
+         console.log('parse', file)
+         VRMParser.filename = file.name
++        VRMParser.mergedAccessories.clear()
+         VRMParser.callback = callback;
+ 
+         const reader = new FileReader()
+@@ -355,7 +361,12 @@ class VRMParser {
+         })
+     }
+ 
+-    public static createVRMFile = (targetVersion?: 'auto' | '0' | '1'): Promise<File> => {
++    public static createVRMFile = async (targetVersion?: 'auto' | '0' | '1'): Promise<File> => {
++        await VRMParser.syncAccessories();
++        return VRMParser.buildVRMFile(targetVersion);
++    }
++
++    private static buildVRMFile = (targetVersion?: 'auto' | '0' | '1'): Promise<File> => {
+         /* Header 12-byte
+         uint32 magic
+         uint32 version
+@@ -467,6 +478,48 @@ class VRMParser {
+         return [qx, qy, qz, qw];
+     }
+ 
++    // Sets the transform and the parent bone of a merged accessory from the item the preview shows; a hidden item is detached.
++    private static placeAccessoryNode = (accItem: any, nodeIdx: number): void => {
++        const nodes = VRMParser.json.nodes;
++        const node = nodes[nodeIdx];
++        node.translation = [ accItem.position.x || 0, accItem.position.y || 0, accItem.position.z || 0 ];
++        node.rotation = VRMParser.eulerDegreesToQuat( accItem.rotation.x || 0, accItem.rotation.y || 0, accItem.rotation.z || 0 );
++        node.scale = [ accItem.scale.x ?? 1, accItem.scale.y ?? 1, accItem.scale.z ?? 1 ];
++
++        for (const n of nodes) {
++            if (n.children && n.children.includes(nodeIdx)) n.children = n.children.filter((c: number) => c !== nodeIdx);
++        }
++        if (accItem.visible === false) return;
++
++        let target: any = null;
++        if (accItem.targetNodeIndex !== undefined && nodes[accItem.targetNodeIndex]) {
++            target = nodes[accItem.targetNodeIndex];
++        } else if (accItem.targetBoneName) {
++            target = nodes.find((n: any) => n.name && n.name.toLowerCase() === accItem.targetBoneName.toLowerCase());
++        }
++        if (!target) target = nodes[0];
++        target.children = target.children || [];
++        target.children.push(nodeIdx);
++    }
++
++    // Takes a removed accessory out of the exported model.
++    public static unmergeAccessory = (id: string): void => {
++        const idx = VRMParser.mergedAccessories.get(id);
++        if (idx === undefined || !VRMParser.json) return;
++        for (const n of VRMParser.json.nodes) {
++            if (n.children && n.children.includes(idx)) n.children = n.children.filter((c: number) => c !== idx);
++        }
++        VRMParser.mergedAccessories.delete(id);
++        VRMParser.chunkRebuilding().catch((e: any) => console.error('Rebuild after removing an accessory failed', e));
++    }
++
++    // Merges or updates every accessory the tab holds, then rebuilds, so the export matches the preview.
++    public static syncAccessories = async (): Promise<void> => {
++        const list = VRMParser.accessorySource ? VRMParser.accessorySource() : [];
++        if (!list.length || !VRMParser.json || !VRMParser.chunk1) return;
++        await VRMParser.mergeAccessories(list);
++    }
++
+     // GLBアクセサリをVRMバイナリ/JSONにマージしてボーン配下に配置
+     public static mergeAccessories = async (accessories: any[]): Promise<void> => {
+         if (!accessories || accessories.length === 0) return;
+@@ -476,6 +529,12 @@ class VRMParser {
+ 
+         for (const accItem of accessories) {
+             if (!accItem.glbData) continue;
++            const merged = VRMParser.mergedAccessories.get(accItem.id);
++            if (merged !== undefined && VRMParser.json.nodes[merged]) {
++                VRMParser.placeAccessoryNode(accItem, merged);
++                continue;
++            }
++            if (accItem.visible === false) continue;
+ 
+             const src = new DataView(accItem.glbData);
+             const header = VRMParser.parseHeader(src);
+@@ -655,48 +714,14 @@ class VRMParser {
+                 });
+             }
+ 
+-            for (const rIdx of rootIndices) {
+-                const mergedRootNodeIdx = rIdx + nodeOffset;
+-                const mergedRootNode = VRMParser.json.nodes[mergedRootNodeIdx];
+-                if (mergedRootNode) {
+-                    mergedRootNode.name = `Accessory_${accItem.name || 'item'}`;
+-                    mergedRootNode.translation = [
+-                        accItem.position.x || 0,
+-                        accItem.position.y || 0,
+-                        accItem.position.z || 0
+-                    ];
+-                    mergedRootNode.rotation = VRMParser.eulerDegreesToQuat(
+-                        accItem.rotation.x || 0,
+-                        accItem.rotation.y || 0,
+-                        accItem.rotation.z || 0
+-                    );
+-                    mergedRootNode.scale = [
+-                        accItem.scale.x ?? 1,
+-                        accItem.scale.y ?? 1,
+-                        accItem.scale.z ?? 1
+-                    ];
+-
+-                    // 配置先ボーンノードの子に追加
+-                    let targetBoneNode: any = null;
+-                    if (accItem.targetNodeIndex !== undefined && VRMParser.json.nodes[accItem.targetNodeIndex]) {
+-                        targetBoneNode = VRMParser.json.nodes[accItem.targetNodeIndex];
+-                    } else if (accItem.targetBoneName) {
+-                        targetBoneNode = VRMParser.json.nodes.find((n: any) =>
+-                            n.name && n.name.toLowerCase() === accItem.targetBoneName.toLowerCase()
+-                        );
+-                    }
+-
+-                    if (targetBoneNode) {
+-                        targetBoneNode.children = targetBoneNode.children || [];
+-                        if (!targetBoneNode.children.includes(mergedRootNodeIdx)) {
+-                            targetBoneNode.children.push(mergedRootNodeIdx);
+-                        }
+-                    } else if (VRMParser.json.nodes[0]) {
+-                        VRMParser.json.nodes[0].children = VRMParser.json.nodes[0].children || [];
+-                        VRMParser.json.nodes[0].children.push(mergedRootNodeIdx);
+-                    }
+-                }
+-            }
++            // A wrapper node carries the preview's transform, so the accessory's own root nodes keep their transforms (as in the preview).
++            const wrapperIdx = VRMParser.json.nodes.length;
++            VRMParser.json.nodes.push({
++                name: `Accessory_${accItem.name || 'item'}`,
++                children: rootIndices.map((r: number) => r + nodeOffset)
++            });
++            VRMParser.mergedAccessories.set(accItem.id, wrapperIdx);
++            VRMParser.placeAccessoryNode(accItem, wrapperIdx);
+         }
+ 
+         // 4. VRMの再構築
 diff --git a/app/src/router/index.ts b/app/src/router/index.ts
 index 367f2a3..ff784d9 100755
 --- a/app/src/router/index.ts
