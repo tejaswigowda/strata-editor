@@ -13,6 +13,7 @@ Zero egress is the point of facebind, so the build is not the upstream site:
   no remote styles, fonts or images, `form-action 'none'`. `page.test.mjs` checks the policy and scans the bundle for analytics, Stripe and Firebase hosts.
 - `?embed=1`: the editor does not load any VRM by itself. The facebind page sends the bound VRM with `postMessage` (same origin, and only from the framing window),
   and an **Apply to the facebind preview** button sends the edited VRM back the same way. The page checks `origin` and `source` on both ends and never uses a `*` target.
+- In embed mode the "Select VRM" button is hidden (the VRM always comes from the page) and the layout follows the webCLI tools: dark cards, two columns (the viewer, then the controls and tabs) and one column under 820 px.
 - Hash routing and relative paths so it works under any path; the About page stays (it is text).
 - `regeneratorRuntime` is declared before the bundle loads (`build.sh` adds a tiny script), so the polyfill never falls back to `Function(...)` and the CSP needs no `unsafe-eval`.
 
