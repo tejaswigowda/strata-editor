@@ -413,7 +413,9 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		// texture: explicit, else what the photo shows (an estimate), else straight; an afro cut implies coily
 		let texture = style.texture && style.texture !== 'auto' ? style.texture : null, textureSource = texture ? 'chosen' : null;
 		if ( ! texture && preset && preset.texture ) { texture = preset.texture; textureSource = 'cut'; }
-		if ( ! texture && source.hairTexture && source.hairTexture.kind in TEXTURES ) { texture = source.hairTexture.kind; textureSource = 'photo'; }
+		// on short hair (it ends above the ear line) the texture estimate mostly reads the cut hairs and the scalp, so it is not trusted
+		const shortHair = source.hairShape && typeof source.hairShape.lengthV === 'number' && source.hairShape.lengthV > 0;
+		if ( ! texture && source.hairTexture && source.hairTexture.kind in TEXTURES && ! shortHair ) { texture = source.hairTexture.kind; textureSource = 'photo'; }
 		texture = texture || 'straight';
 		const wantStyle = texture !== 'straight' || !! preset;
 		if ( textureSource === 'photo' && texture !== 'straight' ) report.warnings.push( `Hair texture "${ texture }" was estimated from the photo (approximate, not calibrated). Pick a texture by hand if it is wrong.` );

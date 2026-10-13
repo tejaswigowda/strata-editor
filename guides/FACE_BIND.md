@@ -186,7 +186,7 @@ hair within about 9 mm RMS in height (doing nothing is 44 mm off). In units of E
 
 - **Pinch at the ear line.** The hair at the ear line (v about 0.16 above the eye line) stays where it is. Above and below it the lift grows as
   `1 - exp(-((v - 0.16) / 0.55)^2)`: about **0.44 E at the bottom** (the sides and back come out shorter and the ears show) and about **0.44 E at the top**
-  (a taller crown). A photo with shorter hair uses more of it (`B = min(0.44, how much shorter)`); the top lift equals the bottom lift.
+  (a taller crown). A photo with shorter hair uses more of it: the bottom lift is `min(0.55, how much shorter)` (0.55 is the most that cannot fold the strands), and the top lift is capped at 0.44 and scaled by how tall the photo's crown is next to the VRM's (full at 1.0, none at 0.7 or lower), so a photo with a low crown gets less hair, not a taller head.
 - **Fringe.** The front is lifted more: about **1.15 E at its lower edge** (v about -0.25), falling off over 0.8 E upward and 0.35 E downward,
   plus a small lift (0.15 E) that the front keeps up to the crown, strongest at the middle of the forehead and weaker toward the sideburns (1.0 at
   the middle, 0.8 at 0.27 head widths, 0.3 at 0.53). The lifted fringe also moves **back toward the head by 20 percent of its lift**, to follow the
@@ -199,6 +199,13 @@ hair within about 9 mm RMS in height (doing nothing is 44 mm off). In units of E
 - Folding strands onto a line and cutting hair back where the mask shows skin, an earlier approach, left bald patches and gaps and is gone.
 - Limits: the field was measured on one restyle of one base (the male; the female base has different hair, so the fit is approximate there), it was hand-made, so it
   is a look to copy and not something a photo measurement can derive, and the largest move is capped at 13 cm.
+
+### Proportional hair (short cuts)
+
+The hair follows the photo's proportions, so a short cut gives a short cut: the side and crown scale limits go down to 0.7 (they were 0.94 and 0.92, which left a short-haired photo with a
+helmet of VRM hair), hair that ends above the ear line in the photo takes the shortest length the plan allows, the crown is not lifted for a photo whose crown is low, and the scalp step also pulls
+hair that the reshape pushed into the head back out to a 4 mm shell. The texture estimate is not trusted on short hair (it mostly reads cut hairs and scalp), so it falls back to straight unless you pick a texture.
+Check: `~/Downloads/test.png` (a short-sided cut) now binds to a compact cap with the forehead and ears clear, where before it was a full curly mop.
 
 ### Scalp hug (so it does not look like a wig)
 

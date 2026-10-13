@@ -113,16 +113,18 @@ export function thicknessAt( skull, x, y, z ) {
  * @param {number} hug 0 to 1
  * @returns {[number, number, number]} the point, moved
  */
-export function hugScalp( skull, x, y, z, thickness, weight, hug ) {
+export function hugScalp( skull, x, y, z, thickness, weight, hug, minThickness = 0.004 ) {
 
 	const k = hug * weight;
-	if ( k <= 0 ) return [ x, y, z ];
 	const [ cx, cy, cz ] = skull.center;
 	const dx = x - cx, dy = y - cy, dz = z - cz, r = Math.hypot( dx, dy, dz );
-	if ( r < 1e-6 ) return [ x, y, z ];
-	const rs = skull.radiusAt( x, y, z ), extra = r - rs - thickness;
-	if ( extra <= 0 ) return [ x, y, z ];
-	const target = rs + thickness + extra * ( 1 - k ), s = target / r;
+	if ( r < 1e-6 || weight <= 0 ) return [ x, y, z ];
+	const rs = skull.radiusAt( x, y, z ), cur = r - rs, extra = cur - thickness;
+	// hair the reshape has pushed into the head comes back out to a thin shell over the scalp (never sunk in), whatever the hug
+	let target = extra > 0 ? rs + thickness + extra * ( 1 - k ) : cur;
+	if ( target < rs + minThickness * weight ) target = rs + minThickness * weight;
+	if ( Math.abs( target - r ) < 1e-9 ) return [ x, y, z ];
+	const s = target / r;
 	return [ cx + dx * s, cy + dy * s, cz + dz * s ];
 
 }

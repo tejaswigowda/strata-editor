@@ -191,7 +191,7 @@ export function measureHair( positions, ids, m ) {
 
 // The hair sits only a centimeter or two outside the skull, which is not moved, so it may not shrink much (that would sink
 // it into the head and show the scalp between the strands): the lower limits are small on purpose.
-const LIMITS_DEFAULT = { volume: [ 0.94, 1.2 ], top: [ 0.92, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.13 };
+const LIMITS_DEFAULT = { volume: [ 0.7, 1.2 ], top: [ 0.7, 1.25 ], length: [ 0.6, 1.6 ], fringe: 0.35, hairline: [ 0.35, 1.3 ], maxMove: 0.13 };
 
 // ratios (or shifts) per bin, with gaps filled by interpolating between the valid bins, flat past the ends
 // Beyond the measured range the value fades back to `restValue` (1 for ratios, 0 for shifts; null = stay flat) over `fade`, so a measurement taken at
@@ -257,7 +257,8 @@ export function planHair( cur, ref, m, strength, limits = {} ) {
 		// toward the photo's length (squeezed by at most half). Longer: stretched.
 		const lowest = a => { for ( let i = 0; i < a.length; i ++ ) if ( a[ i ] !== null ) return vCenter( i ) - GRID.v.step / 2; return null; };
 		const lenR = lowest( rp.halfR ), lenL = lowest( rp.halfL ), curR = lowest( cp.halfR ), curL = lowest( cp.halfL );
-		const lenRatio = ( refV, curV ) => refV !== null && curV !== null && 0.1 - refV > 0.05 && 0.1 - curV > 0.05 ? clamp( ( 0.1 - refV ) / ( 0.1 - curV ), ...LIMITS.length ) : null;
+		// hair that ends above the ear line in the photo (a short cut) is the shortest cut there is
+		const lenRatio = ( refV, curV ) => refV === null || curV === null || 0.1 - curV <= 0.05 ? null : 0.1 - refV <= 0.05 ? LIMITS.length[ 0 ] : clamp( ( 0.1 - refV ) / ( 0.1 - curV ), ...LIMITS.length );
 		const rR = lenRatio( lenR, curR ), rL = lenRatio( lenL, curL );
 		plan.profile = {
 			widthR, widthL, crown, fringe, fringeAt, edge, edgeLift,
@@ -300,14 +301,16 @@ export function planHair( cur, ref, m, strength, limits = {} ) {
 	const cuts = plan.mode === 'silhouette' ? [ plan.profile.trimR, plan.profile.trimL ].filter( v => v !== null && v !== undefined ) : ( plan.trimV !== undefined && plan.trimV !== null ? [ plan.trimV ] : [] );
 	if ( cuts.length && bottom !== null && bottom !== undefined ) need = Math.max( 0, ( cuts.reduce( ( a, b ) => a + b, 0 ) / cuts.length ) - bottom );
 	const edgeLift = plan.mode === 'silhouette' ? plan.profile.edgeLift : ( plan.edgeV && plan.curLineV !== null && plan.curLineV !== undefined ? plan.edgeV - plan.curLineV : null );
-	const B = Math.min( SWEPT.max, need ), shortness = B / SWEPT.max;
+	const B = Math.min( SWEPT.bottomMax, need ), shortness = Math.min( 1, B / SWEPT.max );
+	// the crown is lifted only when the photo's crown is about as tall as the VRM's: a photo with a much lower crown wants proportionally less hair, not a taller head
+	const topRatio = ref.topV > 0 && cur.topV > 0 ? ref.topV / cur.topV : 1, crownShare = clamp( ( topRatio - 0.7 ) / 0.3, 0, 1 );
 	const F = Math.min( SWEPT.fringeMax, Math.max( edgeLift > 0 ? edgeLift : 0, 1.15 * shortness ) );
-	plan.swept = B > 0.02 || F > 0.1 ? { B, T: B, F, shortness: +shortness.toFixed( 2 ) } : null;
+	plan.swept = B > 0.02 || F > 0.1 ? { B, T: Math.min( B, SWEPT.max ) * crownShare, F, shortness: +shortness.toFixed( 2 ) } : null;
 	// the swept-up look raises the crown, so a photo whose crown measures lower than the VRM's must not also shrink it
 	if ( plan.swept ) {
 
-		if ( plan.top && plan.top < 1 ) plan.top = 1;
-		if ( plan.profile && plan.profile.crown ) { const c = plan.profile.crown; plan.profile.crown = t => Math.max( 1, c( t ) ); }
+		if ( crownShare >= 1 && plan.top && plan.top < 1 ) plan.top = 1;
+		if ( crownShare >= 1 && plan.profile && plan.profile.crown ) { const c = plan.profile.crown; plan.profile.crown = t => Math.max( 1, c( t ) ); }
 
 	}
 
@@ -341,7 +344,8 @@ export function summarizePlan( plan ) {
 //   - the top spreads sideways by 8 percent.
 // In the reference B = T = 0.44 and F = 1.15. Here they come from the photo: the shorter the photo's hair is than the VRM's, the
 // more of the lift is used.
-const SWEPT = { pinch: 0.16, sLow: 0.55, sUp: 0.55, fringeAt: - 0.25, fringeUp: 0.8, fringeDown: 0.35, tail: 0.15, back: 0.2, spread: 0.08, innerTop: 0.44, max: 0.44, fringeMax: 1.3 };
+const SWEPT = { pinch: 0.16, sLow: 0.55, sUp: 0.55, fringeAt: - 0.25, fringeUp: 0.8, fringeDown: 0.35, tail: 0.15, back: 0.2, spread: 0.08, innerTop: 0.44, max: 0.44, bottomMax: 0.55, // the lift's steepest slope is about 1.56 times this: above 0.64 it would fold the strands
+	 fringeMax: 1.3 };
 
 const pinchProfile = v => { const s = v < SWEPT.pinch ? SWEPT.sLow : SWEPT.sUp; return 1 - Math.exp( - ( ( ( v - SWEPT.pinch ) / s ) ** 2 ) ); };
 
