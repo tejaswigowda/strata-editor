@@ -97,6 +97,7 @@
 		<strong>Preview</strong>
 		<label><input type="radio" name="view" id="view_bound" checked> Bound (reshaped, recolored)</label>
 		<label><input type="radio" name="view" id="view_base"> Base VRM</label>
+		<label><input type="checkbox" id="baldOn"> Bald: remove the hair <span class="muted">(the VRM is bound again without its hair, so the preview and the download are the same file)</span></label>
 		<div id="preview3d"></div>
 		<div>
 			<strong>Shading</strong>
@@ -123,7 +124,7 @@
 
 	<h2>Network audit</h2>
 	<pre id="net">(no requests)</pre>
-	<p class="muted">Agent use: <code>?vrm=male|female|URL&amp;run=1</code> auto-runs once a photo (or face GLB) is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, image, shape: { strength }, hairShape: { strength, hug }, hairStyle: { cut, texture }, facialHair, look: { skin, hair, iris, brow, strength } })</code> takes <code>'male'</code> (default), <code>'female'</code>, a URL or a File for <code>vrm</code> and a File (or <code>face</code>: a face GLB's bytes) for the starting point, never a URL, for either.</p>
+	<p class="muted">Agent use: <code>?vrm=male|female|URL&amp;run=1</code> auto-runs once a photo (or face GLB) is supplied from local disk; the result is on <code>window.__webcli_result</code>. <code>window.__facebind.run({ vrm, image, shape: { strength }, hairShape: { strength, hug }, hairStyle: { cut, texture }, facialHair, bald, look: { skin, hair, iris, brow, strength } })</code> takes <code>'male'</code> (default), <code>'female'</code>, a URL or a File for <code>vrm</code> and a File (or <code>face</code>: a face GLB's bytes) for the starting point, never a URL, for either.</p>
 </main>
 <script type="module" src="page.js"></script>
 </body>

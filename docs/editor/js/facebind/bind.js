@@ -259,6 +259,41 @@ function replaceImages( vrm, textures, report ) {
 
 }
 
+// ── optional: no hair (bald) ──────────────────────────────────────────────────
+
+const isHairPrim = ( json, p ) => p.material !== undefined && /_HAIR$/.test( ( json.materials[ p.material ] || {} ).name || '' );
+
+/**
+ * Takes the hair out of the VRM: nodes whose mesh is all hair lose their mesh (and skin), and a hair primitive that shares a mesh with other parts (the
+ * VRoid back hair sits on the body mesh) is dropped from that mesh's primitive list. No byte of the binary chunk and no bone changes, so the rig, the spring bones and the
+ * body are untouched; the skin of the head under the hair is already there (the VRoid face mesh is the whole head).
+ * @returns {{ nodes:number[], meshes:number[], primitives:number }} what was changed, for the audit
+ */
+function removeHair( json, report ) {
+
+	const nodes = [], meshes = [];
+	let primitives = 0;
+	( json.nodes || [] ).forEach( ( n, i ) => {
+
+		if ( n.mesh === undefined ) return;
+		const prims = json.meshes[ n.mesh ].primitives;
+		if ( prims.length && prims.every( p => isHairPrim( json, p ) ) ) { primitives += prims.length; delete n.mesh; delete n.skin; delete n.weights; nodes.push( i ); }
+
+	} );
+	( json.meshes || [] ).forEach( ( m, i ) => {
+
+		if ( ! m.primitives.some( p => isHairPrim( json, p ) ) || m.primitives.every( p => isHairPrim( json, p ) ) ) return;
+		const kept = m.primitives.filter( p => ! isHairPrim( json, p ) );
+		primitives += m.primitives.length - kept.length;
+		m.primitives = kept; meshes.push( i );
+
+	} );
+	if ( ! primitives ) report.warnings.push( 'No hair meshes were found to remove.' );
+	report.hairRemoved = { removed: true, primitives };
+	return { nodes, meshes, primitives };
+
+}
+
 // ── rig-safety audit ────────────────────────────────────────────────────────
 
 function diffPaths( a, b, path = '', out = [] ) {
@@ -286,6 +321,13 @@ const ALLOWED_CHANGE = [
 export function assertRigSafe( before, after, shape = {} ) {
 
 	const allowed = [ ...ALLOWED_CHANGE, ...( shape.accessors || [] ).map( i => new RegExp( `^/accessors/${ i }/(min|max)($|/)` ) ) ];
+	// bald: hair-only nodes lose their mesh and skin, mixed meshes lose their hair primitives
+	if ( shape.bald ) {
+
+		for ( const i of shape.bald.nodes ) allowed.push( new RegExp( `^/nodes/${ i }/(mesh|skin|weights)$` ) );
+		for ( const i of shape.bald.meshes ) allowed.push( new RegExp( `^/meshes/${ i }/primitives($|/)` ) );
+
+	}
 	// a texture edit: the edited images point at new bufferViews appended after the old ones, and the buffer grew
 	const tex = shape.textures;
 	if ( tex && tex.images.length ) {
@@ -303,7 +345,7 @@ export function assertRigSafe( before, after, shape = {} ) {
 /**
  * @param {ArrayBuffer|Uint8Array} vrmInput base VRM bytes
  * @param {ArrayBuffer|Uint8Array} faceInput LOCAL face-blendshape GLB bytes (never a URL)
- * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, hug?: number, reference?: object }, hairStyle?: { cut?: 'photo'|'keep'|'crop'|'bob'|'long'|'afro', texture?: 'auto'|'straight'|'wavy'|'curly'|'coily' }, textures?: { materialIndex: number, png: Uint8Array, label?: string }[], look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
+ * @param {{ names?: string[], shape?: { strength?: number, reference?: object }, hairShape?: { strength?: number, hug?: number, reference?: object }, bald?: boolean, hairStyle?: { cut?: 'photo'|'keep'|'crop'|'bob'|'long'|'afro', texture?: 'auto'|'straight'|'wavy'|'curly'|'coily' }, textures?: { materialIndex: number, png: Uint8Array, label?: string }[], look?: { skin?: boolean, hair?: boolean, strength?: number, textureMeans?: Object<number, number[]> } }} [opts]
  *   look = optional, approximate material tints (skin / hair color). textureMeans[materialIndex] = the mean sRGB color (0–255)
  *   of that material's base texture, from lookTexturesOf().
  */
@@ -327,13 +369,15 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		hairShape: null,
 		hairStyle: null,
 		textures: null,
+		hairRemoved: null,
 		normals: null,
 		egress: 'none: the face GLB was read from local bytes only; nothing derived from it left this process',
 	};
 
 	const origBin = ( vrm.chunks.find( c => c.type === 0x004e4942 ) || {} ).data;
 	let reshaped = null;
-	if ( opts.shape || opts.hairShape || opts.hairStyle ) {
+	if ( opts.bald && ( opts.hairShape || opts.hairStyle ) ) report.warnings.push( 'Hair shape and style skipped: the hair is removed.' );
+	if ( opts.shape || ( ! opts.bald && ( opts.hairShape || opts.hairStyle ) ) ) {
 
 		const what = {};
 		if ( opts.shape ) {
@@ -364,8 +408,8 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		const wantStyle = texture !== 'straight' || !! preset;
 		if ( textureSource === 'photo' && texture !== 'straight' ) report.warnings.push( `Hair texture "${ texture }" was estimated from the photo (approximate, not calibrated). Pick a texture by hand if it is wrong.` );
 
-		if ( opts.hairStyle ) report.hairStyle = { approximate: true, cut: cutName, texture, textureSource: textureSource || 'default', detected: source.hairTexture || null, cards: null };
-		if ( opts.hairShape || wantStyle ) {
+		if ( opts.hairStyle && ! opts.bald ) report.hairStyle = { approximate: true, cut: cutName, texture, textureSource: textureSource || 'default', detected: source.hairTexture || null, cards: null };
+		if ( ! opts.bald && ( opts.hairShape || wantStyle ) ) {
 
 			const strength = opts.hairShape && opts.hairShape.strength !== undefined ? opts.hairShape.strength : 0.7;
 			let ref = null, limits = null;
@@ -404,7 +448,8 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 
 	vrm.json.extensions[ BIND_EXTENSION ] = bind;
 	vrm.json.extensionsUsed = [ ...new Set( [ ...( vrm.json.extensionsUsed || [] ), BIND_EXTENSION ] ) ];
-	if ( opts.look ) applyLook( vrm.json, source, opts.look, report );
+	if ( opts.look ) applyLook( vrm.json, source, opts.bald ? { ...opts.look, hair: false } : opts.look, report );
+	const bald = opts.bald ? removeHair( vrm.json, report ) : null;
 
 	let textures = null;
 	if ( opts.textures && opts.textures.length ) {
@@ -413,7 +458,7 @@ export function bindVRM( vrmInput, faceInput, opts = {} ) {
 		report.textures = opts.textures.filter( t => t.label ).map( t => t.label );
 
 	}
-	assertRigSafe( before, vrm.json, { ...( reshaped || {} ), textures } );
+	assertRigSafe( before, vrm.json, { ...( reshaped || {} ), textures, bald } );
 	if ( reshaped || textures ) assertBinOnlyChanged( origBin, vrm.chunks.find( c => c.type === 0x004e4942 ).data, reshaped ? reshaped.ranges : [] );
 	return { bytes: writeGLB( vrm ), bind, report };
 

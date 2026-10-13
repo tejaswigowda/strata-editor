@@ -833,6 +833,35 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( upMax > 0.008, 'the face above the neck must still move: ' + ( upMax * 1000 ).toFixed( 1 ) + ' mm' );
 
 	} );
+	test( 'bald: every hair primitive is gone from the output, the binary chunk, bones, body and clothing are untouched, the hair options are skipped with a warning, deterministic', () => {
+
+		const a = parseGLB( vrmBytes ), ja = a.json;
+		const isHair = ( j, p ) => p.material !== undefined && /_HAIR$/.test( j.materials[ p.material ].name || '' );
+		ok( ja.meshes.some( m => m.primitives.some( p => isHair( ja, p ) ) ), 'the base has hair' );
+		const out = bindVRM( vrmBytes, faceBytes, { bald: true, hairShape: { strength: 1 }, hairStyle: { texture: 'curly' }, look: { hair: true, strength: 1, textureMeans: Object.fromEntries( ja.materials.map( ( m, i ) => [ i, [ 200, 200, 200 ] ] ) ) } } );
+		const b = parseGLB( out.bytes );
+		for ( const [ i, m ] of b.json.meshes.entries() ) {
+
+			const mine = ja.meshes[ i ];
+			// a mesh that is all hair stays in the list (unused); a mixed mesh keeps only its non-hair primitives
+			if ( ! mine.primitives.every( p => isHair( ja, p ) ) ) ok( m.primitives.every( p => ! isHair( b.json, p ) ) && m.primitives.length === mine.primitives.filter( p => ! isHair( ja, p ) ).length, 'mesh ' + mine.name + ' still has hair' );
+
+		}
+		for ( const n of b.json.nodes ) if ( n.mesh !== undefined ) ok( b.json.meshes[ n.mesh ].primitives.some( p => ! isHair( b.json, p ) ), 'a node still shows a hair-only mesh' );
+		ok( same( b.chunks[ 0 ].data, a.chunks[ 0 ].data ), 'the binary chunk must be identical' );
+		eq( b.json.skins, ja.skins ); eq( b.json.accessors, ja.accessors ); eq( b.json.materials.length, ja.materials.length );
+		ok( out.report.hairRemoved && out.report.hairRemoved.primitives >= 50, JSON.stringify( out.report.hairRemoved ) );
+		ok( out.report.warnings.some( w => /Hair shape and style skipped/.test( w ) ) );
+		ok( ! out.report.look || ! out.report.look.applied.some( x => x.role === 'hair' ), 'no hair tint when bald' );
+		ok( out.report.hairShape === null && out.report.hairStyle === null );
+		ok( same( out.bytes, bindVRM( vrmBytes, faceBytes, { bald: true, hairShape: { strength: 1 }, hairStyle: { texture: 'curly' }, look: { hair: true, strength: 1, textureMeans: Object.fromEntries( ja.materials.map( ( m, i ) => [ i, [ 200, 200, 200 ] ] ) ) } } ).bytes ), 'not deterministic' );
+		// with the face reshape and not bald, the hair is still there
+		const keep = parseGLB( bindVRM( vrmBytes, faceBytes, { shape: { strength: 1 } } ).bytes );
+		ok( keep.json.meshes.some( m => m.primitives.some( p => isHair( keep.json, p ) ) ) );
+		const withFace = bindVRM( vrmBytes, photoFace(), { bald: true, shape: { strength: 1 } } );
+		ok( withFace.report.shape && withFace.report.shape.maxMoveMm > 0.5, 'the face reshape still runs when bald' );
+
+	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {
 
 		const mk = kind => { const j = JSON.parse( JSON.stringify( parseGLB( faceBytes ).json ) ); j.nodes[ 0 ].extras = { ...j.nodes[ 0 ].extras, hairTexture: { kind, coherence: 0.3, contrast: 9, roughness: 3 } }; return writeGLB( { json: j, chunks: parseGLB( faceBytes ).chunks } ); };

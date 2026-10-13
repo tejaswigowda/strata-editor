@@ -2,7 +2,7 @@ import { paintFacialHair } from '../editor/js/facebind/facialHair.js';
 import { bindVRM, lookTexturesOf, SCOPE } from '../editor/js/facebind/bind.js';
 
 // ── pure transform: (base VRM = url | local file, face GLB = LOCAL file only) -> bound VRM ──
-// window.__facebind.run({ vrm, image | face, look, shape, hairShape, hairStyle, facialHair })  -> window.__webcli_result
+// window.__facebind.run({ vrm, image | face, look, shape, hairShape, hairStyle, facialHair, bald })  -> window.__webcli_result
 // The starting point is a photo: image -> on-device face landmarks -> face-blendshape GLB -> bind.
 // `face` (an existing face GLB) skips the photo step.
 // ?vrm=male|female|<url>&run=1   auto-runs as soon as a photo (or face GLB) is supplied from local disk.
@@ -78,7 +78,9 @@ async function encodePNG( rgba, width, height ) {
 
 }
 
-async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facialHair, names } ) {
+let photoCache = null; // the last photo's reading, so toggling bald re-binds without reading the face again
+
+async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facialHair, bald, names } ) {
 
 	try {
 
@@ -110,8 +112,9 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 		let faceBytes, faceGlbUrl = null, expression = null, photoRead = null;
 		if ( image ) {
 
-			say( 'Reading the face on this device…' );
-			const { glb, blendshapes, hairMask, facialHair: facialHairRead, hair: hairRead } = await ( await autorig ).faceGLBFromImage( image );
+			let read = photoCache && photoCache.image === image ? photoCache.read : null;
+			if ( ! read ) { say( 'Reading the face on this device…' ); read = await ( await autorig ).faceGLBFromImage( image ); photoCache = { image, read }; }
+			const { glb, blendshapes, hairMask, facialHair: facialHairRead, hair: hairRead } = read;
 			photoRead = { facialHair: facialHairRead, hairColor: hairRead ? hairRead.color : null };
 			showHairMask( image, hairMask );
 			faceBytes = glb; expression = blendshapes;
@@ -121,6 +124,7 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 		} else faceBytes = await readBytes( face, 'face GLB' );
 
 		const opts = { names };
+		if ( bald ) opts.bald = true;
 		if ( shape ) opts.shape = { strength: shape.strength };
 		if ( hairShape ) opts.hairShape = { strength: hairShape.strength, hug: hairShape.hug };
 		if ( hairStyle ) opts.hairStyle = hairStyle;
@@ -208,6 +212,7 @@ function render( report ) {
 		<h3>Not driven: VRM ARKit shapes the face GLB has no morph for</h3>${ list( report.undriven, n => esc( n ) ) }
 		${ report.warnings.length ? `<h3>Warnings</h3>${ list( report.warnings, w => esc( w ) ) }` : '' }
 		${ report.shape ? `<h3>Face shape <span class="muted">(approximate; the face's base positions moved by up to ${ report.shape.maxMoveMm } mm)</span></h3>` : '' }
+		${ report.hairRemoved ? `<h3>Hair removed <span class="muted">(${ report.hairRemoved.primitives } hair pieces left out of the VRM; nothing else changed)</span></h3>` : '' }
 		${ report.textures && report.textures.length ? `<h3>Texture edit <span class="muted">(approximate; a painted copy of the face texture, no geometry)</span></h3>${ list( report.textures, l => esc( l ) ) }` : '' }
 		${ report.hairStyle && ( report.hairStyle.texture !== 'straight' || report.hairStyle.cut !== 'photo' ) ? `<h3>Hair style <span class="muted">(approximate; each lock of the VRM's own hair cards is re-laid, nothing is added)</span></h3>${ list( [ `cut: ${ report.hairStyle.cut }`, `texture: ${ report.hairStyle.texture } (${ report.hairStyle.textureSource })`, ...( report.hairStyle.cards ? [ `${ report.hairStyle.cards } hair locks re-laid` ] : [] ) ], l => esc( l ) ) }` : '' }
 		${ report.hairShape ? `<h3>Hair shape <span class="muted">(approximate; the existing hairstyle scaled and shifted to the photo's hair silhouette, by up to ${ report.hairShape.maxMoveMm } mm)</span></h3>${ list( describeHair( report.hairShape.applied ), l => esc( l ) ) }` : '' }
@@ -293,7 +298,7 @@ const lookOptions = () => ( { skin: $( 'lookSkin' ).checked, hair: $( 'lookHair'
 const shapeOptions = () => $( 'shapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100 } : null;
 const hairShapeOptions = () => $( 'hairShapeOn' ).checked ? { strength: Number( $( 'shapeStrength' ).value ) / 100, hug: Number( $( 'hairHug' ).value ) / 100 } : null;
 const hairStyleOptions = () => ( { cut: $( 'hairCut' ).value, texture: $( 'hairTexture' ).value } );
-const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions(), hairShape: hairShapeOptions(), hairStyle: hairStyleOptions(), facialHair: $( 'facialHairOn' ).checked } ).then( showNetwork );
+const go = () => run( { vrm: vrmFile || $( 'vrmUrl' ).value.trim() || $( 'base' ).value, image: imageFile, face: imageFile ? null : faceFile, look: lookOptions(), shape: shapeOptions(), hairShape: hairShapeOptions(), hairStyle: hairStyleOptions(), facialHair: $( 'facialHairOn' ).checked, bald: $( 'baldOn' ).checked } ).then( showNetwork );
 
 function setImage( f ) {
 
@@ -336,6 +341,8 @@ if ( params.has( 'face' ) || params.has( 'image' ) ) say( 'Ignoring ?image= / ?f
 for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).addEventListener( 'input', e => { if ( ! preview ) return; $( 'expr_manual' ).checked = true; preview.setExpression( id, Number( e.target.value ) / 100 ); updateExpressionNote(); } );
 for ( const m of [ 'flat', 'lit' ] ) $( 'shade_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) preview.setShading( m ); } );
 for ( const m of [ 'photo', 'neutral', 'manual' ] ) $( 'expr_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) { preview.setExpressionMode( m ); updateExpressionNote(); } } );
+// bald re-binds (the photo is not read again), so the preview and the download are the same bytes
+$( 'baldOn' ).addEventListener( 'change', () => { if ( ready() && window.__webcli_result && window.__webcli_result.ok ) go(); } );
 for ( const v of [ 'bound', 'base' ] ) $( 'view_' + v ).addEventListener( 'change', e => e.target.checked && preview && preview.setView( v ) );
 $( 'xReset' ).addEventListener( 'click', () => { for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).value = 0; if ( preview ) { preview.resetExpressions(); $( 'expr_neutral' ).checked = true; updateExpressionNote(); } } );
 

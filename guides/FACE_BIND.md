@@ -29,7 +29,8 @@ byte, and the face GLB's mesh is never grafted on. The only changes to the VRM a
 - the bind block and `extensionsUsed`;
 - (optional) the base **POSITION**, **NORMAL** and **TANGENT** (if present) data of the face's and the hair's own vertices (shape, volume, height, length, fringe);
 - (optional) material colors (skin, hair, iris, brow) and their MToon shade colors;
-- (optional) one appended PNG for the face skin texture (painted facial hair), see below.
+- (optional) one appended PNG for the face skin texture (painted facial hair), see below;
+- (optional) **bald**: the hair is left out of the scene (see [Bald](#bald-no-hair)).
 
 **The outfit is never touched.** Only the face and the hair change. The clothing materials (tops, bottoms, shoes), their colors, textures and meshes are
 identical in the output, and a test checks it. The skin tone is also applied to the body's skin material, so the neck and hands match the face; that is skin, not clothing.
@@ -215,6 +216,17 @@ and reads as a wig. After the lift, hair that has come away from the skull is pu
 - The back-hair layer under the strands is held 20 percent closer than the strands, so the layers do not cross.
 - Limits: the skull is an estimate from the hair itself, so it cannot be more accurate than the stock hair's fit; a strong pull compresses the cards toward the head, which
   can show as banding in the toon-lit preview; and the hug cannot add hair where the lift left the scalp uncovered.
+
+### Bald (no hair)
+
+The preview has a **Bald** checkbox. It binds the VRM again without its hair (the photo is not read again, about 2 seconds), so **the preview and the download are the
+same file**; unchecking it puts the hair back. `bindVRM(..., { bald: true })` and `window.__facebind.run({ ..., bald: true })` do the same.
+
+How: every node whose mesh is all hair loses its `mesh` and `skin`, and a hair primitive that shares a mesh with other parts (the VRoid back hair sits on the body mesh)
+is dropped from that mesh's primitive list. No byte of the binary chunk changes (the unused hair data stays in the file), no bone is touched, so the skeleton, the spring bones,
+the body and the clothing are exactly as before. The VRoid face mesh is the whole head, so the scalp is already there under the hair. The audit allows exactly
+these paths (`/nodes/N/mesh|skin|weights` for the hair nodes and `/meshes/M/primitives` for mixed meshes) and nothing else. Hair shape, style, cut and the hair tint are skipped with a
+warning when bald, and the report lists `hairRemoved`. Facial hair painted on the face texture stays.
 
 ### Hair style
 
