@@ -1,0 +1,313 @@
+diff --git a/app/public/index.html b/app/public/index.html
+index 256fd8b..f6cf163 100755
+--- a/app/public/index.html
++++ b/app/public/index.html
+@@ -2,20 +2,13 @@
+ <html lang="">
+   <head>
+     <meta charset="utf-8">
++    <!-- Zero egress for the embedded copy (facebind): this page may read the VRM it is given and nothing else. No analytics, no share widget, no remote
++         scripts, styles, fonts or images; connections only to this origin and blob: / data: (in-memory). A test in facebind keeps this policy. -->
++    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' blob: data:; media-src blob:; worker-src 'self' blob:; form-action 'none'; base-uri 'none'">
++    <meta name="referrer" content="no-referrer">
+     <meta http-equiv="X-UA-Compatible" content="IE=edge">
+     <meta name="viewport" content="width=device-width,initial-scale=1.0">
+     <link rel="icon" href="<%= BASE_URL %>favicon.ico">
+-    <link rel="apple-touch-icon" sizes="180x180" href="<%= BASE_URL %>res/apple-touch-icon-180x180.png">
+-    <link rel="icon" href="<%= BASE_URL %>res/favicon192.png" sizes="192x192">
+-    <link rel="icon" href="<%= BASE_URL %>res/icon_512.png" sizes="512x512">
+-
+-    <!-- Twitter カード -->
+-    <meta name="twitter:card" content="summary_large_image"></meta>
+-    <meta name="twitter:creator" content="<%= htmlWebpackPlugin.options.creator %>" />
+-    <meta property="og:url" content="<%= htmlWebpackPlugin.options.url %>" />
+-    <meta property="og:title" content="<%= htmlWebpackPlugin.options.title %>" />
+-    <meta property="og:description" content="<%= htmlWebpackPlugin.options.description %>" />
+-    <meta property="og:image" content="<%= htmlWebpackPlugin.options.url %>/res/ogimage.png" />    
+     
+     <title><%= htmlWebpackPlugin.options.title %></title>
+   </head>
+@@ -26,27 +19,5 @@
+     <div id="app"></div>
+     <!-- built files will be auto injected -->
+     
+-    <!-- Twitterシェアボタン -->
+-    <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+-
+-    <!-- Global site tag (gtag.js) - Google Analytics -->
+-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-Y2SF4RRHYB"></script>
+-    <script>
+-      window.dataLayer = window.dataLayer || [];
+-      function gtag(){dataLayer.push(arguments);}
+-      gtag('js', new Date());
+-
+-      gtag('config', 'G-Y2SF4RRHYB');
+-    </script>
+-    <script>
+-      window.htmlWebpackPlugin = {
+-        creator: '<%= htmlWebpackPlugin.options.creator %>',
+-        url: '<%= htmlWebpackPlugin.options.url %>',
+-        image: '<%= htmlWebpackPlugin.options.image %>',
+-        title: '<%= htmlWebpackPlugin.options.title %>',
+-        description: '<%= htmlWebpackPlugin.options.description %>',
+-        hashtags: '<%= htmlWebpackPlugin.options.hashtags %>'        
+-      }
+-    </script>
+   </body>
+ </html>
+diff --git a/app/src/App.vue b/app/src/App.vue
+index 0424231..c422834 100755
+--- a/app/src/App.vue
++++ b/app/src/App.vue
+@@ -1,16 +1,8 @@
+ <template>
+   <div id="app">
+-    <div id="nav">
++    <div id="nav" v-if="!embed">
+       <router-link to="/">Home</router-link> |
+-      <router-link to="/about">About</router-link> | 
+-      <router-link to="/donate">Donate</router-link> |
+-      <a v-if="htmlWebpackPlugin != null"
+-        href="https://twitter.com/share?ref_src=twsrc%5Etfw" 
+-        class="twitter-share-button" 
+-        data-show-count="true"
+-        :data-related="htmlWebpackPlugin.creator"
+-        :data-hashtags="htmlWebpackPlugin.hashtags" 
+-        :data-text="htmlWebpackPlugin.title + ' ' + htmlWebpackPlugin.description">Tweet</a>
++      <router-link to="/about">About</router-link>
+     </div>
+     <router-view/>
+   </div>
+@@ -22,6 +14,7 @@ import { Component, Vue } from 'vue-property-decorator';
+ @Component
+ export default class App extends Vue {
+   htmlWebpackPlugin?: any = null
++  embed = new URLSearchParams(window.location.search).has('embed')
+ 
+   mounted() {
+     this.htmlWebpackPlugin = (window as any).htmlWebpackPlugin
+diff --git a/app/src/components/Main.vue b/app/src/components/Main.vue
+index 23d5e3f..c9d48fc 100755
+--- a/app/src/components/Main.vue
++++ b/app/src/components/Main.vue
+@@ -3,6 +3,10 @@
+     <div class="container vrmviewContainer" @dragover.prevent @drop.prevent="onContainerDrop">
+       <FileUpload :changeFile="changeFile" />
+       <VRMView ref="vrmview" :path="path" :debug="false" @change-first-person-offset="onChangeFirstPersonFromGizmo" @change-accessory-transform-from-gizmo="onChangeAccessoryTransformFromGizmo" @motion-time-update="onMotionTimeUpdate" @motion-state-change="onMotionStateChange" @click-screenshot="clickCaptureScreenshot" />
++      <div v-if="embed">
++        <label for="btnApply">Apply to the facebind preview</label>
++        <input id="btnApply" type="button" @click="applyToParent" :disabled="isExporting" />
++      </div>
+       <div>
+         <label for="btnExport">{{$t('btnExport')}}</label>
+         <input id="btnExport" type="button" @click="clickExport" :disabled="isExporting" />
+@@ -74,7 +78,40 @@ export default class Main extends Vue {
+     return this.currentLoadedVRMVersion === 1 ? 'VRM 1.0' : 'VRM 0.x';
+   }
+ 
++  // facebind embed: the VRM comes from the parent page by postMessage (same origin only), never from a URL; the edited VRM goes back the same way.
++  embed = new URLSearchParams(window.location.search).has('embed')
++
++  onParentMessage = (e: MessageEvent) => {
++    if (e.origin !== window.location.origin || e.source !== window.parent) return
++    const d = e.data
++    if (d && d.type === 'facebind-load-vrm' && d.bytes instanceof ArrayBuffer) {
++      this.selectVrmFile = new File([d.bytes], d.name || 'model.vrm')
++      this.drawVrm(this.selectVrmFile)
++    }
++  }
++
++  applyToParent() {
++    const vrmparser = this.$refs.vrmparser as VRMParserView
++    if (!vrmparser || this.isExporting) return
++    this.isExporting = true
++    VRMParser.createVRMFile(this.exportVRMVersion)
++      .then((file: File) => file.arrayBuffer().then((bytes) => {
++        window.parent.postMessage({ type: 'facebind-edited-vrm', name: file.name, bytes }, window.location.origin, [bytes])
++      }))
++      .catch((e: any) => { console.error('Apply failed', e); alert((this as any).$t('exportConversionFailed')) })
++      .finally(() => { this.isExporting = false })
++  }
++
++  beforeDestroy() {
++    window.removeEventListener('message', this.onParentMessage)
++  }
++
+   mounted() {
++    if (this.embed) {
++      window.addEventListener('message', this.onParentMessage)
++      window.parent.postMessage({ type: 'facebind-editor-ready' }, window.location.origin)
++      return
++    }
+     const urlParams = new URLSearchParams(window.location.search);
+     const paramVrm = urlParams.get('vrm');
+     if (paramVrm) {
+diff --git a/app/src/router/index.ts b/app/src/router/index.ts
+index 367f2a3..ff784d9 100755
+--- a/app/src/router/index.ts
++++ b/app/src/router/index.ts
+@@ -18,16 +18,11 @@ const routes: Array<RouteConfig> = [
+     // this generates a separate chunk (about.[hash].js) for this route
+     // which is lazy-loaded when the route is visited.
+     component: () => import(/* webpackChunkName: "about" */ '../views/About.vue')
+-  },
+-  {
+-    path: '/donate',
+-    name: 'Donate',
+-    component: () => import(/* webpackChunkName: "donate" */ '../views/Donate.vue')
+   }
+ ]
+ 
+ const router = new VueRouter({
+-  mode: 'history',
++  mode: 'hash',
+   base: process.env.BASE_URL,
+   routes
+ })
+diff --git a/app/src/stripe-config.json b/app/src/stripe-config.json
+deleted file mode 100644
+index a9db501..0000000
+--- a/app/src/stripe-config.json
++++ /dev/null
+@@ -1,3 +0,0 @@
+-{
+-    "paymentLink": "https://buy.stripe.com/test_6oU5kEg7ydEc9bdav4a7C00"
+-}
+\ No newline at end of file
+diff --git a/app/src/views/Donate.vue b/app/src/views/Donate.vue
+deleted file mode 100644
+index 1bcf35a..0000000
+--- a/app/src/views/Donate.vue
++++ /dev/null
+@@ -1,91 +0,0 @@
+-<template>
+-  <div class="donate">
+-    <h1>開発のご支援をお願いします</h1>
+-    <p>
+-      VRMEditorToolsは、誰でも簡単にブラウザ上でVRMモデルを確認・編集できるツールを目指して開発されています。<br>
+-      サーバー維持費や今後の新機能開発、継続的なメンテナンスのために、皆様からのご支援をいただけると大変励みになります。
+-    </p>
+-    <p>
+-      もしこのツールが役立ったと感じていただけましたら、月額サポートでのご支援をご検討いただけますと幸いです。
+-    </p>
+-    
+-    <div class="donate-actions">
+-      <button @click="handleDonate" class="stripe-button" :disabled="loading">
+-        {{ loading ? 'Redirecting...' : 'Donate with Stripe' }}
+-      </button>
+-      <p v-if="error" class="error-message">{{ error }}</p>
+-    </div>
+-    
+-    <div class="donate-actions">
+-      <a href="https://www.amazon.co.jp/hz/wishlist/ls/1U1BNCYHORFTC?ref_=wl_share">Amazonギフト券 500円を送る</a>
+-    </div>
+-  </div>
+-</template>
+-
+-<script lang="ts">
+-import { Component, Vue } from 'vue-property-decorator'
+-import stripeConfig from '../stripe-config.json'
+-
+-@Component
+-export default class Donate extends Vue {
+-  handleDonate() {
+-    if (stripeConfig.paymentLink) {
+-      window.open(stripeConfig.paymentLink, '_blank')
+-    } else {
+-      alert('Payment link is not configured.')
+-    }
+-  }
+-}
+-</script>
+-
+-<style scoped>
+-.donate {
+-  max-width: 800px;
+-  margin: 0 auto;
+-  padding: 20px;
+-}
+-
+-.donate h1 {
+-  margin-bottom: 20px;
+-}
+-
+-.donate p {
+-  margin-bottom: 30px;
+-  font-size: 1.1em;
+-}
+-
+-.donate-actions {
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  gap: 10px;
+-}
+-
+-.stripe-button {
+-  display: inline-block;
+-  background-color: #635bff;
+-  color: white;
+-  padding: 12px 24px;
+-  border-radius: 4px;
+-  text-decoration: none;
+-  font-weight: 500;
+-  transition: background-color 0.2s;
+-  font-size: 16px;
+-  border: none;
+-  cursor: pointer;
+-}
+-
+-.stripe-button:hover:not(:disabled) {
+-  background-color: #544de6;
+-}
+-
+-.stripe-button:disabled {
+-  opacity: 0.7;
+-  cursor: not-allowed;
+-}
+-
+-.error-message {
+-  color: #dc3545;
+-  font-size: 0.9em;
+-}
+-</style>
+diff --git a/app/src/views/Home.vue b/app/src/views/Home.vue
+index 2a02dbb..8c79ee9 100755
+--- a/app/src/views/Home.vue
++++ b/app/src/views/Home.vue
+@@ -1,10 +1,10 @@
+ <template>
+   <div class="home">
+-    <h1>VRMEditorTools</h1>
+-    <p>{{$t('description')}}</p>
++    <h1 v-if="!embed">VRMEditorTools</h1>
++    <p v-if="!embed">{{$t('description')}}</p>
+     <Main />
+ 
+-    <div>
++    <div v-if="!embed">
+       <h2>他のVRMツール</h2>
+       <p><a href="https://vrmeditor.tools/">VRMEditorTools</a></p>
+       <p><a href="https://tfuru.github.io/vrma-loader-sample/">VRMA, BVHをアップロードして VRMを動かすやつ</a></p>
+@@ -24,7 +24,9 @@ import Main from '@/components/Main.vue'
+     Main
+   },
+ })
+-export default class Home extends Vue {}
++export default class Home extends Vue {
++  embed = new URLSearchParams(window.location.search).has('embed')
++}
+ </script>
+ 
+ <style scoped lang="scss">
+diff --git a/app/vue.config.js b/app/vue.config.js
+index 872d20a..dde9642 100755
+--- a/app/vue.config.js
++++ b/app/vue.config.js
+@@ -1,4 +1,6 @@
+ module.exports = {
++    publicPath: './',
++    productionSourceMap: false,
+     pages: {
+         index: {
+             entry: 'src/main.ts',

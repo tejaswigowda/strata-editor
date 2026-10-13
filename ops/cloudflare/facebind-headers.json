@@ -1,10 +1,21 @@
 {
-  "_comment": "Single source for the response headers of /strata-editor/facebind/. The Content-Security-Policy is the page's <meta> policy plus frame-ancestors (which only works as a header). page.test.mjs fails if this drifts from the <meta>.",
+  "_comment": "Single source for the response headers of /strata-editor/facebind/. The Content-Security-Policy is the page's <meta> policy plus frame-ancestors (which only works as a header). page.test.mjs fails if this drifts from the <meta>. The overrides entry is for the embedded VRM editor build (docs/facebind/editor): its <meta> CSP plus frame-ancestors 'self', so only the facebind page can frame it.",
   "path": "/strata-editor/facebind/",
   "headers": {
-    "Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; worker-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; worker-src 'none'; frame-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-  }
+  },
+  "overrides": [
+    {
+      "path": "/strata-editor/facebind/editor/",
+      "headers": {
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self' blob: data:; media-src blob:; worker-src 'self' blob:; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+      }
+    }
+  ]
 }

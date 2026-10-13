@@ -110,6 +110,11 @@ downloads. Optional hardening if you need it: remove `raw.githubusercontent.com`
 bundled bases or local files; serve the page with real headers (`ops/cloudflare/`, once the domain is proxied by
 Cloudflare) so the policy does not depend on the `<meta>`.
 
+**The embedded VRM editor.** The Edit button frames `docs/facebind/editor/` (VRMEditorTools, MIT, patched, see `ops/vrmeditor/README.md`). It has its own strict `<meta>` CSP (this origin and
+`blob:` / `data:` only, no inline script, no remote anything), the upstream analytics, Twitter, Firebase and Stripe code is removed, and `page.test.mjs` fails if its policy or bundle drifts. It receives the VRM from the
+page by `postMessage` (origin and source checked) and returns it the same way. Its code runs in a separate frame on the same origin, so the page's egress guard does not wrap its `fetch`; its CSP
+(`connect-src 'self' blob: data:`) is what contains it. It never receives the photo or the face GLB, only the bound VRM.
+
 ## 6. Verify it yourself
 
 **A CSP error about an inline script on a local server is not the page.** If you serve `docs/` with VS Code's Live Server (or a similar live-reload tool), the server

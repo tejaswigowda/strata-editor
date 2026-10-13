@@ -34,7 +34,8 @@ export function createPreview( container ) {
 	const light = new THREE.DirectionalLight( 0xffffff, 2.2 );
 	light.position.set( - 0.6, 0.8, 1 ); // from the upper left, in front
 	const ambient = new THREE.AmbientLight( 0xffffff, 0.9 );
-	let shading = 'flat';
+	let shading = 'lit';
+	scene.add( light, ambient ); // toon shading is the default
 	const toonRamp = ( () => { const t = new THREE.DataTexture( new Uint8Array( [ 90, 90, 90, 255, 170, 170, 170, 255, 255, 255, 255, 255 ] ), 3, 1, THREE.RGBAFormat ); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; } )();
 
 	const models = { base: null, bound: null };
@@ -196,6 +197,8 @@ export function createPreview( container ) {
 		setExpressionMode( m ) { mode = m; applyWeights(); return info; },
 
 		get expressionMode() { return mode; },
+
+		get shading() { return shading; },
 
 		/** Turn the camera around the head: 0 = front, 180 = back; elevation in degrees (positive looks from above). */
 		orbit( degrees, elevation = 0 ) {

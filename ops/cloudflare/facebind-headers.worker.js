@@ -17,8 +17,10 @@ export default {
 		const base = config.path.replace( /\/$/, '' );
 		if ( pathname !== base && ! pathname.startsWith( config.path ) ) return response;
 
+		// the most specific rule wins: the embedded editor has its own policy (it may be framed by the page)
+		const rule = ( config.overrides || [] ).find( o => pathname.startsWith( o.path ) ) || config;
 		const headers = new Headers( response.headers );
-		for ( const [ name, value ] of Object.entries( config.headers ) ) headers.set( name, value );
+		for ( const [ name, value ] of Object.entries( rule.headers ) ) headers.set( name, value );
 		return new Response( response.body, { status: response.status, statusText: response.statusText, headers } );
 
 	},

@@ -12,7 +12,7 @@
 	(see the check in docs/editor/js/facebind/__tests__/page.test.mjs).
 	connect-src lists the hosts a base VRM may be fetched from; add yours here if needed.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; worker-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; worker-src 'none'; frame-src 'self'; form-action 'none'; base-uri 'none'">
 <style>
 	:root { color-scheme: dark; }
 	body { margin: 0; background: #14161a; color: #d9dde3; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -34,6 +34,9 @@
 	[hidden] { display: none !important; }
 	#maskCanvas { display: block; max-width: 220px; border-radius: 8px; margin: 8px 0; }
 	#preview3d { height: 420px; border-radius: 8px; overflow: hidden; margin: 10px 0; } #preview3d canvas { width: 100%; height: 100%; display: block; }
+	#editOverlay { position: fixed; inset: 0; z-index: 1000; background: #0d0f16; display: flex; flex-direction: column; padding: 16px; box-sizing: border-box; } #editOverlay[hidden] { display: none; }
+	#editOverlay .bar { display: flex; align-items: center; gap: 12px; color: #fff; padding-bottom: 8px; } #editOverlay .bar button { margin-top: 0; }
+	#editOverlay iframe { flex: 1; width: 100%; border: 0; border-radius: 8px; background: #fff; }
 	#previewBox label, .sliders label { display: inline-block; margin-right: 16px; }
 	ul { margin: .2em 0; padding-left: 1.2em; } code { color: #9fc4ff; }
 </style>
@@ -93,16 +96,20 @@
 	<div id="status"></div>
 	<div id="resolutionWarn" class="box warn" hidden></div>
 	<a id="download" class="btn" hidden>Download</a>
+	<div id="editOverlay" hidden role="dialog" aria-label="VRM editor tools">
+		<div class="bar"><strong>VRM editor tools</strong> <span class="muted" id="editNote">The VRM is passed to the editor in this page and never leaves the device. Use "Apply to the facebind preview" inside the editor to bring your edits back.</span> <button id="editClose" type="button">Close</button></div>
+		<iframe id="editFrame" title="VRM editor tools" referrerpolicy="no-referrer"></iframe>
+	</div>
 	<div id="previewBox" class="box" hidden>
-		<strong>Preview</strong>
+		<strong>Preview</strong> <button id="editBtn" type="button" title="Open the VRM editor tools (texture and material editing) on this VRM">Edit</button>
 		<label><input type="radio" name="view" id="view_bound" checked> Bound (reshaped, recolored)</label>
 		<label><input type="radio" name="view" id="view_base"> Base VRM</label>
 		<label><input type="checkbox" id="baldOn"> Bald: remove the hair <span class="muted">(the VRM is bound again without its hair, so the preview and the download are the same file)</span></label>
 		<div id="preview3d"></div>
 		<div>
 			<strong>Shading</strong>
-			<label><input type="radio" name="shade" id="shade_flat" checked> Flat (the VRM's own unlit materials)</label>
-			<label><input type="radio" name="shade" id="shade_lit"> Toon-lit (shows the normals)</label>
+			<label><input type="radio" name="shade" id="shade_flat"> Flat (the VRM's own unlit materials)</label>
+			<label><input type="radio" name="shade" id="shade_lit" checked> Toon-lit (shows the normals)</label>
 		</div>
 		<div>
 			<strong>Expression</strong>

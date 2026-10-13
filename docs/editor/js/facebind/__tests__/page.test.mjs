@@ -50,12 +50,44 @@ test( 'CSP: no remote scripts, no inline script except the import map (by hash),
 
 } );
 
+test( 'the embedded VRM editor (docs/facebind/editor, built from cecil-tools/VRMEditorTools by ops/vrmeditor) cannot reach the network: strict CSP, no analytics or share widgets, no remote resources', () => {
+
+	const dir = path.join( root, 'editor' );
+	const html = read( 'editor/index.html' );
+	const c = ( html.match( /Content-Security-Policy" content="([^"]*)"/ ) || [] )[ 1 ] || '';
+	ok( /default-src 'none'/.test( c ) );
+	const connect = c.match( /connect-src ([^;]*)/ )[ 1 ].split( /\s+/ );
+	ok( connect.every( v => [ "'self'", 'blob:', 'data:' ].includes( v ) ), 'editor connect-src: ' + connect.join( ' ' ) );
+	for ( const d of [ 'script-src', 'style-src', 'img-src', 'font-src', 'worker-src', 'media-src' ] ) ok( ! /https?:|\*/.test( c.match( new RegExp( d + ' ([^;]*)' ) )[ 1 ] ), d + ' allows a remote host' );
+	ok( ! /(?<!wasm-)unsafe-eval|script-src[^;]*unsafe-inline/.test( c ), 'editor script-src allows eval or inline scripts' );
+	ok( /form-action 'none'/.test( c ) && /base-uri 'none'/.test( c ) );
+	ok( ! /googletagmanager|gtag|platform\.twitter|<script>[^<]/.test( html ), 'the editor page loads analytics, a share widget or an inline script' );
+	ok( ! /<(script|link|img)[^>]+(?:src|href)="https?:/.test( html ), 'the editor page references a remote resource' );
+	const files = []; const walk = d => { for ( const e of fs.readdirSync( d, { withFileTypes: true } ) ) { const p = path.join( d, e.name ); e.isDirectory() ? walk( p ) : files.push( p ); } }; walk( dir );
+	const js = files.filter( f => f.endsWith( '.js' ) ).map( f => fs.readFileSync( f, 'utf8' ) ).join( '\n' );
+	ok( js.length > 1e6, 'the editor bundle is missing' );
+	ok( ! /googletagmanager|G-Y2SF4RRHYB|js\.stripe\.com|firebaseio|firebaseapp|sendBeacon/.test( js ), 'the editor bundle talks to analytics, Stripe or Firebase' );
+	ok( files.some( f => /LICENSE/.test( f ) ), 'the MIT license of VRMEditorTools must ship with the build' );
+	ok( ! fs.existsSync( path.join( dir, 'res' ) ), 'the editor ships sample VRMs it does not need' );
+	// the page frames it only from this origin and talks to it only by origin-checked messages
+	const pg = read( 'index.html' ), code = read( 'page.js' );
+	ok( /frame-src 'self'/.test( pg ), 'the page CSP must allow framing only this origin' );
+	ok( /e\.origin !== location\.origin \|\| e\.source !== editFrame\.contentWindow/.test( code ), 'the page must check the origin and source of editor messages' );
+	ok( ! /postMessage\([^)]*['"]\*['"]/.test( code ), 'postMessage with a wildcard target' );
+
+} );
+
 test( 'the Cloudflare header policy is the page\'s <meta> CSP plus frame-ancestors, and sets Referrer-Policy and nosniff', () => {
 
 	const ops = JSON.parse( fs.readFileSync( path.join( root, '..', '..', 'ops', 'cloudflare', 'facebind-headers.json' ), 'utf8' ) );
 	eq2( ops.headers[ 'Content-Security-Policy' ], csp + "; frame-ancestors 'none'", 'header CSP drifted from the <meta> CSP: update ops/cloudflare/facebind-headers.json' );
 	eq2( ops.headers[ 'Referrer-Policy' ], 'no-referrer' ); eq2( ops.headers[ 'X-Content-Type-Options' ], 'nosniff' );
 	ok( ops.path === '/strata-editor/facebind/' );
+	// the embedded editor: its <meta> CSP plus frame-ancestors 'self'
+	const edHtml = read( 'editor/index.html' ), edCsp = ( edHtml.match( /Content-Security-Policy" content="([^"]*)"/ ) || [] )[ 1 ] || '';
+	const ov = ops.overrides.find( o => o.path === '/strata-editor/facebind/editor/' );
+	ok( ov, 'no header override for the embedded editor' );
+	eq2( ov.headers[ 'Content-Security-Policy' ], edCsp + "; frame-ancestors 'self'", 'editor header CSP drifted from its <meta> CSP' );
 	for ( const f of [ 'facebind-headers.worker.js', 'wrangler.toml', 'README.md' ] ) ok( fs.existsSync( path.join( root, '..', '..', 'ops', 'cloudflare', f ) ), f + ' is missing' );
 
 } );

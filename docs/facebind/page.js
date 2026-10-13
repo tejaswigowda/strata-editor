@@ -78,6 +78,7 @@ async function encodePNG( rgba, width, height ) {
 
 }
 
+let last = null; // the last bind, so the editor's result can replace the bound VRM in the preview and the download
 let photoCache = null; // the last photo's reading, so toggling bald re-binds without reading the face again
 
 async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facialHair, bald, names } ) {
@@ -161,6 +162,7 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 		const risky = bind.source.nameResolution === 'convention' || bind.source.nameResolution === 'unresolved';
 		$( 'resolutionWarn' ).hidden = ! risky;
 		if ( risky ) $( 'resolutionWarn' ).textContent = 'Check the mapping: ' + bind.warnings.join( ' ' );
+		last = { base: vrmBytes, bind, expression, vrmName };
 		showPreview( vrmBytes, bytes, bind, expression );
 		window.__webcli_result = { ok: true, nameResolution: report.nameResolution, warnings: report.warnings, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, faceGlb: image ? faceBytes : null, expression, bytes, bind, report, scope: SCOPE };
 		say( `Bound ${ report.mapped } of ${ report.sourceMorphs } face morphs${ risky ? ' (names ASSUMED, see the warning below)' : '' }. ${ SCOPE }.`, risky ? 'err' : 'ok' );
@@ -286,7 +288,7 @@ function updateExpressionNote() {
 	if ( ! preview ) return;
 	const { mapped, extra } = preview.info, mode = preview.expressionMode;
 	const top = currentExpression ? topShapes( currentExpression ) : [];
-	$( 'previewNote' ).textContent = 'Flat preview (no MToon shading). Drag to rotate, scroll to zoom. ' + ( mode === 'photo'
+	$( 'previewNote' ).textContent = ( preview.shading === 'lit' ? 'Toon-lit preview (a stand-in for MToon that reads the normals).' : 'Flat preview (no MToon shading).' ) + ' Drag to rotate, scroll to zoom. ' + ( mode === 'photo'
 		? `Expression read from your photo: ${ top.length ? top.join( ', ' ) : 'neutral' }. ${ mapped } shapes go through the bind map${ extra ? `, ${ extra } more ARKit shapes the VRM has are applied by name` : '' }.`
 		: mode === 'manual' ? 'Expression: the sliders.' : 'Expression: neutral.' );
 
@@ -339,7 +341,7 @@ if ( params.has( 'vrm' ) ) {
 if ( params.has( 'face' ) || params.has( 'image' ) ) say( 'Ignoring ?image= / ?face=: the photo and the face GLB are local-only and are never loaded from a URL.', 'err' );
 
 for ( const id of [ 'jawOpen', 'smile', 'blink', 'browsUp' ] ) $( 'x_' + id ).addEventListener( 'input', e => { if ( ! preview ) return; $( 'expr_manual' ).checked = true; preview.setExpression( id, Number( e.target.value ) / 100 ); updateExpressionNote(); } );
-for ( const m of [ 'flat', 'lit' ] ) $( 'shade_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) preview.setShading( m ); } );
+for ( const m of [ 'flat', 'lit' ] ) $( 'shade_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) { preview.setShading( m ); updateExpressionNote(); } } );
 for ( const m of [ 'photo', 'neutral', 'manual' ] ) $( 'expr_' + m ).addEventListener( 'change', e => { if ( e.target.checked && preview ) { preview.setExpressionMode( m ); updateExpressionNote(); } } );
 // bald re-binds (the photo is not read again), so the preview and the download are the same bytes
 $( 'baldOn' ).addEventListener( 'change', () => { if ( ready() && window.__webcli_result && window.__webcli_result.ok ) go(); } );
@@ -356,3 +358,42 @@ const preloaded = preload();
 
 window.__facebind = { run, preview: () => preview, preload: () => preloaded, network: () => window.__facebind_net };
 window.__webcli_result = null;
+
+
+// ── the VRM editor tools (docs/facebind/editor, a static build; see ops/vrmeditor) in an overlay ──────────
+// The bound VRM goes to the iframe by postMessage and the edited VRM comes back the same way. Both ends check that the message is from this origin and from the other
+// window, so nothing else can read or feed the VRM. The editor's own CSP allows connections to this origin and in-memory data only.
+const editFrame = $( 'editFrame' );
+function closeEditor() { $( 'editOverlay' ).hidden = true; editFrame.removeAttribute( 'src' ); }
+$( 'editBtn' ).addEventListener( 'click', () => {
+
+	if ( ! window.__webcli_result || ! window.__webcli_result.ok ) { say( 'Bind first: the editor opens the bound VRM.', 'err' ); return; }
+	$( 'editOverlay' ).hidden = false;
+	editFrame.src = 'editor/index.html?embed=1';
+
+} );
+$( 'editClose' ).addEventListener( 'click', closeEditor );
+window.addEventListener( 'keydown', e => { if ( e.key === 'Escape' && ! $( 'editOverlay' ).hidden ) closeEditor(); } );
+window.addEventListener( 'message', async e => {
+
+	if ( e.origin !== location.origin || e.source !== editFrame.contentWindow || ! e.data ) return;
+	const r = window.__webcli_result;
+	if ( e.data.type === 'facebind-editor-ready' && r && r.ok ) {
+
+		const copy = r.bytes.buffer.slice( r.bytes.byteOffset, r.bytes.byteOffset + r.bytes.byteLength );
+		editFrame.contentWindow.postMessage( { type: 'facebind-load-vrm', name: r.filename, bytes: copy }, location.origin, [ copy ] );
+
+	} else if ( e.data.type === 'facebind-edited-vrm' && e.data.bytes instanceof ArrayBuffer && r && r.ok && last ) {
+
+		// the edited VRM replaces the bound one in the download, in window.__webcli_result and in the preview
+		const bytes = new Uint8Array( e.data.bytes );
+		const url = makeUrl( new Blob( [ bytes ], { type: 'model/gltf-binary' } ) );
+		const a = $( 'download' ); a.href = url; a.hidden = false; a.textContent = `Download ${ r.filename } (edited, ${ ( bytes.length / 1048576 ).toFixed( 1 ) } MB)`;
+		Object.assign( r, { bytes, blobUrl: url, size: bytes.length, edited: true } );
+		closeEditor();
+		await showPreview( last.base, bytes, last.bind, last.expression );
+		say( 'The edited VRM is in the preview and the download.', 'ok' );
+
+	}
+
+} );

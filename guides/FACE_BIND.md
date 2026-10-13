@@ -326,6 +326,18 @@ Notes:
 - Depth from a single photo is a rough estimate; a turned head (> 25°) skips profile depth.
 - Re-binding an already reshaped VRM measures it again and moves it further: bind from the base.
 
+## Editing the bound VRM (VRM editor tools)
+
+The preview has an **Edit** button. It opens an overlay with [VRMEditorTools](https://github.com/cecil-tools/VRMEditorTools) (MIT), a static build in `docs/facebind/editor/`, with the
+bound VRM already loaded: texture and color changes, materials, meta, spring bones, screenshots, VRM 0.x / 1.0 export. Inside it, **Apply to the facebind preview** brings the edited VRM back: it replaces the
+bound VRM in the preview, in the download and in `window.__webcli_result` (`edited: true`). Close or Escape leaves the overlay without applying.
+
+- **Zero egress is kept.** The build is not the upstream site: analytics, share widgets, Firebase, Stripe and sample files are removed, and a strict CSP allows only this origin and in-memory data
+  (a test checks the policy and scans the bundle). The VRM goes in and out by `postMessage` between the page and the iframe, with the origin and the window checked at both ends; it is never put in a URL.
+- **What the audit covers.** The editor re-exports the VRM with its own writer, so after Apply the file is the editor's output; the face-and-hair byte audit applies to the bind, not to editor edits.
+- **Binding again starts over** from the base VRM and discards the edits.
+- How it was built, what was patched and how to rebuild: `ops/vrmeditor/README.md`.
+
 ## Skin tint without a photo
 
 With a face GLB instead of a photo, only the skin tone applies (the GLB has a skin-color hint, but no measurements
