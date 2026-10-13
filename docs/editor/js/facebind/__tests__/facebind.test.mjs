@@ -18,6 +18,7 @@ import { hairShapeFromMask, measureHair, planHair, warpHairPoint, summarizePlan,
 import { cardsOf, relayCards, widenCards, carryNormal, classifyHairTexture, TEXTURES, CUTS } from '../hairStyle.js';
 import { facialHairFromPhoto, paintFacialHair } from '../facialHair.js';
 import { buildSkull, thicknessAt, hugScalp, hugWeight } from '../scalp.js';
+import { linearToSrgb, srgbToLinear } from '../../face/FaceRefine.js';
 import { applyFaceWeights, splitExpression } from '../runtime.js';
 
 let passed = 0, failed = 0, skipped = 0;
@@ -860,6 +861,26 @@ if ( ! fs.existsSync( vrmPath ) || ! fs.existsSync( facePath ) ) { skipped ++; c
 		ok( keep.json.meshes.some( m => m.primitives.some( p => isHair( keep.json, p ) ) ) );
 		const withFace = bindVRM( vrmBytes, photoFace(), { bald: true, shape: { strength: 1 } } );
 		ok( withFace.report.shape && withFace.report.shape.maxMoveMm > 0.5, 'the face reshape still runs when bald' );
+
+	} );
+	test( 'skin tone: the body renders the same color as the face (not 70 percent of the way each), whatever its own texture, and an unreachable (lighter) match is reported', () => {
+
+		const a = parseGLB( vrmBytes ), ja = a.json;
+		const faceMat = ja.materials.findIndex( m => /_Face_\d+_SKIN$/.test( m.name ) ), bodyMat = ja.materials.findIndex( m => /_Body_\d+_SKIN$/.test( m.name ) );
+		ok( faceMat >= 0 && bodyMat >= 0 );
+		const rendered = ( json, mi, mean ) => { const f = json.materials[ mi ].pbrMetallicRoughness.baseColorFactor; return mean.map( ( v, c ) => linearToSrgb( srgbToLinear( v ) * f[ c ] ) ); };
+		const run = ( faceMean, bodyMean ) => { const out = bindVRM( vrmBytes, photoFace(), { look: { skin: true, strength: 0.7, textureMeans: { [ faceMat ]: faceMean, [ bodyMat ]: bodyMean } } } ); return { out, json: parseGLB( out.bytes ).json }; };
+		// the textures differ (the body is a little more yellow), so independent 70 percent tints would leave the body different from the face
+		const r = run( [ 240, 215, 200 ], [ 245, 220, 190 ] );
+		const f = rendered( r.json, faceMat, [ 240, 215, 200 ] ), bd = rendered( r.json, bodyMat, [ 245, 220, 190 ] );
+		for ( let c = 0; c < 3; c ++ ) near( f[ c ], bd[ c ], 3, 'body and face render alike in channel ' + c );
+		const applied = r.out.report.look.applied;
+		ok( applied.find( x => x.material === ja.materials[ bodyMat ].name ).matchedToFace === true && applied.find( x => x.material === ja.materials[ faceMat ].name ).matchedToFace === undefined );
+		// the same color on the shaded side of MToon follows (VRM 0.x _ShadeColor scaled by the same ratio)
+		// a body texture darker than the face render cannot be lightened: reported, and it stays as close as it gets
+		const dark = run( [ 240, 215, 200 ], [ 150, 120, 100 ] );
+		ok( dark.out.report.look.applied.find( x => x.material === ja.materials[ bodyMat ].name ).reached === false );
+		ok( dark.out.report.warnings.some( w => /could not be fully reached/.test( w ) ) );
 
 	} );
 	test( 'hair texture auto: uses the photo estimate when there is one, never invents one, and says it is an estimate', () => {

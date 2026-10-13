@@ -100,6 +100,7 @@ export function buildBinding( source, vrmJson ) {
 
 // ── optional look transfer (rig-safe material tints) ────────────────────────
 
+const FACE_SKIN = /_Face_\d+_SKIN$/;
 const ROLES = { skin: /_SKIN$/, hair: /_HAIR$/, iris: /_EyeIris_/, brow: /_FaceBrow_/ };
 
 function materialIndices( json, role ) {
@@ -195,16 +196,25 @@ function applyLook( json, source, look, report ) {
 
 	}
 
+	// The body takes the face's skin tone: the face is tinted toward the photo (at `strength`), then every other skin material (the body, the hands,
+	// the neck) is tinted so that it renders the same color as the face does now, whatever its own texture is. A tint can only darken, so a body
+	// texture that is darker than the face cannot be made lighter (reported as not reached).
+	let faceRendered = null;
 	for ( const [ role, target ] of jobs ) {
 
-		for ( const mi of materialIndices( json, role ) ) {
+		const mats = materialIndices( json, role );
+		if ( role === 'skin' ) mats.sort( ( a, b ) => FACE_SKIN.test( json.materials[ b ].name || '' ) - FACE_SKIN.test( json.materials[ a ].name || '' ) ); // the face first
+		for ( const mi of mats ) {
 
 			const mean = means[ mi ];
 			if ( ! mean ) { report.warnings.push( `${ role } color skipped for ${ json.materials[ mi ].name }: its texture mean was not supplied.` ); continue; }
 			const old = ( json.materials[ mi ].pbrMetallicRoughness.baseColorFactor || [ 1, 1, 1, 1 ] ).slice( 0, 3 );
-			const { next, reached } = retint( mean, old, target, strength );
+			const isFace = role === 'skin' && FACE_SKIN.test( json.materials[ mi ].name || '' );
+			const matchFace = role === 'skin' && ! isFace && faceRendered;
+			const { next, reached } = retint( mean, old, matchFace ? faceRendered : target, matchFace ? 1 : strength );
 			setMaterialColor( json, mi, next, report );
-			applied.push( { material: json.materials[ mi ].name, role, target: target.map( Math.round ), reached } );
+			if ( isFace ) faceRendered = mean.map( ( t, c ) => linearToSrgb( lin( t ) * next[ c ] ) );
+			applied.push( { material: json.materials[ mi ].name, role, target: ( matchFace ? faceRendered : target ).map( Math.round ), reached, ...( matchFace ? { matchedToFace: true } : {} ) } );
 
 		}
 
