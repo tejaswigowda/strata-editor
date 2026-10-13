@@ -34,6 +34,26 @@ const makeUrl = blob => { const u = URL.createObjectURL( blob ); objectUrls.push
 const $ = id => document.getElementById( id );
 const params = new URLSearchParams( location.search );
 
+// Progress bar (Bind card). Heavy steps run on the page thread, so every update yields once to let the bar paint.
+const paint = () => new Promise( r => { const t = setTimeout( r, 60 ); requestAnimationFrame( () => { clearTimeout( t ); setTimeout( r, 0 ); } ); } );
+let progressHide = 0;
+function progress( pct, label ) {
+
+	clearTimeout( progressHide );
+	$( 'progress' ).hidden = false;
+	$( 'progress' ).classList.toggle( 'indet', pct == null );
+	$( 'pfill' ).style.width = pct == null ? '' : pct + '%';
+	$( 'plabel' ).textContent = label;
+	return paint();
+
+}
+function progressEnd( label, ms = 1000 ) {
+
+	if ( ! label ) { clearTimeout( progressHide ); $( 'progress' ).hidden = true; return; }
+	progress( 100, label );
+	progressHide = setTimeout( () => { $( 'progress' ).hidden = true; }, ms );
+
+}
 const say = ( text, cls = '' ) => { const el = $( 'status' ); el.textContent = text; el.className = cls; };
 const fileBase = name => String( name || 'avatar' ).split( /[\\/]/ ).pop().replace( /\?.*$/, '' ).replace( /\.(vrm|glb)$/i, '' );
 
@@ -98,6 +118,7 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 		for ( const id of [ 'download', 'faceGlbLink' ] ) { $( id ).hidden = true; $( id ).removeAttribute( 'href' ); }
 
 		say( 'Binding on this device…' );
+		await progress( 4, 'Loading the base VRM' );
 		vrm = vrm || 'male';
 		if ( typeof vrm === 'string' && DEFAULT_BASES[ vrm ] ) vrm = DEFAULT_BASES[ vrm ];
 		let vrmBytes, vrmName;
@@ -115,7 +136,7 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 		if ( image ) {
 
 			let read = photoCache && photoCache.image === image ? photoCache.read : null;
-			if ( ! read ) { say( 'Reading the face on this device…' ); read = await ( await autorig ).faceGLBFromImage( image ); photoCache = { image, read }; }
+			if ( ! read ) { say( 'Reading the face on this device…' ); await progress( null, 'Reading the face on this device' ); read = await ( await autorig ).faceGLBFromImage( image ); photoCache = { image, read }; }
 			const { glb, blendshapes, hairMask, facialHair: facialHairRead, hair: hairRead } = read;
 			photoRead = { facialHair: facialHairRead, hairColor: hairRead ? hairRead.color : null };
 			showHairMask( image, hairMask );
@@ -125,6 +146,7 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 
 		} else faceBytes = await readBytes( face, 'face GLB' );
 
+		await progress( 40, 'Preparing the bind' );
 		const opts = { names };
 		if ( bald ) opts.bald = true;
 		if ( shape ) opts.shape = { strength: shape.strength };
@@ -152,7 +174,9 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 			}
 
 		}
+		await progress( 60, 'Binding the face and hair to the VRM' );
 		const { bytes, bind, report } = bindVRM( vrmBytes, faceBytes, opts );
+		await progress( 85, 'Building the download' );
 
 		const blob = new Blob( [ bytes ], { type: 'model/gltf-binary' } );
 		const filename = `${ vrmName }.bound.vrm`;
@@ -164,7 +188,9 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 		$( 'resolutionWarn' ).hidden = ! risky;
 		if ( risky ) $( 'resolutionWarn' ).textContent = 'Check the mapping: ' + bind.warnings.join( ' ' );
 		last = { base: vrmBytes, bind, expression, vrmName };
-		showPreview( vrmBytes, bytes, bind, expression );
+		await progress( 92, 'Drawing the preview' );
+		await showPreview( vrmBytes, bytes, bind, expression );
+		progressEnd( 'Done' );
 		window.__webcli_result = { ok: true, nameResolution: report.nameResolution, warnings: report.warnings, filename, size: bytes.length, blobUrl: url, faceGlbBlobUrl: faceGlbUrl, faceGlb: image ? faceBytes : null, expression, bytes, bind, report, scope: SCOPE };
 		say( `Bound ${ report.mapped } of ${ report.sourceMorphs } face morphs${ risky ? ' (names ASSUMED, see the warning below)' : '' }. ${ SCOPE }.`, risky ? 'err' : 'ok' );
 		if ( params.has( 'run' ) && params.get( 'download' ) !== '0' ) a.click();
@@ -172,6 +198,7 @@ async function run( { vrm, image, face, look, shape, hairShape, hairStyle, facia
 
 	} catch ( e ) {
 
+		progressEnd();
 		window.__webcli_result = { ok: false, code: e.code || 'ERROR', error: e.message };
 		say( e.message, 'err' );
 		return window.__webcli_result;
@@ -333,6 +360,7 @@ $( 'imageFile' ).addEventListener( 'change', e => { setImage( e.target.files[ 0 
 
 $( 'vrmFile' ).addEventListener( 'change', e => { vrmFile = e.target.files[ 0 ] || null; } );
 $( 'faceFile' ).addEventListener( 'change', e => { faceFile = e.target.files[ 0 ] || null; if ( params.has( 'run' ) && ready() ) go(); } );
+$( 'download' ).addEventListener( 'click', () => progressEnd( 'Download started' ) );
 $( 'bind' ).addEventListener( 'click', () => ready() ? go() : say( 'Choose a photo of a face first.', 'err' ) );
 
 document.addEventListener( 'dragover', e => e.preventDefault() );
@@ -392,8 +420,8 @@ $( 'editBtn' ).addEventListener( 'click', () => {
 } );
 // Done asks the editor to bake its edits (accessories and all) into the VRM and send it back; the overlay closes when it arrives
 let doneTimer = 0;
-function setBusy( on ) { $( 'editDone' ).disabled = on; clearTimeout( doneTimer ); if ( on ) doneTimer = setTimeout( () => { setBusy( false ); say( 'The editor did not answer. Wait for the model to load, then press Done again.', 'err' ); }, 30000 ); }
-$( 'editDone' ).addEventListener( 'click', () => { setBusy( true ); editFrame.contentWindow.postMessage( { type: 'facebind-apply' }, location.origin ); } );
+function setBusy( on ) { $( 'editDone' ).textContent = on ? 'Baking…' : 'Done'; if ( ! on ) progressEnd(); $( 'editDone' ).disabled = on; clearTimeout( doneTimer ); if ( on ) doneTimer = setTimeout( () => { setBusy( false ); say( 'The editor did not answer. Wait for the model to load, then press Done again.', 'err' ); }, 30000 ); }
+$( 'editDone' ).addEventListener( 'click', () => { setBusy( true ); progress( null, 'Baking the edits into the VRM' ); editFrame.contentWindow.postMessage( { type: 'facebind-apply' }, location.origin ); } );
 const cancelEditor = () => { setBusy( false ); closeEditor(); };
 $( 'editCancel' ).addEventListener( 'click', cancelEditor );
 window.addEventListener( 'keydown', e => { if ( e.key === 'Escape' && ! $( 'editOverlay' ).hidden ) cancelEditor(); } );
@@ -416,7 +444,9 @@ window.addEventListener( 'message', async e => {
 		Object.assign( r, { bytes, blobUrl: url, size: bytes.length, edited: true } );
 		setBusy( false );
 		closeEditor();
+		await progress( 80, 'Loading the edited VRM into the preview' );
 		await showPreview( last.base, bytes, last.bind, last.expression );
+		progressEnd( 'Done' );
 		say( 'The edited VRM is in the preview and the download.', 'ok' );
 
 	}
