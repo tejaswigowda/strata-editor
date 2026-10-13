@@ -208,7 +208,7 @@ function render( report ) {
 
 	const list = ( items, fmt ) => items.length ? `<ul>${ items.map( i => `<li>${ fmt( i ) }</li>` ).join( '' ) }</ul>` : '<p class="muted">none</p>';
 	$( 'report' ).innerHTML = `
-		<h2>Result</h2>
+		<div class="card"><div class="card-header">Result</div><div class="card-body">
 		<p><strong>${ report.mapped }</strong> of ${ report.sourceMorphs } face morphs mapped <span class="muted">(names from ${ esc( report.nameResolution ) })</span>.</p>
 		<h3>Skipped: face morph with no VRM target</h3>${ list( report.unmapped, u => `#${ esc( u.source ) } ${ esc( u.name ?? '(unnamed)' ) }: ${ esc( u.reason ) }` ) }
 		<h3>Not driven: VRM ARKit shapes the face GLB has no morph for</h3>${ list( report.undriven, n => esc( n ) ) }
@@ -218,7 +218,8 @@ function render( report ) {
 		${ report.textures && report.textures.length ? `<h3>Texture edit <span class="muted">(approximate; a painted copy of the face texture, no geometry)</span></h3>${ list( report.textures, l => esc( l ) ) }` : '' }
 		${ report.hairStyle && ( report.hairStyle.texture !== 'straight' || report.hairStyle.cut !== 'photo' ) ? `<h3>Hair style <span class="muted">(approximate; each lock of the VRM's own hair cards is re-laid, nothing is added)</span></h3>${ list( [ `cut: ${ report.hairStyle.cut }`, `texture: ${ report.hairStyle.texture } (${ report.hairStyle.textureSource })`, ...( report.hairStyle.cards ? [ `${ report.hairStyle.cards } hair locks re-laid` ] : [] ) ], l => esc( l ) ) }` : '' }
 		${ report.hairShape ? `<h3>Hair shape <span class="muted">(approximate; the existing hairstyle scaled and shifted to the photo's hair silhouette, by up to ${ report.hairShape.maxMoveMm } mm)</span></h3>${ list( describeHair( report.hairShape.applied ), l => esc( l ) ) }` : '' }
-		${ report.look ? `<h3>Look transfer <span class="muted">(approximate; material tint only)</span></h3>${ list( report.look.applied, a => `${ esc( a.role ) }: ${ esc( a.material ) } → rgb(${ a.target.map( esc ).join( ', ' ) })${ a.reached ? '' : ' (not fully reachable)' }` ) }` : '' }`;
+		${ report.look ? `<h3>Look transfer <span class="muted">(approximate; material tint only)</span></h3>${ list( report.look.applied, a => `${ esc( a.role ) }: ${ esc( a.material ) } → rgb(${ a.target.map( esc ).join( ', ' ) })${ a.reached ? '' : ' (not fully reachable)' }` ) }` : '' }
+		</div></div>`;
 
 }
 
