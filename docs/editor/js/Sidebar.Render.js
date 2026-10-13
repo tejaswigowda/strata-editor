@@ -1509,7 +1509,7 @@ function SidebarRender( editor ) {
 
 		}
 
-		const recorders = mimes.map( function ( m ) {
+		const makeRecorders = list => list.map( function ( m ) {
 
 			const rec = new MediaRecorder( stream, {
 				mimeType: m,
@@ -1521,6 +1521,49 @@ function SidebarRender( editor ) {
 			return { mime: m, recorder: rec, chunks, stopped };
 
 		} );
+
+		// Firefox (and some Linux builds) can report an MP4/H.264 mime as supported and
+		// then throw from MediaRecorder.start(), or refuse the stream's silent audio
+		// track. Try the picked mimes first, then WebM, then the same again without the
+		// audio track, so a render doesn't die on the recorder.
+		let recorders = [];
+		const webmFallback = [ 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm' ].filter( m => window.MediaRecorder && MediaRecorder.isTypeSupported( m ) ).slice( 0, 1 );
+		const startRecorders = () => {
+
+			const attempts = [];
+			for ( const withAudio of [ true, false ] ) {
+
+				attempts.push( { list: mimes, withAudio } );
+				if ( webmFallback.length && ! mimes.every( m => m.indexOf( 'webm' ) !== - 1 ) ) attempts.push( { list: webmFallback, withAudio } );
+
+			}
+
+			let lastError = null;
+			for ( const a of attempts ) {
+
+				if ( ! a.withAudio ) for ( const track of stream.getAudioTracks() ) stream.removeTrack( track );
+
+				let made = [];
+				try {
+
+					made = makeRecorders( a.list );
+					for ( const r of made ) r.recorder.start();
+					recorders = made;
+					return;
+
+				} catch ( e ) {
+
+					lastError = e;
+					console.warn( `Render: recorder start failed for ${ a.list.join( ', ' ) }${ a.withAudio ? '' : ' (no audio track)' }`, e );
+					for ( const r of made ) { try { if ( r.recorder.state !== 'inactive' ) r.recorder.stop(); } catch ( _ ) { /* already stopped */ } }
+
+				}
+
+			}
+
+			throw lastError || new Error( 'MediaRecorder could not start' );
+
+		};
 		// Warm-up: the very first render of a scene compiles every shader and uploads
 		// every texture / skinning buffer to the GPU, which can take several seconds
 		// on a heavy scene. Done after recording starts, that stall freezes the first
@@ -1541,12 +1584,14 @@ function SidebarRender( editor ) {
 		ctx.drawImage( glCanvas, 0, 0 );
 		await sleep( 0 );
 
-		for ( const r of recorders ) r.recorder.start();
-
 		const totalFrames = Math.max( 1, Math.round( renderLength * fps ) );
 		const frameMs = 1000 / fps;
 
+		let renderError = null;
+
 		try {
+
+			startRecorders();
 
 			// Wall-clock driven: MediaRecorder timestamps frames by real time, so
 			// sampling the timeline at the true elapsed time keeps the output video
@@ -1617,10 +1662,15 @@ function SidebarRender( editor ) {
 
 			}
 
+		} catch ( e ) {
+
+			renderError = e;
+
 		} finally {
 
-			for ( const r of recorders ) r.recorder.stop();
-			await Promise.all( recorders.map( r => r.stopped ) );
+			const live = recorders.filter( r => r.recorder.state !== 'inactive' );
+			for ( const r of live ) r.recorder.stop();
+			await Promise.all( live.map( r => r.stopped ) );
 
 			silenceSource.stop();
 			audioCtx.close();
@@ -1651,6 +1701,15 @@ function SidebarRender( editor ) {
 			hideRenderOverlay();
 			signals.resumeViewportRendering.dispatch();
 			updateDuration(); // re-enables the render button if timeline non-empty
+
+		}
+
+		if ( renderError ) {
+
+			console.error( 'Render failed', renderError );
+			setProgress( 0, 'Render failed: ' + ( renderError && renderError.message ? renderError.message : renderError ) );
+			previewWrap.style.display = 'none';
+			return;
 
 		}
 
