@@ -112,6 +112,12 @@ Cloudflare) so the policy does not depend on the `<meta>`.
 
 ## 6. Verify it yourself
 
+**A CSP error about an inline script on a local server is not the page.** If you serve `docs/` with VS Code's Live Server (or a similar live-reload tool), the server
+injects a small `<script>` into every HTML response at serve time. It opens a WebSocket back to the dev server (`ws://host/path/ws`) to reload the page when a file changes.
+It is not in `docs/facebind/index.html` (`curl` the file or read it on disk and it is absent), and on the published site (GitHub Pages) it does not exist. The page's CSP blocks it ("Executing
+inline script violates the following Content Security Policy directive 'script-src ...'"), so no live-reload socket is ever opened: the policy doing its job. The error is harmless for this page and
+only means live reload does not work here; reload by hand. Test the real policy without the injection by running a plain static server (`python3 -m http.server`) or by opening the published site.
+
 1. **Static checks.** `node docs/editor/js/facebind/__tests__/page.test.mjs` (CSP, import-map hash, no remote URLs, no
    network or storage APIs in the code, guard rules, escaping, vendored hashes).
 2. **Network panel.** Open the page with devtools Network open (disable cache). Load it, run a photo. You should see
