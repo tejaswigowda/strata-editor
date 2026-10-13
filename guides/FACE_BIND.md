@@ -330,8 +330,8 @@ Notes:
 ## Editing the bound VRM (VRM editor tools)
 
 The preview has an **Edit** button. It opens an overlay with [VRMEditorTools](https://github.com/cecil-tools/VRMEditorTools) (MIT), a static build in `docs/facebind/editor/`, with the
-bound VRM already loaded: texture and color changes, materials, meta, spring bones, screenshots, VRM 0.x / 1.0 export. Inside it, **Apply to the facebind preview** brings the edited VRM back: it replaces the
-bound VRM in the preview, in the download and in `window.__webcli_result` (`edited: true`). Close or Escape leaves the overlay without applying.
+bound VRM already loaded: texture and color changes, materials, meta, spring bones, screenshots, VRM 0.x / 1.0 export. **Done** bakes the editor's edits (accessories included) into the VRM and brings it back: it replaces the
+bound VRM in the preview, in the download and in `window.__webcli_result` (`edited: true`). **Cancel** or Escape leaves the overlay without applying. **Download VRM** inside the editor also bakes first, then saves.
 
 - **Zero egress is kept.** The build is not the upstream site: analytics, share widgets, Firebase, Stripe and sample files are removed, and a strict CSP allows only this origin and in-memory data
   (a test checks the policy and scans the bundle). The VRM goes in and out by `postMessage` between the page and the iframe, with the origin and the window checked at both ends; it is never put in a URL.

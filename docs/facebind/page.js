@@ -390,12 +390,18 @@ $( 'editBtn' ).addEventListener( 'click', () => {
 	editFrame.src = 'editor/index.html?embed=1';
 
 } );
-$( 'editClose' ).addEventListener( 'click', closeEditor );
-window.addEventListener( 'keydown', e => { if ( e.key === 'Escape' && ! $( 'editOverlay' ).hidden ) closeEditor(); } );
+// Done asks the editor to bake its edits (accessories and all) into the VRM and send it back; the overlay closes when it arrives
+let doneTimer = 0;
+function setBusy( on ) { $( 'editDone' ).disabled = on; clearTimeout( doneTimer ); if ( on ) doneTimer = setTimeout( () => { setBusy( false ); say( 'The editor did not answer. Wait for the model to load, then press Done again.', 'err' ); }, 30000 ); }
+$( 'editDone' ).addEventListener( 'click', () => { setBusy( true ); editFrame.contentWindow.postMessage( { type: 'facebind-apply' }, location.origin ); } );
+const cancelEditor = () => { setBusy( false ); closeEditor(); };
+$( 'editCancel' ).addEventListener( 'click', cancelEditor );
+window.addEventListener( 'keydown', e => { if ( e.key === 'Escape' && ! $( 'editOverlay' ).hidden ) cancelEditor(); } );
 window.addEventListener( 'message', async e => {
 
 	if ( e.origin !== location.origin || e.source !== editFrame.contentWindow || ! e.data ) return;
 	const r = window.__webcli_result;
+	if ( e.data.type === 'facebind-apply-failed' ) { setBusy( false ); say( 'The editor could not bake the VRM. Nothing was changed.', 'err' ); return; }
 	if ( e.data.type === 'facebind-editor-ready' && r && r.ok ) {
 
 		const copy = r.bytes.buffer.slice( r.bytes.byteOffset, r.bytes.byteOffset + r.bytes.byteLength );
@@ -408,6 +414,7 @@ window.addEventListener( 'message', async e => {
 		const url = makeUrl( new Blob( [ bytes ], { type: 'model/gltf-binary' } ) );
 		const a = $( 'download' ); a.href = url; a.hidden = false; a.textContent = `Download ${ r.filename } (edited, ${ ( bytes.length / 1048576 ).toFixed( 1 ) } MB)`;
 		Object.assign( r, { bytes, blobUrl: url, size: bytes.length, edited: true } );
+		setBusy( false );
 		closeEditor();
 		await showPreview( last.base, bytes, last.bind, last.expression );
 		say( 'The edited VRM is in the preview and the download.', 'ok' );
