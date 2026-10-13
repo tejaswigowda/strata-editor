@@ -31,6 +31,10 @@ The object stores only a **reference** — `userData.isCallcard` plus its plane 
 - **In the live scene**, the object loads `/about/callcard` in a hidden same-origin iframe and rasterizes it once per scene load (`docs/editor/js/Callcard.js`, `hydrateCallcard`). It's a real `CanvasTexture` on a real plane `Mesh`, so it renders through the normal pipeline — no special-case viewport code.
 - **At render time**, the Render tab re-fetches and re-bakes the card fresh (`refreshCallcard`) right before recording starts, so the export always carries the *current* card. `scene/serialize.js` strips the baked texture out of `sceneToJSON()` before every autosave/git-commit, so the persisted scene JSON never grows a copy of the card's pixels — only the reference survives.
 
+## Putting it on a screen inside a scene
+
+The card does not have to fill the frame; it can sit on a billboard or screen in the world. Scale the object down to the screen, place it a few millimeters in front of the surface, and put a dark plane behind it (the card page has a transparent background). The bake resolution never drops below 1024 px on its long side, so a small world-size card stays sharp when the camera closes in. Then end the short with a camera leg that lands at the fill distance from the section above.
+
 ## Trust boundary
 
 The embed URL always resolves to this same-origin `/about/callcard` route — it is not a free-form field pointed at an arbitrary third-party origin. An embedded HTML component runs in the render/live context, so only first-party (or explicitly trusted) components should ever be embeddable this way; don't repurpose this mechanism to bake arbitrary third-party pages into a render without adding an explicit trust/sandbox model first (same concern as the [git URL-hash preload](GIT_VERSIONING.md#shareable-links-url-hash-preload)'s anonymous-read trust boundary).

@@ -141,8 +141,11 @@ export function refreshCallcard( object ) {
 	object.updateWorldMatrix( true, false );
 	const worldScale = object.getWorldScale( new THREE.Vector3() );
 	const MAX_PX = 2048; // cap so an extreme scale can't blow past canvas/texture limits
+	const MIN_PX = 1024; // floor so a card built into a small world object (a billboard) stays crisp when the camera closes in
 	let pxWidth  = width * worldScale.x * PIXELS_PER_UNIT;
 	let pxHeight = height * worldScale.y * PIXELS_PER_UNIT;
+	const undershoot = MIN_PX / Math.max( pxWidth, pxHeight );
+	if ( undershoot > 1 ) { pxWidth *= undershoot; pxHeight *= undershoot; }
 	const overshoot = Math.max( pxWidth, pxHeight ) / MAX_PX;
 	if ( overshoot > 1 ) { pxWidth /= overshoot; pxHeight /= overshoot; } // scale both down together — keeps the aspect ratio intact
 	pxWidth = Math.round( pxWidth );
