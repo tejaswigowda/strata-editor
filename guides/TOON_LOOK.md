@@ -110,6 +110,13 @@ lights first and look at the face.
 To prove the file's parameters are honoured, edit `_ShadeColor`, `_OutlineWidth`, `_OutlineColor` or
 `_RimColor` of a material in the `.vrm` and re-import: the render changes.
 
+## On any object
+
+`toon()` and the `look` spec work on any mesh or group, not only VRMs. For a model with many meshes that share
+materials (a diorama such as Littlest Tokyo) use the shader system, which wraps this module and adds a cache so
+shared materials stay shared, skips baked outline meshes, and makes it one undo step: `mtoon('LittlestTokyo.glb',
+{ outline: { width: 0 } })`, or the Shader tab. See [SHADERS.md](SHADERS.md).
+
 ---
 
 **Next:** [Character customizer](CUSTOMIZER.md) · [← Back to README](../README.md)

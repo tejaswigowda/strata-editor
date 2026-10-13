@@ -1,4 +1,5 @@
 import { UIPanel } from './libs/ui.js';
+import { listShaders, flattenMtoon } from './shaders/shaderSpec.js';
 import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { RemoveObjectCommand } from './commands/RemoveObjectCommand.js';
 import { SetPositionCommand } from './commands/SetPositionCommand.js';
@@ -80,6 +81,31 @@ function Shell( editor ) {
 	// synchronous for the shell; a failure leaves the rest of the shell untouched.
 	let toonLook = null;
 	import( './toon/ToonLook.js' ).then( m => { toonLook = m; } ).catch( e => console.warn( 'Shell: toon look unavailable', e ) );
+
+	// Same for the shader library (guides/SHADERS.md): shader() / mtoon() / unshader() stay synchronous.
+	let shaderLib = null;
+	import( './shaders/ShaderLibrary.js' ).then( m => { shaderLib = m; } ).catch( e => console.warn( 'Shell: shader library unavailable', e ) );
+	const shaderTargets = target => {
+
+		if ( target && Array.isArray( target.nodes ) ) return target.nodes;
+		if ( Array.isArray( target ) ) return target.filter( Boolean );
+		if ( typeof target === 'string' ) {
+
+			// a name first ("LittlestTokyo.glb" is not a selector), then a selector
+			const byName = editor.scene.getObjectByName( target );
+			const found = byName ? [ byName ] : selectorEngine.query( editor.scene, target );
+			if ( ! found.length ) throw new Error( `shader: nothing matches "${ target }"` );
+			return found;
+
+		}
+		if ( target && target.isObject3D ) return [ target ];
+		throw new Error( 'shader: the target must be an object, an array of objects, or a name / selector string' );
+
+	};
+	const shaderOpts = ( roots, opts = {} ) => ( {
+		skipOutlines: opts.skipOutlines !== false,
+		filter: opts.scope === 'self' ? ( m => roots.includes( m ) ) : opts.filter,
+	} );
 
 	let faceBind = null;
 	import( './facebind/runtime.js' ).then( m => { faceBind = m; } ).catch( e => console.warn( 'Shell: face bind runtime unavailable', e ) );
@@ -561,7 +587,7 @@ function Shell( editor ) {
 
 		// ── Misc ──
 		{ w: 'fetchAPI', k: 'fn' }, { w: 'askScene', k: 'fn' },
-		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'refineFace', k: 'fn' }, { w: 'driveFace', k: 'fn' },
+		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'shader', k: 'fn' }, { w: 'shaders', k: 'fn' }, { w: 'unshader', k: 'fn' }, { w: 'mtoon', k: 'fn' }, { w: 'refineFace', k: 'fn' }, { w: 'driveFace', k: 'fn' },
 		{ w: 'evalAI', k: 'fn' }, { w: 'evalEditMatrix', k: 'fn' },
 		{ w: 'saveEvalRows', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
 		{ w: 'askExternal', k: 'fn' }, { w: 'checkApiHealth', k: 'fn' },
@@ -2394,6 +2420,42 @@ function Shell( editor ) {
 
 					if ( ! toonLook ) throw new Error( 'toon: the toon module is still loading (or failed to load; see the console) — try again in a moment' );
 					return toonLook.applyToonLook( object, spec.look === undefined && spec.mode === undefined ? { look: 'toon', ...spec } : spec, { addLight: ( scene, light ) => editor.execute( new AddObjectCommand( editor, light ) ) } );
+
+				},
+				// ── Shaders on any object (see guides/SHADERS.md) ──────────────────────
+				//   shader(target, shader, params?, opts?)   give every mesh under target a shader, as one undo
+				//        target   an object, an array, a $S() set, or a name / selector string
+				//        shader   an id from shaders() ('mtoon', 'standard', 'fresnel', 'hologram', ...),
+				//                 a THREE.Material, or a function (sourceMaterial) => Material
+				//        opts     { scope: 'self' (just that mesh), skipOutlines: true, filter(mesh) }
+				//        Meshes that shared a material keep sharing; baked "outline" meshes are left alone.
+				//   mtoon(target, spec?)    shader(target, 'mtoon', spec); spec as for toon() or flat (rimColor, outlineWidth, ...)
+				//   unshader(target)        back to the original materials, as one undo
+				//   shaders()               the registry: ids, groups, parameters and defaults
+				shader: function ( target, shader, params, opts ) {
+
+					if ( ! shaderLib ) throw new Error( 'shader: the shader library is still loading (or failed to load; see the console); try again in a moment' );
+					const roots = shaderTargets( target );
+					return shaderLib.executeShader( editor, roots, shader, params, shaderOpts( roots, opts ) );
+
+				},
+				mtoon: function ( target, spec, opts ) {
+
+					if ( ! shaderLib ) throw new Error( 'mtoon: the shader library is still loading (or failed to load; see the console); try again in a moment' );
+					const roots = shaderTargets( target );
+					return shaderLib.executeShader( editor, roots, 'mtoon', flattenMtoon( spec ), shaderOpts( roots, opts ) );
+
+				},
+				unshader: function ( target, opts ) {
+
+					if ( ! shaderLib ) throw new Error( 'unshader: the shader library is still loading (or failed to load; see the console); try again in a moment' );
+					const roots = shaderTargets( target );
+					return shaderLib.executeRevert( editor, roots, shaderOpts( roots, { ...opts, skipOutlines: false } ) );
+
+				},
+				shaders: function () {
+
+					return listShaders();
 
 				},
 				// ── Face refine (see guides/FACE_REFINE.md) ──────────────────────────

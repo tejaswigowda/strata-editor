@@ -215,9 +215,10 @@ function shadeFrom( color, hasMap ) {
 
 }
 
-function toToon( old ) {
+function toToon( old, cache ) {
 
 	if ( isToon( old ) ) return old;
+	if ( cache && cache.has( old ) ) return cache.get( old );
 
 	const m = new MToonNodeMaterial();
 	m.name = old.name || '';
@@ -247,7 +248,9 @@ function toToon( old ) {
 
 	m.userData = { ...( old.userData || {} ) };
 	delete m.userData.mtoonParams;
-	return install( m );
+	install( m );
+	if ( cache ) cache.set( old, m );
+	return m;
 
 }
 
@@ -361,6 +364,8 @@ function ensureLights( root, options = {} ) {
  * Turn `root` (a character, or a single prop) toon, then apply the spec's overrides.
  * options.swap(mesh, material|materials) routes the material change through a
  * recorder (the customizer's undo); default is a direct assignment.
+ * options.filter(mesh) → false skips that mesh; options.cache (a Map) makes meshes that share a
+ * source material share its toon material too.
  */
 export function applyToonLook( root, input, options = {} ) {
 
@@ -378,9 +383,10 @@ export function applyToonLook( root, input, options = {} ) {
 	root.traverse( mesh => {
 
 		if ( ! mesh.isMesh || ! mesh.material || ( mesh.userData && mesh.userData.noToon ) ) return;
+		if ( options.filter && ! options.filter( mesh ) ) return;
 
 		const before = [].concat( mesh.material );
-		const converted = before.map( m => ( m.isOutline ? m : toToon( m ) ) );
+		const converted = before.map( m => ( m.isOutline ? m : toToon( m, options.cache ) ) );
 		const changed = converted.some( ( m, i ) => m !== before[ i ] );
 
 		if ( changed ) {
@@ -428,6 +434,7 @@ export function revertToonLook( root, options = {} ) {
 	root.traverse( mesh => {
 
 		if ( ! mesh.isMesh ) return;
+		if ( options.filter && ! options.filter( mesh ) ) return;
 		const had = originals.get( mesh );
 
 		if ( had ) {

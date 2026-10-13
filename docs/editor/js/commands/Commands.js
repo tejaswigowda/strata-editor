@@ -8,6 +8,7 @@ export { GroupObjectsCommand } from './GroupObjectsCommand.js';
 export { UngroupObjectsCommand } from './UngroupObjectsCommand.js';
 export { RemoveObjectCommand } from './RemoveObjectCommand.js';
 export { RemoveScriptCommand } from './RemoveScriptCommand.js';
+export { SetShaderCommand } from './SetShaderCommand.js';
 export { SetColorCommand } from './SetColorCommand.js';
 export { SetClassCommand } from './SetClassCommand.js';
 export { SetGeometryCommand } from './SetGeometryCommand.js';

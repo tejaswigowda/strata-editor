@@ -4,6 +4,7 @@ import { Config } from './Config.js';
 import { Loader } from './Loader.js';
 import { normalizeSkinIndices } from './mesh/skinIndices.js';
 import { sceneHasToon } from './toon/toonSpec.js';
+import { sceneHasShaders } from './shaders/shaderSpec.js';
 import { History as _History } from './History.js';
 import { Strings } from './Strings.js';
 import { Storage as _Storage } from './Storage.js';
@@ -800,6 +801,17 @@ Editor.prototype = {
 				console.warn( 'Editor: toon materials could not be restored; the scene keeps its standard-material twins', e );
 
 			}
+
+		}
+
+		// TSL shader presets (shaders/ShaderLibrary.js) serialise as standard twins too.
+		try {
+
+			if ( sceneHasShaders( scene ) ) ( await import( './shaders/ShaderLibrary.js' ) ).restoreShaders( scene );
+
+		} catch ( e ) {
+
+			console.warn( 'Editor: shader presets could not be restored; the scene keeps its standard-material twins', e );
 
 		}
 

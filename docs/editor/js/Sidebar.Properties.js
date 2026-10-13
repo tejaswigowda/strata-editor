@@ -3,6 +3,7 @@ import { UITabbedPanel } from './libs/ui.js';
 import { SidebarObject } from './Sidebar.Object.js';
 import { SidebarGeometry } from './Sidebar.Geometry.js';
 import { SidebarMaterial } from './Sidebar.Material.js';
+import { SidebarShader } from './Sidebar.Shader.js';
 import { SidebarScript } from './Sidebar.Script.js';
 
 // ── Inline SVG icon helper (matches the main sidebar tabs) ────────────────────
@@ -16,6 +17,7 @@ const PROPERTY_TAB_ICONS = {
 	'objectTab':   tabSvg( '<path d="M8 1.5l5.5 3v7L8 14.5 2.5 11.5v-7z"/><path d="M2.5 4.5 8 7.5l5.5-3M8 7.5V14.5"/>' ),
 	'geometryTab': tabSvg( '<path d="M8 2 14 13H2z"/><path d="M8 2v11M2 13l6-4 6 4"/>' ),
 	'materialTab': tabSvg( '<circle cx="8" cy="8" r="6"/><path d="M5.2 5.2a3 3 0 0 1 2.3-1.1"/>' ),
+	'shaderTab':   tabSvg( '<path d="M8 1.5 9.6 6.4 14.5 8 9.6 9.6 8 14.5 6.4 9.6 1.5 8 6.4 6.4z"/>' ),
 	'scriptTab':   tabSvg( '<polyline points="6,5 3,8 6,11"/><polyline points="10,5 13,8 10,11"/>' ),
 };
 
@@ -29,6 +31,7 @@ function SidebarProperties( editor ) {
 	container.addTab( 'objectTab', strings.getKey( 'sidebar/properties/object' ), new SidebarObject( editor ) );
 	container.addTab( 'geometryTab', strings.getKey( 'sidebar/properties/geometry' ), new SidebarGeometry( editor ) );
 	container.addTab( 'materialTab', strings.getKey( 'sidebar/properties/material' ), new SidebarMaterial( editor ) );
+	container.addTab( 'shaderTab', 'Shader', new SidebarShader( editor ) );
 	container.addTab( 'scriptTab', strings.getKey( 'sidebar/properties/script' ), new SidebarScript( editor ) );
 	container.select( 'objectTab' );
 
@@ -55,6 +58,7 @@ function SidebarProperties( editor ) {
 
 	const geometryTab = getTabByTabId( container.tabs, 'geometryTab' );
 	const materialTab = getTabByTabId( container.tabs, 'materialTab' );
+	const shaderTab = getTabByTabId( container.tabs, 'shaderTab' );
 	const scriptTab = getTabByTabId( container.tabs, 'scriptTab' );
 
 	function toggleTabs( object ) {
@@ -67,6 +71,10 @@ function SidebarProperties( editor ) {
 
 		materialTab.setHidden( ! object.material );
 
+		let hasMesh = false;
+		object.traverse( o => { if ( o.isMesh ) hasMesh = true; } );
+		shaderTab.setHidden( ! hasMesh );
+
 		scriptTab.setHidden( object === editor.camera );
 
 		// set active tab
@@ -78,6 +86,10 @@ function SidebarProperties( editor ) {
 		} else if ( container.selected === 'materialTab' ) {
 
 			container.select( materialTab.isHidden() ? 'objectTab' : 'materialTab' );
+
+		} else if ( container.selected === 'shaderTab' ) {
+
+			container.select( shaderTab.isHidden() ? 'objectTab' : 'shaderTab' );
 
 		} else if ( container.selected === 'scriptTab' ) {
 
