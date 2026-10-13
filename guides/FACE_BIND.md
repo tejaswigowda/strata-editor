@@ -55,6 +55,7 @@ photo (local File) -> MediaPipe Face Landmarker (on device, CPU) -> face-blendsh
   files are static, same-origin, and loaded once when the page opens (the model status line says when it is ready).
 - The autorigger is vendored unmodified in [`docs/facebind/autorig/`](../docs/facebind/autorig/README.md); the glue is
   `faceFromImage.js`. The generated face GLB is kept in memory and offered as a local download.
+- **Webcam:** "Use the webcam instead" shows a mirrored live view; "Take selfie" grabs one unmirrored frame as an in-memory PNG, switches the camera off and uses it like a chosen photo. Video only, nothing recorded or uploaded ([`selfie.js`](../docs/facebind/selfie.js)). It needs https or localhost and the browser's camera permission.
 - The photo needs a clear, front-facing face. No face found → `NO_FACE_DETECTED`.
 - The photo is never a URL: `?image=` is ignored, and a string passed as `image` is rejected (`IMAGE_MUST_BE_LOCAL`).
 

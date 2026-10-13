@@ -50,6 +50,20 @@ test( 'CSP: no remote scripts, no inline script except the import map (by hash),
 
 } );
 
+test( 'webcam selfie: video only, the stream is stopped after the shot, nothing is recorded or sent, and only the page (not the editor) may use the camera', () => {
+
+	const s = strip( read( 'selfie.js' ) );
+	ok( /getUserMedia/.test( s ) && /audio: false/.test( s ), 'the selfie must ask for video only' );
+	ok( /getTracks\(\) \) t\.stop\(\)/.test( s ) && /stop\(\);\s*return new File/.test( s ), 'the stream must be stopped when the frame is taken' );
+	ok( ! /MediaRecorder|fetch\(|XMLHttpRequest|sendBeacon|WebSocket|localStorage|indexedDB/.test( s ), 'the selfie module must not record, store or send anything' );
+	ok( /pagehide/.test( read( 'page.js' ) ), 'the camera must be released when the page is left' );
+	const ops = JSON.parse( fs.readFileSync( path.join( root, '..', '..', 'ops', 'cloudflare', 'facebind-headers.json' ), 'utf8' ) );
+	ok( /camera=\(self\)/.test( ops.headers[ 'Permissions-Policy' ] ) && /microphone=\(\)/.test( ops.headers[ 'Permissions-Policy' ] ), 'camera for this page only, no microphone' );
+	const ed = ops.overrides.find( o => o.path === '/strata-editor/facebind/editor/' );
+	ok( /camera=\(\)/.test( ed.headers[ 'Permissions-Policy' ] ), 'the embedded editor must not get the camera' );
+
+} );
+
 test( 'the embedded VRM editor (docs/facebind/editor, built from cecil-tools/VRMEditorTools by ops/vrmeditor) cannot reach the network: strict CSP, no analytics or share widgets, no remote resources', () => {
 
 	const dir = path.join( root, 'editor' );
@@ -133,7 +147,7 @@ test( 'no network, storage or dynamic-import-by-URL API anywhere else in the fac
 	const files = [];
 	const walk = ( dir, base ) => { for ( const e of fs.readdirSync( dir, { withFileTypes: true } ) ) { const p = path.join( dir, e.name ); if ( e.isDirectory() ) { if ( e.name !== '__tests__' && e.name !== 'vendor' ) walk( p, base ); } else if ( /\.(js|mjs)$/.test( e.name ) ) files.push( p ); } };
 	walk( path.join( root, '..', 'editor', 'js', 'facebind' ) ); walk( path.join( root, '..', 'editor', 'js', 'face' ) );
-	walk( path.join( root, 'autorig' ) ); files.push( path.join( root, 'preview.js' ) );
+	walk( path.join( root, 'autorig' ) ); files.push( path.join( root, 'preview.js' ), path.join( root, 'selfie.js' ) );
 	ok( files.length >= 12, 'expected to scan the whole code base, found ' + files.length );
 	for ( const f of files ) {
 

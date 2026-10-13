@@ -1,3 +1,4 @@
+import { createSelfie } from './selfie.js';
 import { paintFacialHair } from '../editor/js/facebind/facialHair.js';
 import { bindVRM, lookTexturesOf, SCOPE } from '../editor/js/facebind/bind.js';
 
@@ -311,6 +312,22 @@ function setImage( f ) {
 	if ( imageFile ) { img.src = URL.createObjectURL( imageFile ); img.hidden = false; } else { img.removeAttribute( 'src' ); img.hidden = true; }
 
 }
+
+// webcam selfie (selfie.js): the frame becomes an in-memory File and goes the same way as a chosen photo
+const selfie = createSelfie( $( 'camVideo' ) );
+const closeCam = () => { selfie.stop(); $( 'camBox' ).hidden = true; $( 'camOpen' ).hidden = false; };
+$( 'camOpen' ).addEventListener( 'click', async () => {
+
+	try { $( 'camBox' ).hidden = false; $( 'camOpen' ).hidden = true; await selfie.start(); } catch ( e ) { closeCam(); say( 'The camera could not be opened: ' + ( e.name === 'NotAllowedError' ? 'permission was refused.' : e.message ), 'err' ); }
+
+} );
+$( 'camCancel' ).addEventListener( 'click', closeCam );
+$( 'camShot' ).addEventListener( 'click', async () => {
+
+	try { const f = await selfie.capture(); closeCam(); $( 'imageFile' ).value = ''; setImage( f ); say( 'Selfie taken. Press Bind.', 'ok' ); } catch ( e ) { say( e.message, 'err' ); }
+
+} );
+window.addEventListener( 'pagehide', () => selfie.stop() );
 
 $( 'imageFile' ).addEventListener( 'change', e => { setImage( e.target.files[ 0 ] ); if ( params.has( 'run' ) && ready() ) go(); } );
 

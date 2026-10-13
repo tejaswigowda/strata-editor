@@ -5,7 +5,7 @@
     "Content-Security-Policy": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-9UQGbCfi1dg1RZD9yUpmzSiGI6acfQOXLGHtJclwhCM='; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'self' blob: https://raw.githubusercontent.com; worker-src 'none'; frame-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), interest-cohort=()"
   },
   "overrides": [
     {

@@ -23,7 +23,7 @@ be applied yet. In the Cloudflare dashboard, set the DNS record for the domain t
 | `Content-Security-Policy` | the page's `<meta>` policy, plus `frame-ancestors 'none'` |
 | `Referrer-Policy` | `no-referrer` |
 | `X-Content-Type-Options` | `nosniff` |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), interest-cohort=()` |
+| `Permissions-Policy` | `camera=(self), microphone=(), geolocation=(), interest-cohort=()` (the page's webcam selfie; the embedded editor keeps `camera=()`) |
 
 `docs/editor/js/facebind/__tests__/page.test.mjs` fails if the CSP here drifts from the `<meta>` in
 `docs/facebind/index.html`. Keep the `<meta>` as the fallback for direct-origin loads: when both are present the

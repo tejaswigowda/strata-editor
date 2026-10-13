@@ -42,6 +42,7 @@
 	input[type=file] { max-width: 100%; }
 	button, .btn { background: var(--accent); color: #fff; border: 0; border-radius: 7px; padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 12px; }
 	button:hover, .btn:hover { background: #4577cc; }
+	#camVideo { display: block; width: 100%; max-width: 360px; border-radius: 8px; background: #000; transform: scaleX(-1); } button.secondary { background: var(--surface3); border: 1px solid var(--border); }
 	#preview { display: block; max-width: 220px; max-height: 220px; border-radius: 8px; margin: 10px 0; }
 	summary { cursor: pointer; margin-top: 14px; }
 	#status { margin-top: 12px; min-height: 1.5em; } #status.ok { color: var(--success); } #status.err { color: #ff8f8f; }
@@ -80,6 +81,12 @@
 
 	<label for="imageFile">Photo of a face (local file only)</label>
 	<input type="file" id="imageFile" accept="image/*">
+	<button id="camOpen" type="button" class="secondary">Use the webcam instead</button>
+	<div id="camBox" hidden>
+		<video id="camVideo" playsinline muted></video>
+		<div><button id="camShot" type="button">Take selfie</button> <button id="camCancel" type="button" class="secondary">Cancel</button></div>
+		<p class="muted">The camera stays in this page: video only (no microphone), nothing is recorded or uploaded, and it is switched off as soon as the selfie is taken. Face the camera, eyes open, even light.</p>
+	</div>
 	<img id="preview" alt="Your photo (shown here only; it is not uploaded)" hidden>
 	<canvas id="maskCanvas" hidden></canvas>
 	<p id="maskNote" class="muted" hidden>Pink: the hair the on-device segmenter found. The hair shape is based on this silhouette.</p>
