@@ -16,6 +16,8 @@
 // to a THREE.AnimationClip (which drives playback AND glTF export) is a separate,
 // injectable function so the representation stays portable.
 
+import { expandSplineEvents } from './splineTrack.js';
+
 let _uidCounter = 0;
 function uid() {
 
@@ -219,6 +221,7 @@ export class TimelineModel {
 		this.duration = Number( data.duration ) || 0;
 		this.tracks = ( data.tracks || [] ).map( t => ( {
 			target: String( t.target ),
+			...( t.spline ? { spline: true } : {} ), // camera track plays as one smooth path (splineTrack.js)
 			events: ( t.events || [] ).map( e => ( {
 				id: e.id || uid(),
 				at: Math.max( 0, Number( e.at ) || 0 ),
@@ -363,6 +366,7 @@ export class TimelineModel {
 			duration: this.duration,
 			tracks: this.tracks.map( t => ( {
 				target: t.target,
+				...( t.spline ? { spline: true } : {} ),
 				events: t.events.map( e => ( {
 					id: e.id,
 					at: e.at,
@@ -706,7 +710,9 @@ export function compileTimeline( model, ctx ) {
 
 		if ( nodes.length === 0 ) continue;
 
-		for ( const event of model.sortedEvents( track ) ) {
+		const playEvents = track.spline ? expandSplineEvents( model.sortedEvents( track ) ) : model.sortedEvents( track );
+
+		for ( const event of playEvents ) {
 
 			if ( CLIP_OPS.has( event.op ) ) continue;
 

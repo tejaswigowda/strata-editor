@@ -26,6 +26,7 @@ import { releaseTimelineObject, syncMaterialTransparency } from './intelligence/
 import { hydrateHtmlEmbed } from './HtmlEmbed.js';
 import { hydrateMarkdownEmbed } from './MarkdownEmbed.js';
 import { hydrateCallcard } from './Callcard.js';
+import { CameraPath } from './CameraPath.js';
 
 /**
  * Cube border helper: `node.userData.hasEdgeOutline` is a plain, serializable
@@ -196,12 +197,16 @@ function Viewport( editor ) {
 	}
 
 	const transformControls = new TransformControls( camera );
+	const cameraPath = new CameraPath( editor, { sceneHelpers, transformControls, render: () => render(), container: container.dom, getControls: () => controls } );
+	editor.cameraPath = cameraPath;
 	transformControls.addEventListener( 'axis-changed', function () {
 
 		render();
 
 	} );
 	transformControls.addEventListener( 'objectChange', function () {
+
+		if ( cameraPath.dragging ) { cameraPath.dragMove(); return; }
 
 		if ( editDragActive ) {
 
@@ -252,6 +257,8 @@ function Viewport( editor ) {
 	transformControls.addEventListener( 'mouseDown', function () {
 
 		const object = transformControls.object;
+
+		if ( object === cameraPath.proxy ) { cameraPath.beginDrag(); return; }
 
 		// Scoped release: if the timeline is holding a sampled pose (paused/
 		// scrubbed frame), gizmo-editing THIS object must not fight its held
@@ -308,6 +315,8 @@ function Viewport( editor ) {
 	transformControls.addEventListener( 'mouseUp', function () {
 
 		const object = transformControls.object;
+
+		if ( cameraPath.dragging ) { cameraPath.endDrag(); return; }
 
 		if ( editDragActive ) {
 
@@ -450,6 +459,9 @@ function Viewport( editor ) {
 	function handleClick( additive = false ) {
 
 		if ( onDownPosition.distanceTo( onUpPosition ) === 0 ) {
+
+			// a camera path handle takes the click before ordinary object picking
+			if ( camera === editor.viewportCamera && cameraPath.pick( onUpPosition, camera ) ) { render(); return; }
 
 			const intersects = selector.getPointerIntersects( onUpPosition, camera );
 			signals.intersectionsDetected.dispatch( intersects, additive );
@@ -1562,6 +1574,7 @@ function Viewport( editor ) {
 
 		renderer.setViewport( 0, 0, container.dom.offsetWidth, container.dom.offsetHeight );
 		renderer.render( scene, editor.viewportCamera );
+		if ( camera === editor.viewportCamera ) cameraPath.updateScales( camera ); else cameraPath.label.style.display = 'none';
 
 		// 'html'/'md' stencil meshes never carry baked pixels out of a scene load
 		// (see HtmlEmbed.js / MarkdownEmbed.js) — re-rasterize the ones still

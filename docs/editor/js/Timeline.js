@@ -4,6 +4,7 @@ import { UIPanel, UIText, UIButton, UISelect, UINumber, UICheckbox } from './lib
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
 import { TimelineModel } from './intelligence/timeline.js';
+import { cameraKeys, simplifyKeys, eventsFromKeys } from './intelligence/splineTrack.js';
 import { holdTimelineAt, getImportedClips, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { CLIP_OPS, importedClipsOf, clipRoot, nodesForTarget } from './intelligence/clipDirectives.js';
 import { buildClipEvent } from './intelligence/clipControl.js';
@@ -714,6 +715,133 @@ function Timeline( editor ) {
 	}
 
 	/** Key mode: writing a field edits the SELECTED animate event (undoable). */
+	// ── Camera path tools (shown when a shot camera is selected; see CameraPath.js) ──
+	const camRow = document.createElement( 'div' );
+	camRow.style.cssText = 'display:none;flex-direction:column;gap:4px;padding:4px 0;border-bottom:1px solid #ccc;';
+	keyPanel.insertBefore( camRow, keyGrid );
+
+	const camButtons = document.createElement( 'div' );
+	camButtons.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
+	camRow.appendChild( camButtons );
+
+	const smallButton = ( label, title, fn ) => {
+
+		const b = new UIButton( label );
+		b.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+		b.dom.title = title;
+		b.onClick( fn );
+		camButtons.appendChild( b.dom );
+		return b;
+
+	};
+
+	smallButton( '+ Key from view', 'Add a key at the playhead from the Edit Camera view: its position, where it is looking, and its field of view', addKeyFromView );
+	const splineWrap = document.createElement( 'label' );
+	splineWrap.style.cssText = 'display:flex;gap:4px;align-items:center;cursor:pointer;';
+	splineWrap.title = 'Play this camera as one smooth path through its keys, instead of straight legs';
+	const splineBox = document.createElement( 'input' );
+	splineBox.type = 'checkbox';
+	splineBox.addEventListener( 'change', function () { setSpline( splineBox.checked ); } );
+	splineWrap.appendChild( splineBox );
+	splineWrap.appendChild( document.createTextNode( 'Smooth path' ) );
+	camButtons.appendChild( splineWrap );
+	const simplifyButton = smallButton( 'Simplify', 'Replace a dense run of keys with a few that follow the same smooth path', simplifyCameraTrack );
+	const deleteKeyButton = smallButton( 'Delete key', 'Delete the key selected in the viewport (Delete key)', function () { if ( editor.cameraPath ) editor.cameraPath.deleteSelected(); } );
+
+	const camInfo = document.createElement( 'div' );
+	camInfo.style.cssText = 'color:#666;font-size:10px;';
+	camRow.appendChild( camInfo );
+
+	function selectedShotCamera() {
+
+		const o = editor.selected;
+		return o && o.isCamera && o !== editor.camera ? o : null;
+
+	}
+
+	function cameraTrackOf( camera ) {
+
+		if ( ! camera || ! editor.timeline ) return null;
+		const sels = [];
+		if ( camera.userData && camera.userData.label ) sels.push( '#' + camera.userData.label );
+		if ( camera.name ) sels.push( '#' + camera.name );
+		sels.push( camera.uuid );
+		for ( const sel of sels ) { const t = editor.timeline.track( sel ); if ( t ) return t; }
+		return null;
+
+	}
+
+	function addKeyFromView() {
+
+		const object = selectedShotCamera();
+		if ( ! object ) return;
+		if ( editor.viewportCamera !== editor.camera ) {
+
+			camInfo.textContent = 'Switch the viewport to Edit Camera, orbit to frame the shot, then add the key.';
+			return;
+
+		}
+
+		const cam = editor.camera, c = editor.controls ? editor.controls.center : null;
+		const look = c ? [ c.x, c.y, c.z ] : ( () => { const d = cam.getWorldDirection( new THREE.Vector3() ).multiplyScalar( 1 ).add( cam.position ); return [ d.x, d.y, d.z ]; } )();
+		const r = v => Math.round( v * 1e4 ) / 1e4;
+		const props = { to: { position: [ r( cam.position.x ), r( cam.position.y ), r( cam.position.z ) ] }, lookAt: look.map( r ), fov: Math.round( cam.fov * 100 ) / 100 };
+
+		const target = bestSelectorFor( object );
+		let prevEnd = 0;
+		const track = editor.timeline ? editor.timeline.track( target ) : null;
+		if ( track ) for ( const e of track.events ) { const end = e.at + e.dur; if ( end <= playhead - 1e-6 ) prevEnd = Math.max( prevEnd, end ); }
+		const at = Math.round( Math.min( prevEnd, playhead ) * 1000 ) / 1000;
+		const dur = Math.round( Math.max( 0.001, playhead - at ) * 1000 ) / 1000;
+		commitMutation( m => m.addEvent( target, { at, op: 'animate', args: { props, easing: 'linear', duration: dur }, dur } ), 'Add camera key from view' );
+		sampleAt( playhead );
+
+	}
+
+	function setSpline( on ) {
+
+		const t = cameraTrackOf( selectedShotCamera() );
+		if ( ! t ) return;
+		commitMutation( m => { const mt = m.track( t.target ); if ( mt ) { if ( on ) mt.spline = true; else delete mt.spline; } }, on ? 'Camera: smooth path' : 'Camera: straight legs' );
+		sampleAt( playhead );
+
+	}
+
+	function simplifyCameraTrack() {
+
+		const t = cameraTrackOf( selectedShotCamera() );
+		if ( ! t ) return;
+		const keys = cameraKeys( t.events );
+		if ( keys.length < 4 ) { camInfo.textContent = 'Already a handful of keys.'; return; }
+		const picked = simplifyKeys( keys );
+		const ids = new Set( keys.map( k => k.id ) );
+		commitMutation( m => {
+
+			const mt = m.track( t.target );
+			mt.events = mt.events.filter( e => ! ids.has( e.id ) ).concat( eventsFromKeys( keys, picked, 'ck' ) );
+			mt.spline = true;
+
+		}, 'Simplify camera keys' );
+		camInfo.textContent = 'Simplified ' + keys.length + ' keys to ' + picked.length + ' on a smooth path.';
+		sampleAt( playhead );
+
+	}
+
+	function refreshCamRow() {
+
+		const cam = selectedShotCamera();
+		if ( ! cam ) { camRow.style.display = 'none'; return; }
+		camRow.style.display = 'flex';
+		const t = cameraTrackOf( cam );
+		const n = t ? cameraKeys( t.events ).length : 0;
+		splineBox.checked = !! ( t && t.spline );
+		splineBox.disabled = ! t;
+		simplifyButton.dom.style.display = n >= 4 ? '' : 'none';
+		deleteKeyButton.dom.style.display = editor.cameraPath && editor.cameraPath.selectedKeyId ? '' : 'none';
+		camInfo.textContent = n ? n + ' key' + ( n === 1 ? '' : 's' ) + ( t.spline ? ', smooth path' : ', straight legs' ) + '. Click a handle in the Edit Camera view to move it.' : 'No keys yet: orbit the Edit Camera to frame the shot, set the playhead, and press + Key from view.';
+
+	}
+
 	function onKeyFieldChange() {
 
 		const found = selectedAnimateEvent();
@@ -766,6 +894,7 @@ function Timeline( editor ) {
 
 		const found = selectedAnimateEvent();
 		const object = editor.selected;
+		refreshCamRow();
 
 		if ( found ) {
 
@@ -1450,7 +1579,8 @@ function Timeline( editor ) {
 	}, true );
 
 	// ── Signals ───────────────────────────────────────────────────────────────
-	signals.timelineChanged.add( function () { render(); refreshCode(); } );
+	signals.timelineChanged.add( function () { render(); refreshCode(); refreshCamRow(); } );
+	signals.cameraPathChanged.add( refreshCamRow );
 	// Imported clips (e.g. a glTF/GLB import) land on editor.scene.animations
 	// outside the TimelineModel, dispatched via animationsChanged — refresh the
 	// tab so the new clip's row/duration/code comment show up immediately.
