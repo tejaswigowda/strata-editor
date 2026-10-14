@@ -6,6 +6,7 @@ import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js'
 import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea } from './libs/ui.js';
 import { holdTimelineAt, getImportedClips } from './intelligence/timelineController.js';
 import { findCallcards, refreshCallcard } from './Callcard.js';
+import { swapNodeMaterials } from './toon/WebGLFallback.js';
 
 // ── SRT helpers (parse / format / word-wrap for hard-burn) ─────────────────
 
@@ -1034,6 +1035,9 @@ function SidebarRender( editor ) {
 
 			}
 
+			// MToon / TSL node materials have no GLSL program: render them through WebGL stand-ins
+			restores.push( swapNodeMaterials( scene ) );
+
 			if ( transparent && scene.background ) {
 
 				const prevBackground = scene.background;
@@ -1355,6 +1359,10 @@ function SidebarRender( editor ) {
 
 		}
 
+		// MToon / TSL node materials have no GLSL program, so this WebGL renderer would throw
+		// compiling them: swap in WebGL stand-ins for the render, restore afterwards.
+		const restoreMaterials = swapNodeMaterials( scene );
+
 		// Set the render aspect on EVERY camera used (sequence + fallback),
 		// restore all afterwards. Skipped for 360: a cube capture always covers
 		// the full surrounding sphere regardless of any camera's aspect/FOV, so
@@ -1572,24 +1580,25 @@ function SidebarRender( editor ) {
 		// frames all cost about the same.
 		setProgress( 0, 'Preparing GPU resources\u2026' );
 		await sleep( 30 ); // let the status paint
-		holdTimelineAt( editor, Math.min( duration, skip ) );
-		const warmCameras = new Set( [ fallbackCamera ] );
-		for ( const s of shots ) warmCameras.add( cameraOf( s ) );
-		for ( const cam of warmCameras ) {
-
-			if ( is360 ) renderEquirectFace( cam ); else renderer.render( scene, cam );
-
-		}
-
-		ctx.drawImage( glCanvas, 0, 0 );
-		await sleep( 0 );
-
 		const totalFrames = Math.max( 1, Math.round( renderLength * fps ) );
 		const frameMs = 1000 / fps;
 
 		let renderError = null;
 
 		try {
+
+			// Inside the guarded block so a GPU failure here still restores the scene and the UI.
+			holdTimelineAt( editor, Math.min( duration, skip ) );
+			const warmCameras = new Set( [ fallbackCamera ] );
+			for ( const s of shots ) warmCameras.add( cameraOf( s ) );
+			for ( const cam of warmCameras ) {
+
+				if ( is360 ) renderEquirectFace( cam ); else renderer.render( scene, cam );
+
+			}
+
+			ctx.drawImage( glCanvas, 0, 0 );
+			await sleep( 0 );
 
 			startRecorders();
 
@@ -1678,6 +1687,7 @@ function SidebarRender( editor ) {
 			for ( const restore of cameraRestores ) restore();
 			for ( const restore of skinFixes ) restore();
 			restoreEnvironment();
+			restoreMaterials();
 			resetShadowMaps(); // this renderer's WebGL shadow maps are just as invalid for the live WebGPU viewport — force it to regenerate its own
 			holdTimelineAt( editor, 0 );
 			signals.sceneGraphChanged.dispatch();
