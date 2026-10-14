@@ -185,6 +185,7 @@ function Editor() {
 	this.selected = null;
 	this.selectionMultiple = []; // all currently selected objects ( includes `selected` as primary )
 	this.helpers = {};
+	this.helperStates = { cameraHelpers: true, lightHelpers: true, skeletonHelpers: true }; // shared by the View menu and the viewport's camera-hide button
 
 	this.cameras = {};
 

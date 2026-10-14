@@ -366,6 +366,23 @@ hr {
 	padding: 2px;
 }
 
+.ViewportIconButton {
+	height: 27px;
+	box-sizing: border-box;
+	padding: 0 8px;
+	color: #666;
+	background-color: #ddd;
+	border: 3px solid #ddd;
+	border-radius: 4px;
+	cursor: pointer;
+	outline: none;
+	line-height: 0;
+}
+
+	.ViewportIconButton:hover {
+		background-color: #fff;
+	}
+
 .Select {
 	color: #666;
 	background-color: #ddd;
@@ -1628,6 +1645,17 @@ body.sidebar-bottom #sidebar #shell {
 			background-color: #444;
 		}
 
+	.ViewportIconButton {
+		color: #aaa;
+		background-color: #222;
+		border-color: #222;
+	}
+
+		.ViewportIconButton:hover {
+			color: #ccc;
+			background-color: #444;
+		}
+
 	/* UI */
 
 	#menubar {
@@ -2065,4 +2093,11 @@ body.sidebar-bottom #resizer:active::after {
     transform: scale(3) translate(8px, 7px);
     overflow: visible;
 	z-index: 9999;
+}
+
+/* viewport: "hide cameras" button, lit while cameras are hidden */
+.ViewportIconButton.selected {
+	color: var( --accent-contrast );
+	background-color: var( --accent );
+	border-color: var( --accent );
 }

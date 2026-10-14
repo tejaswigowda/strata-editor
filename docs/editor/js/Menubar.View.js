@@ -20,13 +20,8 @@ function MenubarView( editor ) {
 
 	// Helpers
 
-	const states = {
-
-		cameraHelpers: true,
-		lightHelpers: true,
-		skeletonHelpers: true
-
-	};
+	const states = editor.helperStates; // shared: the viewport's camera-hide button flips the same flag
+	const refreshers = [];
 
 	// Each helper toggle shows its icon; the hover label reflects what a click
 	// will do next ("Hide …" when visible, "Show …" when hidden).
@@ -53,9 +48,17 @@ function MenubarView( editor ) {
 		} );
 
 		refresh();
+		refreshers.push( refresh );
 		options.add( option );
 
 	}
+
+	// keep the toggles in step when a helper state is changed from elsewhere
+	signals.showHelpersChanged.add( function () {
+
+		refreshers.forEach( refresh => refresh() );
+
+	} );
 
 	addHelperToggle( 'cameraHelpers', 'cameraHelpers' );
 	addHelperToggle( 'lightHelpers', 'lightHelpers' );
