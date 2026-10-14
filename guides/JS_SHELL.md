@@ -167,6 +167,7 @@ exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection,
 | Inspector (camera): fov / near / far | `$S('camera').fov/.near/.far` | ✓ |
 | Add light | `addLight(type, opts)` | ✓ |
 | Properties: Shader tab (any shader on any object, incl. MToon) | `shader(target, id, params)` / `mtoon(target, spec)` / `unshader(target)` / `shaders()` (see [SHADERS.md](SHADERS.md)) | ✓ |
+| Animations tab / viewport: camera keys (add, drag a handle or aim, fov, time, delete, smooth, simplify, copy as command) | `$S('#cam').keys/.keyAt/.keyFromView/.moveKey/.deleteKey/.smooth/.simplify/.setKeys/.asCommand/.selectKey` (see [CAMERA_PATHS.md](CAMERA_PATHS.md)) | ✓ |
 | Scene: background / fog / environment | `setBackground` / `setFog` / `clearFog` / `setEnvironment` | signal (as UI) |
 | Edit: group / ungroup | `groupSelection` / `ungroupSelection` | ✓ |
 | Outliner: hide others / show | `isolate` / `soloClass` / `showAll` | ✓ |

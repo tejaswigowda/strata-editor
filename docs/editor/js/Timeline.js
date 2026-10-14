@@ -4,7 +4,8 @@ import { UIPanel, UIText, UIButton, UISelect, UINumber, UICheckbox } from './lib
 import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
 import { TimelineModel } from './intelligence/timeline.js';
-import { cameraKeys, simplifyKeys, eventsFromKeys } from './intelligence/splineTrack.js';
+import { cameraKeys } from './intelligence/splineTrack.js';
+import { editCameraTrack, findCameraTrack, specFromEditCamera, moveSelector, move as camMove } from './intelligence/cameraMoveEdit.js';
 import { holdTimelineAt, getImportedClips, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { CLIP_OPS, importedClipsOf, clipRoot, nodesForTarget } from './intelligence/clipDirectives.js';
 import { buildClipEvent } from './intelligence/clipControl.js';
@@ -31,6 +32,7 @@ function Timeline( editor ) {
 
 	let playing = false;
 	let playhead = 0;               // seconds (the shared clock)
+	editor.getTimelinePlayhead = () => playhead; // the shell's keyFromView() defaults to the playhead
 	let selectedEventId = null;
 	let followRenderCamera = true; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback (default on)
 	let followedAway = false;       // true once WE switched editor.viewportCamera away from editor.camera, so we know to restore it
@@ -745,6 +747,7 @@ function Timeline( editor ) {
 	splineWrap.appendChild( splineBox );
 	splineWrap.appendChild( document.createTextNode( 'Smooth path' ) );
 	camButtons.appendChild( splineWrap );
+	smallButton( 'Copy as command', 'Copy the shell command that rebuilds this camera move exactly (the same keys the viewport shows)', copyMoveCommand );
 	const simplifyButton = smallButton( 'Simplify', 'Replace a dense run of keys with a few that follow the same smooth path', simplifyCameraTrack );
 	const deleteKeyButton = smallButton( 'Delete key', 'Delete the key selected in the viewport (Delete key)', function () { if ( editor.cameraPath ) editor.cameraPath.deleteSelected(); } );
 
@@ -761,69 +764,59 @@ function Timeline( editor ) {
 
 	function cameraTrackOf( camera ) {
 
-		if ( ! camera || ! editor.timeline ) return null;
-		const sels = [];
-		if ( camera.userData && camera.userData.label ) sels.push( '#' + camera.userData.label );
-		if ( camera.name ) sels.push( '#' + camera.name );
-		sels.push( camera.uuid );
-		for ( const sel of sels ) { const t = editor.timeline.track( sel ); if ( t ) return t; }
-		return null;
+		return findCameraTrack( editor.timeline, camera );
 
 	}
 
+	// Camera edits go through intelligence/cameraMove.js, the same operations the shell's
+	// $S('#cam').keyAt() / moveKey() / ... call, so both land on one track and one undo stack.
 	function addKeyFromView() {
 
 		const object = selectedShotCamera();
 		if ( ! object ) return;
-		if ( editor.viewportCamera !== editor.camera ) {
+		let spec;
+		try { spec = specFromEditCamera( editor ); } catch ( e ) {
 
 			camInfo.textContent = 'Switch the viewport to Edit Camera, orbit to frame the shot, then add the key.';
 			return;
 
 		}
-
-		const cam = editor.camera, c = editor.controls ? editor.controls.center : null;
-		const look = c ? [ c.x, c.y, c.z ] : ( () => { const d = cam.getWorldDirection( new THREE.Vector3() ).multiplyScalar( 1 ).add( cam.position ); return [ d.x, d.y, d.z ]; } )();
-		const r = v => Math.round( v * 1e4 ) / 1e4;
-		const props = { to: { position: [ r( cam.position.x ), r( cam.position.y ), r( cam.position.z ) ] }, lookAt: look.map( r ), fov: Math.round( cam.fov * 100 ) / 100 };
-
-		const target = bestSelectorFor( object );
-		let prevEnd = 0;
-		const track = editor.timeline ? editor.timeline.track( target ) : null;
-		if ( track ) for ( const e of track.events ) { const end = e.at + e.dur; if ( end <= playhead - 1e-6 ) prevEnd = Math.max( prevEnd, end ); }
-		const at = Math.round( Math.min( prevEnd, playhead ) * 1000 ) / 1000;
-		const dur = Math.round( Math.max( 0.001, playhead - at ) * 1000 ) / 1000;
-		commitMutation( m => m.addEvent( target, { at, op: 'animate', args: { props, easing: 'linear', duration: dur }, dur } ), 'Add camera key from view' );
+		const time = Math.round( playhead * 1000 ) / 1000;
+		editCameraTrack( editor, object, 'Add camera key from view', track => camMove.upsertKey( track, { ...spec, time } ) );
 		sampleAt( playhead );
 
 	}
 
 	function setSpline( on ) {
 
-		const t = cameraTrackOf( selectedShotCamera() );
-		if ( ! t ) return;
-		commitMutation( m => { const mt = m.track( t.target ); if ( mt ) { if ( on ) mt.spline = true; else delete mt.spline; } }, on ? 'Camera: smooth path' : 'Camera: straight legs' );
+		const object = selectedShotCamera();
+		if ( ! object || ! cameraTrackOf( object ) ) return;
+		editCameraTrack( editor, object, on ? 'Camera: smooth path' : 'Camera: straight legs', track => camMove.setSmooth( track, on ) );
 		sampleAt( playhead );
 
 	}
 
 	function simplifyCameraTrack() {
 
-		const t = cameraTrackOf( selectedShotCamera() );
+		const object = selectedShotCamera();
+		const t = cameraTrackOf( object );
 		if ( ! t ) return;
-		const keys = cameraKeys( t.events );
-		if ( keys.length < 4 ) { camInfo.textContent = 'Already a handful of keys.'; return; }
-		const picked = simplifyKeys( keys );
-		const ids = new Set( keys.map( k => k.id ) );
-		commitMutation( m => {
-
-			const mt = m.track( t.target );
-			mt.events = mt.events.filter( e => ! ids.has( e.id ) ).concat( eventsFromKeys( keys, picked, 'ck' ) );
-			mt.spline = true;
-
-		}, 'Simplify camera keys' );
-		camInfo.textContent = 'Simplified ' + keys.length + ' keys to ' + picked.length + ' on a smooth path.';
+		if ( cameraKeys( t.events ).length < 4 ) { camInfo.textContent = 'Already a handful of keys.'; return; }
+		const r = editCameraTrack( editor, object, 'Simplify camera keys', track => camMove.simplifyTrack( track ) );
+		camInfo.textContent = 'Simplified ' + r.before + ' keys to ' + r.after + ' on a smooth path.';
 		sampleAt( playhead );
+
+	}
+
+	function copyMoveCommand() {
+
+		const object = selectedShotCamera();
+		const t = object ? cameraTrackOf( object ) : null;
+		if ( ! t ) { camInfo.textContent = 'No keys to copy yet.'; return; }
+		const text = camMove.toCommand( t, moveSelector( editor, object ) );
+		const done = () => { camInfo.textContent = 'Copied the camera move as a shell command.'; };
+		if ( navigator.clipboard && navigator.clipboard.writeText ) navigator.clipboard.writeText( text ).then( done, () => { camInfo.textContent = text; } );
+		else camInfo.textContent = text;
 
 	}
 

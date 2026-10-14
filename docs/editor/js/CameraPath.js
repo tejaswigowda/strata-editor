@@ -10,8 +10,7 @@
 
 import * as THREE from 'three';
 import { cameraKeys, samplePath, makeCurve } from './intelligence/splineTrack.js';
-import { TimelineModel } from './intelligence/timeline.js';
-import { SetTimelineCommand } from './commands/SetTimelineCommand.js';
+import { editCameraTrack, findCameraTrack, cameraSelectors, move } from './intelligence/cameraMoveEdit.js';
 
 const PATH = 0x35d0ff, KEY = 0xffffff, SEL = 0x7dff4a, LOOK = 0xff3df2, TICK = 0x9fe9ff;
 const HANDLE_PX = 0.013; // handle radius as a fraction of the distance to the viewing camera
@@ -90,25 +89,13 @@ export class CameraPath {
 
 	selectorsFor( object ) {
 
-		const out = [];
-		if ( object.userData && object.userData.label ) out.push( '#' + object.userData.label );
-		if ( object.name ) out.push( '#' + object.name );
-		out.push( object.uuid );
-		return out;
+		return cameraSelectors( object );
 
 	}
 
 	trackFor( camera ) {
 
-		const tl = this.editor.timeline;
-		if ( ! tl || ! camera ) return null;
-		for ( const sel of this.selectorsFor( camera ) ) {
-
-			const t = tl.tracks.find( t => t.target === sel );
-			if ( t ) return t;
-
-		}
-		return null;
+		return findCameraTrack( this.editor.timeline, camera );
 
 	}
 
@@ -148,6 +135,13 @@ export class CameraPath {
 		const events = eventsOverride || track.events;
 		const keys = cameraKeys( events );
 		this.keyCount = keys.length;
+		if ( ! eventsOverride && this.selectedKeyId ) {
+
+			// an edit from elsewhere (the shell, undo) may have removed the selected key or its aim point
+			const sk = keys.find( k => k.id === this.selectedKeyId );
+			if ( ! sk || ( this.selectedKind === 'look' && ! isVec3( sk.lookAt ) ) ) this._dropSelection();
+
+		}
 		if ( keys.length === 0 ) { this.render(); return; }
 		const spline = !! track.spline;
 
@@ -214,6 +208,13 @@ export class CameraPath {
 		} );
 
 		this.group.updateMatrixWorld( true );
+		if ( ! eventsOverride && ! this.dragging && this.selectedKeyId && this.transformControls.object === this.proxy ) {
+
+			// the gizmo follows the handle when the key was moved by something other than the gizmo
+			const h = this.handles.find( h => h.userData.handle.id === this.selectedKeyId && h.userData.handle.kind === ( this.selectedKind || 'key' ) );
+			if ( h ) { this.proxy.position.copy( h.position ); this.proxy.updateMatrixWorld( true ); }
+
+		}
 		this.render();
 
 	}
@@ -276,10 +277,9 @@ export class CameraPath {
 
 	describe( h ) {
 
-		const keys = cameraKeys( this.editor.timeline.track( this.trackTarget ).events );
+		const keys = move.keyList( this.editor.timeline.track( this.trackTarget ) );
 		const k = keys.find( k => k.id === h.id );
-		const i = keys.indexOf( k );
-		return ( h.kind === 'look' ? 'aim ' : 'key ' ) + ( i + 1 ) + '/' + keys.length + ' · ' + ( k ? k.time.toFixed( 2 ) : '?' ) + 's';
+		return k ? move.keyLabel( k.index, keys.length, k.time, h.kind ) : '?';
 
 	}
 
@@ -295,10 +295,17 @@ export class CameraPath {
 		const hit = this._raycaster.intersectObjects( this.handles, false )[ 0 ];
 		if ( ! hit ) { this.releaseHandle(); return false; }
 
-		const h = hit.object.userData.handle;
+		this._selectHandle( hit.object );
+		return true;
+
+	}
+
+	_selectHandle( handleMesh ) {
+
+		const h = handleMesh.userData.handle;
 		this.selectedKeyId = h.id;
 		this.selectedKind = h.kind;
-		this.proxy.position.copy( hit.object.position );
+		this.proxy.position.copy( handleMesh.position );
 		this.proxy.updateMatrixWorld( true );
 		const tc = this.transformControls;
 		if ( this._priorMode === null ) this._priorMode = tc.getMode();
@@ -306,7 +313,34 @@ export class CameraPath {
 		tc.attach( this.proxy );
 		this.editor.signals.cameraPathChanged.dispatch();
 		this.rebuild();
-		return true;
+
+	}
+
+	/** Select key `index` (0-based, as keys() lists it) or its aim point; the same as clicking its handle. */
+	selectKeyIndex( index, kind = 'key' ) {
+
+		this.rebuild();
+		if ( kind !== 'key' && kind !== 'look' ) throw new Error( "selectKey: kind is 'key' or 'look'" );
+		const h = this.handles.find( h => h.userData.handle.kind === kind && ( kind === 'look' ? this._indexOf( h.userData.handle.id ) === index : h.userData.handle.index === index ) );
+		if ( ! h ) throw new Error( kind === 'look' ? 'selectKey: key ' + index + ' has no aim point to select (it is a named target or unset)' : 'selectKey: no key ' + index + ( this.keyCount ? ' (0 to ' + ( this.keyCount - 1 ) + ')' : ', or the camera path is hidden' ) );
+		this._selectHandle( h );
+
+	}
+
+	_indexOf( id ) {
+
+		const track = this.editor.timeline && this.editor.timeline.track( this.trackTarget );
+		return track ? cameraKeys( track.events ).findIndex( k => k.id === id ) : - 1;
+
+	}
+
+	_dropSelection() {
+
+		this.selectedKeyId = null;
+		this.selectedKind = null;
+		if ( this.transformControls.object === this.proxy ) this.transformControls.detach();
+		if ( this._priorMode ) { this.transformControls.setMode( this._priorMode ); this._priorMode = null; }
+		this.editor.signals.cameraPathChanged.dispatch();
 
 	}
 
@@ -362,15 +396,10 @@ export class CameraPath {
 		this.dragging = false;
 		const c = this.getControls();
 		if ( c ) c.enabled = true;
-		// deep copy: TimelineModel copies events shallowly, and the undo snapshot must not change
-		const model = TimelineModel.fromJSON( JSON.parse( JSON.stringify( this.editor.timeline.toJSON() ) ) );
-		const track = model.track( this.trackTarget );
-		if ( track ) {
-
-			this._apply( track.events, this.proxy.position.toArray() );
-			this.editor.execute( new SetTimelineCommand( this.editor, model.toJSON(), this.selectedKind === 'look' ? 'Move camera aim point' : 'Move camera key' ) );
-
-		}
+		const index = this._indexOf( this.selectedKeyId );
+		const pos = this.proxy.position.toArray();
+		const spec = this.selectedKind === 'look' ? { lookAt: pos } : { pos };
+		if ( index >= 0 && this.camera ) editCameraTrack( this.editor, this.camera, this.selectedKind === 'look' ? 'Move camera aim point' : 'Move camera key', track => move.moveKey( track, index, spec ) );
 		this._live = null;
 		this.rebuild();
 
@@ -378,15 +407,11 @@ export class CameraPath {
 
 	deleteSelected() {
 
-		if ( ! this.selectedKeyId ) return;
-		const id = this.selectedKeyId;
+		if ( ! this.selectedKeyId || ! this.camera ) return;
+		const index = this._indexOf( this.selectedKeyId );
 		this.releaseHandle();
-		const model = TimelineModel.fromJSON( this.editor.timeline.toJSON() );
-		const track = model.track( this.trackTarget );
-		if ( ! track ) return;
-		if ( cameraKeys( track.events ).length <= 1 ) return; // keep at least one key
-		track.events = track.events.filter( e => e.id !== id );
-		this.editor.execute( new SetTimelineCommand( this.editor, model.toJSON(), 'Delete camera key' ) );
+		if ( index < 0 ) return;
+		try { editCameraTrack( this.editor, this.camera, 'Delete camera key', track => move.deleteKey( track, index ) ); } catch ( e ) { /* keeps at least one key */ }
 
 	}
 

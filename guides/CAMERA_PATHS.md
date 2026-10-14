@@ -22,8 +22,40 @@ With **Smooth path** on, the track stores `spline: true` and the compiler plays 
 
 The curve is computed in `intelligence/splineTrack.js` (pure, with tests in `intelligence/__tests__/splineTrack.test.mjs`) and baked to ordinary 0.1 s `animate` legs when the timeline compiles, so playback, rendering and glTF export need no special handling.
 
+## From the JS shell
+
+Everything above is also a shell verb on the same track. `$S('#cam07')` selects the camera, and each verb acts on the first shot camera in the set. The viewport and the shell read and write **one keyed track** in the scene timeline, so a shell edit redraws the path overlay, the key panel and the timeline block at once, and a drag in the viewport shows up in the next `keys()` or `asCommand()`.
+
+| Verb | What it does | GUI twin |
+|---|---|---|
+| `.keys()` | The key list: `{ index, time, pos, lookAt, fov, label, selected }` | the handles and their labels |
+| `.keyAt(t, { pos, lookAt, fov })` | Add a key at `t` seconds, or merge into the key already there. Anything you leave out is taken from the path at `t`. Needs no viewport. | + Key from view |
+| `.keyFromView(t?)` | Capture the Edit Camera pose at `t` (default: the playhead). Needs the viewport on the Edit Camera, and throws otherwise. | + Key from view |
+| `.moveKey(i, { pos, lookAt, fov, time })` | Change a key. `lookAt: null` or `fov: null` clears it. | drag a handle or aim diamond, key panel |
+| `.deleteKey(i)` | Remove a key. Throws on the last one. | Delete |
+| `.smooth(true \| false)` | Smooth path on or off | Smooth path |
+| `.simplify(tolerance?)` | Collapse a dense run of keys to a few, smooth on | Simplify |
+| `.setKeys([{ t, pos, lookAt?, fov? }], { smooth })` | Replace the whole move in one step | |
+| `.asCommand()` | The `setKeys(...)` command that rebuilds this move exactly | Copy as command |
+| `.selectKey(i, 'key' \| 'look')` | Select a handle (or its aim point) as if clicked | click a handle |
+
+* **Indices.** `keys()[i]` is the handle labelled `key i+1/N` in the viewport, so shell indices start at 0 and the label counts from 1. Each key's `label` is exactly the text the viewport shows. Keys are ordered by arrival time, and a key keeps its identity (and its selection) when `moveKey` gives it a new time.
+* **One undo.** Every verb is one `SetTimelineCommand`, the same entry a handle drag makes, so shell and viewport edits interleave on one undo stack. A verb that throws (bad index, last key, two keys at one time) changes nothing and adds no entry.
+* **Round trip.** `.asCommand()` returns text such as `$S('#cam07').setKeys([ { t: 0.001, pos: [0.36, 0.19, 0.03], lookAt: [0.5, 0.1, 0.2], fov: 30 }, ... ], { smooth: true })`. Running it on any camera, from any state, gives the same keys.
+* **Headless.** `keyAt`, `moveKey`, `deleteKey`, `smooth`, `simplify`, `setKeys` and `asCommand` need no viewport, so a script or an agent can author a whole shot's camera move with them. The same commands always give the same track, the same baked 0.1 s legs and the same glTF export. Only `keyFromView` reads the Edit Camera.
+* **Retiming.** Changing a key's `time` moves the legs on either side of it with it, so the motion between neighbours is what the keys say. Holds and legs you did not touch stay as they were.
+
+```js
+const cam = $S('#cam07-ots-maya');
+cam.keyAt(0,  { pos: [0.36, 0.19, 0.03], lookAt: '#maya', fov: 30 })
+   .keyAt(6,  { pos: [0.40, 0.19, 0.05], lookAt: '#maya', fov: 28 })
+   .smooth(true);
+cam.moveKey(1, { fov: 26 });
+cam.asCommand();   // copy this to keep or share the move
+```
+
 ## Limits
 
-* Handles edit position and aim point. Field of view and timing are edited in the key panel, or by dragging the block in the timeline.
-* The aim point is a point in space. To follow a moving subject, keep the named `lookAt` (for example `#maya`) on the key instead.
+* Handles edit position and aim point. Field of view and timing are edited in the key panel, by dragging the block in the timeline, or with `moveKey` from the shell.
+* The aim point is a point in space. A named `lookAt` such as `#maya` is kept on the key as written and resolved to the subject's world position **when the timeline compiles**, so it aims at a static subject for the whole shot. It does not follow a subject that the timeline itself moves; for that, sample the subject's path into point `lookAt` keys.
 * Keys that are not `animate` events with a position (for example a lone `fov` change) are not drawn.

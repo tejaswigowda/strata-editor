@@ -636,6 +636,17 @@ function Shell( editor ) {
 		{ w: 'scaleTo', k: 'method', h: "(factor)" },
 		{ w: 'reset', k: 'method', h: "()" },
 		{ w: 'lookAt', k: 'method', h: "(target)" },
+		// Camera moves (guides/CAMERA_PATHS.md): the same keyed track the viewport edits
+		{ w: 'keys', k: 'method', h: "()  list the camera's keys" },
+		{ w: 'keyAt', k: 'method', h: "(t, { pos, lookAt, fov })" },
+		{ w: 'keyFromView', k: 'method', h: "(t?)  from the Edit Camera" },
+		{ w: 'moveKey', k: 'method', h: "(i, { pos, lookAt, fov, time })" },
+		{ w: 'deleteKey', k: 'method', h: "(i)" },
+		{ w: 'smooth', k: 'method', h: "(true|false)" },
+		{ w: 'simplify', k: 'method', h: "(tolerance?)" },
+		{ w: 'setKeys', k: 'method', h: "([{ t, pos, lookAt, fov }], { smooth })" },
+		{ w: 'selectKey', k: 'method', h: "(i, 'key'|'look')" },
+		{ w: 'asCommand', k: 'method', h: "()  the command that rebuilds this move" },
 		// Material props
 		{ w: 'metalness', k: 'prop', h: "(0–1)" },
 		{ w: 'roughness', k: 'prop', h: "(0–1)" },

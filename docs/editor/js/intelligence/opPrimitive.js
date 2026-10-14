@@ -30,6 +30,7 @@ import { TimelineModel, CLIP_OPS } from './timeline.js';
 import { releaseTimelineObject } from './timelineController.js';
 import { recordClipDirective, clipControlOp } from './clipControl.js';
 import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
+import * as camMove from './cameraMoveEdit.js';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
 import { SetLabelCommand } from '../commands/SetLabelCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
@@ -600,6 +601,113 @@ class ChainableSet {
 
 		const seconds = Math.max( 0, Number( dur ) || 0 ) / 1000;
 		return this._recordAnim( { type: 'moveToEach', target: String( target ), duration: seconds } );
+
+	}
+
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── CAMERA MOVES (the shell half of the viewport's camera-path editor) ──────
+	// ────────────────────────────────────────────────────────────────────────────
+	// A shot camera's move is ONE keyed track on the universal timeline. These verbs
+	// read and write that same track the viewport overlay, key panel and timeline
+	// block show, so each edit redraws them live, is one entry on the shared undo
+	// history, and `keys()[i]` is the handle labelled `key i+1/N` in the viewport.
+	// They act on the first shot camera in the set. See guides/CAMERA_PATHS.md.
+
+	_shotCamera( verb ) {
+
+		const cam = this.nodes.find( n => camMove.isShotCamera( this.editor, n ) );
+		if ( ! cam ) throw new Error( `${ verb }: ${ this.selector } matches no shot camera` );
+		return cam;
+
+	}
+
+	_editMove( verb, label, fn ) {
+
+		const cam = this._shotCamera( verb );
+		this._last = camMove.editCameraTrack( this.editor, cam, label, fn );
+		return this;
+
+	}
+
+	/** The camera's keys: [{ index, time, pos, lookAt, fov, label, selected }], the viewport's list. */
+	keys() {
+
+		const cam = this._shotCamera( 'keys' );
+		const sel = camMove.selectedKeyIndex( this.editor, cam );
+		return camMove.move.keyList( camMove.liveTrack( this.editor, cam ) ).map( k => ( { ...k, selected: k.index === sel } ) );
+
+	}
+
+	/** Add a key at time t (seconds), or merge into the one already there. Headless. */
+	keyAt( t, spec = {} ) {
+
+		return this._editMove( 'keyAt', `Camera: key at ${ t }s`, track => camMove.move.upsertKey( track, { ...spec, time: t } ) );
+
+	}
+
+	/** The shell twin of "+ Key from view": needs the viewport on the Edit Camera. */
+	keyFromView( t ) {
+
+		const spec = camMove.specFromEditCamera( this.editor );
+		const time = t === undefined ? camMove.playheadTime( this.editor ) : t;
+		return this._editMove( 'keyFromView', 'Add camera key from view', track => camMove.move.upsertKey( track, { ...spec, time } ) );
+
+	}
+
+	/** Change key i: { pos, lookAt ('#name' | [x,y,z] | null), fov, time }. */
+	moveKey( i, spec ) {
+
+		return this._editMove( 'moveKey', `Move camera key ${ i }`, track => camMove.move.moveKey( track, i, spec ) );
+
+	}
+
+	/** Remove key i (a camera always keeps at least one). */
+	deleteKey( i ) {
+
+		return this._editMove( 'deleteKey', `Delete camera key ${ i }`, track => camMove.move.deleteKey( track, i ) );
+
+	}
+
+	/** Play the move as one smooth curve through its keys (true) or as straight legs (false). */
+	smooth( on = true ) {
+
+		return this._editMove( 'smooth', on ? 'Camera: smooth path' : 'Camera: straight legs', track => camMove.move.setSmooth( track, !! on ) );
+
+	}
+
+	/** Collapse a dense run of keys to a few on a smooth path. tolerance in world units (default 0.01). */
+	simplify( tolerance ) {
+
+		const opts = tolerance && typeof tolerance === 'object' ? tolerance : ( tolerance === undefined ? {} : { tolerance } );
+		return this._editMove( 'simplify', 'Simplify camera keys', track => camMove.move.simplifyTrack( track, opts ) );
+
+	}
+
+	/** Replace the whole move at once: [{ t, pos, lookAt?, fov? }], { smooth }. What asCommand() emits. */
+	setKeys( specs, opts ) {
+
+		return this._editMove( 'setKeys', 'Set camera keys', track => camMove.move.setKeys( track, specs, opts || {} ) );
+
+	}
+
+	/** The command that rebuilds this camera's move exactly; paste it back to restore it. */
+	asCommand() {
+
+		const cam = this._shotCamera( 'asCommand' );
+		const track = camMove.liveTrack( this.editor, cam );
+		return camMove.move.toCommand( track || { events: [] }, camMove.moveSelector( this.editor, cam ) );
+
+	}
+
+	/** Select key i in the viewport (or its aim point with kind 'look'); the key panel and gizmo follow. */
+	selectKey( i, kind = 'key' ) {
+
+		const cam = this._shotCamera( 'selectKey' );
+		const cp = this.editor.cameraPath;
+		if ( ! cp ) throw new Error( 'selectKey: the viewport camera-path overlay is not available' );
+		if ( this.editor.selected !== cam ) this.editor.select( cam );
+		cp.selectKeyIndex( i, kind );
+		return this;
 
 	}
 
