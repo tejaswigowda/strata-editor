@@ -1531,8 +1531,8 @@ function Timeline( editor ) {
 			applyFollowCamera();
 
 			// This tick() loop runs independently of Viewport's own animate()
-			// loop, which only calls render() while mixer.stats.actions.inUse
-			// is nonzero (plus one grace frame). The two loops can settle a
+			// loop, which only calls render() while a mixer action is running
+			// (plus one grace frame). The two loops can settle a
 			// frame apart right as playback ends, freezing the canvas on
 			// whatever mid-fade content state happened to be live when
 			// Viewport's rendering stopped — never showing the truly-final

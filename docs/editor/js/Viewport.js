@@ -1462,9 +1462,22 @@ function Viewport( editor ) {
 
 	// animations
 
-	let prevActionsInUse = 0;
+	let prevMixerRunning = false;
 
 	const timer = new THREE.Timer(); // only used for animations
+
+	// The timeline keeps one paused ("held") action per target so its pose
+	// stays applied; those count as "in use" forever, so mixer.stats.actions
+	// .inUse can't tell an idle scene from a playing one. Only a running
+	// (enabled, unpaused) action needs the per-frame mixer update and render.
+	function isMixerRunning( mixer ) {
+
+		const list = mixer._actions;
+		if ( ! list ) return mixer.stats.actions.inUse > 0;
+		for ( let i = 0; i < list.length; i ++ ) if ( list[ i ].isRunning() ) return true;
+		return false;
+
+	}
 
 	function animate() {
 
@@ -1477,11 +1490,11 @@ function Viewport( editor ) {
 
 		// Animations
 
-		const actions = mixer.stats.actions;
+		const mixerRunning = isMixerRunning( mixer );
 
-		if ( actions.inUse > 0 || prevActionsInUse > 0 ) {
+		if ( mixerRunning || prevMixerRunning ) {
 
-			prevActionsInUse = actions.inUse;
+			prevMixerRunning = mixerRunning;
 
 			mixer.update( delta );
 			needsUpdate = true;

@@ -304,6 +304,7 @@ export function holdTimelineAt( editor, t ) {
 	// content-only target), so sample them regardless of whether there are any
 	// transform actions to hold below.
 	applyContentAt( editor, editor.timeline, t );
+	editor.needsContentRender = true; // Viewport only renders on demand while nothing is playing
 
 	const actions = getTimelineTargetActions( editor );
 	const importedAny = holdImportedClipsAt( editor, t );
