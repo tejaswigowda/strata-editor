@@ -1259,7 +1259,10 @@ function Timeline( editor ) {
 
 		playing = false;
 		holdTimelineAt( editor, playhead ); // hold, don't stop — pose stays put
-		restoreViewportCamera();
+		// Keep the viewport on the shot camera so the paused frame stays on
+		// screen to edit against; Stop (or unticking Follow) is what returns to
+		// the Edit Camera.
+		applyFollowCamera();
 		updatePlayheadUI();
 
 	}
@@ -1279,6 +1282,9 @@ function Timeline( editor ) {
 		playing = false;
 		playhead = Math.max( 0, t );
 		sampleAt( playhead );
+		// While a paused frame is held on a shot camera, scrubbing keeps that
+		// view in step with the playhead (a manual camera change is left alone).
+		if ( followedAway && editor.viewportCamera === followedCamera ) applyFollowCamera();
 		updatePlayheadUI();
 
 	}
@@ -1491,6 +1497,7 @@ function Timeline( editor ) {
 
 			editor.viewportCamera = cam;
 			followedAway = true;
+			followedCamera = cam;
 			signals.viewportCameraChanged.dispatch();
 
 		}

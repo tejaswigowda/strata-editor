@@ -104,6 +104,7 @@ function PlayBar( editor ) {
 	} );
 
 	signals.editorCleared.add( close );
+	signals.editCameraSelected.add( close );
 
 	return container;
 

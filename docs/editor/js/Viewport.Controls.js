@@ -1,8 +1,48 @@
+import * as THREE from 'three';
+
 import { UIPanel, UISelect } from './libs/ui.js';
 
 function ViewportControls( editor ) {
 
 	const signals = editor.signals;
+
+	// Switching from a shot camera to the Edit Camera must not teleport the
+	// view: give the Edit Camera the shot camera's pose and field of view, and
+	// orbit about whatever it is looking at, so editing starts from the frame
+	// that was on screen (e.g. a paused shot).
+	function carryViewToEditCamera( from ) {
+
+		const edit = editor.camera;
+		if ( ! from || from === edit ) return;
+
+		from.updateWorldMatrix( true, false );
+		const position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3();
+		from.matrixWorld.decompose( position, quaternion, scale );
+		const forward = new THREE.Vector3( 0, 0, - 1 ).applyQuaternion( quaternion );
+
+		let distance = 1;
+		const raycaster = new THREE.Raycaster( position, forward );
+		raycaster.camera = from; // sprites can't be raycast without one
+		try {
+
+			const hits = raycaster.intersectObjects( editor.scene.children, true ).filter( h => h.object.isMesh && h.object.visible );
+			if ( hits.length > 0 ) distance = Math.max( 0.05, hits[ 0 ].distance ); // pivot on what is at the centre of the frame
+
+		} catch ( e ) {
+
+			// the orbit centre just falls back to 1 unit ahead; never block the switch
+		}
+
+		edit.position.copy( position );
+		edit.quaternion.copy( quaternion );
+		if ( from.isPerspectiveCamera && edit.isPerspectiveCamera ) edit.fov = from.fov;
+		edit.updateProjectionMatrix();
+		edit.updateMatrixWorld( true );
+
+		if ( editor.controls ) editor.controls.center.copy( position ).addScaledVector( forward, distance );
+		signals.cameraChanged.dispatch( edit );
+
+	}
 
 	// camera panel — bottom left
 
@@ -46,7 +86,11 @@ function ViewportControls( editor ) {
 	const cameraSelect = new UISelect();
 	cameraSelect.onChange( function () {
 
+		const previous = editor.viewportCamera;
+		const toEditCamera = this.getValue() === editor.camera.uuid;
+		if ( toEditCamera ) carryViewToEditCamera( previous );
 		editor.setViewportCamera( this.getValue() );
+		if ( toEditCamera ) signals.editCameraSelected.dispatch();
 
 	} );
 	cameraSelect.dom.style.display = 'inline-block';

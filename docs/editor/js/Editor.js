@@ -99,6 +99,7 @@ function Editor() {
 		historyChanged: new Signal(),
 
 		viewportCameraChanged: new Signal(),
+		editCameraSelected: new Signal(), // the user switched the viewport to the Edit Camera (e.g. so the play bar steps aside for the editing chrome)
 		cameraPathChanged: new Signal(), // the camera path overlay's selected key changed (CameraPath.js)
 		viewportShadingChanged: new Signal(),
 		timelinePlayRequested: new Signal(), // external "play" trigger (e.g. the #...&play=true overlay button) — Timeline.js listens and calls its own play()
