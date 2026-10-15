@@ -582,6 +582,11 @@ body.present-mode #present-bar {
 			background: #2a9dff;
 		}
 
+#timeline button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
 /* ── Play bar — QuickTime-style transport that replaces the menubar ──────────
    Opened by PlayBar.js when the timeline starts playing; its cancel button
    removes body.play-bar-open and the regular menubar returns. */

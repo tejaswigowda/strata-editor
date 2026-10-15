@@ -12,6 +12,7 @@ import { buildClipEvent } from './intelligence/clipControl.js';
 import { normalizeClassName } from './intelligence/classDerive.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
+import { formatClockMs } from './TimeFormat.js';
 import * as recipes from './intelligence/animationRecipes.js';
 import { applyContentAt } from './intelligence/textChange.js';
 
@@ -36,6 +37,7 @@ function Timeline( editor ) {
 	let selectedEventId = null;
 	let followRenderCamera = true; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback (default on)
 	let followedAway = false;       // true once WE switched editor.viewportCamera away from editor.camera, so we know to restore it
+	let followedCamera = null;      // the shot camera we last switched the viewport to (so a manual camera change isn't overridden)
 
 	// ── Container ─────────────────────────────────────────────────────────────
 	const container = new UIPanel();
@@ -48,11 +50,6 @@ function Timeline( editor ) {
 	const bar = document.createElement( 'div' );
 	bar.style.cssText = 'padding:6px 10px;border-bottom:1px solid #ccc;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;';
 	container.dom.appendChild( bar );
-
-	const title = document.createElement( 'div' );
-	title.textContent = 'Universal Timeline';
-	title.style.cssText = 'font-weight:bold;font-size:11px;margin-right:6px;';
-	bar.appendChild( title );
 
 	const playIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M3 1.5v9l7-4.5z" fill="currentColor"/></svg>';
 	const pauseIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M2 1h3v10H2zM7 1h3v10H7z" fill="currentColor"/></svg>';
@@ -76,7 +73,7 @@ function Timeline( editor ) {
 
 	const timeReadout = document.createElement( 'div' );
 	timeReadout.style.cssText = 'font-family:monospace;font-size:11px;background:rgba(0,0,0,0.05);border-radius:4px;padding:3px 8px;';
-	timeReadout.textContent = '0.00 / 0.00';
+	timeReadout.textContent = '00:00:000 / 00:00:000';
 	bar.appendChild( timeReadout );
 
 	// Add-event-at-playhead: apply an animation to the SELECTED object at the
@@ -100,9 +97,12 @@ function Timeline( editor ) {
 	} );
 	bar.appendChild( addSelect.dom );
 
-	const deleteButton = new UIButton( 'Delete' );
+	const trashIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+	const deleteButton = new UIButton();
+	deleteButton.dom.innerHTML = trashIcon;
 	deleteButton.dom.title = 'Delete the selected event (Del / Backspace)';
-	deleteButton.dom.style.cssText = 'height:24px;padding:0 8px;border-radius:4px;font-size:11px;';
+	deleteButton.dom.setAttribute( 'aria-label', 'Delete the selected event' );
+	deleteButton.dom.style.cssText = 'width:28px;height:28px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;';
 	deleteButton.dom.disabled = true;
 	deleteButton.onClick( function () { deleteSelected(); } );
 	bar.appendChild( deleteButton.dom );
@@ -953,15 +953,18 @@ function Timeline( editor ) {
 
 		const model = editor.timeline || new TimelineModel();
 
-		// Ruler ticks (every 1s, or 0.5s when short).
+		// Ruler ticks (every 1s, or 0.5s when short). Every tick gets a line, but
+		// only every Nth one a label, so the mm:ss:ms text never overlaps.
 		ruler.innerHTML = '';
 		const vd = viewDuration();
 		const step = vd <= 6 ? 0.5 : ( vd <= 20 ? 1 : Math.ceil( vd / 20 ) );
-		for ( let t = 0; t <= vd + 1e-6; t += step ) {
+		const labelEvery = Math.max( 1, Math.ceil( 58 / Math.max( 1, timeToPx( step ) ) ) );
+		let tickIndex = 0;
+		for ( let t = 0; t <= vd + 1e-6; t += step, tickIndex ++ ) {
 
 			const tick = document.createElement( 'div' );
-			tick.style.cssText = `position:absolute;left:${ timeToPx( t ) }px;top:0;bottom:0;border-left:1px solid #ddd;font-size:9px;color:#999;padding-left:2px;`;
-			tick.textContent = ( Math.round( t * 100 ) / 100 ) + 's';
+			tick.style.cssText = `position:absolute;left:${ timeToPx( t ) }px;top:0;bottom:0;border-left:1px solid #ddd;font-size:9px;color:#999;padding-left:2px;white-space:nowrap;`;
+			if ( tickIndex % labelEvery === 0 ) tick.textContent = formatClockMs( t );
 			ruler.appendChild( tick );
 
 		}
@@ -1307,7 +1310,7 @@ function Timeline( editor ) {
 		const vd = viewDuration();
 		playheadEl.style.left = ( LABEL_W + timeToPx( Math.min( playhead, vd ) ) ) + 'px';
 		const dur = totalDuration();
-		timeReadout.textContent = `${ playhead.toFixed( 2 ) } / ${ dur.toFixed( 2 ) }`;
+		timeReadout.textContent = `${ formatClockMs( playhead ) } / ${ formatClockMs( dur ) }`;
 		deleteButton.dom.disabled = ! selectedEventId;
 		signals.timelinePlayheadUpdated.dispatch( { time: playhead, duration: dur, playing } );
 
