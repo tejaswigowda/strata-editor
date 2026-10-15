@@ -223,7 +223,9 @@ export function cssEasingFunction( easing ) {
  *                               `to: { positionX: 0 }` resets only X.
  *
  * params: { props, easing: CSS timing function, duration: SECONDS (the sugar
- * converts jQuery ms), lookAtWorld: [x,y,z] (injected by compileTimeline) }
+ * converts jQuery ms), lookAtWorld: [x,y,z] (injected by compileTimeline),
+ * lookFromWorld: [x,y,z] (the previous leg's aim point, injected by
+ * compileTimeline — the aim eases from it to lookAtWorld across the leg) }
  */
 export function animateRecipe( node, params = {} ) {
 
@@ -336,6 +338,13 @@ export function animateRecipe( node, params = {} ) {
 	const lookTarget = Array.isArray( params.lookAtWorld )
 		? new THREE.Vector3( num( params.lookAtWorld[ 0 ] ), num( params.lookAtWorld[ 1 ] ), num( params.lookAtWorld[ 2 ] ) )
 		: null;
+	// Without a start aim, every sample would aim at the END target while the
+	// position is still at the start, so each leg's first frame snaps to a
+	// wrong direction and back-to-back legs visibly stutter.
+	const lookFrom = lookTarget && Array.isArray( params.lookFromWorld )
+		? new THREE.Vector3( num( params.lookFromWorld[ 0 ] ), num( params.lookFromWorld[ 1 ] ), num( params.lookFromWorld[ 2 ] ) )
+		: null;
+	const lookNow = lookTarget ? new THREE.Vector3() : null;
 
 	const needPos = delta.lengthSq() > 0 || toPos !== null || ( origin !== null && ( hasRotDelta || hasScale ) );
 	const needRot = hasRotDelta || toRotQ !== null || lookTarget !== null;
@@ -397,8 +406,10 @@ export function animateRecipe( node, params = {} ) {
 			if ( lookTarget ) {
 
 				// Object3D.lookAt convention: cameras/lights aim -Z at the target
-				if ( cameraLike ) tmpM.lookAt( tmpV, lookTarget, up );
-				else tmpM.lookAt( lookTarget, tmpV, up );
+				if ( lookFrom ) lookNow.copy( lookFrom ).lerp( lookTarget, k );
+				else lookNow.copy( lookTarget );
+				if ( cameraLike ) tmpM.lookAt( tmpV, lookNow, up );
+				else tmpM.lookAt( lookNow, tmpV, up );
 				q.setFromRotationMatrix( tmpM );
 
 			} else if ( toRotQ ) {

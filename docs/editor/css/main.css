@@ -582,6 +582,82 @@ body.present-mode #present-bar {
 			background: #2a9dff;
 		}
 
+/* ── Play bar — QuickTime-style transport that replaces the menubar ──────────
+   Opened by PlayBar.js when the timeline starts playing; its cancel button
+   removes body.play-bar-open and the regular menubar returns. */
+#play-bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 36px;
+	background: #2b2b2b;
+	display: none;
+	align-items: center;
+	gap: 10px;
+	padding: 0 12px;
+	box-sizing: border-box;
+	z-index: 50;
+}
+
+body.play-bar-open #play-bar {
+	display: flex;
+}
+
+body.play-bar-open #menubar,
+body.present-mode #play-bar {
+	display: none !important;
+}
+
+	#play-bar .play-bar-button {
+		flex-shrink: 0;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border: none;
+		border-radius: 50%;
+		color: #fff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.5 );
+		opacity: 0.85;
+	}
+
+		#play-bar .play-bar-button:hover,
+		#play-bar .play-bar-button.active {
+			opacity: 1;
+		}
+
+		#play-bar .play-bar-button.active {
+			box-shadow: 0 0 0 2px rgba( 255, 255, 255, 0.55 );
+		}
+
+	#play-bar .play-bar-button.play { background: #2ea44f; }
+	#play-bar .play-bar-button.pause { background: #e0a000; }
+	#play-bar .play-bar-button.stop { background: #e5484d; }
+
+	#play-bar .play-bar-button.cancel {
+		background: rgba( 255, 255, 255, 0.14 );
+		box-shadow: none;
+		margin-left: 4px;
+	}
+
+	#play-bar input[type="range"] {
+		flex: 1;
+		min-width: 80px;
+		accent-color: #2ea44f;
+	}
+
+	#play-bar .play-bar-time {
+		flex-shrink: 0;
+		min-width: 96px;
+		text-align: right;
+		font: 12px/1 monospace;
+		color: #ddd;
+	}
+
 /* ── Sidebar docking position (toggled from the menubar) ─────────────────────
    Default (no body class) keeps the sidebar on the right. */
 

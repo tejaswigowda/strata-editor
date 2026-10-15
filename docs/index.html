@@ -61,6 +61,7 @@
 			import { Script } from './editor/js/Script.js';
 			import { Player } from './editor/js/Player.js';
 			import { PresentBar } from './editor/js/PresentBar.js';
+			import { PlayBar } from './editor/js/PlayBar.js';
 			import { Sidebar } from './editor/js/Sidebar.js';
 			import { Menubar } from './editor/js/Menubar.js';
 			import { Resizer } from './editor/js/Resizer.js';
@@ -136,6 +137,9 @@
 
 				const menubar = new Menubar( editor );
 				document.body.appendChild( menubar.dom );
+
+				const playBar = new PlayBar( editor );
+				document.body.appendChild( playBar.dom );
 
 				const resizer = new Resizer( editor );
 				document.body.appendChild( resizer.dom );

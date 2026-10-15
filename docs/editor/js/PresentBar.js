@@ -1,4 +1,5 @@
 import { UIPanel } from './libs/ui.js';
+import { formatClock } from './TimeFormat.js';
 
 // ── PresentBar.js ─────────────────────────────────────────────────────────────
 // The entire chrome shown in Present mode (#...&present=true — see index.html
@@ -43,7 +44,7 @@ function PresentBar( editor ) {
 
 	const timeLabel = document.createElement( 'div' );
 	timeLabel.className = 'present-time';
-	timeLabel.textContent = '0.00 / 0.00';
+	timeLabel.textContent = '00:00 / 00:00';
 	container.dom.appendChild( timeLabel );
 
 	// Remix: drop back into the full editor on the SAME scene — reloads with
@@ -119,7 +120,7 @@ function PresentBar( editor ) {
 
 		if ( ! scrubbing ) seek.value = String( info.time );
 
-		timeLabel.textContent = `${ info.time.toFixed( 2 ) } / ${ duration.toFixed( 2 ) }`;
+		timeLabel.textContent = `${ formatClock( info.time ) } / ${ formatClock( duration ) }`;
 
 	} );
 

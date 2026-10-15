@@ -530,6 +530,9 @@ export function compileTimeline( model, ctx ) {
 	// for why this can't just live on node.material.opacity.
 	const nodeOpacity = new Map();
 
+	// Per-node aim point (world) the last look-at leg ended on, so the next leg
+	// can ease the aim from there instead of snapping (see animateRecipe).
+	const lastAim = new Map();
 	// Selector → node(s), with the same camera/uuid fallbacks used for track
 	// targets below. Shared by the lookAt and moveTo/moveToEach resolvers.
 	function resolveSelectorNodes( selector ) {
@@ -814,9 +817,13 @@ export function compileTimeline( model, ctx ) {
 				// already warned above) — skip rather than animate to a wrong point.
 				if ( perNodeTargetWorld && ! perNodeTargetWorld[ ni ] ) continue;
 
-				const nodeParams = perNodeTargetWorld
+				let nodeParams = perNodeTargetWorld
 					? { ...params, targetWorld: perNodeTargetWorld[ ni ], targetQuaternion: perNodeTargetQuaternion[ ni ] }
 					: params;
+
+				if ( params.lookAtWorld && lastAim.has( node.uuid ) ) nodeParams = { ...nodeParams, lookFromWorld: lastAim.get( node.uuid ) };
+				if ( params.lookAtWorld ) lastAim.set( node.uuid, params.lookAtWorld );
+				else lastAim.delete( node.uuid );
 
 				// Restore THIS node's own last-committed (or, if this is its first
 				// opacity event in this pass, its own REST) opacity before letting
