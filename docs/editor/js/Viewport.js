@@ -27,6 +27,7 @@ import { hydrateHtmlEmbed } from './HtmlEmbed.js';
 import { hydrateMarkdownEmbed } from './MarkdownEmbed.js';
 import { hydrateCallcard } from './Callcard.js';
 import { CameraPath } from './CameraPath.js';
+import { swapNodeMaterials } from './toon/WebGLFallback.js';
 
 /**
  * Cube border helper: `node.userData.hasEdgeOutline` is a plain, serializable
@@ -1573,7 +1574,20 @@ function Viewport( editor ) {
 		startTime = performance.now();
 
 		renderer.setViewport( 0, 0, container.dom.offsetWidth, container.dom.offsetHeight );
-		renderer.render( scene, editor.viewportCamera );
+
+		// Without WebGPU the editor falls back to the classic WebGLRenderer, which cannot compile
+		// node materials (MToon, TSL shaders): draw them through WebGL stand-ins for this frame.
+		const restoreNodeMaterials = renderer.isWebGLRenderer ? swapNodeMaterials( scene, { cache: true } ) : null;
+		try {
+
+			renderer.render( scene, editor.viewportCamera );
+
+		} finally {
+
+			if ( restoreNodeMaterials ) restoreNodeMaterials();
+
+		}
+
 		if ( camera === editor.viewportCamera ) cameraPath.updateScales( camera ); else cameraPath.label.style.display = 'none';
 
 		// 'html'/'md' stencil meshes never carry baked pixels out of a scene load

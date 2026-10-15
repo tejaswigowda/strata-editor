@@ -72,6 +72,7 @@ Colors and maps carry over from the source material where the new type has them.
 * **Switching shaders** removes MToon's outline passes before the new material goes on.
 * **Undo / redo** restore the materials, MToon's extra draw groups, and any lights it added.
 * **The Render tab (video and snapshots) draws with WebGL**, which cannot run node materials. While rendering, MToon is swapped for a stepped `MeshToonMaterial` with the same color, maps and transparency (outline passes are left out), and other node shaders for the material they replaced. The scene gets its real materials back afterwards, so the viewport is unchanged. Rendered toon shading is therefore close to, not identical to, the viewport's MToon.
+* **Browsers without WebGPU (most Android phones) fall back to the classic WebGL renderer**, which cannot compile node materials, so the viewport draws MToon through the same stand-ins, swapped in around each frame and cached. Before this, loading a scene with MToon on such a browser failed with `Cannot read properties of undefined (reading 'replace')`. The scene itself keeps its real MToon materials, so saving is unaffected.
 * **Revert** restores the original material of each mesh. After a reload, the original of a stock-type shader
   (`standard`, `phong`, ...) is not stored, so Revert only reaches TSL / MToon shaders there.
 

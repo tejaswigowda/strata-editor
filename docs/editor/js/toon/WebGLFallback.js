@@ -11,6 +11,12 @@
 //                       else a MeshStandardMaterial copy of the shared properties.
 //
 // Shared materials stay shared: one stand-in per original.
+//
+// Two uses. The Render tab swaps once per render and disposes the stand-ins afterwards. The
+// viewport, when it has fallen back to WebGL (no WebGPU, e.g. most Android browsers), swaps
+// around every frame with { cache: true }: stand-ins are kept per original material, re-synced
+// from it each frame, so edits show and nothing is rebuilt. The scene always keeps its real
+// node materials (they are what gets saved).
 
 import * as THREE from 'three';
 import { isToon } from './ToonLook.js';
@@ -47,8 +53,39 @@ function rampTexture( shade ) {
 
 }
 
+const CACHE = new WeakMap(); // original node material -> stand-in, for the viewport's per-frame swap
+
+function syncToon( t, m ) {
+
+	copyShared( t, m );
+	const shade = m.shadeColorFactor && m.shadeColorFactor.isColor ? luminance( m.shadeColorFactor ) : 0.6;
+	if ( t.userData.shade !== shade ) {
+
+		if ( t.gradientMap ) t.gradientMap.dispose();
+		t.gradientMap = rampTexture( shade );
+		t.userData.shade = shade;
+
+	}
+
+}
+
 /** A WebGL-renderable stand-in for one node material. */
-export function webglStandIn( m ) {
+export function webglStandIn( m, cache = false ) {
+
+	if ( cache && CACHE.has( m ) ) {
+
+		const hit = CACHE.get( m );
+		if ( hit.userData && hit.userData.webglStandIn ) { if ( hit.isMeshToonMaterial ) syncToon( hit, m ); else { const k = hit.userData; copyShared( hit, m ); hit.userData = k; } }
+		return hit;
+
+	}
+	const made = buildStandIn( m );
+	if ( cache ) CACHE.set( m, made );
+	return made;
+
+}
+
+function buildStandIn( m ) {
 
 	if ( isToon( m ) ) {
 
@@ -56,7 +93,7 @@ export function webglStandIn( m ) {
 		const t = copyShared( new THREE.MeshToonMaterial(), m );
 		const shade = m.shadeColorFactor && m.shadeColorFactor.isColor ? luminance( m.shadeColorFactor ) : 0.6;
 		t.gradientMap = rampTexture( shade );
-		t.userData = { webglStandIn: true };
+		t.userData = { webglStandIn: true, shade };
 		return t;
 
 	}
@@ -70,13 +107,13 @@ export function webglStandIn( m ) {
 }
 
 /** Swap every node material under `root` for a stand-in. Returns restore(). A no-op when there are none. */
-export function swapNodeMaterials( root ) {
+export function swapNodeMaterials( root, { cache = false } = {} ) {
 
 	const made = new Map(); // original -> stand-in
 	const swaps = [];
 	const standIn = m => {
 
-		if ( ! made.has( m ) ) made.set( m, webglStandIn( m ) );
+		if ( ! made.has( m ) ) made.set( m, webglStandIn( m, cache ) );
 		return made.get( m );
 
 	};
@@ -104,6 +141,7 @@ export function swapNodeMaterials( root ) {
 	return function restore() {
 
 		for ( const undo of swaps ) undo();
+		if ( cache ) return;
 		for ( const s of made.values() ) {
 
 			if ( s.userData && s.userData.webglStandIn ) {
