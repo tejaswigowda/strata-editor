@@ -8,6 +8,8 @@ import { SetScaleCommand } from './commands/SetScaleCommand.js';
 import { SetMaterialColorCommand } from './commands/SetMaterialColorCommand.js';
 import { SetMaterialCommand } from './commands/SetMaterialCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
+import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
+import { parseSrt, cuesToSrt, normalizeCues } from './intelligence/subtitles.js';
 import { GroupObjectsCommand } from './commands/GroupObjectsCommand.js';
 import { UngroupObjectsCommand } from './commands/UngroupObjectsCommand.js';
 import { SetLabelCommand } from './commands/SetLabelCommand.js';
@@ -537,6 +539,8 @@ function Shell( editor ) {
 		{ w: '$S', k: 'fn' }, { w: 'Pick', k: 'fn' }, { w: 'pick', k: 'fn' },
 		{ w: 'query', k: 'fn' }, { w: 'queryOne', k: 'fn' },
 		{ w: 'isValidSelector', k: 'fn' }, { w: 'listSelectors', k: 'fn' },
+		{ w: 'subtitles', k: 'fn' }, { w: 'setSubtitles', k: 'fn' }, { w: 'importSrt', k: 'fn' }, { w: 'exportSrt', k: 'fn' },
+		{ w: 'holdTimelineAt', k: 'fn' },
 
 		// ── Ops ──
 		{ w: 'op', k: 'fn' }, { w: 'ops', k: 'fn' }, { w: 'listOps', k: 'fn' },
@@ -1985,6 +1989,30 @@ function Shell( editor ) {
 				$S: query,
 				Pick: query,
 				pick: query,
+				// ── Subtitles — the same cues the Render tab shows, kept on the scene ──
+				// subtitles() → [{ id, start, end, text }] (output-video seconds)
+				// setSubtitles([{ start, end, text }, ...]) → replaces them (undoable, autosaved)
+				// importSrt(srtText) / exportSrt() → convert to / from .srt text
+				subtitles: () => normalizeCues( editor.scene.userData && editor.scene.userData.renderSubtitles ),
+				setSubtitles: ( cues, label ) => {
+
+					if ( ! Array.isArray( cues ) ) throw new Error( 'setSubtitles: pass an array of { start, end, text }' );
+					editor.execute( new SetSubtitlesCommand( editor, cues, label || 'Set subtitles (shell)' ) );
+					return normalizeCues( editor.scene.userData && editor.scene.userData.renderSubtitles );
+
+				},
+				importSrt: ( srtText ) => {
+
+					const cues = parseSrt( String( srtText ) );
+					if ( cues.length === 0 ) throw new Error( 'importSrt: no cues found in that text' );
+					editor.execute( new SetSubtitlesCommand( editor, cues, `Import subtitles (${ cues.length } cues)` ) );
+					return cues;
+
+				},
+				exportSrt: () => cuesToSrt( editor.scene.userData && editor.scene.userData.renderSubtitles ),
+				// holdTimelineAt(t) / holdTimelineAt(editor, t) → jump the whole scene to t seconds
+				// (what scrubbing does), so you can read poses, bones and cameras at that moment
+				holdTimelineAt: ( a, b ) => holdTimelineAt( editor, typeof a === 'number' ? a : b ),
 				// OP_VOCABULARY — the closed op set + typed args (for introspection).
 				OP_VOCABULARY,
 

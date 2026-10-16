@@ -62,6 +62,7 @@
 			import { Player } from './editor/js/Player.js';
 			import { PresentBar } from './editor/js/PresentBar.js';
 			import { PlayBar } from './editor/js/PlayBar.js';
+			import { SubtitlePreview } from './editor/js/SubtitlePreview.js';
 			import { Sidebar } from './editor/js/Sidebar.js';
 			import { Menubar } from './editor/js/Menubar.js';
 			import { Resizer } from './editor/js/Resizer.js';
@@ -140,6 +141,9 @@
 
 				const playBar = new PlayBar( editor );
 				document.body.appendChild( playBar.dom );
+
+				const subtitlePreview = new SubtitlePreview( editor );
+				document.body.appendChild( subtitlePreview.dom );
 
 				const resizer = new Resizer( editor );
 				document.body.appendChild( resizer.dom );

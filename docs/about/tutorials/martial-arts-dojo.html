@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A martial-arts lesson in a bamboo dojo — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: two rigged VRoid characters share one motion-capture clip. Stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut, warm lighting and a four-camera render sequence — all with the JS Shell.">
+<!--
+	/about/tutorials/martial-arts-dojo.html — a by-hand tutorial. The two
+	characters are made outside Strata (VRM: facebind, rig: bodyrig-webCLI,
+	motion: Mesquite MoCap); everything after that is real Strata surface
+	(Import dialog, JS Shell globals, $S clip directives, camera keys, the
+	Render tab). Paste each Shell block in order. Static page, no build step.
+	The finished scene is tejaswigowda/test1 / dojo.json. Screenshot is a real
+	capture from that scene.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>A martial-arts lesson in a bamboo dojo</h1>
+
+	<figure>
+		<img src="./screenshots/dojo-lesson.png" alt="A student and a bald teacher face each other on a tatami mat inside an open bamboo hut with a calligraphy scroll and paper lanterns">
+		<figcaption>The finished scene, seen through the <code>cam-wide</code> camera at 30 s: the teacher demonstrates a kick while the student watches.</figcaption>
+	</figure>
+
+	<p class="tagline">Two characters, one motion clip. A <strong>teacher</strong> performs a martial-arts routine in short chunks; after each chunk the <strong>student</strong>, who has been standing and watching, repeats it. Around them a bamboo hut with warm lanterns and a low sun, and four cameras that cut between over-the-shoulder, side and wide shots. Everything after the import is the JS Shell and the Render tab, and the finished scene is <a href="../../#repo=tejaswigowda/test1&amp;file=dojo.json&amp;branch=main"><code>dojo.json</code></a> in the <code>tejaswigowda/test1</code> repo.</p>
+
+	<div class="note"><strong>Where the pieces come from.</strong> Both characters are VRM models made with <a href="https://tejaswigowda.com/strata-editor/facebind/">facebind</a>. They were rigged and given the animation with <a href="https://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a>, which writes one GLB per character with the clip baked in. The motion itself is from <a href="https://arxiv.org/abs/2512.22690">Mesquite MoCap: Democratizing Real-Time Motion Capture with Affordable, Bodyworn IoT Sensors and WebXR SLAM</a> (arXiv:2512.22690). Both characters carry the same clip, named <code>p2</code>, 46.83 s long.</div>
+
+	<div class="note"><strong>How to follow along.</strong> Open the <a href="../../">editor</a>, import your two GLBs (<strong>Import</strong> in the menu bar), open the <strong>Shell</strong> tab and paste each block in order. Every block goes through an undoable command, so <kbd>Ctrl/Cmd+Z</kbd> backs out a step. The selectors below (<code>.vroidv110malev113bound-15p2glb</code>) are derived from the imported object names; yours will differ, so check with <code>scene.children.map(o =&gt; o.name)</code> and adjust.</div>
+
+	<div class="note"><strong>Each Shell command runs in its own scope.</strong> A <code>const</code> or function from one block is not visible in the next, so step 1 stores the shared pieces on <code>window.dojo</code> and every later block starts by pulling out what it needs with <code>const { … } = window.dojo;</code>. Only the bamboo-frame block in step 5 needs <code>await</code>, so only that one is wrapped in <code>(async () =&gt; { … })();</code>; the Shell does not print what an async block returns, so it leaves its results on <code>window.dojo</code> too. <code>holdTimelineAt(t)</code>, used throughout, is a Shell global that jumps the whole scene to <code>t</code> seconds — exactly what scrubbing the timeline does.</div>
+
+	<h2><span class="step">1</span> Import and pick a teacher</h2>
+	<p class="lede">Import both GLBs. They arrive as two top-level groups, each with its own copy of the clip <code>p2</code>, and the same clip name does not clash because a clip is bound to its own character. Make the bald one the teacher and the other the student; below, the teacher is the group whose name contains <code>(15)</code> and the student the one containing <code>(11)</code>.</p>
+	<pre><code>const T = scene.children.find(c =&gt; /\(15\)/.test(c.name));   // teacher
+const S = scene.children.find(c =&gt; /\(11\)/.test(c.name));   // student
+const bone = (root, re) =&gt; { let r = null; root.traverse(o =&gt; { if (!r &amp;&amp; o.isBone &amp;&amp; re.test(o.name)) r = o; }); return r; };
+const wp = b =&gt; b.getWorldPosition(new THREE.Vector3());
+const hips = ch =&gt; bone(ch, /J_Bip_C_Hips/);
+window.dojo = { T, S, bone, wp, hips, plan: [] };</code></pre>
+	<p>Check it took: <code>window.dojo.T.name</code> and <code>window.dojo.S.name</code> should print the two character names.</p>
+	<div class="note"><strong>Frame 0 of this clip is a T-pose.</strong> The routine starts from a relaxed stance at about 4.5 s into the clip, so everything below treats <code>4.5</code> as the "rest" time: both characters are held there before and between their turns.</div>
+
+	<h2><span class="step">2</span> Put them face to face</h2>
+	<p class="lede">Imported clips carry <em>root motion</em>: the hips travel through the scene as the clip plays, and the clip's own root node can start well away from the group origin. Placing the groups by their position alone therefore leaves the characters wherever the clip puts them. Instead, measure where the hips are at rest time, then move each group so the hips land on the spots you want.</p>
+	<pre><code>const { T, S, wp, hips } = window.dojo;
+
+// Hold the whole scene at the rest stance (this is what scrubbing does), then read where each pair of hips is.
+holdTimelineAt(4.5);
+scene.updateMatrixWorld(true);
+const s0 = wp(hips(S)), t0 = wp(hips(T));
+
+// Teacher goes to the mirror image of the student across the origin on z.
+const target = new THREE.Vector3(s0.x, 0, -s0.z);
+const d = target.clone().sub(t0); d.y = 0;
+editor.execute(new SetPositionCommand(editor, T, T.position.clone().add(d)));</code></pre>
+	<p>The pair now stand about 3.4 m apart on the z axis. Next, turn them to face each other. The chest line is the reliable way to measure facing — the angle between the shoulder normal and the direction to the partner — so use it to check, then nudge <code>rotation.y</code> until both read close to 0°:</p>
+	<pre><code>const { T, S, bone, wp, hips } = window.dojo;
+const facingError = (a, b) =&gt; {
+  const l = wp(bone(a, /J_Bip_L_UpperArm/)), r = wp(bone(a, /J_Bip_R_UpperArm/));
+  const f = l.sub(r).cross(new THREE.Vector3(0, 1, 0)); f.y = 0; f.normalize();
+  const to = wp(hips(b)).sub(wp(hips(a))); to.y = 0; to.normalize();
+  return +(f.angleTo(to) * 180 / Math.PI).toFixed(1);
+};
+[facingError(T, S), facingError(S, T)];   // aim for ~0 at the rest stance</code></pre>
+	<div class="note"><strong>Why measure instead of rotating by 180°.</strong> The clip's root node has its own orientation, so the group's <code>rotation.y</code> that makes a character face its partner is not a round number (the teacher ended up near +92° and the student near +272° here). Measure, then adjust — a few degrees either way is easy to see from above in the viewport.</div>
+	<p>While the routine plays, the performer turns and kicks, so the facing error grows mid-move. That is the clip, not the placement; at the rest stance both are within a degree or two.</p>
+
+	<h2><span class="step">3</span> Teach in chunks: the demo, then the repeat</h2>
+	<p class="lede">The timeline is a list of directives. <code>$S(selector).at(t).play(clip, { duration })</code> starts a clip, <code>.seek(time)</code> picks where in the clip to start, and <code>.pause()</code> freezes it. Before its first <code>play</code> a clip shows frame 0 (the T-pose), so first park both characters at the rest stance, then play the routine in three chunks:</p>
+	<ol class="steps">
+		<li>The <strong>teacher</strong> demonstrates a chunk of the clip while the student stands at rest.</li>
+		<li>One second later, the <strong>student</strong> plays the <em>same</em> chunk while the teacher watches at rest.</li>
+		<li>A second after that, the next chunk begins.</li>
+	</ol>
+	<pre><code>const { plan } = window.dojo;                          // [who, start, end] windows on the timeline
+const teacher = $S('.vroidv110malev113bound-15p2glb');
+const student = $S('.vroidv110malev113bound-11p2glb');
+
+// Park both on the rest stance: play for 1 s, seek to 4.5 s, pause.
+for (const who of [teacher, student]) who.at(0).play('p2', { duration: 1000 }).seek(4.5).pause();
+
+// Three chunks of the 46.8 s clip, in clip time.
+const chunks = [[4.5, 16.4], [16.4, 29.1], [29.1, 46.8]];
+let t = 1;
+for (const [a, b] of chunks) {
+  const len = +(b - a).toFixed(2);
+  teacher.at(t).play('p2', { duration: len * 1000 }).seek(a);       // teacher demos
+  teacher.at(+(t + len).toFixed(2)).pause();                        // ...and freezes
+  student.at(+(t + len + 1).toFixed(2)).play('p2', { duration: len * 1000 }).seek(a);   // student repeats
+  student.at(+(t + 2 * len + 1).toFixed(2)).pause();
+  plan.push(['teacher', t, +(t + len).toFixed(2)], ['student', +(t + len + 1).toFixed(2), +(t + 2 * len + 1).toFixed(2)]);
+  t = +(t + 2 * len + 2).toFixed(2);
+}
+editor.timeline.toJSON().duration;                    // 90.6</code></pre>
+	<p>Open the <strong>Animations</strong> tab and scrub. The teacher moves from 1 s to 12.9 s while the student holds still, then the student performs the same moves from 13.9 s to 25.8 s, and so on. Each chunk starts where the last one ended in the clip (<code>4.5 → 16.4 → 29.1 → 46.8</code>), so the lesson walks through the whole routine once, demo then repeat, in 90.6 s.</p>
+	<div class="note"><strong>Why <code>.seek()</code> after <code>.play()</code>.</strong> A later <code>play</code> restarts the clip's local time at 0, so the chunk's start has to be re-applied each time. <code>duration</code> is in milliseconds and sets how long the clip runs before the next directive can take over.</div>
+
+	<h2><span class="step">4</span> A floor with no grid</h2>
+	<p class="lede">A wood base, a tatami mat on top and a boundary tape make the floor. The important detail is the mat's texture: tatami is usually drawn with dark seams, but those read as a grid under the characters, so paint plain straw with random fibres instead — and the texture still tiles.</p>
+	<pre><code>const dojo = new THREE.Group(); dojo.name = 'Dojo Floor';
+
+const wood = new THREE.Mesh(new THREE.PlaneGeometry(60, 60),
+  new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.8 }));
+wood.name = 'Wood Floor'; wood.rotation.x = -Math.PI / 2; wood.position.y = -0.06; wood.receiveShadow = true;
+
+// Straw texture: a flat tan base with thin random fibres, no seams.
+const c = document.createElement('canvas'); c.width = c.height = 512;
+const g = c.getContext('2d');
+g.fillStyle = '#c9b57c'; g.fillRect(0, 0, 512, 512);
+for (let i = 0; i &lt; 2600; i++) {
+  const x = Math.random() * 512, y = Math.random() * 512, len = 30 + Math.random() * 90;
+  g.strokeStyle = `hsla(${42 + Math.random() * 8},${30 + Math.random() * 20}%,${48 + Math.random() * 18}%,0.35)`;
+  g.lineWidth = 1 + Math.random(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + len, y + (Math.random() - 0.5) * 2); g.stroke();
+}
+const straw = new THREE.CanvasTexture(c);
+straw.wrapS = straw.wrapT = THREE.RepeatWrapping; straw.repeat.set(3, 3); straw.colorSpace = THREE.SRGBColorSpace;
+
+// Box faces are [+x, -x, +y, -y, +z, +z]: only the top (+y) gets the straw.
+const side = new THREE.MeshStandardMaterial({ color: 0xb8a56c, roughness: 0.9 });
+const top  = new THREE.MeshStandardMaterial({ map: straw, roughness: 0.9 });
+const mat = new THREE.Mesh(new THREE.BoxGeometry(10, 0.06, 10), [side, side, top, side, side, side]);
+mat.name = 'Tatami Mat'; mat.position.y = -0.03; mat.receiveShadow = true;
+
+dojo.add(wood, mat);
+for (const [x, z, w, d] of [[0, -4.65, 9.3, 0.07], [0, 4.65, 9.3, 0.07], [-4.65, 0, 0.07, 9.3], [4.65, 0, 0.07, 9.3]]) {
+  const tape = new THREE.Mesh(new THREE.BoxGeometry(w, 0.004, d), new THREE.MeshStandardMaterial({ color: 0x9a2a2a }));
+  tape.name = 'Boundary Tape'; tape.position.set(x, 0.002, z); dojo.add(tape);
+}
+editor.execute(new AddObjectCommand(editor, dojo));
+scene.fog = new THREE.FogExp2(0xb9c29a, 0.035);        // a soft green haze
+scene.background = new THREE.Color(0xb9c29a);</code></pre>
+	<p>Check the characters' feet against the mat: both should be within a centimetre of <code>y = 0</code>. If one floats or sinks, nudge that group's <code>position.y</code> with <code>SetPositionCommand</code>.</p>
+
+	<h2><span class="step">5</span> A bamboo hut</h2>
+	<p class="lede">The hut is built from the same trick everywhere: a <em>pole</em> is a thin cylinder stretched between two points, with a few short rings along it for the bamboo nodes. Collect all the poles into arrays, merge each array into <strong>one mesh</strong>, and the whole frame is a handful of draw calls instead of a thousand. The hut is 20 m long and 15 m wide with an open front, so the cameras fly through it freely, and the sun comes in through the open end.</p>
+	<pre><code>(async () =&gt; {
+const { mergeGeometries } = await import('three/addons/utils/BufferGeometryUtils.js');
+const V3 = THREE.Vector3, UP = new V3(0, 1, 0);
+let seed = 11; const rnd = () =&gt; (seed = (seed * 16807) % 2147483647) / 2147483647;
+const std = o =&gt; new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.75 }, o));
+const mesh = (name, geom, material, cast = false) =&gt; {
+  const m = new THREE.Mesh(geom, material); m.name = name; m.castShadow = cast; m.receiveShadow = true; return m;
+};
+
+// A pole from a to b, plus node rings along it.
+const poles = { p: [], n: [] };
+const addPole = (set, a, b, r, nodeEvery = 0.55) =&gt; {
+  a = new V3(...a); b = new V3(...b);
+  const dir = b.clone().sub(a), len = dir.length(); dir.normalize();
+  const q = new THREE.Quaternion().setFromUnitVectors(UP, dir);
+  const pole = new THREE.CylinderGeometry(r, r * 1.05, len, 7, 1);
+  pole.applyMatrix4(new THREE.Matrix4().compose(a.clone().add(b).multiplyScalar(0.5), q, new V3(1, 1, 1)));
+  set.p.push(pole);
+  for (let t = 0.3 + rnd() * 0.25; t &lt; len - 0.08; t += nodeEvery + rnd() * 0.15) {
+    const ring = new THREE.CylinderGeometry(r * 1.25, r * 1.25, 0.05, 7, 1);
+    ring.applyMatrix4(new THREE.Matrix4().compose(a.clone().addScaledVector(dir, t), q, new V3(1, 1, 1)));
+    set.n.push(ring);
+  }
+};
+
+const X0 = -10, X1 = 10, ZW = 7.5, EAVE = 3.5, RIDGE = 6.1, EZ = 8.2;   // hut extents
+// Posts every 2.5 m on both long sides, with beams along the tops.
+for (let x = X0; x &lt;= X1 + 1e-6; x += 2.5) for (const z of [-ZW, ZW]) addPole(poles, [x, 0, z], [x, 3.85, z], 0.1, 0.7);
+for (const z of [-ZW, ZW]) addPole(poles, [X0 - 0.2, 3.8, z], [X1 + 0.2, 3.8, z], 0.08, 1.0);
+// Ridge pole and rafters (one every metre, on both slopes).
+for (const x of [X0, X1]) addPole(poles, [x, 0, 0], [x, RIDGE + 0.1, 0], 0.11, 0.8);
+addPole(poles, [X0 - 1.2, RIDGE + 0.05, 0], [X1 + 1.2, RIDGE + 0.05, 0], 0.1, 1.0);
+for (let x = X0 - 0.5; x &lt;= X1 + 0.5 + 1e-6; x += 1) for (const s of [-1, 1]) addPole(poles, [x, RIDGE, 0], [x, EAVE, s * EZ], 0.05, 1.2);
+// Back wall: vertical slats that follow the gable, with three lashed rails.
+for (let z = -ZW; z &lt;= ZW + 1e-6; z += 0.28) addPole(poles, [X0 + 0.05, 0, z], [X0 + 0.05, RIDGE - 0.05 - Math.abs(z) * 0.317, z], 0.05, 0.6);
+for (const y of [0.5, 1.9, 3.2]) addPole(poles, [X0 + 0.15, y, -ZW], [X0 + 0.15, y, ZW], 0.04, 1.4);
+// Low railings along both long sides.
+for (const z of [-ZW, ZW]) {
+  for (const y of [0.5, 1.0]) addPole(poles, [X0, y, z], [X1, y, z], 0.04, 1.4);
+  for (let x = X0 + 0.4; x &lt; X1; x += 0.45) addPole(poles, [x, 0, z], [x, 1.0, z], 0.03, 0.6);
+}
+
+const hut = new THREE.Group(); hut.name = 'Bamboo Hut';
+hut.add(mesh('Bamboo Frame', mergeGeometries(poles.p), std({ color: 0xc7b256, roughness: 0.55 }), true));
+hut.add(mesh('Bamboo Nodes', mergeGeometries(poles.n), std({ color: 0x74672a, roughness: 0.7 })));
+
+// Hand everything the next blocks need over on window.dojo.
+Object.assign(window.dojo, { mergeGeometries, rnd, std, mesh, addPole, hut, K: { X0, X1, ZW, EAVE, RIDGE, EZ } });
+})();</code></pre>
+	<p>Nothing is in the scene yet: the hut group is held on <code>window.dojo.hut</code> until the next block adds the roof and the scroll and puts the whole thing in.</p>
+	<p>Now the thatch roof: two tilted boxes with a straw texture drawn on a canvas, and a rolled ridge cap. Then a calligraphy scroll on the back wall — drawn on a canvas too, with the characters 武道 ("martial way").</p>
+	<pre><code>const { rnd, std, mesh, hut } = window.dojo;
+const { X0, EAVE, RIDGE, EZ } = window.dojo.K;
+
+// Thatch texture: brown base, 1600 random strands, a dark band every 32 px.
+const tc = document.createElement('canvas'); tc.width = tc.height = 256;
+const tx = tc.getContext('2d');
+tx.fillStyle = '#8f6f37'; tx.fillRect(0, 0, 256, 256);
+for (let i = 0; i &lt; 1600; i++) {
+  const x = rnd() * 256, y = rnd() * 256, len = 20 + rnd() * 50;
+  tx.strokeStyle = `hsla(${34 + rnd() * 10},${35 + rnd() * 20}%,${28 + rnd() * 30}%,0.55)`;
+  tx.lineWidth = 1 + rnd() * 1.6; tx.beginPath(); tx.moveTo(x, y); tx.lineTo(x + (rnd() - 0.5) * 4, y + len); tx.stroke();
+}
+for (let y = 0; y &lt; 256; y += 32) { tx.fillStyle = 'rgba(40,28,10,0.35)'; tx.fillRect(0, y, 256, 3); }
+const thatch = new THREE.CanvasTexture(tc);
+thatch.wrapS = thatch.wrapT = THREE.RepeatWrapping; thatch.repeat.set(8, 3); thatch.colorSpace = THREE.SRGBColorSpace;
+const thatchMat = () =&gt; std({ map: thatch, roughness: 0.95 });
+
+const tilt = Math.atan2(RIDGE - EAVE, EZ), slope = Math.hypot(RIDGE - EAVE, EZ);
+for (const s of [-1, 1]) {
+  const roof = mesh('Thatch Roof ' + (s &gt; 0 ? 'South' : 'North'), new THREE.BoxGeometry(22.8, 0.24, slope + 0.5), thatchMat());
+  roof.position.set(0, (RIDGE + EAVE) / 2 + Math.cos(tilt) * 0.17, s * (EZ / 2 + Math.sin(tilt) * 0.17));
+  roof.rotation.x = s * tilt; hut.add(roof);
+}
+const ridge = mesh('Ridge Roll', new THREE.CylinderGeometry(0.24, 0.24, 23, 10), thatchMat());
+ridge.rotation.z = Math.PI / 2; ridge.position.set(0, RIDGE + 0.28, 0); hut.add(ridge);
+
+// Scroll on the back wall.
+const sc = document.createElement('canvas'); sc.width = 256; sc.height = 512;
+const sx = sc.getContext('2d');
+sx.fillStyle = '#efe3c4'; sx.fillRect(0, 0, 256, 512);
+sx.strokeStyle = '#7a1d1d'; sx.lineWidth = 10; sx.strokeRect(14, 14, 228, 484);
+sx.fillStyle = '#16120d'; sx.textAlign = 'center'; sx.font = 'bold 170px "Hiragino Mincho ProN","Yu Mincho",serif';
+sx.fillText('武', 128, 220); sx.fillText('道', 128, 410);
+const scrollTex = new THREE.CanvasTexture(sc); scrollTex.colorSpace = THREE.SRGBColorSpace;
+const scroll = mesh('Dojo Scroll', new THREE.PlaneGeometry(1.5, 3), std({ map: scrollTex, roughness: 0.9 }));
+scroll.position.set(X0 + 0.28, 2.0, 0); scroll.rotation.y = Math.PI / 2; hut.add(scroll);
+editor.execute(new AddObjectCommand(editor, hut));</code></pre>
+	<div class="note"><strong>Keep the cameras inside.</strong> The hut is sized around the camera paths from step 7 — 20 × 15 m, rafters starting 3.5 m up. If you resize it, re-run the check at the end of that step: with the posts, rails and scroll in the way, a camera that moves through one at the wrong moment shows a bamboo trunk filling the frame.</div>
+
+	<h2><span class="step">6</span> A grove outside, and the lighting</h2>
+	<p class="lede">The grove is the same pole helper again: 64 tall stalks scattered outside the hut footprint, leaning a little, with a leaf canopy on half of them, over a green ground plane. It shows through the slats and over the rails and gives the scene a surrounding. The floor from step 4 shrinks to the hut's footprint so the grove ground can take over outside it.</p>
+	<pre><code>const { mergeGeometries, rnd, std, mesh, addPole } = window.dojo;
+const grove = { p: [], n: [] }, leaves = [];
+for (let placed = 0; placed &lt; 64;) {
+  const x = (rnd() * 2 - 1) * 20, z = (rnd() * 2 - 1) * 20;
+  if (Math.abs(x) &lt; 12 &amp;&amp; Math.abs(z) &lt; 10.8) continue;            // keep the hut itself clear
+  const h = 8 + rnd() * 5, lx = (rnd() - 0.5) * 0.9, lz = (rnd() - 0.5) * 0.9;
+  addPole(grove, [x, 0, z], [x + lx, h, z + lz], 0.07 + rnd() * 0.05, 0.6);
+  if (placed % 2 === 0) { const l = new THREE.IcosahedronGeometry(1.5, 1); l.scale(1.7, 0.8, 1.7); l.translate(x + lx, h - 0.4, z + lz); leaves.push(l); }
+  placed++;
+}
+const groveGroup = new THREE.Group(); groveGroup.name = 'Bamboo Grove';
+groveGroup.add(mesh('Grove Stalks', mergeGeometries(grove.p), std({ color: 0x8aa23f, roughness: 0.6 })));
+groveGroup.add(mesh('Grove Nodes',  mergeGeometries(grove.n), std({ color: 0x4d5a22 })));
+groveGroup.add(mesh('Grove Leaves', mergeGeometries(leaves),  std({ color: 0x5c8a33, roughness: 0.95 })));
+const ground = mesh('Grove Ground', new THREE.PlaneGeometry(140, 140), std({ color: 0x7b8a47, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.075; groveGroup.add(ground);
+editor.execute(new AddObjectCommand(editor, groveGroup));
+
+// Shrink the wood floor to the hut footprint (scale on the plane's own x/y axes).
+editor.execute(new SetScaleCommand(editor, scene.getObjectByName('Wood Floor'), new THREE.Vector3(21.4 / 60, 16.6 / 60, 1)));</code></pre>
+	<p>Lighting is five different jobs. A <strong>hemisphere light</strong> fills shadows with warm sky and brown ground bounce; a <strong>low warm sun</strong> through the open end casts the long soft shadows that make the floor read as a floor; a <strong>cool rim</strong> from behind separates the characters from the back wall; and <strong>four paper lanterns</strong> are both a visible mesh and a point light that pools orange on the mat.</p>
+	<pre><code>const { std, mesh } = window.dojo;
+const lights = new THREE.Group(); lights.name = 'Hut Lighting';
+
+const hemi = new THREE.HemisphereLight(0xfff0d2, 0x3a3020, 0.85); hemi.name = 'Sky Fill'; lights.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xffd59a, 2.6); sun.name = 'Sun Key';
+sun.position.set(14, 5, 5); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 2, far: 40 });
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;   // no acne on skin
+lights.add(sun);
+
+const rim = new THREE.DirectionalLight(0x9db9ff, 0.55); rim.name = 'Cool Rim'; rim.position.set(-12, 6, -5); lights.add(rim);
+
+[[-5, 4.8], [-5, -4.8], [3.5, 4.8], [3.5, -4.8]].forEach(([x, z], i) =&gt; {
+  const glow = new THREE.PointLight(0xffa24a, 22, 13, 2); glow.name = 'Lantern Light ' + (i + 1); glow.position.set(x, 3, z);
+  const paper = mesh('Paper Lantern ' + (i + 1), new THREE.CylinderGeometry(0.2, 0.2, 0.42, 12),
+    std({ color: 0xffd9a3, emissive: 0xffa24a, emissiveIntensity: 1.6, roughness: 0.8 }));
+  paper.position.copy(glow.position); lights.add(glow, paper);
+});
+editor.execute(new AddObjectCommand(editor, lights));
+
+scene.environmentIntensity = 0.45;     // the default environment is bright; this stops it flattening the key and rim</code></pre>
+	<div class="note"><strong>Only some meshes cast shadows, on purpose.</strong> A character is dozens of small skinned meshes, and each caster is another pass through the shadow map. Letting only the big ones — the body, head and hair, about 13 of the 83 — cast cuts the cost to roughly a third while the shadow on the floor looks the same:
+		<pre><code>scene.traverse(o =&gt; { if (o.isSkinnedMesh) o.castShadow = o.geometry.attributes.position.count &gt;= 700; });</code></pre></div>
+
+	<h2><span class="step">7</span> Four cameras that follow the performer</h2>
+	<p class="lede">Each camera is a <code>PerspectiveCamera</code> with a key every half second, so it moves along with the characters instead of sitting still. The keys are computed from the characters' <em>actual</em> hip and head positions at each time, sampled by holding the timeline at that moment, which is why the previous steps' alignment matters: the first version of these cameras was keyed before the teacher was corrected, and half the shots missed him entirely. The four cameras:</p>
+	<ul>
+		<li><code>cam-wide</code> — a slow push-in from the front, framing both characters and the mat.</li>
+		<li><code>cam-side</code> — a slow orbit around whoever is performing.</li>
+		<li><code>cam-student-pov</code> / <code>cam-teacher-pov</code> — over the watcher's shoulder, looking at the performer.</li>
+	</ul>
+	<pre><code>const { T, S, bone, wp, hips, plan } = window.dojo;
+
+// Create the cameras in one group.
+const camGroup = new THREE.Group(); camGroup.name = 'CAMERAS';
+for (const [name, fov] of [['cam-wide', 38], ['cam-student-pov', 42], ['cam-teacher-pov', 42], ['cam-side', 32]]) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 200); cam.name = name; camGroup.add(cam);
+}
+editor.execute(new AddObjectCommand(editor, camGroup));
+
+// Sample hips and head of both characters every half second.
+const END = 93.5, times = [];
+for (let t = 0.5; t &lt;= END + 1e-6; t += 0.5) times.push(+t.toFixed(3));
+const samples = [];
+for (const t of times) {
+  holdTimelineAt(t); scene.updateMatrixWorld(true);
+  samples.push({ Th: wp(hips(T)), Thd: wp(bone(T, /J_Bip_C_Head$/)), Sh: wp(hips(S)), Shd: wp(bone(S, /J_Bip_C_Head$/)) });
+}
+holdTimelineAt(0);
+
+// Smooth each series (gaussian over +/-6 samples) so the cameras don't jitter with the moves.
+const smooth = (series, sigma) =&gt; series.map((_, i) =&gt; {
+  const acc = new THREE.Vector3(); let w = 0;
+  for (let j = Math.max(0, i - 6); j &lt;= Math.min(series.length - 1, i + 6); j++) {
+    const k = Math.exp(-((j - i) ** 2) / (2 * sigma * sigma)); acc.addScaledVector(series[j], k); w += k;
+  }
+  return acc.multiplyScalar(1 / w);
+});
+const Th = smooth(samples.map(s =&gt; s.Th), 1.5),  Sh = smooth(samples.map(s =&gt; s.Sh), 1.5);
+const Thd = smooth(samples.map(s =&gt; s.Thd), 1.5), Shd = smooth(samples.map(s =&gt; s.Shd), 1.5);
+const r3 = v =&gt; v.toArray().map(n =&gt; +n.toFixed(3));
+
+// Over-the-shoulder: just behind and beside the watcher's head, looking at the performer.
+const behind = (head, from, to) =&gt; {
+  const d = to.clone().sub(from); d.y = 0; d.normalize();
+  const side = new THREE.Vector3(-d.z, 0, d.x);
+  return head.clone().addScaledVector(d, -0.8).addScaledVector(side, 0.5).setY(1.7);
+};
+
+const keys = { wide: [], pS: [], pT: [], side: [] };
+times.forEach((t, i) =&gt; {
+  const u = t / END;
+  const win = plan.find(([who, s, e]) =&gt; t &gt;= s &amp;&amp; t &lt; e);
+  const perf = win ? win[0] : 'teacher';
+  const P = perf === 'teacher' ? Th[i] : Sh[i];                   // who is performing now
+  keys.wide.push({ t, pos: [+(8.4 - 0.9 * u).toFixed(3), 2.0, +(0.4 * Math.sin(u * 6.28)).toFixed(3)], lookAt: [0, 1.0, 0], fov: 38 });
+  keys.pS.push({ t, pos: r3(behind(Shd[i], Sh[i], Th[i])), lookAt: r3(Th[i].clone().setY(0.9)), fov: 42 });
+  keys.pT.push({ t, pos: r3(behind(Thd[i], Th[i], Sh[i])), lookAt: r3(Sh[i].clone().setY(0.9)), fov: 42 });
+  const a = win ? (t - win[1]) / (win[2] - win[1]) : 0, ang = -0.5 + a;   // orbit through one radian per window
+  keys.side.push({ t, pos: r3(new THREE.Vector3(P.x + 4.2 * Math.cos(ang), 1.5, P.z + 4.2 * Math.sin(ang))), lookAt: r3(new THREE.Vector3(P.x, 0.95, P.z)), fov: 32 });
+});
+$S('#cam-wide').setKeys(keys.wide, { smooth: true });
+$S('#cam-student-pov').setKeys(keys.pS, { smooth: true });
+$S('#cam-teacher-pov').setKeys(keys.pT, { smooth: true });
+$S('#cam-side').setKeys(keys.side, { smooth: true });</code></pre>
+	<p><code>setKeys</code> turns each list into a smooth spline, so the cameras glide between the half-second keys. The timeline now runs to 93.5 s: the 90.6 s lesson plus the last camera keys, which hold the closing wide shot.</p>
+
+	<h2><span class="step">8</span> Cut between them in the Render tab</h2>
+	<p class="lede">Cameras alone do nothing until the <strong>Render</strong> tab's <strong>Camera Sequence</strong> says when each one is live. Each demo or repeat window opens on the over-the-shoulder shot of the performer, cuts to the side orbit at the midpoint, and returns to the wide as the window ends — three cameras per window, nineteen shots in all. The sequence lives in <code>scene.userData.renderShots</code>, the same list the <strong>+ Add Shot</strong> button edits, so it is saved with the scene and can be written from the Shell:</p>
+	<pre><code>const { plan } = window.dojo;
+const uuid = n =&gt; scene.getObjectByName(n).uuid;
+const cuts = [[0, 'cam-wide']];
+for (const [who, s, e] of plan) {
+  cuts.push([s, who === 'teacher' ? 'cam-student-pov' : 'cam-teacher-pov']);   // watcher's shoulder
+  cuts.push([+((s + e) / 2).toFixed(2), 'cam-side']);                          // side orbit at the midpoint
+  cuts.push([e, 'cam-wide']);                                                  // back to the wide
+}
+scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({ id: 'shot-' + i, at, camera: uuid(name), transition: 'cut', transitionDur: 0.5 }));
+editor.signals.timelineChanged.dispatch();      // the Render tab refreshes its list</code></pre>
+	<p>Open the <strong>Render</strong> tab and the Camera Sequence list shows <code>cam-wide @ 0.00s</code>, <code>cam-student-pov @ 1.00s</code>, <code>cam-side @ 6.95s</code> and so on. To preview a shot, pick a camera from the viewport's camera menu and scrub the Animations tab. To check every shot at once, project the performer's head, hips, hands and feet through the shot's camera and see that all six land in the frame:</p>
+	<pre><code>const { T, S, bone, wp, plan } = window.dojo;
+const END = editor.timeline.toJSON().duration;
+const names = ['J_Bip_C_Head$', 'J_Bip_C_Hips', 'J_Bip_L_Foot$', 'J_Bip_R_Foot$', 'J_Bip_L_Hand$', 'J_Bip_R_Hand$'];
+const misses = [];
+for (let t = 0.5; t &lt; END; t += 0.5) {
+  holdTimelineAt(t); scene.updateMatrixWorld(true);
+  const shot = scene.userData.renderShots.filter(s =&gt; s.at &lt;= t).pop();
+  const cam = scene.getObjectByProperty('uuid', shot.camera); cam.updateMatrixWorld(true); cam.updateProjectionMatrix();
+  const win = plan.find(([, s, e]) =&gt; t &gt;= s &amp;&amp; t &lt; e);
+  const who = cam.name === 'cam-wide' ? [T, S] : win ? [win[0] === 'teacher' ? T : S] : [];
+  for (const ch of who) {
+    const out = names.filter(n =&gt; { const p = wp(bone(ch, new RegExp(n))).project(cam); return !(Math.abs(p.x) &lt; 0.98 &amp;&amp; Math.abs(p.y) &lt; 0.98 &amp;&amp; p.z &lt; 1); });
+    if (out.length) misses.push([t, cam.name, out.length]);
+  }
+}
+holdTimelineAt(0);
+misses;    // empty = every shot has its performer fully in frame</code></pre>
+	<p>Render it from the same tab: <strong>Video Render</strong> picks up the Camera Sequence on its own. The scene runs 93.5 s, so keep the tab in the foreground while it renders; browsers throttle hidden tabs, which makes frames stall.</p>
+
+	<h2><span class="step">9</span> Two things that bite: vanishing parts and slow playback</h2>
+	<p class="lede">With two VRoid characters the scene holds <strong>83 skinned meshes</strong> — each character is split into dozens (hair strands, face parts, jacket, trousers...) — and that exposes two problems that a single simple character never shows.</p>
+	<ul>
+		<li><strong>Heads and parts disappear while playing.</strong> three.js decides whether to draw a mesh from its bounding sphere, and a skinned mesh's sphere is computed from the <em>bind pose</em>, not the animated pose. A root-motion clip carries a character far from that pose, so the engine culls pieces that are still on screen. The fix is <code>mesh.frustumCulled = false</code> on every skinned mesh.</li>
+		<li><strong>Playback is slow.</strong> Each skinned mesh had its own skeleton of 109 bones, so every frame did the 109 bone-matrix updates 83 times. In a CPU profile that one function took about 45% of the time. The meshes of one character already share the same bones, and their inverse-bind matrices differ only by one constant matrix per mesh, so a single skeleton can serve them all if that constant is folded into each mesh's <code>bindMatrix</code>. The skinned vertices came out identical (to about 6e-8) and the 83 skeletons became 2.</li>
+	</ul>
+	<p>You don't have to do anything: both fixes run automatically every time an object is added to the scene (<code>optimizeSkinnedMeshes</code> in <code>editor/js/mesh/skinnedPerf.js</code>), including when a saved scene loads. If a mesh's inverse-bind matrices are not related by a constant, it keeps its own skeleton and is left alone. To see what you have:</p>
+	<pre><code>const skinned = []; scene.traverse(o =&gt; { if (o.isSkinnedMesh) skinned.push(o); });
+({ meshes: skinned.length,
+   skeletons: new Set(skinned.map(m =&gt; m.skeleton)).size,
+   culled: skinned.filter(m =&gt; m.frustumCulled).length });   // { meshes: 83, skeletons: 2, culled: 0 }</code></pre>
+
+	<h2><span class="step">10</span> Save it</h2>
+	<ol class="steps">
+		<li>Open the <strong>Git</strong> tab and set your repository, branch and token (the token is stored in your browser only).</li>
+		<li>Set <strong>Scene file</strong> to a new name, such as <code>dojo.json</code>, so you do not overwrite another scene.</li>
+		<li>Press <strong>Commit Scene</strong>. Geometry buffers and images go out as separate binary files; the characters and the clip are the bulk of it. A scene this size is split into 8 MB parts next to a small manifest, and loads transparently.</li>
+	</ol>
+	<p>The finished scene is public: open <a href="../../#repo=tejaswigowda/test1&amp;file=dojo.json&amp;branch=main">tejaswigowda/test1 · dojo.json</a>. Before you commit, a last check that the four cameras and the plan came through:</p>
+	<pre><code>editor.timeline.toJSON().tracks.map(t =&gt; t.target);   // the two characters and the four cameras
+scene.userData.renderShots.length;                       // 19</code></pre>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="https://tejaswigowda.com/strata-editor/facebind/">facebind</a> · <a href="https://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a> · <a href="https://arxiv.org/abs/2512.22690">Mesquite MoCap (arXiv:2512.22690)</a>
+	</footer>
+</main>
+</body>
+</html>

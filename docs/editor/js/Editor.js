@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Config } from './Config.js';
 import { Loader } from './Loader.js';
 import { normalizeSkinIndices } from './mesh/skinIndices.js';
+import { optimizeSkinnedMeshes } from './mesh/skinnedPerf.js';
 import { sceneHasToon } from './toon/toonSpec.js';
 import { sceneHasShaders } from './shaders/shaderSpec.js';
 import { History as _History } from './History.js';
@@ -100,6 +101,7 @@ function Editor() {
 
 		viewportCameraChanged: new Signal(),
 		editCameraSelected: new Signal(), // the user switched the viewport to the Edit Camera (e.g. so the play bar steps aside for the editing chrome)
+		subtitlesChanged: new Signal(), // scene.userData.renderSubtitles changed (import, edit, undo/redo) — dispatched with the new cue list
 		cameraPathChanged: new Signal(), // the camera path overlay's selected key changed (CameraPath.js)
 		viewportShadingChanged: new Signal(),
 		timelinePlayRequested: new Signal(), // external "play" trigger (e.g. the #...&play=true overlay button) — Timeline.js listens and calls its own play()
@@ -249,6 +251,8 @@ Editor.prototype = {
 	addObject: function ( object, parent, index ) {
 
 		var scope = this;
+
+		optimizeSkinnedMeshes( object );
 
 		object.traverse( function ( child ) {
 

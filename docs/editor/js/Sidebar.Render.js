@@ -7,78 +7,10 @@ import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITex
 import { holdTimelineAt, getImportedClips } from './intelligence/timelineController.js';
 import { findCallcards, refreshCallcard } from './Callcard.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
+import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesEqual, newCueId } from './intelligence/subtitles.js';
+import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 
-// ── SRT helpers (parse / format / word-wrap for hard-burn) ─────────────────
-
-function formatSrtTime( seconds ) {
-
-	seconds = Math.max( 0, seconds );
-	const h = Math.floor( seconds / 3600 );
-	const m = Math.floor( ( seconds % 3600 ) / 60 );
-	const s = Math.floor( seconds % 60 );
-	const ms = Math.round( ( seconds - Math.floor( seconds ) ) * 1000 );
-	const pad = ( n, len ) => String( n ).padStart( len || 2, '0' );
-	return `${ pad( h ) }:${ pad( m ) }:${ pad( s ) },${ pad( ms, 3 ) }`;
-
-}
-
-function parseSrtTime( str ) {
-
-	const m = str.trim().match( /(\d+):(\d{2}):(\d{2})[,.](\d{3})/ );
-	if ( ! m ) return 0;
-	return ( + m[ 1 ] ) * 3600 + ( + m[ 2 ] ) * 60 + ( + m[ 3 ] ) + ( + m[ 4 ] ) / 1000;
-
-}
-
-function newCueId() {
-
-	return 'cue-' + Math.random().toString( 36 ).slice( 2, 9 );
-
-}
-
-/** Parse raw .srt text into { id, start, end, text } cues (index lines optional/ignored, re-numbered on export). */
-function parseSrt( text ) {
-
-	const blocks = String( text ).replace( /\r/g, '' ).split( /\n\s*\n/ ).map( b => b.trim() ).filter( Boolean );
-	const cues = [];
-
-	for ( const block of blocks ) {
-
-		const lines = block.split( '\n' );
-		let idx = 0;
-		if ( /^\d+$/.test( ( lines[ 0 ] || '' ).trim() ) ) idx = 1;
-		const timeLine = lines[ idx ] || '';
-		const m = timeLine.match( /(.+?)\s*-->\s*(.+)/ );
-		if ( ! m ) continue;
-
-		cues.push( {
-			id: newCueId(),
-			start: parseSrtTime( m[ 1 ] ),
-			end: parseSrtTime( m[ 2 ] ),
-			text: lines.slice( idx + 1 ).join( '\n' ).trim(),
-		} );
-
-	}
-
-	return cues;
-
-}
-
-function cuesToSrt( cues ) {
-
-	return cues
-		.slice()
-		.sort( ( a, b ) => a.start - b.start )
-		.map( ( c, i ) => `${ i + 1 }\n${ formatSrtTime( c.start ) } --> ${ formatSrtTime( c.end ) }\n${ c.text }\n` )
-		.join( '\n' );
-
-}
-
-function activeCueAt( cues, t ) {
-
-	return cues.find( c => t >= c.start && t < c.end ) || null;
-
-}
+// ── hard-burn caption drawing (parse / format / sync helpers live in intelligence/subtitles.js) ──
 
 /** Word-wraps and draws one subtitle cue at the bottom of the canvas, with a translucent backing box (classic hard-burn caption look). */
 function drawBurnedCaption( ctx, width, height, text ) {
@@ -633,18 +565,36 @@ function SidebarRender( editor ) {
 	subsList.style.cssText = 'display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;margin-bottom:6px;';
 	container.dom.appendChild( subsList );
 
+	// The scene JSON is the single source of truth: this list only ever READS
+	// the cues from scene.userData.renderSubtitles and WRITES through
+	// SetSubtitlesCommand (undoable, autosaved, versioned with the scene). It
+	// re-reads whenever the cues change from anywhere else (undo/redo, loading a
+	// scene, the JS shell), so the list and the scene JSON never drift apart.
 	function getCues() {
 
-		const ud = editor.scene.userData = editor.scene.userData || {};
-		if ( ! Array.isArray( ud.renderSubtitles ) ) ud.renderSubtitles = [];
-		return ud.renderSubtitles;
+		return normalizeCues( editor.scene.userData && editor.scene.userData.renderSubtitles );
 
 	}
 
+	function commitCues( next, label ) {
+
+		if ( cuesEqual( getCues(), next ) ) return;
+		editor.execute( new SetSubtitlesCommand( editor, next, label ) );
+
+	}
+
+	let shown = []; // the cues the list currently displays (so our own edits don't rebuild the list under the cursor)
+	const sameShown = ( a, b ) => a.length === b.length && a.every( ( c, i ) => c.id === b[ i ].id && c.start === b[ i ].start && c.end === b[ i ].end && c.text === b[ i ].text );
+
+	const subsStatus = document.createElement( 'div' );
+	subsStatus.style.cssText = 'font-size:10px;opacity:0.65;margin:0 0 6px;';
+
 	function refreshSubsList() {
 
-		const cues = getCues().slice().sort( ( a, b ) => a.start - b.start );
+		const cues = getCues();
+		shown = cues.map( c => ( { ...c } ) );
 		subsList.innerHTML = '';
+		subsStatus.textContent = cues.length === 0 ? '' : `${ cues.length } cue${ cues.length === 1 ? '' : 's' } \u00b7 saved with the scene (scene.userData.renderSubtitles)`;
 
 		if ( cues.length === 0 ) {
 
@@ -655,7 +605,9 @@ function SidebarRender( editor ) {
 
 		}
 
-		for ( const cue of cues ) {
+		cues.forEach( ( cue, i ) => {
+
+			const edit = ( field, value, label ) => { shown[ i ][ field ] = value; commitCues( shown.map( c => ( { ...c } ) ), label ); };
 
 			const row = document.createElement( 'div' );
 			row.style.cssText = 'display:flex;align-items:flex-start;gap:4px;';
@@ -663,7 +615,7 @@ function SidebarRender( editor ) {
 
 			const startNum = new UINumber( cue.start ).setWidth( '46px' ).setPrecision( 2 ).setRange( 0, 100000 );
 			startNum.dom.title = 'Start (s)';
-			startNum.onChange( function () { cue.start = startNum.getValue(); } );
+			startNum.onChange( function () { edit( 'start', startNum.getValue(), 'Retime subtitle cue' ); } );
 			row.appendChild( startNum.dom );
 
 			const arrow = document.createElement( 'span' );
@@ -673,34 +625,40 @@ function SidebarRender( editor ) {
 
 			const endNum = new UINumber( cue.end ).setWidth( '46px' ).setPrecision( 2 ).setRange( 0, 100000 );
 			endNum.dom.title = 'End (s)';
-			endNum.onChange( function () { cue.end = endNum.getValue(); } );
+			endNum.onChange( function () { edit( 'end', endNum.getValue(), 'Retime subtitle cue' ); } );
 			row.appendChild( endNum.dom );
 
 			const textArea = new UITextArea().setValue( cue.text );
 			textArea.dom.rows = 1;
 			textArea.dom.style.cssText += 'flex:1;font-size:11px;resize:vertical;min-height:20px;';
-			textArea.onChange( function () { cue.text = textArea.getValue(); } );
+			textArea.onChange( function () { edit( 'text', textArea.getValue(), 'Edit subtitle text' ); } );
 			row.appendChild( textArea.dom );
 
 			const delBtn = new UIButton( '\u2715' );
 			delBtn.dom.style.cssText = 'height:20px;width:20px;padding:0;border-radius:4px;font-size:10px;flex-shrink:0;';
-			delBtn.onClick( function () {
-
-				const cues2 = getCues();
-				const i = cues2.indexOf( cue );
-				if ( i !== - 1 ) cues2.splice( i, 1 );
-				refreshSubsList();
-
-			} );
+			delBtn.onClick( function () { commitCues( shown.filter( ( c, k ) => k !== i ), 'Delete subtitle cue' ); } );
 			row.appendChild( delBtn.dom );
 
-		}
+		} );
 
 	}
+
+	// scene JSON -> list: refresh only when what the scene holds differs from what the list shows
+	function syncSubsFromScene() {
+
+		if ( ! sameShown( getCues(), shown ) ) refreshSubsList();
+
+	}
+
+	signals.subtitlesChanged.add( syncSubsFromScene );
+	signals.sceneGraphChanged.add( syncSubsFromScene ); // scene loaded / replaced
+	signals.historyChanged.add( syncSubsFromScene );    // undo / redo
+	signals.editorCleared.add( syncSubsFromScene );
 
 	const subsControls = document.createElement( 'div' );
 	subsControls.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;';
 	container.dom.appendChild( subsControls );
+	container.dom.appendChild( subsStatus );
 
 	const addCueButton = new UIButton( '+ Add Cue' );
 	addCueButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
@@ -708,8 +666,7 @@ function SidebarRender( editor ) {
 
 		const cues = getCues();
 		const lastEnd = cues.length ? Math.max( ...cues.map( c => c.end ) ) : 0;
-		cues.push( { id: newCueId(), start: lastEnd, end: lastEnd + 3, text: '' } );
-		refreshSubsList();
+		commitCues( [ ...cues, { id: newCueId(), start: lastEnd, end: lastEnd + 3, text: '' } ], 'Add subtitle cue' );
 
 	} );
 	subsControls.appendChild( addCueButton.dom );
@@ -726,8 +683,10 @@ function SidebarRender( editor ) {
 		const reader = new FileReader();
 		reader.onload = function () {
 
-			const ud = editor.scene.userData = editor.scene.userData || {};
-			ud.renderSubtitles = parseSrt( String( reader.result ) );
+			const cues = parseSrt( String( reader.result ) );
+			if ( cues.length === 0 ) { subsStatus.textContent = 'No cues found in that file — nothing was changed.'; return; }
+			// replaces the scene's cues in one undoable, autosaved step; the list follows via subtitlesChanged
+			commitCues( cues, `Import subtitles (${ cues.length } cues)` );
 			refreshSubsList();
 
 		};
