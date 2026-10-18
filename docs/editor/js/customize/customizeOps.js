@@ -227,32 +227,51 @@ const NAME = {
 	brows: /eyebrow/i,
 };
 
+// Some rigs (VRoid-style exports) give every mesh a generic name ("Bodybaked_3") and carry the
+// meaning in the material name ("N00_000_00_Body_00_SKIN"), split over several meshes per part.
+const matText = m => [].concat( m.material || [] ).map( x => x && x.name ).filter( Boolean ).join( ' ' );
+const word = w => new RegExp( `(^|[\\s_])${ w }([\\s_]|$)`, 'i' );
+const MAT = {
+	skin: /_SKIN\b/i,
+	body: /body_\d+_skin/i,
+	face: /face_\d+_skin/i,
+	top: word( 'tops?' ),
+	bottom: word( 'bottoms?' ),
+	shoes: word( 'shoes?' ),
+	cloth: /_CLOTH\b/i,
+	hair: /hair/i,
+	brows: /facebrow|eyebrow/i,
+	eyes: /_EYE\b/i,
+};
+
 function partNodes( root, key ) {
 
 	const meshes = meshesUnder( [ root ] );
 	const byName = re => meshes.filter( m => re.test( m.name ) );
+	const byMat = re => meshes.filter( m => re.test( matText( m ) ) );
 	const P = findParts( root );
 	const generic = ( ...res ) => meshes.filter( m => res.some( re => re.test( m.name ) ) );
 	const uniq = list => [ ...new Set( list.filter( Boolean ) ) ];
 
-	const body = uniq( [ P.body, ...generic( /^body$/i ) ] );
-	const face = uniq( [ P.face, ...generic( /^head$|^face$/i ) ] );
-	const shirt = uniq( [ P.shirt, ...generic( /^tops?$/i ) ] );
-	const bottom = uniq( [ P.bottom, ...generic( /^bottoms?$/i ) ] );
-	const shoes = uniq( [ P.shoes, ...generic( /^shoes?$/i ) ] );
+	const body = uniq( [ P.body, ...generic( /^body$/i ), ...byMat( MAT.body ) ] );
+	const face = uniq( [ P.face, ...generic( /^head$|^face$/i ), ...byMat( MAT.face ) ] );
+	const shirt = uniq( [ P.shirt, ...generic( /^tops?$/i ), ...byMat( MAT.top ) ] );
+	const bottom = uniq( [ P.bottom, ...generic( /^bottoms?$/i ), ...byMat( MAT.bottom ) ] );
+	const shoes = uniq( [ P.shoes, ...generic( /^shoes?$/i ), ...byMat( MAT.shoes ) ] );
+	const isBrow = m => NAME.brows.test( m.name ) || MAT.brows.test( matText( m ) );
 	const table = {
-		hair: uniq( [ ...byName( NAME.hair ).filter( m => ! NAME.brows.test( m.name ) ) ] ),
+		hair: uniq( [ ...meshes.filter( m => ( NAME.hair.test( m.name ) || MAT.hair.test( matText( m ) ) ) && ! isBrow( m ) ) ] ),
 		beard: uniq( [ ...P.facialHair, ...byName( NAME.beard ) ] ),
-		brows: uniq( [ P.brows, ...byName( NAME.brows ) ] ),
+		brows: uniq( [ P.brows, ...byName( NAME.brows ), ...byMat( MAT.brows ) ] ),
 		body, face, shirt, bottom, shoes,
-		teeth: uniq( [ P.teeth ] ), eyes: uniq( [ P.eyeL, P.eyeR ] ), eyel: uniq( [ P.eyeL ] ), eyer: uniq( [ P.eyeR ] ),
+		teeth: uniq( [ P.teeth ] ), eyes: uniq( [ P.eyeL, P.eyeR, ...byMat( MAT.eyes ) ] ), eyel: uniq( [ P.eyeL ] ), eyer: uniq( [ P.eyeR ] ),
 	};
 
 	table.top = table.shirt;
 	table.trousers = table.bottom;
 	table.facialhair = table.beard;
-	table.skin = uniq( [ ...body, ...face ] );
-	table.clothing = uniq( [ ...shirt, ...bottom, ...shoes ] );
+	table.skin = uniq( [ ...body, ...face, ...byMat( MAT.skin ) ] );
+	table.clothing = uniq( [ ...shirt, ...bottom, ...shoes, ...byMat( MAT.cloth ) ] );
 	table.cards = uniq( [ ...table.hair, ...table.beard, ...table.brows ] );
 
 	const list = table[ key.toLowerCase() ];
@@ -470,6 +489,36 @@ function localBox( mesh, ref ) {
 
 }
 
+// Rigs whose eyes are one mesh covering both eyes (no separate left/right meshes): split the eye
+// vertices at the midline into two boxes in the REF mesh's local space.
+function splitEyes( meshes, ref ) {
+
+	const pts = [];
+	const v = new THREE.Vector3();
+
+	for ( const mesh of meshes ) {
+
+		const pos = mesh.geometry.attributes.position;
+		if ( ! pos ) continue;
+
+		const toRef = mesh.isSkinnedMesh
+			? new THREE.Matrix4().copy( ref.bindMatrix ).invert().multiply( mesh.bindMatrix )
+			: new THREE.Matrix4().copy( ref.matrixWorld ).invert().multiply( mesh.matrixWorld );
+
+		for ( let i = 0; i < pos.count; i ++ ) pts.push( v.fromBufferAttribute( pos, i ).applyMatrix4( toRef ).clone() );
+
+	}
+
+	if ( pts.length === 0 ) return null;
+
+	const mid = new THREE.Box3().setFromPoints( pts ).getCenter( new THREE.Vector3() ).x;
+	const left = pts.filter( p => p.x < mid ), right = pts.filter( p => p.x >= mid );
+	if ( left.length === 0 || right.length === 0 ) return null;
+
+	return { L: { localBox: new THREE.Box3().setFromPoints( left ) }, R: { localBox: new THREE.Box3().setFromPoints( right ) } };
+
+}
+
 function opAttachProp( root, op, rec, ctx ) {
 
 	root.updateMatrixWorld( true );
@@ -508,8 +557,9 @@ function opAttachProp( root, op, rec, ctx ) {
 
 	if ( spec.kind === 'sunglasses' ) {
 
-		if ( ! P.eyeL || ! P.eyeR ) throw new CustomizeError( 'attachProp: "sunglasses" needs the eye meshes; use a primitive prop with an offset on this rig' );
-		prop = buildSunglasses( P.eyeL, P.eyeR, m => localBox( m, ref ) ); // children already in ref-local coordinates
+		const eyes = P.eyeL && P.eyeR ? { L: P.eyeL, R: P.eyeR } : splitEyes( partMeshes( root, 'eyes' ), ref );
+		if ( ! eyes ) throw new CustomizeError( 'attachProp: "sunglasses" needs the eye meshes; use a primitive prop with an offset on this rig' );
+		prop = buildSunglasses( eyes.L, eyes.R, m => m.localBox || localBox( m, ref ) ); // children already in ref-local coordinates
 		Lp.compose( offset, q, new THREE.Vector3( 1, 1, 1 ) );
 
 	} else if ( spec.kind === 'object' ) {

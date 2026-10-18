@@ -43,9 +43,10 @@ export function findParts( root ) {
  * Canonical bone name: lower-case, without the "_N" suffix the editor adds to make
  * duplicate bone names unique. Only suffixes WITHOUT a leading zero count, so the
  * MetaHuman chain names spine_01 / spine_02 / neck_01 stay distinct from each other.
+ * VRoid centre-line bones ("J_Bip_C_Head") drop their prefix so "head" resolves on them too.
  */
 export function boneKey( name ) {
 
-	return name.replace( /_[1-9]\d*$/, '' ).toLowerCase();
+	return name.replace( /_[1-9]\d*$/, '' ).replace( /^j_bip_c_/i, '' ).toLowerCase();
 
 }

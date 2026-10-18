@@ -647,5 +647,44 @@ await test( 'props follow the head on a scaled character with the mesh node offs
 
 } );
 
+await test( 'parts resolve from material names when mesh names are generic (VRoid-style rig)', () => {
+
+	const root = new THREE.Group();
+	const add = ( name, mat ) => {
+
+		const m = new THREE.Mesh( new THREE.BoxGeometry( 1, 1, 1 ), new THREE.MeshStandardMaterial( { name: mat } ) );
+		m.name = name;
+		root.add( m );
+		return m;
+
+	};
+
+	const body = [ add( 'Bodybaked', 'N00_000_00_Body_00_SKIN' ), add( 'Bodybaked_1', 'N00_000_00_Body_00_SKIN' ) ];
+	const face = add( 'Facebaked_3', 'N00_000_00_Face_00_SKIN' );
+	const brow = add( 'Facebaked_5', 'N00_000_00_FaceBrow_00_FACE' );
+	const eye = add( 'Facebaked_1', 'N00_000_00_EyeIris_00_EYE' );
+	const bottom = add( 'Bodybaked_4', 'N00_001_01_Bottoms_01_CLOTH' );
+	const shoes = add( 'Bodybaked_5', 'N00_004_01_Shoes_01_CLOTH' );
+	const top = add( 'Bodybaked_6', 'N00_004_01_Tops_01_CLOTH' );
+	const hair = [ add( 'Bodybaked_7', 'N00_000_00_HairBack_00_HAIR' ), add( 'Hair001baked', 'N00_000_Hair_00_HAIR' ) ];
+
+	const has = ( key, list ) => {
+
+		const got = ops.partMeshes( root, key );
+		assert.deepStrictEqual( [ ...got ].sort( ( a, b ) => a.id - b.id ), [ ...list ].sort( ( a, b ) => a.id - b.id ), key );
+
+	};
+
+	has( 'skin', [ ...body, face ] );
+	has( 'clothing', [ top, bottom, shoes ] );
+	has( 'hair', hair );
+	has( 'brows', [ brow ] );
+	has( 'eyes', [ eye ] );
+
+	const r = ops.applyCustomize( root, [ { op: 'tint', target: 'part:skin', color: '#9a6f57' }, { op: 'recolor', target: 'part:shoes', color: '#050505' } ] );
+	assert.ok( r.applied.length === 2 );
+
+} );
+
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );
