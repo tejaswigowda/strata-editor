@@ -29,6 +29,7 @@ import { executeRecipeOp } from './animationRecipes.js';
 import { TimelineModel, CLIP_OPS } from './timeline.js';
 import { releaseTimelineObject } from './timelineController.js';
 import { recordClipDirective, clipControlOp } from './clipControl.js';
+import { FaceChannel, gazeVerbs } from './faceEdit.js';
 import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import * as camMove from './cameraMoveEdit.js';
 import { SetClassCommand } from '../commands/SetClassCommand.js';
@@ -875,6 +876,55 @@ class ChainableSet {
 			time,
 		} );
 		return this;
+	}
+
+	// ────────────────────────────────────────────────────────────────────────────
+	// ── THE AUTHORED FACE (expression + gaze as keyed channels) ─────────────────
+	// ────────────────────────────────────────────────────────────────────────────
+	// A character's face is two channels on the same timeline track as its body clip, addressed like a
+	// camera move: continuous values with easing + duration per key. Presets expand to explicit keys;
+	// the idle layer (blink / breath / micro-noise) is seeded and sits UNDER the authored keys.
+	//
+	//   $S('#f1').face.keyAt(2, { shapes: { jawOpen: 0.4, browInnerUp: 0.2 }, duration: 400, easing: 'ease-out' })
+	//   $S('#f1').face.applyPreset('smile', 5, { duration: 600 })
+	//   $S('#f1').gaze(3, '#f2')                    // eyes (and, by weight, head) follow the other fighter
+	//   $S('#f1').face.idle({ seed: 7 })            // blinks, breath, micro-noise — seeded, deterministic
+	//
+	// See guides/FACE_TRACK.md.
+
+	get face() {
+
+		return new FaceChannel( this.editor, this.selector );
+
+	}
+
+	/** Look at '#name' (follows it), [x,y,z] (holds) or 'away', arriving at t. { duration ms, easing, head 0..1 }. */
+	gaze( t, target, opts ) {
+
+		gazeVerbs.gazeAt( this.editor, this.selector, t, target, opts || {} );
+		return this;
+
+	}
+
+	/** The gaze keys: [{ index, time, target, head, duration, easing, label }]. */
+	gazeKeys() {
+
+		return gazeVerbs.gazeKeys( this.editor, this.selector );
+
+	}
+
+	moveGaze( i, spec ) {
+
+		gazeVerbs.moveGaze( this.editor, this.selector, i, spec );
+		return this;
+
+	}
+
+	deleteGaze( i ) {
+
+		gazeVerbs.deleteGaze( this.editor, this.selector, i );
+		return this;
+
 	}
 
 	bounce( height = 0.5, duration = 1 )        { return this.op( { type: 'bounce', height, duration } ); }

@@ -12,6 +12,10 @@ Two surfaces, one op set:
 | **Customize tab** (stateful) | `Sidebar.Customize.js` | a person picks colours, toggles hair, poses the face, attaches a prop; every change is one undoable command and is recorded on the character (`userData.customize`) |
 | **`customize` stage** (headless) | `customize/customizeOps.js` | an agent or script hands over the same ops as JSON; `runCustomizeStage(scene, spec)` applies them |
 
+> **Expression over time.** The Expression section also has a *Key at playhead* mode, plus gaze and an idle layer:
+> presets and sliders then write **keys on the timeline** instead of a one-shot edit. See
+> [The authored face](FACE_TRACK.md).
+
 ## The rig-safety invariant
 
 > Edits that do not change the **vertex set**, the **skin weights** or the **skeleton** preserve both

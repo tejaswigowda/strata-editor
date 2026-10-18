@@ -12,6 +12,7 @@ import { buildClipEvent } from './intelligence/clipControl.js';
 import { cutCommand, groupCommand, setGroupEdl, makeMotion } from './intelligence/motionEditOps.js';
 import { normalizeEdl, edlTable, edlDuration, formatCollisionReport } from './intelligence/motionEdit.js';
 import { groupDomain } from './intelligence/motionEditRuntime.js';
+import * as FT from './intelligence/faceTrack.js';
 import { normalizeClassName } from './intelligence/classDerive.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
@@ -448,6 +449,7 @@ function Timeline( editor ) {
 			} ).join( '\n' );
 
 			model.tracks = []; // clear all events, rebuild from code
+			model.faces = {}; // the idle layer is rebuilt from its `.face.idle(...)` lines below
 			let eventCount = 0;
 
 			// Parse $S('selector').at(time).op(args).at(time).op(args); blocks
@@ -460,6 +462,19 @@ function Timeline( editor ) {
 				const selectorMatch = block.match( /^(['"`])(.+?)\1\)/ );
 				if ( ! selectorMatch ) continue;
 				const selector = selectorMatch[ 2 ];
+
+				// `$S('#f1').face.idle({ seed: 7 })` — the face's idle layer (an underlayer, never keys)
+				const afterSelector = block.slice( selectorMatch[ 0 ].length );
+
+				if ( /^\s*\.face\.idle\(/.test( afterSelector ) ) {
+
+					const from = afterSelector.indexOf( '.idle(' ) + 6;
+					const idleArg = afterSelector.slice( from, afterSelector.lastIndexOf( ')' ) ).trim();
+					const idle = FT.normalizeIdle( idleArg ? Function( `"use strict"; return (${ idleArg })` )() : true );
+					if ( idle ) model.faces[ selector ] = { idle };
+					continue;
+
+				}
 
 				// Extract .at(time).op(args) chains with balanced paren/brace support
 				const chainRegex = /\.at\(([^)]+)\)\.(\w+)\(/g;
@@ -506,6 +521,19 @@ function Timeline( editor ) {
 						const call = parseClipCall( op, argsStr );
 						const built = buildClipEvent( editor, { selector, nodes: nodesForTarget( editor, selector ), op, clip: call.clip, opts: call.opts, time: call.time } );
 						model.addEvent( selector, { at, op, args: built.args, dur: built.dur } );
+						eventCount ++;
+						continue;
+
+					}
+
+					// Authored face: `.at(start).face({ shapes, easing, duration, hold })` / `.gaze({ target, head, easing, duration })`.
+					// Validated here with the SAME checks the shell uses, so a bad value is a code warning, not a silent drop.
+					if ( op === FT.FACE_OP || op === FT.GAZE_OP ) {
+
+						const o = Function( `"use strict"; return (${ argsStr.trim() || '{}' })` )();
+						const { duration, ...rest } = o;
+						if ( op === FT.FACE_OP ) FT.checkShapes( rest.shapes ); else FT.checkTarget( rest.target );
+						model.addEvent( selector, { at, op, args: rest, dur: Math.max( 0, Number( duration ) || 0 ) / 1000 } );
 						eventCount ++;
 						continue;
 
@@ -1299,6 +1327,15 @@ function Timeline( editor ) {
 
 			}
 
+		} else if ( ev.op === FT.FACE_OP || ev.op === FT.GAZE_OP ) {
+
+			// authored face keys: a key ARRIVES at the block's right edge (at + dur)
+			const face = ev.op === FT.FACE_OP;
+			if ( ! selected ) block.style.background = face ? '#c2185b' : '#6d4c41';
+			const what = face ? Object.keys( ev.args.shapes || {} ).slice( 0, 2 ).join( ', ' ) + ( Object.keys( ev.args.shapes || {} ).length > 2 ? '…' : '' ) : ( Array.isArray( ev.args.target ) ? 'point' : ev.args.target );
+			block.textContent = `${ face ? 'face' : 'gaze' } · ${ what }`;
+			block.title = `${ ev.op } key arriving @ ${ ( ev.at + ev.dur ).toFixed( 2 ) }s (moves for ${ ev.dur.toFixed( 2 ) }s${ ev.args.easing ? `, ${ ev.args.easing }` : '' }) — drag to retime, drag right edge to change the duration`;
+
 		} else {
 
 			block.textContent = ev.op;
@@ -1542,6 +1579,14 @@ function Timeline( editor ) {
 
 	function argList( op, args, dur ) {
 
+		// face / gaze keys: one object, duration in ms like everything else at the surface
+		if ( op === FT.FACE_OP || op === FT.GAZE_OP ) {
+
+			const ms = Math.round( ( dur ?? 0 ) * 1000 );
+			return fmtProps( { ...args, ...( ms ? { duration: ms } : {} ) } );
+
+		}
+
 		// The one grammar: .animate(props, ms, easing) — jQuery ms at the surface
 		if ( op === 'animate' ) {
 
@@ -1653,6 +1698,8 @@ function Timeline( editor ) {
 				if ( cut ) blocks.push( cut + ( keep === null ? '' : `   // ${ g.edl.spans.length } span${ g.edl.spans.length === 1 ? '' : 's' }, ${ keep.toFixed( 2 ) }s` ) );
 
 			}
+
+			for ( const [ selector, cfg ] of Object.entries( model.faces ) ) if ( cfg.idle ) blocks.push( FT.idleCommand( selector, cfg.idle ) + '   // seeded underlayer — never baked into the keys' );
 
 			for ( const track of model.tracks ) {
 

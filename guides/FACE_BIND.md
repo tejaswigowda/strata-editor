@@ -17,6 +17,16 @@ mocap / the `driveFace` shell global) animates the VRM's expressions.
 - **Privacy audit:** [FACE_BIND_PRIVACY.md](FACE_BIND_PRIVACY.md).
 - **Code:** [`docs/editor/js/facebind/`](../docs/editor/js/facebind/bind.js).
 
+## Morph deltas and the warp (a known limit)
+
+The morph targets are deltas against the base and are carried through the warp **untouched**. That is exact on an
+unwarped base, but where the warp stretches the face (eyes, mouth, brows) an untransformed delta is off by the local
+strain: measured over all 52 ARKit shapes on the bundled bases, the worst shape is ~6.5% of the face height at bind
+strength 0.5 and ~13% at strength 1 (brows and blinks), with a worst rms of 16–20% / 31–39% of the delta. The check
+is `docs/editor/js/facebind/__tests__/morphDeltas.test.mjs` (`--strict` makes it fail while this is open); the
+authored face ([FACE_TRACK.md](FACE_TRACK.md#facebind-gate-read-this-before-building-on-a-bound-character)) depends on
+it. The fix belongs here: carry each delta through the warp (`d' = W(v + d) − W(v) + d`) inside `reshapeVRM`.
+
 ## What it is and is not
 
 **Expression binding first, a photo-informed look second, never a likeness guarantee.** The core is the weight

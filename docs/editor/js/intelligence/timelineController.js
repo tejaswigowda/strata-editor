@@ -11,6 +11,7 @@ import { TimelineModel, compileTimeline, TIMELINE_CLIP_NAME } from './timeline.j
 import { applyContentAt } from './textChange.js';
 import { importedClipsOf, directivesByClip, sampleClipState, clipDirectiveProblems } from './clipDirectives.js';
 import { editedPlayback } from './motionEditRuntime.js';
+import { applyFaceAt } from './faceRuntime.js';
 
 /** Remove any previously compiled Timeline clip from scene.animations. */
 function stripTimelineClip( editor ) {
@@ -329,7 +330,7 @@ export function holdTimelineAt( editor, t ) {
 
 	const actions = getTimelineTargetActions( editor );
 	const importedAny = holdImportedClipsAt( editor, t );
-	if ( actions.length === 0 && ! importedAny ) return false;
+	if ( actions.length === 0 && ! importedAny ) return applyFaceAt( editor, t );
 	for ( const a of actions ) {
 
 		a.play(); // idempotent activation — does NOT reset time/paused if already active
@@ -339,6 +340,7 @@ export function holdTimelineAt( editor, t ) {
 
 	}
 	editor.mixer.update( 0 );
+	applyFaceAt( editor, t ); // the authored face goes on top of the posed body (morph weights, eye + head aim)
 	refreshCameraProjections( editor ); // fov tracks write camera.fov but never the projection matrix
 	syncMaterialTransparency( editor );
 	return true;

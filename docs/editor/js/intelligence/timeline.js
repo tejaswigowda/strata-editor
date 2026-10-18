@@ -212,6 +212,7 @@ export class TimelineModel {
 		this.duration = 0;
 		this.tracks = [];
 		this.groups = []; // registered performance groups (motion edit lists) — see motionEdit.js
+		this.faces = {}; // per-character face layer settings { '#f1': { idle } } — see faceTrack.js
 		if ( data ) this._load( data );
 		this.recomputeDuration();
 
@@ -233,12 +234,13 @@ export class TimelineModel {
 		} ) );
 
 		this.groups = ( data.groups || [] ).map( g => JSON.parse( JSON.stringify( g ) ) );
+		this.faces = data.faces && typeof data.faces === 'object' ? JSON.parse( JSON.stringify( data.faces ) ) : {};
 
 	}
 
 	isEmpty() {
 
-		return this.tracks.every( t => t.events.length === 0 );
+		return this.tracks.every( t => t.events.length === 0 ) && Object.keys( this.faces ).length === 0;
 
 	}
 
@@ -288,6 +290,13 @@ export class TimelineModel {
 		}
 
 		return null;
+
+	}
+
+	/** The face-layer settings of a character's track ({ idle }), or null. */
+	face( target ) {
+
+		return this.faces[ target ] || null;
 
 	}
 
@@ -385,6 +394,7 @@ export class TimelineModel {
 
 		this.tracks = [];
 		this.groups = [];
+		this.faces = {};
 		this.duration = 0;
 
 	}
@@ -431,6 +441,7 @@ export class TimelineModel {
 				} ) ),
 			} ) ),
 			...( this.groups.length ? { groups: JSON.parse( JSON.stringify( this.groups ) ) } : {} ), // absent when unused, so old scenes serialize unchanged
+			...( Object.keys( this.faces ).length ? { faces: JSON.parse( JSON.stringify( this.faces ) ) } : {} ),
 		};
 
 	}

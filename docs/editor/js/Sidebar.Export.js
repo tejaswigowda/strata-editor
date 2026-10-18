@@ -6,7 +6,8 @@ import { UIPanel } from './libs/ui.js';
 import { PropertyBinding, AnimationClip, AnimationMixer, Mesh, BufferGeometry, Skeleton, VectorKeyframeTrack, NumberKeyframeTrack } from 'three';
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
-import { includeCameraForBinding } from './intelligence/timelineController.js';
+import { includeCameraForBinding, holdTimelineAt } from './intelligence/timelineController.js';
+import { faceExportTracks } from './intelligence/faceRuntime.js';
 import { directivesByClip, exportTracksForClip, importedClipsOf } from './intelligence/clipDirectives.js';
 import { editedExportTracks } from './intelligence/motionEditRuntime.js';
 import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/textChange.js';
@@ -710,6 +711,20 @@ function SidebarExport( editor ) {
 			}
 
 		} );
+
+		// The authored face: morph weights (keys + idle layer) and, where there is gaze, the eye + head
+		// rotations — baked by running the real sampler, so the file matches the viewport. A baked head
+		// track supersedes the body clip's own head track of the same name.
+		const face = faceExportTracks( editor, t => holdTimelineAt( editor, t ), { duration: total } );
+
+		if ( face.tracks.length > 0 ) {
+
+			const t0 = typeof editor.getTimelinePlayhead === 'function' ? editor.getTimelinePlayhead() : 0;
+			holdTimelineAt( editor, t0 ); // the bake moved the playhead pose; put it back
+			for ( let i = tracks.length - 1; i >= 0; i -- ) if ( face.replaces.has( tracks[ i ].name ) ) tracks.splice( i, 1 );
+			for ( const track of face.tracks ) tracks.push( track );
+
+		}
 
 		return tracks.length > 0 ? [ new AnimationClip( 'Animation', - 1, tracks ) ] : [];
 

@@ -50,5 +50,10 @@
 		"title": "Editing captured motion as data",
 		"href": "edit-captured-motion.html",
 		"desc": "Cut a 170-second two-performer capture to 53 seconds with a non-destructive edit list: register the pair, splice eight spans with a blend, check hip-to-hip collisions, remap the cameras, then undo or clear it — all from the JS Shell, and the capture itself is never modified."
+	},
+	{
+		"title": "Authoring a face: gaze and idle",
+		"href": "author-a-face.html",
+		"desc": "Give two characters a face with timeline keys: named-target gaze that follows a moving character (eyes lead, head lags, anatomical clamp), a seeded blink / breath idle layer under the keys, and held expressions with easing and duration — authored from the JS Shell, mirrored in the Customize tab, deterministic, and no face capture."
 	}
 ]

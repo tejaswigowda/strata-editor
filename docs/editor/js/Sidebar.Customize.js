@@ -17,6 +17,9 @@ import { CustomizeError, EXPRESSIONS, partMeshes, validateCustomize } from './cu
 import { auditRig, rigFingerprint } from './customize/rigSafety.js';
 import { PRIMITIVE_KINDS } from './customize/props.js';
 import { boneKey } from './presets/rigParts.js';
+import { FaceChannel, gazeVerbs } from './intelligence/faceEdit.js';
+import { holdTimelineAt } from './intelligence/timelineController.js';
+import * as FT from './intelligence/faceTrack.js';
 
 const SLIDERS = [
 	{ label: 'Jaw open', shapes: [ 'jawOpen' ] },
@@ -164,10 +167,57 @@ function SidebarCustomize( editor ) {
 
 	title( 'Expression' );
 
+	// Key at playhead: the same controls write KEYS on the timeline (the authored face) instead of a one-shot
+	// edit — presets expand to explicit per-shape keys, a slider drag keys that shape. See guides/FACE_TRACK.md.
+	const keyMode = new UICheckbox( false );
+	const keyMs = document.createElement( 'input' );
+	keyMs.type = 'number'; keyMs.min = 0; keyMs.step = 50; keyMs.value = 400; keyMs.style.width = '64px';
+	const keyEase = new UISelect().setWidth( '96px' );
+	keyEase.setOptions( Object.fromEntries( [ 'linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out' ].map( k => [ k, k ] ) ) );
+	keyEase.setValue( 'ease-in-out' );
+
+	const keyRow = row( 'Key at playhead', keyMode );
+	keyRow.dom.appendChild( keyMs );
+	keyRow.add( new UIText( 'ms' ).setClass( 'Label' ) );
+	keyRow.add( keyEase );
+	container.add( note( 'On: presets and sliders write timeline keys (arriving at the playhead) instead of a one-shot edit. Easing and duration carry the acting.' ) );
+
+	const selectorOf = c => c.userData && c.userData.label ? '#' + c.userData.label : ( c.name ? '#' + c.name : c.uuid );
+	const channel = () => new FaceChannel( editor, selectorOf( root ) );
+	const playheadT = () => ( typeof editor.getTimelinePlayhead === 'function' ? Math.round( editor.getTimelinePlayhead() * 1000 ) / 1000 : 0 );
+	const keySpec = () => ( { duration: Number( keyMs.value ) || 0, easing: keyEase.getValue() } );
+
+	// one keyed edit: run it, show the result at the playhead, refresh the lists
+	function keyed( label, fn ) {
+
+		if ( ! root ) return say( 'Pick a character first.', 'error' );
+
+		try {
+
+			fn();
+			holdTimelineAt( editor, playheadT() );
+			editor.signals.sceneGraphChanged.dispatch();
+			say( label, 'ok' );
+			refreshFace();
+
+		} catch ( e ) {
+
+			say( e.message, 'error' );
+
+		}
+
+	}
+
 	const presetSelect = new UISelect().setWidth( '110px' );
 	presetSelect.setOptions( Object.fromEntries( Object.keys( EXPRESSIONS ).map( k => [ k, k ] ) ) );
 	presetSelect.setValue( 'neutral' );
-	row( 'Preset', presetSelect, button( 'Apply', () => run( [ { op: 'blendshape', preset: presetSelect.getValue() } ], 'Expression ' + presetSelect.getValue() ) ) );
+	row( 'Preset', presetSelect, button( 'Apply', () => {
+
+		const name = presetSelect.getValue();
+		if ( keyMode.getValue() ) return keyed( `Keyed "${ name }" at ${ playheadT() }s (explicit per-shape keys)`, () => channel().applyPreset( name, playheadT(), keySpec() ) );
+		run( [ { op: 'blendshape', preset: name } ], 'Expression ' + name );
+
+	} ) );
 
 	const sliders = SLIDERS.map( s => {
 
@@ -175,7 +225,13 @@ function SidebarCustomize( editor ) {
 		input.type = 'range';
 		input.min = 0; input.max = 1; input.step = 0.05; input.value = 0;
 		input.style.width = '150px';
-		input.addEventListener( 'change', () => run( [ { op: 'blendshape', shapes: Object.fromEntries( s.shapes.map( n => [ n, Number( input.value ) ] ) ) } ], s.label + ' ' + input.value ) );
+		input.addEventListener( 'change', () => {
+
+			const shapes = Object.fromEntries( s.shapes.map( n => [ n, Number( input.value ) ] ) );
+			if ( keyMode.getValue() ) return keyed( `Keyed ${ s.label } ${ input.value } at ${ playheadT() }s`, () => channel().keyAt( playheadT(), { ...keySpec(), shapes } ) );
+			run( [ { op: 'blendshape', shapes } ], s.label + ' ' + input.value );
+
+		} );
 		const r = new UIRow();
 		r.add( new UIText( s.label ).setClass( 'Label' ) );
 		r.dom.appendChild( input );
@@ -183,6 +239,76 @@ function SidebarCustomize( editor ) {
 		return { ...s, input, row: r };
 
 	} );
+
+	// ── Face performance (gaze, idle, the keys) ───────────────────────────────
+
+	title( 'Face performance' );
+	container.add( note( 'Expression and gaze are keyed channels on the timeline — the same keys the shell writes with $S(\'#id\').face.keyAt(…) and .gaze(…). Gaze follows a named character as it moves; eyes lead and the head lags by the weight; past the eyes\' range the head turns.' ) );
+
+	const gazeTarget = new UISelect().setWidth( '110px' );
+	const gazeHead = document.createElement( 'input' );
+	gazeHead.type = 'range'; gazeHead.min = 0; gazeHead.max = 1; gazeHead.step = 0.05; gazeHead.value = FT.GAZE_DEFAULTS.head; gazeHead.style.width = '70px';
+	const gazeRow = row( 'Gaze at', gazeTarget );
+	gazeRow.dom.appendChild( gazeHead );
+	gazeRow.add( button( 'Key at playhead', () => keyed( `Gaze → ${ gazeTarget.getValue() } at ${ playheadT() }s`, () => gazeVerbs.gazeAt( editor, selectorOf( root ), playheadT(), gazeTarget.getValue(), { ...keySpec(), head: Number( gazeHead.value ) } ) ) ) );
+
+	const idleCheck = new UICheckbox( false );
+	const idleSeed = document.createElement( 'input' );
+	idleSeed.type = 'number'; idleSeed.value = 1; idleSeed.step = 1; idleSeed.style.width = '56px';
+	const idleRow = row( 'Idle layer', idleCheck );
+	idleRow.add( new UIText( 'seed' ).setClass( 'Label' ) );
+	idleRow.dom.appendChild( idleSeed );
+	const applyIdle = () => keyed( idleCheck.getValue() ? 'Idle layer on (seeded blink, breath, gaze micro-noise)' : 'Idle layer off — authored keys untouched', () => channel().idle( idleCheck.getValue() ? { seed: Math.round( Number( idleSeed.value ) || 1 ) } : false ) );
+	idleCheck.onChange( applyIdle );
+	idleSeed.addEventListener( 'change', () => { if ( idleCheck.getValue() ) applyIdle(); } );
+	container.add( note( 'Blinks, a faint breath and gaze micro-noise: seeded (same scene, same blinks), an underlayer that never becomes keys, and suppressed under a held beat.' ) );
+
+	const keyList = document.createElement( 'div' );
+	keyList.style.cssText = 'font-size:11px;line-height:1.7;margin:4px 0 8px;';
+	container.dom.appendChild( keyList );
+
+	const faceCmd = new UITextArea().setWidth( '100%' ).setHeight( '84px' );
+	faceCmd.dom.readOnly = true;
+	faceCmd.dom.style.cssText += 'font-family:monospace;font-size:11px;';
+	container.add( faceCmd );
+
+	function refreshFace() {
+
+		keyList.innerHTML = '';
+		if ( ! root ) { faceCmd.setValue( '' ); return; }
+
+		const ch = channel(), sel = selectorOf( root );
+
+		const others = characters().filter( c => c !== root ).map( selectorOf );
+		const prev = gazeTarget.getValue();
+		gazeTarget.setOptions( Object.fromEntries( [ ...others, 'away' ].map( o => [ o, o ] ) ) );
+		gazeTarget.setValue( [ ...others, 'away' ].includes( prev ) ? prev : others[ 0 ] || 'away' );
+
+		const cfg = ch.idleConfig();
+		idleCheck.setValue( !! cfg );
+		if ( cfg ) idleSeed.value = cfg.seed;
+
+		const rowFor = ( k, text, remove ) => {
+
+			const d = document.createElement( 'div' );
+			d.textContent = `${ k.label }  ${ text }`;
+			const x = document.createElement( 'button' );
+			x.textContent = '×'; x.title = 'Delete this key';
+			x.style.cssText = 'margin-left:8px;padding:0 6px;cursor:pointer;';
+			x.addEventListener( 'click', () => keyed( 'Key deleted', remove ) );
+			d.appendChild( x );
+			keyList.appendChild( d );
+
+		};
+
+		for ( const k of ch.keys() ) rowFor( k, `${ Object.entries( k.shapes ).map( ( [ n, v ] ) => `${ n } ${ v }` ).join( ', ' ) } · ${ k.duration }ms ${ k.easing }${ k.hold ? ' · hold' : '' }`, () => ch.deleteKey( k.index ) );
+		for ( const k of gazeVerbs.gazeKeys( editor, sel ) ) rowFor( k, `→ ${ Array.isArray( k.target ) ? 'point' : k.target } · head ${ k.head } · ${ k.duration }ms ${ k.easing }`, () => gazeVerbs.deleteGaze( editor, sel, k.index ) );
+
+		faceCmd.setValue( ch.asCommand() );
+
+	}
+
+	signals.timelineChanged.add( () => { if ( root ) refreshFace(); } );
 
 	// ── Props ─────────────────────────────────────────────────────────────────
 
@@ -358,6 +484,7 @@ function SidebarCustomize( editor ) {
 
 	function refreshAll() {
 
+		refreshFace();
 		refreshControls();
 		showRig();
 		refreshFlags();

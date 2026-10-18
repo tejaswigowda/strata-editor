@@ -246,6 +246,10 @@ g.clear();                                             // back to the full captu
 
 **Export.** glTF export bakes a cut clip's keyframes onto the shared clock; the saved scene keeps only the capture plus the edit list. See the [worked tutorial](../docs/about/tutorials/edit-captured-motion.html).
 
+## The authored face — expression and gaze as timeline keys
+
+A character's expression (continuous morph weights with easing and duration per key), its **gaze** (a named target that follows a moving character; eyes lead, the head lags, past the eyes' range the head turns) and a seeded **idle layer** (blink, breath, micro-noise) are keyed channels on the same track as its body clip: `$S('#f1').face.keyAt(2, { shapes: { jawOpen: 0.4 }, duration: 400, easing: 'ease-out' })`, `$S('#f1').gaze(3, '#f2')`, `$S('#f1').face.idle({ seed: 7 })`. Presets expand to explicit per-shape keys; precedence is idle < authored < visemes (not built). See [The authored face](FACE_TRACK.md).
+
 ## Animation lifecycle management
 
 When an object with attached animations is deleted, the cascade delete system automatically cleans up its animations to prevent orphaned clips:
