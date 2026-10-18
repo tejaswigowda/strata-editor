@@ -133,5 +133,19 @@ test( 'AI host verb map: clip-control verbs resolve to a single op', () => {
 
 } );
 
+test( 'play from/to trims to a sub-range; the clip itself is untouched', () => {
+
+	const trimmed = [ play( 2, { from: 3, to: 6 } ) ];
+	near( sampleClipState( clip, trimmed, 0 ).local, 3, 'before the play: first frame of the span' );
+	near( sampleClipState( clip, trimmed, 2 ).local, 3 );
+	near( sampleClipState( clip, trimmed, 3.5 ).local, 4.5 );
+	near( sampleClipState( clip, trimmed, 5 ).local, 6, 'reaches the out point' );
+	near( sampleClipState( clip, trimmed, 99 ).local, 6, 'holds the out point' );
+	near( sampleClipState( clip, [ play( 0, { from: 3, to: 6, speed: 2 } ) ], 1 ).local, 5, 'speed scales the span' );
+	near( sampleClipState( clip, [ play( 0, { from: 3, to: 6, loop: true } ) ], 4 ).local, 4, 'loop wraps inside the span' );
+	near( sampleClipState( clip, [ play( 0, { to: 4 } ) ], 9 ).local, 4, 'to alone trims the tail' );
+
+} );
+
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );

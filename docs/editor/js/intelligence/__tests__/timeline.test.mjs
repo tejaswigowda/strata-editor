@@ -181,5 +181,64 @@ test( 'empty timeline compiles to null', () => {
 
 } );
 
+// ── Performance groups (registered pair edits) ────────────────────────────────
+
+const groupModel = () => {
+
+	const m = new TimelineModel();
+	m.addEvent( '#f1', { at: 0, op: 'play', args: { name: 'c1', group: 'g' }, dur: 50 } );
+	m.addEvent( '#f2', { at: 0, op: 'play', args: { name: 'c2', group: 'g' }, dur: 50 } );
+	m.addEvent( '#cam', { at: 1, op: 'animate', args: {}, dur: 2 } );
+	m.groups.push( { id: 'g', targets: [ '#f1', '#f2' ], at: 0, edl: null, broken: false, members: {} } );
+	return m;
+
+};
+
+test( 'groups serialize only when present, and round-trip', () => {
+
+	const plain = new TimelineModel();
+	plain.addEvent( '.a', { at: 0, op: 'fadeIn', args: {}, dur: 1 } );
+	assert.strictEqual( 'groups' in plain.toJSON(), false, 'old scenes serialize unchanged' );
+
+	const back = TimelineModel.fromJSON( JSON.parse( JSON.stringify( groupModel().toJSON() ) ) );
+	assert.strictEqual( back.groups.length, 1 );
+	assert.deepStrictEqual( back.group( 'g' ).targets, [ '#f1', '#f2' ] );
+
+} );
+
+test( 'a group member moves WITH the group: both performers keep one start', () => {
+
+	const m = groupModel();
+	const id = m.groupEvents( 'g' )[ 0 ].id;
+	assert.ok( m.moveEvent( id, 5 ) );
+	assert.deepStrictEqual( m.groupEvents( 'g' ).map( e => e.at ), [ 5, 5 ] );
+	assert.strictEqual( m.group( 'g' ).at, 5 );
+	assert.strictEqual( m.duration, 55 );
+
+} );
+
+test( 'a group member cannot be resized alone, and removing one removes the group', () => {
+
+	const m = groupModel();
+	const id = m.groupEvents( 'g' )[ 0 ].id;
+	assert.strictEqual( m.resizeEvent( id, 3 ), false );
+	assert.strictEqual( m.groupEvents( 'g' )[ 0 ].dur, 50 );
+
+	assert.ok( m.removeEvent( id ) );
+	assert.strictEqual( m.groups.length, 0 );
+	assert.strictEqual( m.groupEvents( 'g' ).length, 0 );
+	assert.deepStrictEqual( m.tracks.map( t => t.target ), [ '#cam' ], 'unrelated tracks survive' );
+
+} );
+
+test( 'a broken group moves its members independently', () => {
+
+	const m = groupModel();
+	m.group( 'g' ).broken = true;
+	m.moveEvent( m.groupEvents( 'g' )[ 0 ].id, 7 );
+	assert.deepStrictEqual( m.groupEvents( 'g' ).map( e => e.at ).sort(), [ 0, 7 ] );
+
+} );
+
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );

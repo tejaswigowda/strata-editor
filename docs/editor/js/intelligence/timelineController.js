@@ -10,6 +10,7 @@ import * as selectorEngine from './selectorEngine.js';
 import { TimelineModel, compileTimeline, TIMELINE_CLIP_NAME } from './timeline.js';
 import { applyContentAt } from './textChange.js';
 import { importedClipsOf, directivesByClip, sampleClipState, clipDirectiveProblems } from './clipDirectives.js';
+import { editedPlayback } from './motionEditRuntime.js';
 
 /** Remove any previously compiled Timeline clip from scene.animations. */
 function stripTimelineClip( editor ) {
@@ -275,6 +276,26 @@ function holdImportedClipsAt( editor, t ) {
 	let any = false;
 
 	for ( const clip of importedClipsOf( editor ) ) {
+
+		// A clip cut by an edit list is posed from its derived (in-memory) clip; the capture
+		// itself stays on scene.animations untouched and simply stops contributing.
+		const edit = editedPlayback( editor, clip, directed.get( clip ) || [], t );
+
+		if ( edit ) {
+
+			const raw = editor.mixer.existingAction( clip, editor.scene );
+			if ( raw ) raw.setEffectiveWeight( 0 );
+
+			const e = editor.mixer.clipAction( edit.clip, editor.scene );
+			e.play();
+			e.enabled = true;
+			e.paused = true;
+			e.setEffectiveWeight( 1 );
+			e.time = edit.local;
+			any = true;
+			continue;
+
+		}
 
 		const { local, weight } = sampleClipState( clip, directed.get( clip ) || [], t );
 		const a = editor.mixer.clipAction( clip, editor.scene );

@@ -52,6 +52,7 @@ import { diagnoseImport, diagnosticMessages } from './import/diagnostics.js';
 import { labelImportedAsset } from './import/labelPass.js';
 import { executeRecipeOp } from './intelligence/animationRecipes.js';
 import { op as runOp, ops as runOps, makeQuery, OP_VOCABULARY } from './intelligence/opPrimitive.js';
+import { makeMotion } from './intelligence/motionEditOps.js';
 import { colorToName } from './intelligence/colorName.js';
 import { whatsVisible, whatsAt } from './intelligence/gpuPick.js';
 import { lassoSelect } from './intelligence/lassoSelect.js';
@@ -536,7 +537,7 @@ function Shell( editor ) {
 		{ w: 'relabel', k: 'fn' }, { w: 'tagClass', k: 'fn' }, { w: 'untagClass', k: 'fn' },
 
 		// ── Selectors ──
-		{ w: '$S', k: 'fn' }, { w: 'Pick', k: 'fn' }, { w: 'pick', k: 'fn' },
+		{ w: '$S', k: 'fn' }, { w: '$M', k: 'fn' }, { w: 'Pick', k: 'fn' }, { w: 'pick', k: 'fn' },
 		{ w: 'query', k: 'fn' }, { w: 'queryOne', k: 'fn' },
 		{ w: 'isValidSelector', k: 'fn' }, { w: 'listSelectors', k: 'fn' },
 		{ w: 'subtitles', k: 'fn' }, { w: 'setSubtitles', k: 'fn' }, { w: 'importSrt', k: 'fn' }, { w: 'exportSrt', k: 'fn' },
@@ -1515,6 +1516,7 @@ function Shell( editor ) {
 			// Scope vars become named parameters of a new Function; direct eval()
 			// inside that function reliably sees all parameters as local variables.
 			const query = makeQuery( editor ); // shared selector-picker ($S, Pick, pick)
+			const motion = makeMotion( editor ); // $M — motion edit lists (cut captured clips as data)
 
 			// ── Parity helpers (shared by the UI-to-shell globals below) ──
 			// isolate/solo: one undoable batch flipping mesh.visible so only the matched
@@ -1987,6 +1989,10 @@ function Shell( editor ) {
 				// Example: $S('.wheel').recolor('#111').spin('y', 1)
 				// Aliases: Pick, pick — the same selector-picking function.
 				$S: query,
+				// $M('group') — non-destructive motion editing: $M.group('sparring', ['#f1','#f2']),
+				// then .splice([[1.6,9],[14.6,22.1]], { blend: 0.25 }) / .play({from,to}) / .speed / .hold /
+				// .collision() / .clear() / .asCommand(). The capture is never modified.
+				$M: motion,
 				Pick: query,
 				pick: query,
 				// ── Subtitles — the same cues the Render tab shows, kept on the scene ──

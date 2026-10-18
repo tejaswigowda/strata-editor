@@ -39,14 +39,21 @@ export function sampleClipState( clip, events, t ) {
 
 	let P = null;
 	for ( const e of plays ) { if ( e.at <= t ) P = e; }
-	if ( ! P ) return { local: 0, weight: 1 };
+	// `from` / `to` trim the clip to a sub-range (clip-local seconds); the clip itself is untouched.
+	const bound = ( v, fallback ) => ( typeof v === 'number' && Number.isFinite( v ) ) ? clamp( v, 0, dur ) : fallback;
+
+	if ( ! P ) return { local: bound( plays[ 0 ].args.from, 0 ), weight: 1 };
 
 	const o = { ...PLAY_DEFAULTS, ...P.args };
 	const speed = Number.isFinite( Number( o.speed ) ) && Number( o.speed ) !== 0 ? Number( o.speed ) : 1;
 
-	const norm = ( v ) => o.loop ? ( ( v % dur ) + dur ) % dur : clamp( v, 0, dur );
+	const lo = bound( o.from, 0 );
+	const hi = Math.max( lo, bound( o.to, dur ) );
+	const span = hi - lo;
 
-	let local = speed < 0 ? dur : 0;
+	const norm = ( v ) => o.loop && span > 0 ? lo + ( ( ( v - lo ) % span ) + span ) % span : clamp( v, lo, hi );
+
+	let local = speed < 0 ? hi : lo;
 	let running = true;
 	let last = P.at;
 
@@ -63,12 +70,12 @@ export function sampleClipState( clip, events, t ) {
 		advance( e.at );
 
 		if ( e.op === 'pause' ) running = false;
-		else if ( e.op === 'stop' ) { running = false; local = 0; }
+		else if ( e.op === 'stop' ) { running = false; local = lo; }
 		else if ( e.op === 'seek' ) local = clamp( Number( e.args.time ) || 0, 0, dur );
 
 	}
 
-	const ranToEnd = running && ! o.loop && ( speed > 0 ? local + speed * ( t - last ) >= dur : local + speed * ( t - last ) <= 0 );
+	const ranToEnd = running && ! o.loop && ( speed > 0 ? local + speed * ( t - last ) >= hi : local + speed * ( t - last ) <= lo );
 	advance( t );
 
 	let weight = Math.max( 0, Number( o.weight ) );

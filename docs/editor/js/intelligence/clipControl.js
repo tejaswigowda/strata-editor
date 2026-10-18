@@ -15,7 +15,7 @@ import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import { SetLabelCommand } from '../commands/SetLabelCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
 
-const PLAY_OPTS = [ 'at', 'loop', 'speed', 'fade', 'weight', 'clampWhenFinished', 'duration' ];
+const PLAY_OPTS = [ 'at', 'loop', 'speed', 'fade', 'weight', 'clampWhenFinished', 'duration', 'from', 'to' ];
 
 function num( v, what ) {
 
@@ -59,6 +59,18 @@ function playArgs( clipName, opts ) {
 
 	}
 
+	// `from` / `to`: trim to a sub-range of the clip (clip-local seconds). The clip is never modified.
+	for ( const key of [ 'from', 'to' ] ) {
+
+		if ( opts[ key ] === undefined ) continue;
+		const v = num( opts[ key ], key );
+		if ( v < 0 ) throw new Error( `play(): ${ key } must be >= 0 (clip-local seconds)` );
+		args[ key ] = v;
+
+	}
+
+	if ( args.from !== undefined && args.to !== undefined && ! ( args.to > args.from ) ) throw new Error( 'play(): "to" must be greater than "from"' );
+
 	if ( opts.fade !== undefined ) {
 
 		const fade = num( opts.fade, 'fade' );
@@ -94,14 +106,37 @@ export function buildClipEvent( editor, { selector, nodes, op, clip: clipName, o
 
 	const clip = resolveClip( editor, selector, nodes, clipName, op );
 
+	// A registered performance group is edited as ONE unit (motionEdit.js). A directive on a single
+	// member would desynchronise the pair, so it is refused — go through $M('<group>') instead.
+	const grouped = editor.timeline && editor.timeline.groups.find( g => g.targets.includes( selector ) );
+
+	if ( grouped ) {
+
+		throw new Error( `${ op }(): ${ selector } belongs to the registered performance group "${ grouped.id }" — edit it as a unit with $M('${ grouped.id }'); per-performer timing needs $M('${ grouped.id }').breakRegistration() and then .timeOffset('${ selector }', dt) / .speedOf('${ selector }', f) (it desynchronises the pair)` );
+
+	}
+
 	let args, dur = 0;
 
 	if ( op === 'play' ) {
 
 		args = playArgs( clip.name, opts );
+
+		for ( const key of [ 'from', 'to' ] ) {
+
+			if ( args[ key ] !== undefined && args[ key ] > clip.duration + 1e-9 ) {
+
+				throw new Error( `play(): ${ key } ${ args[ key ] }s is outside clip "${ clip.name }" (0–${ clip.duration.toFixed( 2 ) }s)` );
+
+			}
+
+		}
+
+		const length = ( args.to !== undefined ? Math.min( args.to, clip.duration ) : clip.duration ) - ( args.from || 0 );
+
 		dur = opts.duration !== undefined
 			? Math.max( 0, num( opts.duration, 'duration' ) ) / 1000
-			: clip.duration / Math.abs( args.speed || 1 );
+			: length / Math.abs( args.speed || 1 );
 
 	} else if ( op === 'seek' ) {
 

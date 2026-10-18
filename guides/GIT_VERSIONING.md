@@ -15,6 +15,22 @@ Open the **Git** menu to configure a repository and sync scenes. All calls use `
 
 Reads (Load Scene, Compare with Remote, and the URL hash preload below) go through a CDN-first resolver, not the GitHub REST API: raw.githubusercontent.com and jsDelivr are tried first (raw first when authoring, for freshness; jsDelivr first in present/preview mode, for scale), and the API is used only as a last-resort fallback if both CDN edges fail. This sidesteps GitHub's 60 req/hr anonymous rate limit — the failure mode that used to hit shared-IP classrooms and widely-shared links hardest. It handles files over 1 MB and decodes UTF-8 natively. Commits (writes) always go through the GitHub API with a token, exactly as before — there is no CDN write path.
 
+## How a scene is written
+
+**Commit Scene** writes the scene as **compact JSON** — one line, never pretty-printed — with big geometry buffers and images split out as binary assets. A scene is megabytes of baked float arrays, and large scenes are split into `$chunked` parts on byte boundaries anyway, so line diffs were never usable; indentation was pure size. For a human-readable dump, export a readable copy explicitly; it is never the committed artifact.
+
+Animation values are also **quantized** on save (`docs/editor/js/SceneQuantize.js` — lossy, deterministic, same scene in → byte-identical file out):
+
+| Data | Precision |
+|------|-----------|
+| Quaternion tracks | 5 decimals |
+| Position tracks | 4 decimals (0.1 mm at metre scale) |
+| Key times | 4 decimals (0.1 ms) |
+
+Nothing structural is quantized (uuids, indices, matrices, geometry, scale/rotation/morph tracks, the timeline model). On a 170-second two-performer capture, measured on the live scene: pretty-printed 349.9 MB → compact 107.0 MB (−69%) → compact + quantized 84.4 MB (−76% in total).
+
+Minifying does not change how a scene is *loaded*: the chunked reader still reassembles every part before parsing. When a load fails, the banner names the stage that failed (fetching the scene, fetching assets, applying the scene) and the console carries the stack.
+
 ## Merge-conflict viewport
 
 `Git, Compare with Remote` diffs your scene against the repo's. It opens a split-screen review: left is local, right is remote, one shared orbit camera. Objects are tinted green (added), red (removed), orange (modified). A per-conflict list lets you choose local, remote, or both per object (or **Accept All**). **AI Suggest** proposes resolutions. **Apply Merge** rebuilds the scene from your choices.

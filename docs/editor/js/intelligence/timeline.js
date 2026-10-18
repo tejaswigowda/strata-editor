@@ -211,6 +211,7 @@ export class TimelineModel {
 
 		this.duration = 0;
 		this.tracks = [];
+		this.groups = []; // registered performance groups (motion edit lists) — see motionEdit.js
 		if ( data ) this._load( data );
 		this.recomputeDuration();
 
@@ -230,6 +231,8 @@ export class TimelineModel {
 				dur: Math.max( 0, Number( e.dur ) || 0 ),
 			} ) ),
 		} ) );
+
+		this.groups = ( data.groups || [] ).map( g => JSON.parse( JSON.stringify( g ) ) );
 
 	}
 
@@ -288,33 +291,71 @@ export class TimelineModel {
 
 	}
 
-	/** Retime an event (change its absolute `at`). */
+	/** The performance group with this id, or null. */
+	group( id ) {
+
+		return this.groups.find( g => g.id === id ) || null;
+
+	}
+
+	/** Every event that belongs to a performance group (one per member), in track order. */
+	groupEvents( id ) {
+
+		const out = [];
+		for ( const t of this.tracks ) for ( const e of t.events ) if ( e.args && e.args.group === id ) out.push( e );
+		return out;
+
+	}
+
+	/**
+	 * Retime an event (change its absolute `at`). A member of a registered group moves
+	 * WITH the group: every member keeps the same start, so the pair stays registered.
+	 */
 	moveEvent( id, at ) {
 
 		const found = this.findEvent( id );
 		if ( ! found ) return false;
-		found.event.at = Math.max( 0, Number( at ) || 0 );
+
+		const start = Math.max( 0, Number( at ) || 0 );
+		const g = found.event.args && found.event.args.group ? this.group( found.event.args.group ) : null;
+
+		if ( g && ! g.broken ) {
+
+			g.at = start;
+			for ( const e of this.groupEvents( g.id ) ) e.at = start;
+
+		} else {
+
+			found.event.at = start;
+
+		}
+
 		this.recomputeDuration();
 		return true;
 
 	}
 
-	/** Resize an event (change its `dur`). */
+	/** Resize an event (change its `dur`). A group member's length is its edit list's — not resizable. */
 	resizeEvent( id, dur ) {
 
 		const found = this.findEvent( id );
 		if ( ! found ) return false;
+		if ( found.event.args && found.event.args.group && this.group( found.event.args.group ) ) return false;
 		found.event.dur = Math.max( 0, Number( dur ) || 0 );
 		this.recomputeDuration();
 		return true;
 
 	}
 
-	/** Remove an event by id. Drops the track if it becomes empty. */
+	/** Remove an event by id. Removing a group member removes the whole group (never one performer). */
 	removeEvent( id ) {
 
 		const found = this.findEvent( id );
 		if ( ! found ) return false;
+
+		const gid = found.event.args && found.event.args.group;
+		if ( gid && this.group( gid ) ) return this.removeGroup( gid );
+
 		found.track.events.splice( found.index, 1 );
 		if ( found.track.events.length === 0 ) {
 
@@ -327,9 +368,23 @@ export class TimelineModel {
 
 	}
 
+	/** Drop a group and all of its member events. */
+	removeGroup( id ) {
+
+		if ( ! this.group( id ) ) return false;
+		this.groups = this.groups.filter( g => g.id !== id );
+
+		for ( const t of this.tracks ) t.events = t.events.filter( e => ! ( e.args && e.args.group === id ) );
+		this.tracks = this.tracks.filter( t => t.events.length > 0 );
+		this.recomputeDuration();
+		return true;
+
+	}
+
 	clear() {
 
 		this.tracks = [];
+		this.groups = [];
 		this.duration = 0;
 
 	}
@@ -375,6 +430,7 @@ export class TimelineModel {
 					dur: e.dur,
 				} ) ),
 			} ) ),
+			...( this.groups.length ? { groups: JSON.parse( JSON.stringify( this.groups ) ) } : {} ), // absent when unused, so old scenes serialize unchanged
 		};
 
 	}

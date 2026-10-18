@@ -9,6 +9,9 @@ import { editCameraTrack, findCameraTrack, specFromEditCamera, moveSelector, mov
 import { holdTimelineAt, getImportedClips, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { CLIP_OPS, importedClipsOf, clipRoot, nodesForTarget } from './intelligence/clipDirectives.js';
 import { buildClipEvent } from './intelligence/clipControl.js';
+import { cutCommand, groupCommand, setGroupEdl, makeMotion } from './intelligence/motionEditOps.js';
+import { normalizeEdl, edlTable, edlDuration, formatCollisionReport } from './intelligence/motionEdit.js';
+import { groupDomain } from './intelligence/motionEditRuntime.js';
 import { normalizeClassName } from './intelligence/classDerive.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
@@ -159,6 +162,92 @@ function Timeline( editor ) {
 		'or select an object and add an event at the playhead.';
 	rows.appendChild( emptyHint );
 
+	// ── Motion edit bar (performance groups: the cut, collision check, clear) ──
+	// Drives the SAME $M operations the Shell exposes — one edit list, one undo stack.
+	const $M = makeMotion( editor );
+	const collisionText = {}; // group id -> last report text
+
+	const motionBar = document.createElement( 'div' );
+	motionBar.style.cssText = 'display:none;flex-direction:column;gap:6px;padding:6px 10px;border-top:1px solid #ccc;font-size:11px;flex-shrink:0;';
+	container.dom.appendChild( motionBar );
+
+	function motionButton( text, title, fn ) {
+
+		const b = document.createElement( 'button' );
+		b.textContent = text;
+		b.title = title;
+		b.style.cssText = 'padding:2px 8px;font-size:11px;border-radius:3px;cursor:pointer;';
+		b.addEventListener( 'click', function () {
+
+			try { fn(); } catch ( e ) { collisionText[ b.dataset.group ] = 'Error: ' + e.message; refreshMotionBar(); }
+
+		} );
+		return b;
+
+	}
+
+	function refreshMotionBar() {
+
+		const model = editor.timeline;
+		motionBar.innerHTML = '';
+
+		if ( ! model || model.groups.length === 0 ) { motionBar.style.display = 'none'; return; }
+
+		motionBar.style.display = 'flex';
+
+		for ( const g of model.groups ) {
+
+			const head = document.createElement( 'div' );
+			head.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+
+			const cutLen = g.edl ? edlDuration( g.edl ) : null;
+			const label = document.createElement( 'span' );
+			label.style.cssText = 'flex:1;min-width:140px;';
+			label.textContent = `${ g.broken ? '\u26A0' : '\u2702' } ${ g.id } (${ g.targets.join( ' + ' ) }) — ` +
+				( g.edl ? `${ g.edl.spans.length } span${ g.edl.spans.length === 1 ? '' : 's' }, ${ cutLen.toFixed( 2 ) }s` : 'uncut' ) +
+				( g.broken ? ' — registration BROKEN' : ' — registered' );
+			head.appendChild( label );
+
+			const check = motionButton( 'Collision check', 'Hip-to-hip floor distance over the edited timeline (floor 0.6 m)', () => {
+
+				collisionText[ g.id ] = formatCollisionReport( $M( g.id ).collision() );
+				refreshMotionBar();
+
+			} );
+			check.dataset.group = g.id;
+			head.appendChild( check );
+
+			if ( g.edl ) {
+
+				const clear = motionButton( 'Clear cut', 'Drop the edit list — the full capture plays again (undoable)', () => { $M( g.id ).clear(); } );
+				clear.dataset.group = g.id;
+				head.appendChild( clear );
+
+			}
+
+			if ( g.broken ) {
+
+				const restore = motionButton( 'Restore registration', 'Re-register the pair (undoable)', () => { $M( g.id ).restoreRegistration(); } );
+				restore.dataset.group = g.id;
+				head.appendChild( restore );
+
+			}
+
+			motionBar.appendChild( head );
+
+			if ( collisionText[ g.id ] ) {
+
+				const out = document.createElement( 'pre' );
+				out.style.cssText = 'margin:0;font-size:10px;line-height:1.4;white-space:pre-wrap;color:#555;';
+				out.textContent = collisionText[ g.id ];
+				motionBar.appendChild( out );
+
+			}
+
+		}
+
+	}
+
 	// ── Code panel (compiled sugar, now editable, always visible) ─────────────
 	// A Monaco editor (already loaded globally for Script.js) gives this JS
 	// syntax highlighting. It loads asynchronously via requireJS, so `codePanel`
@@ -274,6 +363,68 @@ function Timeline( editor ) {
 
 	}
 
+	// `$M('id').at(t).cut([...spans], { blend, rootOffset, rootYaw })` and `.breakRegistration().timeOffset(sel, dt)`
+	// lines of the code panel -> the group's edit list on `model`. Recorded against a stub so nothing
+	// runs until it is validated; unsupported calls are an error, never silently dropped.
+	function applyMotionLines( model, lines ) {
+
+		for ( const line of lines ) {
+
+			const recorded = [];
+			const handle = ( id ) => {
+
+				const calls = [];
+				recorded.push( { id, calls } );
+				const h = new Proxy( {}, { get: ( _, name ) => ( ...args ) => { calls.push( [ name, args ] ); return h; } } );
+				return h;
+
+			};
+
+			handle.group = () => {}; // the definition line is informational — groups are created from the shell
+			Function( '$M', `"use strict"; ${ line }` )( handle );
+
+			for ( const { id, calls } of recorded ) {
+
+				const g = model.group( id );
+				if ( ! g ) throw new Error( `$M('${ id }'): no such performance group — create it with $M.group('${ id }', [...]) in the Shell` );
+
+				for ( const [ name, args ] of calls ) {
+
+					if ( name === 'at' ) {
+
+						g.at = Math.max( 0, Number( args[ 0 ] ) || 0 );
+						for ( const e of model.groupEvents( id ) ) e.at = g.at;
+
+					} else if ( name === 'cut' ) {
+
+						const opts = args[ 1 ] || {};
+						const edl = normalizeEdl( { spans: args[ 0 ], blend: opts.blend, rootOffset: opts.rootOffset, rootYaw: opts.rootYaw }, groupDomain( editor, model, g ) );
+						setGroupEdl( editor, model, g, edl );
+
+					} else if ( name === 'breakRegistration' ) {
+
+						g.broken = true;
+
+					} else if ( name === 'timeOffset' || name === 'speedOf' ) {
+
+						if ( ! g.broken ) throw new Error( `$M('${ id }').${ name }() needs .breakRegistration() first — it desynchronises the pair` );
+						g.members = g.members || {};
+						g.members[ args[ 0 ] ] = { ...( g.members[ args[ 0 ] ] || {} ), [ name === 'timeOffset' ? 'timeOffset' : 'speed' ]: Number( args[ 1 ] ) };
+
+					} else {
+
+						throw new Error( `$M('${ id }').${ name }(): not supported in the code panel — use the Shell` );
+
+					}
+
+				}
+
+			}
+
+		}
+
+	}
+
 	// Parse edited code and update timeline model. Returns true if the save
 	// went through, false if it was aborted (see the empty-parse guard below).
 	function parseAndApplyCode( codeText ) {
@@ -283,6 +434,19 @@ function Timeline( editor ) {
 		try {
 
 			const model = editor.timeline ? TimelineModel.fromJSON( editor.timeline.toJSON() ) : new TimelineModel();
+
+			// Performance-group events are owned by their `$M(...)` lines (below), not by `$S` lines:
+			// keep them across the rebuild so a group's members can never be edited one at a time.
+			const groupEvents = model.tracks.flatMap( t => t.events.filter( e => e.args && e.args.group ).map( e => ( { target: t.target, event: e } ) ) );
+			const motionLines = [];
+			codeText = codeText.split( '\n' ).filter( line => {
+
+				if ( ! /^\s*\$M[.(]/.test( line ) ) return true;
+				motionLines.push( line.trim() );
+				return false;
+
+			} ).join( '\n' );
+
 			model.tracks = []; // clear all events, rebuild from code
 			let eventCount = 0;
 
@@ -472,6 +636,10 @@ function Timeline( editor ) {
 				}
 
 			}
+
+			for ( const { target, event } of groupEvents ) model.addEvent( target, event );
+			eventCount += groupEvents.length;
+			applyMotionLines( model, motionLines );
 
 			if ( eventCount === 0 ) {
 
@@ -952,6 +1120,7 @@ function Timeline( editor ) {
 	function render() {
 
 		const model = editor.timeline || new TimelineModel();
+		refreshMotionBar();
 
 		// Ruler ticks (every 1s, or 0.5s when short). Every tick gets a line, but
 		// only every Nth one a label, so the mm:ss:ms text never overlaps.
@@ -1070,6 +1239,8 @@ function Timeline( editor ) {
 		selectedEventId = null;
 		commitMutation( m => {
 
+			// a performer's track can't be deleted alone from a registered group — the whole group goes
+			for ( const g of m.groups.filter( g => g.targets.includes( target ) ) ) m.removeGroup( g.id );
 			m.tracks = m.tracks.filter( t => t.target !== target );
 			m.recomputeDuration();
 
@@ -1101,15 +1272,44 @@ function Timeline( editor ) {
 		const left = timeToPx( ev.at );
 		const width = Math.max( 6, timeToPx( ev.dur ) );
 		const selected = ev.id === selectedEventId;
+
+		// A member of a registered performance group: the block is the group's CUT (its length is the
+		// edit list's, it moves with the whole group, and each span boundary is drawn as a tick).
+		const group = ev.args && ev.args.group && editor.timeline ? editor.timeline.group( ev.args.group ) : null;
+
 		block.style.cssText = `position:absolute;left:${ left }px;width:${ width }px;top:4px;bottom:4px;` +
-			`background:${ selected ? '#ff5722' : '#2196F3' };border-radius:3px;opacity:0.85;` +
+			`background:${ selected ? '#ff5722' : ( group ? '#00897b' : '#2196F3' ) };border-radius:3px;opacity:0.85;` +
 			'cursor:grab;font-size:9px;color:#fff;overflow:hidden;white-space:nowrap;padding:2px 4px;box-sizing:border-box;user-select:none;';
-		block.textContent = ev.op;
-		block.title = `${ ev.op } @ ${ ev.at.toFixed( 2 ) }s, dur ${ ev.dur.toFixed( 2 ) }s — drag to retime, drag right edge to resize`;
+
+		if ( group ) {
+
+			const spans = group.edl ? group.edl.spans.length : 0;
+			block.textContent = `${ group.broken ? '\u26A0 ' : '\u2702 ' }${ group.id }${ spans ? ` · ${ spans } span${ spans === 1 ? '' : 's' }` : ' · uncut' }`;
+			block.title = `${ group.id }: ${ group.broken ? 'registration BROKEN' : 'registered pair — edited as one unit' } @ ${ ev.at.toFixed( 2 ) }s, ${ ev.dur.toFixed( 2 ) }s — drag to move both performers; edit the cut in the code panel or with $M('${ group.id }')`;
+
+			if ( group.edl ) {
+
+				for ( const r of edlTable( group.edl ).slice( 1 ) ) {
+
+					const tick = document.createElement( 'div' );
+					tick.style.cssText = `position:absolute;left:${ timeToPx( r.outStart ) }px;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.8);pointer-events:none;`;
+					block.appendChild( tick );
+
+				}
+
+			}
+
+		} else {
+
+			block.textContent = ev.op;
+			block.title = `${ ev.op } @ ${ ev.at.toFixed( 2 ) }s, dur ${ ev.dur.toFixed( 2 ) }s — drag to retime, drag right edge to resize`;
+
+		}
 
 		// Resize handle (right edge).
 		const handle = document.createElement( 'div' );
 		handle.style.cssText = 'position:absolute;right:0;top:0;bottom:0;width:6px;cursor:ew-resize;background:rgba(255,255,255,0.35);';
+		if ( group ) handle.style.display = 'none';
 		block.appendChild( handle );
 
 		// Drag to retime.
@@ -1382,6 +1582,8 @@ function Timeline( editor ) {
 
 			const o = [];
 			if ( args.loop !== undefined ) o.push( `loop: ${ args.loop }` );
+			if ( args.from !== undefined ) o.push( `from: ${ args.from }` );
+			if ( args.to !== undefined ) o.push( `to: ${ args.to }` );
 			if ( args.speed !== undefined ) o.push( `speed: ${ args.speed }` );
 			if ( args.weight !== undefined ) o.push( `weight: ${ args.weight }` );
 			if ( args.fade !== undefined ) o.push( `fade: ${ Math.round( args.fade * 1000 ) }` );
@@ -1441,9 +1643,21 @@ function Timeline( editor ) {
 
 		} else {
 
+			// Performance groups: the cut is the group's edit list, shown (and re-accepted) as one
+			// `$M` line, followed by the 1-line summary of what it keeps.
+			for ( const g of model.groups ) {
+
+				const keep = g.edl ? edlDuration( g.edl ) : null;
+				blocks.push( groupCommand( g ) + ( keep === null ? '   // uncut — the full capture plays' : `   // registered pair; the capture is never modified` ) );
+				const cut = cutCommand( g );
+				if ( cut ) blocks.push( cut + ( keep === null ? '' : `   // ${ g.edl.spans.length } span${ g.edl.spans.length === 1 ? '' : 's' }, ${ keep.toFixed( 2 ) }s` ) );
+
+			}
+
 			for ( const track of model.tracks ) {
 
-				const evs = model.sortedEvents( track );
+				const evs = model.sortedEvents( track ).filter( e => ! ( e.args && e.args.group ) );
+				if ( evs.length === 0 ) continue;
 				const chain = evs.map( e => `.at(${ Math.round( e.at * 1000 ) / 1000 }).${ e.op }(${ argList( e.op, e.args, e.dur ) })` );
 				let line = `$S('${ track.target }')` + ( evs.length === 1 ? chain[ 0 ] : chain.map( c => `\n  ${ c }` ).join( '' ) ) + ';';
 

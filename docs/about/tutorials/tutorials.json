@@ -45,5 +45,10 @@
 		"title": "A martial-arts lesson, then a sparring match, in a bamboo dojo",
 		"href": "martial-arts-dojo.html",
 		"desc": "Two rigged VRoid characters share one mocap clip: stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut with warm lantern lighting, and a four-camera render sequence — plus the two skinned-mesh pitfalls (parts vanishing, slow playback) that two characters expose. Part 2 swaps in two fighters from a two-person capture and turns the lesson into a 170-second sparring match, with cameras that follow the pair and shots cut by distance and verified frame by frame."
+	},
+	{
+		"title": "Editing captured motion as data",
+		"href": "edit-captured-motion.html",
+		"desc": "Cut a 170-second two-performer capture to 53 seconds with a non-destructive edit list: register the pair, splice eight spans with a blend, check hip-to-hip collisions, remap the cameras, then undo or clear it — all from the JS Shell, and the capture itself is never modified."
 	}
 ]

@@ -216,6 +216,36 @@ Because events carry absolute times on one clock, the whole scene (objects and c
 
 The agent authors timeline events only. Runtime `requestAnimationFrame` loops remain out of scope. Skeletal motion (BVH) and captured performance are on the roadmap as imported data, not generation.
 
+## Motion edit lists — cut captured motion as data
+
+A captured clip is **data you can edit without re-baking it**. A cut is an *edit list* — a handful of spans over the clip — stored on the timeline model next to every other event. The capture on the scene is only ever **read**; the cut is compiled in memory when needed (the way the Timeline clip is) and never saved, so clearing the list restores the full capture and a 170-second take cut to 53 seconds costs a few hundred bytes. The Shell global is `$M`:
+
+```js
+const g = $M.group('sparring', ['#f1', '#f2']);      // register the pair as ONE editable unit
+g.splice([[1.6, 9], [14.6, 22.1], [30.8, 44.4]].map(([from, to]) => ({ from, to })), { blend: 0.25 });
+g.collision();                                         // hip-to-hip floor distance over the edited timeline
+g.remapShots();                                        // move cameras cut against the source to the new timebase
+g.clear();                                             // back to the full capture
+```
+
+| Call | Meaning |
+|------|---------|
+| `.play({ from, to })` / `.trim(from, to)` | Subclip — the primitive everything else composes from. |
+| `.splice(spans, { blend })` | Join non-adjacent spans. **A blend is mandatory** (default 0.25 s, ≥ 1/60 s): quaternions slerp over the window and the root is offset so the body does not teleport at the cut. |
+| `.cut(spans, opts)` | Replace the whole list declaratively — what `.asCommand()` emits and the code panel accepts. |
+| `.speed(f)` / `.retime([[srcTime, speed], …])` | Resample spans (`0.5` = slow motion). |
+| `.hold(t, dur)` | Freeze the pose at cut-time `t`. |
+| `.rootOffset([x,y,z])` / `.rootYaw(deg)` | Move or turn the whole performance, same transform for every member. |
+| `.at(t)` | Start of the cut on the shared clock (what dragging the block does). |
+| `.collision({ floor })` | Min hip-to-hip distance, per span; flags anything under `floor` (default 0.6 m). |
+| `.clear()` · `.asCommand()` · `.edl()` · `.table()` · `.bake()` | Drop the list · its command text · a copy · its layout · the derived clips (for export/inspection — never the authoring path). |
+
+**Registration.** Performers captured in one metric world frame are only coherent together, so a group's members are edited **atomically** — same spans, same blend windows, and one continuity offset (from the group's centroid) applied to every member so their separation survives a cut. A play directive on a single member (`$S('#f1').play(clip, { from, to })`, `.pause()`, …) is refused. `.timeOffset(sel, dt)` and `.speedOf(sel, f)` break registration by definition, so they are refused until `.breakRegistration()` — which warns what is lost, is undoable, and is reversed by `.restoreRegistration()`.
+
+**GUI parity.** The Animations tab draws a group's members as one block per performer with a tick at each span boundary (drag it: both move; it cannot be resized or deleted one performer at a time), a **Collision check / Clear cut** bar, and a code-panel line `$M('sparring').cut([...], { blend })` you can edit and save. Shell and GUI write the same model through `SetTimelineCommand`: one undo stack, and everything above runs headless — no viewport.
+
+**Export.** glTF export bakes a cut clip's keyframes onto the shared clock; the saved scene keeps only the capture plus the edit list. See the [worked tutorial](../docs/about/tutorials/edit-captured-motion.html).
+
 ## Animation lifecycle management
 
 When an object with attached animations is deleted, the cascade delete system automatically cleans up its animations to prevent orphaned clips:

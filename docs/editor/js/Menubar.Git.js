@@ -14,6 +14,7 @@ import { diffScenes } from './SceneDiff.js';
 import { MergeViewport } from './MergeViewport.js';
 import { externalizeScene, internalizeScene, u8ToBase64, chunkSceneFile, partPath } from './GitAssets.js';
 import { splitRepoRef, resolveSceneJSON, resolveAssetBytes } from './GitResolver.js';
+import { quantizeSceneJSON } from './SceneQuantize.js';
 
 // ── Commit-message generation ─────────────────────────────────────────────────
 // Uses the already-loaded local AI engine (editor.aiEngine) to generate a
@@ -766,8 +767,12 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 	// Split the scene into a small, diffable scene.json plus separate binary
 	// asset blobs (geometry buffers / images) — keeps the committed scene file
 	// tiny and avoids serializing hundreds of MB of float text.
-	const { json, assets } = await externalizeScene( editor.toJSON() );
-	const sceneBytes = new TextEncoder().encode( JSON.stringify( json, null, 2 ) );
+	// The committed scene is compact (one line) with animation floats quantized
+	// (SceneQuantize.js, lossy + deterministic) — never pretty-printed: it is
+	// megabytes of baked float arrays, and $chunked splits it on byte boundaries
+	// anyway, so line diffs were never usable.
+	const { json, assets } = await externalizeScene( quantizeSceneJSON( editor.toJSON() ) );
+	const sceneBytes = new TextEncoder().encode( JSON.stringify( json ) );
 
 	const files = [];
 	for ( const [ path, u8 ] of assets ) files.push( { path, base64: u8ToBase64( u8 ), immutable: true } );
@@ -1110,6 +1115,10 @@ export async function loadSceneFromHash( editor ) {
 	showLoadOverlay();
 	setLoadProgress( 0.1, `Loading ${ parsed.owner }/${ parsed.repo }…` );
 
+	// Which step was running when a load failed — a bare "Cannot read properties of undefined" says
+	// nothing about WHERE, and the failing step differs per device (e.g. reassembling a huge chunked scene).
+	let stage = 'fetching the scene';
+
 	try {
 
 		setLoadProgress( 0.15, `Fetching ${ file }…` );
@@ -1120,9 +1129,11 @@ export async function loadSceneFromHash( editor ) {
 		const json   = resolved.json;
 		const branch = resolved.ref; // the ref that actually resolved (ref, or main/master if it was null)
 
+		stage = 'fetching assets';
 		setLoadProgress( 0.5, 'Fetching assets…' );
 		await internalizeFromGit( json, parsed, branch, existingPat, mode );
 
+		stage = 'applying the scene';
 		setLoadProgress( 0.85, 'Applying scene…' );
 		editor.clear();
 		await editor.fromJSON( json );
@@ -1178,8 +1189,10 @@ export async function loadSceneFromHash( editor ) {
 		const reason = kind === 'not-found' ? `no "${ file }" at ${ parsed.owner }/${ parsed.repo }`
 			: kind === 'rate-limited' ? 'GitHub API rate limit reached (CDN reads also failed)'
 			: kind === 'parse-error' ? 'scene file is not valid JSON'
+			: kind === 'network' && ! err.kind ? `${ stage } failed — ${ err.message }`
 			: `network error — ${ err.message }`;
 
+		if ( err && err.stack ) console.warn( err.stack );
 		console.warn( `loadSceneFromHash(): failed to load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ reason }. Falling back to normal startup.` );
 		_showBanner( `Could not load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ reason }`, 5000 );
 		return false;

@@ -8,6 +8,7 @@ import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { includeCameraForBinding } from './intelligence/timelineController.js';
 import { directivesByClip, exportTracksForClip, importedClipsOf } from './intelligence/clipDirectives.js';
+import { editedExportTracks } from './intelligence/motionEditRuntime.js';
 import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/textChange.js';
 import { commitExportToRepo } from './Menubar.Git.js';
 
@@ -702,7 +703,8 @@ function SidebarExport( editor ) {
 			for ( const clip of object.animations ) {
 
 				const events = directed.get( clip );
-				const clipTracks = events ? exportTracksForClip( clip, events, total ) : clip.tracks;
+				// a cut clip exports the keyframes of its edit list (baked for export only)
+				const clipTracks = events ? ( editedExportTracks( editor, clip, events ) || exportTracksForClip( clip, events, total ) ) : clip.tracks;
 				for ( const track of clipTracks ) tracks.push( track );
 
 			}
