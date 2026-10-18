@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>A martial-arts lesson in a bamboo dojo — Strata tutorials</title>
+<title>A martial-arts lesson, then a sparring match, in a bamboo dojo — Strata tutorials</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: two rigged VRoid characters share one motion-capture clip. Stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut, warm lighting and a four-camera render sequence — all with the JS Shell.">
+<meta name="description" content="Step-by-step tutorial: two rigged VRoid characters share one motion-capture clip. Stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut, warm lighting and a four-camera render sequence. Part 2 swaps in two fighters from a two-person capture and turns the lesson into a sparring match — all with the JS Shell.">
+<!-- Part 2 (steps 10-13): a second pair of characters whose two clips were captured together; the lesson pair is replaced. Finished scenes: dojo.json (lesson) and sparring.json (sparring). -->
 <!--
 	/about/tutorials/martial-arts-dojo.html — a by-hand tutorial. The two
 	characters are made outside Strata (VRM: facebind, rig: bodyrig-webCLI,
@@ -109,7 +110,7 @@
 </head>
 <body>
 <main>
-	<h1>A martial-arts lesson in a bamboo dojo</h1>
+	<h1>A martial-arts lesson, then a sparring match, in a bamboo dojo</h1>
 
 	<figure>
 		<img src="./screenshots/dojo-lesson.png" alt="A student and a bald teacher face each other on a tatami mat inside an open bamboo hut with a calligraphy scroll and paper lanterns">
@@ -118,11 +119,16 @@
 
 	<p class="tagline">Two characters, one motion clip. A <strong>teacher</strong> performs a martial-arts routine in short chunks; after each chunk the <strong>student</strong>, who has been standing and watching, repeats it. Around them a bamboo hut with warm lanterns and a low sun, and four cameras that cut between over-the-shoulder, side and wide shots. Everything after the import is the JS Shell and the Render tab, and the finished scene is <a href="../../#repo=tejaswigowda/test1&amp;file=dojo.json&amp;branch=main"><code>dojo.json</code></a> in the <code>tejaswigowda/test1</code> repo.</p>
 
-	<div class="note"><strong>Where the pieces come from.</strong> Both characters are VRM models made with <a href="https://tejaswigowda.com/strata-editor/facebind/">facebind</a>. They were rigged and given the animation with <a href="https://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a>, which writes one GLB per character with the clip baked in. The motion itself is from <a href="https://arxiv.org/abs/2512.22690">Mesquite MoCap: Democratizing Real-Time Motion Capture with Affordable, Bodyworn IoT Sensors and WebXR SLAM</a> (arXiv:2512.22690). Both characters carry the same clip, named <code>p2</code>, 46.83 s long.</div>
+	<figure>
+		<img src="./screenshots/dojo-sparring.png" alt="Two fighters sparring on the tatami mat inside the same bamboo hut">
+		<figcaption>Part 2 (steps 10–13): the same hut with a second pair of characters, now sparring for 170 s — <a href="../../#repo=tejaswigowda/test1&amp;file=sparring.json&amp;branch=main"><code>sparring.json</code></a>, seen through <code>cam-wide</code> at 12 s.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Where the pieces come from.</strong> Both characters are VRM models made with <a href="https://tejaswigowda.com/strata-editor/facebind/">facebind</a>. They were rigged and given the animation with <a href="https://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a>, which writes one GLB per character with the clip baked in. The motion itself is from <a href="https://arxiv.org/abs/2512.22690">Mesquite MoCap: Democratizing Real-Time Motion Capture with Affordable, Bodyworn IoT Sensors and WebXR SLAM</a> (arXiv:2512.22690). Both characters carry the same clip, named <code>p2</code>, 46.83 s long. Part 2 (step 10 onwards) uses a second pair from the same pipeline whose two clips, <code>st1_1072026Skeleton</code> and <code>st2_1072026Skeleton</code> (170.17 s each), were captured together.</div>
 
 	<div class="note"><strong>How to follow along.</strong> Open the <a href="../../">editor</a>, import your two GLBs (<strong>Import</strong> in the menu bar), open the <strong>Shell</strong> tab and paste each block in order. Every block goes through an undoable command, so <kbd>Ctrl/Cmd+Z</kbd> backs out a step. The selectors below (<code>.vroidv110malev113bound-15p2glb</code>) are derived from the imported object names; yours will differ, so check with <code>scene.children.map(o =&gt; o.name)</code> and adjust.</div>
 
-	<div class="note"><strong>Each Shell command runs in its own scope.</strong> A <code>const</code> or function from one block is not visible in the next, so step 1 stores the shared pieces on <code>window.dojo</code> and every later block starts by pulling out what it needs with <code>const { … } = window.dojo;</code>. Only the bamboo-frame block in step 5 needs <code>await</code>, so only that one is wrapped in <code>(async () =&gt; { … })();</code>; the Shell does not print what an async block returns, so it leaves its results on <code>window.dojo</code> too. <code>holdTimelineAt(t)</code>, used throughout, is a Shell global that jumps the whole scene to <code>t</code> seconds — exactly what scrubbing the timeline does.</div>
+	<div class="note"><strong>Each Shell command runs in its own scope.</strong> A <code>const</code> or function from one block is not visible in the next, so step 1 stores the shared pieces on <code>window.dojo</code> and every later block starts by pulling out what it needs with <code>const { … } = window.dojo;</code>. Only the bamboo-frame block in step 5 (and, in Part 2, the swap block in step 10 and the shot-list block in step 13) needs <code>await</code>, so only those are wrapped in <code>(async () =&gt; { … })();</code>; the Shell does not print what an async block returns, so they leave their results on <code>window.dojo</code> too. <code>holdTimelineAt(t)</code>, used throughout, is a Shell global that jumps the whole scene to <code>t</code> seconds — exactly what scrubbing the timeline does.</div>
 
 	<h2><span class="step">1</span> Import and pick a teacher</h2>
 	<p class="lede">Import both GLBs. They arrive as two top-level groups, each with its own copy of the clip <code>p2</code>, and the same clip name does not clash because a clip is bound to its own character. Make the bald one the teacher and the other the student; below, the teacher is the group whose name contains <code>(15)</code> and the student the one containing <code>(11)</code>.</p>
@@ -473,15 +479,217 @@ misses;    // empty = every shot has its performer fully in frame</code></pre>
    skeletons: new Set(skinned.map(m =&gt; m.skeleton)).size,
    culled: skinned.filter(m =&gt; m.frustumCulled).length });   // { meshes: 83, skeletons: 2, culled: 0 }</code></pre>
 
-	<h2><span class="step">10</span> Save it</h2>
+	<h2><span class="step">10</span> Part 2 — swap in the sparring pair</h2>
+	<p class="lede">The lesson used one clip on two characters. A real sparring match needs the opposite: two clips <em>captured together</em>, one per fighter. These two GLBs come from the same pipeline as before and carry <code>st1_1072026Skeleton</code> and <code>st2_1072026Skeleton</code>, each 170.17 s long, with the same 109-bone VRoid skeleton. Import both (the hut, floor, lights and cameras stay), then remove the lesson pair, <strong>prune the lesson clips</strong> that were bound to them (two 46.8 s clips that would otherwise be saved with the scene for nothing), name the fighters, and clear the timeline: its directives and camera keys all pointed at the old characters.</p>
+	<pre><code>(async () =&gt; {
+  const { SetTimelineCommand } = await import('./commands/SetTimelineCommand.js');
+  const { TimelineModel } = await import('./intelligence/timeline.js');
+  const { SetLabelCommand } = await import('./commands/SetLabelCommand.js');
+  const { T, S } = window.dojo;                       // the lesson pair from step 1
+
+  // 1. Remove the lesson pair, and the clips that belonged to them.
+  const dead = new Set();
+  for (const o of [T, S]) o.traverse(x =&gt; dead.add(x.uuid));
+  for (const o of [T, S]) editor.execute(new RemoveObjectCommand(editor, o));
+  editor.execute(new SetValueCommand(editor, scene, 'animations',
+    scene.animations.filter(c =&gt; !c.tracks.some(t =&gt; dead.has(t.name.split('.')[0])))));
+
+  // 2. Name the fighters. Selectors match the label, so label them as well as renaming.
+  const f1 = scene.children.find(c =&gt; /_st1_/.test(c.name));    // the bald fighter
+  const f2 = scene.children.find(c =&gt; /_st2_/.test(c.name));
+  for (const [o, n] of [[f1, 'f1'], [f2, 'f2']]) {
+    editor.execute(new SetValueCommand(editor, o, 'name', n));
+    editor.execute(new SetLabelCommand(editor, o, n));
+  }
+
+  // 3. Empty the timeline (undoable like everything else).
+  editor.execute(new SetTimelineCommand(editor, TimelineModel.fromJSON(null).toJSON(), 'Reset timeline for sparring'));
+  window.dojo = { ...window.dojo, f1, f2 };
+})();</code></pre>
+	<div class="note"><strong><code>#f1</code>, not <code>.f1</code>.</strong> Renaming an imported group does not recompute its derived class, so <code>$S('.f1')</code> matches nothing. The label is what <code>#f1</code> matches, which is why the block sets it. Check with <code>$S('#f1').count()</code> and <code>$S('#f2').count()</code>; both should be 1.</div>
+
+	<div class="note"><strong>Import paths in the Shell.</strong> A dynamic <code>import()</code> typed into the Shell resolves relative to <code>Shell.js</code> itself, so the editor's own modules are <code>./Command.js</code>, <code>./commands/…</code> and <code>./intelligence/…</code> — not <code>./editor/js/…</code>. (<code>three/addons/…</code>, as in step 5, resolves through the page's import map.)</div>
+
+	<h2><span class="step">11</span> Play both clips from zero, and do not move them</h2>
+	<p class="lede">One directive each. Both clips are the same length, so both start at 0 and run to the end together; <code>duration</code> is in milliseconds and is what makes the timeline 170.17 s long.</p>
+	<pre><code>$S('#f1').at(0).play('st1_1072026Skeleton', { duration: 170170 });
+$S('#f2').at(0).play('st2_1072026Skeleton', { duration: 170170 });
+editor.timeline.toJSON().duration;       // 170.17</code></pre>
+	<p>The placement is the part to get right. The two clips share <em>one world frame</em>: their root motion already says where each fighter stands relative to the other at every moment. Drag one fighter by hand and you change that relationship, and the bodies start to overlap. To measure it, sample both skeletons every half second and count the moments when any pair of body points, one from each fighter, comes within 12 cm:</p>
+	<pre><code>const { f1, f2, bone } = window.dojo;
+const re = ['C_Head$', 'C_Chest$', 'C_Hips', 'L_Hand$', 'R_Hand$', 'L_Foot$', 'R_Foot$',
+            'L_LowerLeg$', 'R_LowerLeg$', 'L_LowerArm$', 'R_LowerArm$'].map(n =&gt; new RegExp('J_Bip_' + n));
+const pts = ch =&gt; re.map(r =&gt; bone(ch, r).getWorldPosition(new THREE.Vector3()));
+let overlaps = 0;
+for (let t = 0.5; t &lt; 170; t += 0.5) {
+  holdTimelineAt(t); scene.updateMatrixWorld(true);
+  const A = pts(f1), B = pts(f2);
+  if (Math.min(...A.flatMap(a =&gt; B.map(b =&gt; a.distanceTo(b)))) &lt; 0.12) overlaps++;
+}
+holdTimelineAt(0);
+overlaps;      // 1 at the import position; 15 with the bald fighter dragged 1 m along z</code></pre>
+	<p>Each fighter sits at the position the importer gave it (<code>userData.importNormalize.applied.position</code>), and that is where they should stay. What you <em>can</em> change is where the whole pair stands on the mat, because moving both by the same amount keeps their relationship intact. Sample the hips across the whole clip, take the centre of the box they cover, and shift both groups so that centre lands on the middle of the mat. The same block puts both fighters back at their import position first, so it is safe to re-run, and turns on shadows for the bigger body parts, as in step 6:</p>
+	<pre><code>const { f1, f2, bone, wp } = window.dojo;
+// Start from the importer's positions (this also makes the block safe to re-run).
+for (const ch of [f1, f2]) {
+  editor.execute(new SetPositionCommand(editor, ch, new THREE.Vector3(...ch.userData.importNormalize.applied.position)));
+}
+
+const hips = ch =&gt; bone(ch, /J_Bip_C_Hips/), box = new THREE.Box3();
+for (let t = 0; t &lt;= 170; t += 0.5) {
+  holdTimelineAt(t); scene.updateMatrixWorld(true);
+  box.expandByPoint(wp(hips(f1))); box.expandByPoint(wp(hips(f2)));
+}
+const c = box.getCenter(new THREE.Vector3());
+for (const ch of [f1, f2]) {
+  editor.execute(new SetPositionCommand(editor, ch, new THREE.Vector3(ch.position.x - c.x, ch.position.y, ch.position.z - c.z)));
+}
+scene.traverse(o =&gt; { if (o.isSkinnedMesh) o.castShadow = o.geometry.attributes.position.count &gt;= 700; });
+holdTimelineAt(0);
+box.min.toArray().concat(box.max.toArray());   // for these clips: x -1.5..2.0, z -4.3..2.2 before the shift</code></pre>
+	<div class="note"><strong>Two hips-distance numbers worth knowing.</strong> Across the clip the fighters are between about 1.0 m and 4.2 m apart (hips), so a single fixed camera cannot frame both well the whole way: at 1 m the pair is a tight knot, at 4 m a wide stage. That is what the cameras in the next two steps are built around.</div>
+
+	<h2><span class="step">12</span> Cameras that follow the pair</h2>
+	<p class="lede">Reuse the four cameras from step 7 — they stay in the <code>CAMERAS</code> group — but give them new keys and new jobs. For the lesson the interesting quantity was <em>who is performing</em>. For a spar it is <em>where the pair is and how far apart they are</em>: the midpoint between the hips, and their distance. The two over-the-shoulder cameras are renamed <code>cam-f1-pov</code> and <code>cam-f2-pov</code> (each sits behind its own fighter and looks at the other), and everything is keyed every half second across all 170 s:</p>
+	<ul>
+		<li><code>cam-wide</code> — from the open front of the hut, pulling back as the pair separates: the distance is <code>5.2 + 1.2 × gap</code>, clamped to 6.5–8.2 m, and never past x = 9, because the hut's front ridge pole stands at x = 10.</li>
+		<li><code>cam-side</code> — an orbit of ±0.45 rad around the pair's midpoint, with a radius of <code>3.4 + 1.15 × gap</code> (4.4–7.2 m) and a 44° field of view. The small angle and the radius cap keep it inside the rails at z = ±7.5.</li>
+		<li><code>cam-f1-pov</code> / <code>cam-f2-pov</code> — 0.8 m behind the watcher's head and 0.5 m to the side, at 1.7 m high, looking at the other fighter's chest.</li>
+	</ul>
+	<pre><code>const { f1, f2, bone, wp } = window.dojo;
+const V = (x, y, z) =&gt; new THREE.Vector3(x, y, z), r3 = v =&gt; v.toArray().map(n =&gt; +n.toFixed(3));
+const clamp = (v, a, b) =&gt; Math.min(b, Math.max(a, v));
+
+// Rename the shoulder cameras from step 7 for the new cast.
+for (const [a, b] of [['cam-student-pov', 'cam-f1-pov'], ['cam-teacher-pov', 'cam-f2-pov']]) {
+  editor.execute(new SetValueCommand(editor, scene.getObjectByName(a), 'name', b));
+}
+
+// Sample hips and heads of both fighters every half second.
+const END = 170, times = [];
+for (let t = 0.5; t &lt;= END + 1e-6; t += 0.5) times.push(+t.toFixed(3));
+const samples = times.map(t =&gt; {
+  holdTimelineAt(t); scene.updateMatrixWorld(true);
+  return { h1: wp(bone(f1, /J_Bip_C_Hips/)), h2: wp(bone(f2, /J_Bip_C_Hips/)), d1: wp(bone(f1, /J_Bip_C_Head$/)), d2: wp(bone(f2, /J_Bip_C_Head$/)) };
+});
+holdTimelineAt(0);
+
+// Smooth each series (gaussian over +/-8 samples) so the cameras don't jitter with the moves.
+const smooth = (series, sigma) =&gt; series.map((_, i) =&gt; {
+  const acc = V(0, 0, 0); let w = 0;
+  for (let j = Math.max(0, i - 8); j &lt;= Math.min(series.length - 1, i + 8); j++) {
+    const k = Math.exp(-((j - i) ** 2) / (2 * sigma * sigma)); acc.addScaledVector(series[j], k); w += k;
+  }
+  return acc.multiplyScalar(1 / w);
+});
+const H1 = smooth(samples.map(s =&gt; s.h1), 1.5), H2 = smooth(samples.map(s =&gt; s.h2), 1.5);
+const D1 = smooth(samples.map(s =&gt; s.d1), 1.5), D2 = smooth(samples.map(s =&gt; s.d2), 1.5);
+const PM = smooth(H1.map((h, i) =&gt; h.clone().add(H2[i]).multiplyScalar(0.5)), 2.5);   // midpoint of the pair
+const gap = H1.map((h, i) =&gt; Math.hypot(h.x - H2[i].x, h.z - H2[i].z));                // distance between them
+
+// Just behind and beside the watcher's head, looking at the other fighter.
+const behind = (head, from, to) =&gt; {
+  const d = to.clone().sub(from); d.y = 0; d.normalize();
+  const side = V(-d.z, 0, d.x);
+  return head.clone().addScaledVector(d, -0.8).addScaledVector(side, 0.5).setY(1.7);
+};
+
+const keys = { wide: [], side: [], p1: [], p2: [] };
+times.forEach((t, i) =&gt; {
+  const pm = PM[i], d = gap[i];
+  const rw = Math.min(clamp(5.2 + 1.2 * d, 6.5, 8.2), 9.0 - pm.x);
+  keys.wide.push({ t, pos: r3(V(pm.x + rw, 2.1, pm.z * 0.6 + 1.2 * Math.sin(2 * Math.PI * t / 60))), lookAt: r3(V(pm.x, 1.0, pm.z)), fov: 42 });
+  const ang = 0.45 * Math.sin(2 * Math.PI * t / 45), rs = clamp(3.4 + 1.15 * d, 4.4, 7.2);
+  keys.side.push({ t, pos: r3(V(pm.x + rs * Math.cos(ang), 1.5, pm.z + rs * Math.sin(ang))), lookAt: r3(V(pm.x, 1.0, pm.z)), fov: 44 });
+  keys.p1.push({ t, pos: r3(behind(D1[i], H1[i], H2[i])), lookAt: r3(V(H2[i].x, 1.1, H2[i].z)), fov: 50 });
+  keys.p2.push({ t, pos: r3(behind(D2[i], H2[i], H1[i])), lookAt: r3(V(H1[i].x, 1.1, H1[i].z)), fov: 50 });
+});
+$S('#cam-wide').setKeys(keys.wide, { smooth: true });
+$S('#cam-side').setKeys(keys.side, { smooth: true });
+$S('#cam-f1-pov').setKeys(keys.p1, { smooth: true });
+$S('#cam-f2-pov').setKeys(keys.p2, { smooth: true });
+window.dojo.gap = gap;                       // the next step picks shots from it
+editor.timeline.toJSON().duration;           // still 170.17</code></pre>
+
+	<h2><span class="step">13</span> Cut by distance, and check every frame</h2>
+	<p class="lede">With 170 s of continuous action there is no "demo" and "repeat" to cut on, so cut on <em>distance</em>. Every 4.5–5 s, look at the average gap over the next four seconds: if the fighters are nearly touching (&lt; 1.6 m) use the side camera, which keeps both in frame; at mid range (1.6–2.6 m) alternate the two over-the-shoulder shots; when they are far apart (&ge; 2.6 m) alternate wide and side. Never repeat the camera just used, open on the wide, and finish on it. For this pair that is 37 shots.</p>
+	<p>An over-the-shoulder shot only works if the other fighter really fits in the frame, and it cannot be judged by eye on 170 s of footage. So the block that builds the shot list also tests it: it projects the head, chest, hips and both hands of the fighter being looked at (head, chest, hips, hands and feet of <em>both</em> for the wide and side cameras) through the real, compiled camera at every half-second of every shot, and turns any over-the-shoulder shot that ever misses into a side shot. It writes the list through a small undoable command, so <kbd>Ctrl/Cmd+Z</kbd> brings the previous sequence back.</p>
+	<pre><code>(async () =&gt; {
+  const { Command } = await import('./Command.js');
+  const { f1, f2, bone, wp, gap } = window.dojo, END = 170;
+  const NAMES = ['C_Head$', 'C_Chest$', 'C_Hips', 'L_Hand$', 'R_Hand$', 'L_Foot$', 'R_Foot$'];
+  const B = { f1: NAMES.map(n =&gt; bone(f1, new RegExp('J_Bip_' + n))), f2: NAMES.map(n =&gt; bone(f2, new RegExp('J_Bip_' + n))) };
+  const cam = n =&gt; scene.getObjectByName(n);
+  const avgGap = t =&gt; { const i0 = Math.round(t / 0.5) - 1, a = gap.slice(Math.max(0, i0), i0 + 8); return a.reduce((s, v) =&gt; s + v, 0) / a.length; };
+
+  // Shot plan by distance.
+  const plan = [{ at: 0, cam: 'cam-wide' }];
+  let t = 5, last = 'cam-wide', ots = 0, far = 0;
+  while (t &lt; END - 5) {
+    const d = avgGap(t); let pick;
+    if (d &lt; 1.6) pick = 'cam-side';
+    else if (d &lt; 2.6) pick = (ots++ % 2) ? 'cam-f2-pov' : 'cam-f1-pov';
+    else pick = (far++ % 2) ? 'cam-wide' : 'cam-side';
+    if (pick === last) pick = pick === 'cam-side' ? 'cam-wide' : 'cam-side';
+    plan.push({ at: +t.toFixed(2), cam: pick }); last = pick; t += pick === 'cam-wide' ? 5 : 4.5;
+  }
+  plan.push({ at: END - 5, cam: 'cam-wide' });
+
+  // Project the points that matter through the real camera at every half-second of every shot.
+  const inFrame = (c, points) =&gt; points.every(p =&gt; { const n = p.clone().project(c); return Math.abs(n.x) &lt; 0.98 &amp;&amp; Math.abs(n.y) &lt; 0.98 &amp;&amp; n.z &gt; -1 &amp;&amp; n.z &lt; 1; });
+  const check = () =&gt; plan.map((s, k) =&gt; {
+    const end = k + 1 &lt; plan.length ? plan[k + 1].at : END; let miss = 0;
+    for (let tt = Math.max(s.at, 0.5); tt &lt; end; tt += 0.5) {
+      holdTimelineAt(tt); scene.updateMatrixWorld(true);
+      const c = cam(s.cam); c.updateMatrixWorld(true); c.updateProjectionMatrix();
+      const ok = s.cam === 'cam-f1-pov' ? inFrame(c, B.f2.slice(0, 5).map(wp))
+               : s.cam === 'cam-f2-pov' ? inFrame(c, B.f1.slice(0, 5).map(wp))
+               : inFrame(c, [...B.f1, ...B.f2].map(wp));
+      if (!ok) miss++;
+    }
+    return miss;
+  });
+  let misses = check();
+  plan.forEach((s, k) =&gt; { if (misses[k] &amp;&amp; /pov/.test(s.cam)) s.cam = 'cam-side'; });   // fall back
+  misses = check();                                                                          // and re-check
+  holdTimelineAt(0);
+
+  // Write the sequence through an undoable command (what the Render tab's list edits).
+  const before = JSON.parse(JSON.stringify(scene.userData.renderShots || []));
+  const shots = plan.map((s, i) =&gt; ({ id: 'shot-' + i, at: s.at, camera: cam(s.cam).uuid, transition: 'cut', transitionDur: 0.5 }));
+  class SetShots extends Command {
+    constructor(ed, list) { super(ed); this.type = 'SetShotsCommand'; this.name = 'Set camera sequence'; this.list = list; }
+    execute() { this.editor.scene.userData.renderShots = JSON.parse(JSON.stringify(this.list)); this.editor.signals.timelineChanged.dispatch(); }
+    undo()    { this.editor.scene.userData.renderShots = JSON.parse(JSON.stringify(before));    this.editor.signals.timelineChanged.dispatch(); }
+  }
+  editor.execute(new SetShots(editor, shots));
+  window.dojo.shotMisses = misses.reduce((a, b) =&gt; a + b, 0);   // 0 = every shot has its subject fully in frame
+})();</code></pre>
+	<p>Read <code>window.dojo.shotMisses</code> afterwards: <code>0</code> means every sample of every shot had its subject fully in frame. Then check the other direction — that no camera is ever inside a character or outside the hut. For this scene the closest any camera came to a body was 0.63 m, and all of them stayed within |x| &lt; 9.6, |z| &lt; 7.2 and between 0.3 and 3.3 m high:</p>
+	<pre><code>const { f1, f2 } = window.dojo;
+const heads = []; for (const ch of [f1, f2]) ch.traverse(o =&gt; { if (o.isBone &amp;&amp; /Hips|Head$|Chest$/.test(o.name)) heads.push(o); });
+const shots = scene.userData.renderShots.slice().sort((a, b) =&gt; a.at - b.at);
+let closest = 9, outside = 0;
+for (let t = 0.5; t &lt; 170; t += 0.5) {
+  holdTimelineAt(t); scene.updateMatrixWorld(true);
+  const s = shots.filter(k =&gt; k.at &lt;= t).pop(), c = scene.getObjectByProperty('uuid', s.camera); c.updateMatrixWorld(true);
+  const p = c.getWorldPosition(new THREE.Vector3());
+  for (const b of heads) closest = Math.min(closest, p.distanceTo(b.getWorldPosition(new THREE.Vector3())));
+  if (Math.abs(p.x) &gt; 9.6 || Math.abs(p.z) &gt; 7.2 || p.y &gt; 3.3 || p.y &lt; 0.3) outside++;
+}
+holdTimelineAt(0);
+({ closest: +closest.toFixed(2), outside });      // { closest: 0.63, outside: 0 }</code></pre>
+	<p>The skinned-mesh fixes from step 9 apply to the new characters too, with no extra work: the scene ends with 84 skinned meshes on 2 skeletons and none frustum-culled, and the CPU cost of playback is the same as the lesson's.</p>
+
+	<h2><span class="step">14</span> Save it</h2>
 	<ol class="steps">
 		<li>Open the <strong>Git</strong> tab and set your repository, branch and token (the token is stored in your browser only).</li>
-		<li>Set <strong>Scene file</strong> to a new name, such as <code>dojo.json</code>, so you do not overwrite another scene.</li>
-		<li>Press <strong>Commit Scene</strong>. Geometry buffers and images go out as separate binary files; the characters and the clip are the bulk of it. A scene this size is split into 8 MB parts next to a small manifest, and loads transparently.</li>
+		<li>Set <strong>Scene file</strong> to a new name for each scene — <code>dojo.json</code> for the lesson, <code>sparring.json</code> for the match — so one does not overwrite the other.</li>
+		<li>Press <strong>Commit Scene</strong>. Geometry buffers and images go out as separate binary files; the characters and their clips are the bulk of it. A scene this size is split into 8 MB parts next to a small manifest, and loads transparently. The sparring scene is about 140 MB because of its two 170-second clips (and the compiled timeline clip, which is rebuilt on load); the lesson scene is about 53 MB.</li>
 	</ol>
-	<p>The finished scene is public: open <a href="../../#repo=tejaswigowda/test1&amp;file=dojo.json&amp;branch=main">tejaswigowda/test1 · dojo.json</a>. Before you commit, a last check that the four cameras and the plan came through:</p>
-	<pre><code>editor.timeline.toJSON().tracks.map(t =&gt; t.target);   // the two characters and the four cameras
-scene.userData.renderShots.length;                       // 19</code></pre>
+	<p>Both are public in <code>tejaswigowda/test1</code>: <a href="../../#repo=tejaswigowda/test1&amp;file=dojo.json&amp;branch=main">dojo.json</a> (the lesson, 93.5 s, 19 shots) and <a href="../../#repo=tejaswigowda/test1&amp;file=sparring.json&amp;branch=main">sparring.json</a> (the match, 170.17 s, 37 shots). Before you commit, a last check that the characters, the four cameras and the sequence came through:</p>
+	<pre><code>editor.timeline.toJSON().tracks.map(t =&gt; t.target);   // lesson: the two lesson characters + four cameras; sparring: #f1, #f2 + four cameras
+scene.userData.renderShots.length;                       // lesson: 19; sparring: 37</code></pre>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="https://tejaswigowda.com/strata-editor/facebind/">facebind</a> · <a href="https://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a> · <a href="https://arxiv.org/abs/2512.22690">Mesquite MoCap (arXiv:2512.22690)</a>
