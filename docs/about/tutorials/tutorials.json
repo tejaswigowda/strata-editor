@@ -55,5 +55,10 @@
 		"title": "Authoring a face: gaze and idle",
 		"href": "author-a-face.html",
 		"desc": "Give two characters a face with timeline keys: named-target gaze that follows a moving character (eyes lead, head lags, anatomical clamp), a seeded blink / breath idle layer under the keys, and held expressions with easing and duration — authored from the JS Shell, mirrored in the Customize tab, deterministic, and no face capture."
+	},
+	{
+		"title": "A sparring match from a two-person motion capture",
+		"href": "sparring-from-mocap.html",
+		"desc": "Turn a 170-second OptiTrack capture of two people sparring (recorded in the Martial Arts and Motion Capture course, GAME 294, ASU — run by Pavan Turaga, recorded by Assegid Kidane) into a 53-second match: register the pair, cut it with a non-destructive edit list, check every frame for collisions, move the camera shots onto the new timeline, and give both fighters an eyeline and an idle face — all from the JS Shell."
 	}
 ]

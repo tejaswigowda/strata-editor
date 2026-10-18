@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A sparring match from a two-person motion capture — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: take a 170-second OptiTrack capture of two people sparring, register the pair, cut it to a 53-second match with a non-destructive edit list, check every frame for collisions, re-time the camera shots, and give both fighters an eyeline and an idle face — all from the JS Shell.">
+<!--
+	/about/tutorials/sparring-from-mocap.html — a by-hand tutorial that picks up
+	where the dojo tutorial's Part 2 leaves off: the finished scene there
+	(sparring.json: two rigged characters, a bamboo hut, four cameras, 37 shots)
+	is the starting point here. Everything is real Strata surface: the JS Shell
+	($M edit lists, $S face / gaze verbs), the Render tab and the Animations tab.
+	The numbers quoted were measured on that capture. Static page, no build step.
+	Paste each Shell block in order.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main { max-width: 760px; margin: 0 auto; padding: 8vh 24px 14vh; }
+	h1 { margin: 0 0 0.2em; font-size: 1.9rem; font-weight: 700; color: #f3f5f8; }
+	.tagline { margin: 0 0 2.4em; color: #9aa4b2; font-size: 1.05rem; }
+	h2 { margin: 2.6em 0 0.3em; font-size: 1.2rem; color: #f3f5f8; display: flex; align-items: baseline; gap: 0.5em; }
+	h2 .step { color: #7db2ff; font-variant-numeric: tabular-nums; font-weight: 700; }
+	h2 + p.lede { margin-top: 0.2em; color: #c3c9d1; }
+	p, li { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre { background: #1a1d23; border: 1px solid #2a2e36; border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.86rem; line-height: 1.55; }
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img { display: block; width: 100%; border-radius: 8px; border: 1px solid #2a2e36; }
+	figure figcaption { margin-top: 0.5em; font-size: 0.82rem; color: #7d8794; text-align: center; }
+	table { border-collapse: collapse; margin: 1em 0; font-size: 0.9rem; }
+	th, td { border: 1px solid #2a2e36; padding: 4px 10px; text-align: right; color: #c3c9d1; }
+	th { color: #f3f5f8; background: #1a1d23; }
+	.note { border-left: 3px solid #3a4152; background: #1a1d23; padding: 0.8em 1em; border-radius: 0 6px 6px 0; color: #a9b1bd; font-size: 0.92rem; margin: 1em 0; }
+	.note strong { color: #d9dde3; }
+	.credit { border-left-color: #7db2ff; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer { margin-top: 3.5em; padding-top: 1.2em; border-top: 1px solid #2a2e36; color: #5b6470; font-size: 0.85rem; }
+	footer a { color: #7d8794; }
+</style>
+</head>
+<body>
+<main>
+	<h1>A sparring match from a two-person motion capture</h1>
+
+	<figure>
+		<img src="./screenshots/dojo-sparring.png" alt="Two fighters sparring on a tatami mat inside an open bamboo hut">
+		<figcaption>The starting scene, <a href="../../#repo=tejaswigowda/test1&amp;file=sparring.json&amp;branch=main"><code>sparring.json</code></a>, seen through <code>cam-wide</code> at 12 s.</figcaption>
+	</figure>
+
+	<p class="tagline">Two people sparred for <strong>170 seconds</strong> in front of an optical motion-capture system. Here you turn that take into a <strong>53-second match</strong>: register the pair, cut it as data, check every frame for collisions, move the camera shots onto the new timeline, and give both fighters somewhere to look.</p>
+
+	<div class="note credit"><strong>Credits.</strong> The motion in this tutorial was recorded with an <strong>OptiTrack</strong> optical motion-capture system in the course <strong>“Martial Arts and Motion Capture” (GAME 294)</strong> at Arizona State University, <strong>run by <a href="https://search.asu.edu/profile/1795222">Pavan Turaga</a></strong> and <strong>recorded by <a href="https://search.asu.edu/profile/215415">Assegid Kidane</a></strong>. The two performers' captured clips are used here as the source material for the editing techniques below; the cut, the cameras and the faces are authored in Strata.</div>
+
+	<div class="note"><strong>Where this picks up.</strong> The scene (two rigged VRoid characters carrying the two captured clips, a bamboo hut, a floor, lighting, four cameras and a 37-shot sequence) is built in <a href="martial-arts-dojo.html">the dojo tutorial</a>, Part 2 — start there if you want to build it. The finished, uncut scene is <a href="../../#repo=tejaswigowda/test1&amp;file=sparring.json&amp;branch=main"><code>sparring.json</code></a> in the <code>tejaswigowda/test1</code> repo; open it and paste each block below into the <strong>Shell</strong> tab. The fighters are labelled <code>#f1</code> and <code>#f2</code> and carry the clips <code>st1_1072026Skeleton</code> and <code>st2_1072026Skeleton</code>, 170.17 s each. Every block is one undoable step.</div>
+
+	<h2><span class="step">1</span> Register the pair</h2>
+	<p class="lede">The two clips were captured together, in <strong>one shared world frame</strong>: each fighter's root motion already says where they stand relative to the other at every moment. Move or retime one fighter alone and that relationship breaks and the bodies overlap. So the pair is registered as a single editable <strong>group</strong>, and every edit applies to both fighters at once.</p>
+	<pre><code>const sparring = $M.group('sparring', ['#f1', '#f2']);
+sparring.collision();     // baseline: the full 170 s capture</code></pre>
+	<p>The collision report measures the hip-to-hip distance on the floor over the timeline and flags anything under 0.6 m, a reasonable floor for non-contact sparring. For the full capture the closest the two ever get is <code>0.80 m</code>: this is <strong>non-contact</strong> sparring — a strike that should read as connecting has to be sold by the cut, not by the geometry.</p>
+
+	<h2><span class="step">2</span> Find the exchanges</h2>
+	<p class="lede">170 seconds is too long, and the middle of it is empty. Measuring where the two come close together, the exchanges are front-loaded — ten of them between 2.6 s and 43.2 s — then there is <em>nothing</em> from 43.2 s to 98.5 s, then they resume and thin out. Padding each cluster by −1.0 s before and +1.2 s after, and merging gaps under 0.4 s, gives eight spans:</p>
+	<table>
+		<tr><th>#</th><th>in</th><th>out</th><th>dur</th><th>closest</th></tr>
+		<tr><td>E01</td><td>1.60</td><td>9.00</td><td>7.40 s</td><td>0.94 m</td></tr>
+		<tr><td>E02</td><td>14.60</td><td>22.10</td><td>7.50 s</td><td>0.96 m</td></tr>
+		<tr><td>E03</td><td>30.80</td><td>44.40</td><td>13.60 s</td><td>0.80 m</td></tr>
+		<tr><td>E04</td><td>97.50</td><td>103.40</td><td>5.90 s</td><td>1.11 m</td></tr>
+		<tr><td>E05</td><td>104.80</td><td>110.80</td><td>6.00 s</td><td>0.93 m</td></tr>
+		<tr><td>E06</td><td>113.70</td><td>117.60</td><td>3.90 s</td><td>1.08 m</td></tr>
+		<tr><td>E07</td><td>134.70</td><td>140.60</td><td>5.90 s</td><td>1.10 m</td></tr>
+		<tr><td>E08</td><td>158.40</td><td>161.10</td><td>2.70 s</td><td>1.17 m</td></tr>
+	</table>
+	<p>That drops <strong>44.4 – 97.5 s (53.1 s)</strong> and keeps <strong>52.9 s</strong>, 31% of the source. Widen the handles if you want it longer, but don't pad back toward the lull. One fighter covers noticeably more floor than the other (91.5 m against 78.3 m): the more mobile fighter is characterisation you get for free, so favour it when you pick shots.</p>
+
+	<h2><span class="step">3</span> Cut it — as data</h2>
+	<p class="lede">A cut here is not a re-bake. It is an <strong>edit list</strong>: eight spans stored on the timeline, a few hundred bytes. The captured clips are only ever read.</p>
+	<pre><code>sparring.splice([
+  [1.6, 9.0], [14.6, 22.1], [30.8, 44.4], [97.5, 103.4],
+  [104.8, 110.8], [113.7, 117.6], [134.7, 140.6], [158.4, 161.1],
+].map(([from, to]) =&gt; ({ from, to })), { blend: 0.25 });
+
+sparring.asCommand();     // the declarative form of this cut
+sparring.table();         // each span with its start and length on the new clock</code></pre>
+	<p>The <strong>blend is mandatory</strong>. Over a 0.25 s window at every cut, each rotation is slerped from the outgoing pose to the incoming one, and the floor position is offset so the pair's centre continues from where it was — otherwise the bodies pop or teleport at every join. That offset is computed from the pair's centre and applied to <em>both</em> fighters, so how far apart they stand survives the cut.</p>
+	<div class="note"><strong>Why you can't edit one fighter alone.</strong> <code>$S('#f1').play('st1_1072026Skeleton', { from: 1, to: 5 })</code> is refused, because it would desynchronise the pair. Per-fighter timing (<code>timeOffset</code>, <code>speedOf</code>) needs an explicit <code>sparring.breakRegistration()</code>, which warns what you lose (they can clip through each other) and is undoable.</div>
+
+	<h2><span class="step">4</span> Check every frame</h2>
+	<p class="lede">No renderer will tell you the fighters now overlap. The collision report runs over the <em>edited</em> timeline:</p>
+	<pre><code>const report = sparring.collision();
+report.min;          // 0.741
+report.ok;           // true: no span under 0.6 m
+report.spans;        // the closest approach inside each span</code></pre>
+	<p>The cut's closest approach, <code>0.74 m</code>, is a little <em>closer</em> than the capture's own <code>0.80 m</code>, and it sits at the start of E07 (44.4 s on the new clock), inside the blend window. The blend interpolates both fighters' positions, so it can bring them nearer than either source span does; that is exactly the sort of thing this check exists to catch. If a span ever reports under 0.6 m, widen the blend or move the cut point.</p>
+
+	<h2><span class="step">5</span> Put the cameras on the new timeline</h2>
+	<p class="lede">The four cameras' keys, and the Render tab's 37-shot sequence, were cut against the 170 s source. <code>remapShots()</code> moves the camera keys: an event that lies wholly inside one kept span is moved to the cut's clock; anything else is dropped and reported.</p>
+	<pre><code>const r = sparring.remapShots();
+r.kept; r.dropped;                 // 396 kept, 964 dropped (the keys that straddle a cut or fall in the lull)
+editor.timeline.toJSON().duration; // 52.9</code></pre>
+	<p>The Camera Sequence in the Render tab is a separate list of <em>which camera is live when</em>. Move it onto the same clock: for each span, the shot that was live when the span began opens it, and any shot that began inside the span moves with it.</p>
+	<pre><code>(async () =&gt; {
+  const { edlTable } = await import('./intelligence/motionEdit.js');
+  const g = editor.timeline.group('sparring');
+  const spans = edlTable(g.edl).filter(r =&gt; !r.hold);
+  const shots = scene.userData.renderShots.slice().sort((a, b) =&gt; a.at - b.at);
+  const next = new Map();
+  for (const r of spans) {
+    const open = shots.filter(s =&gt; s.at &lt;= r.from).pop();               // the shot live as the span begins
+    if (open) next.set(+r.outStart.toFixed(3), { ...open, at: +r.outStart.toFixed(3) });
+    for (const s of shots) if (s.at &gt; r.from &amp;&amp; s.at &lt; r.to) {
+      const at = +(r.outStart + (s.at - r.from) / r.speed).toFixed(3);
+      next.set(at, { ...s, at });
+    }
+  }
+  scene.userData.renderShots = [...next.values()].sort((a, b) =&gt; a.at - b.at).map((s, i) =&gt; ({ ...s, id: 'shot-' + i }));
+})();</code></pre>
+	<p>The Shell does not print what an async block returns; check <code>scene.userData.renderShots.length</code> afterwards (37 shots become 18, the last at 50.2 s). This block assigns the list directly, so it is not on the undo stack; to go back, reload the scene or re-run the shot list from the dojo tutorial. Open the <strong>Render</strong> tab to see the sequence on the 52.9 s timeline.</p>
+
+	<h2><span class="step">6</span> Give them somewhere to look</h2>
+	<p class="lede">Two people watching each other for 53 seconds: most of the acting is <strong>where they look</strong>, and <strong>not looking dead</strong>. Both are timeline data. A gaze key whose target is a selector <em>follows</em> that fighter as they move; the eyes lead and the head lags, and past the eyes' range the head takes over, so there are no doll eyes.</p>
+	<pre><code>const A = $S('#f1'), B = $S('#f2');
+A.gaze(0, '#f2', { duration: 0 });
+B.gaze(0, '#f1', { duration: 0 });
+
+// a look away and back between exchanges (times on the cut's clock)
+for (const t of [6.4, 14.2, 28, 34.4, 40.2, 44.1])
+  A.gaze(t, 'away', { duration: 250, head: 0.2 }).gaze(t + 0.9, '#f2', { duration: 300 });
+for (const t of [6.9, 14.7, 28.6, 34.9, 40.6, 44.6])
+  B.gaze(t, 'away', { duration: 250, head: 0.2 }).gaze(t + 0.9, '#f1', { duration: 300 });</code></pre>
+	<p>Measured on this cut: wherever the other fighter is inside the eyes' range, the eyes sit within about 1° of their head, and sampling both faces costs about 0.6 ms per frame. Then add the idle layer:</p>
+	<pre><code>A.face.idle({ seed: 11 });     // a seeded blink, a faint breath, a little gaze micro-noise
+B.face.idle({ seed: 12 });</code></pre>
+	<p>The idle layer is <strong>seeded</strong> — the same scene renders the same blinks on every run — and it is an underlayer: it never becomes keys, <code>A.face.idle(false)</code> removes it, and the keys you authored are untouched. A held expression (<code>hold: true</code>) keeps blinks out of it. The same keys are in the <strong>Customize</strong> tab (<em>Face performance</em>) and the <strong>Animations</strong> tab's code panel; see <a href="author-a-face.html">Authoring a face</a> for expression keys and the details.</p>
+
+	<h2><span class="step">7</span> Render it and save</h2>
+	<ol class="steps">
+		<li>Press <strong>Play</strong> in the Animations tab: the timeline is 52.9 s, both fighters move, the cameras cut, and the eyes follow.</li>
+		<li>Open the <strong>Render</strong> tab and render the camera sequence to video. Keep the tab in the foreground while it renders — browsers throttle hidden tabs, which makes frames stall.</li>
+		<li>In the <strong>Git</strong> tab, set <strong>Scene file</strong> to a new name such as <code>sparring-cut.json</code> and press <strong>Commit Scene</strong>. The scene is saved compactly (one line, animation numbers quantized), and what is stored is the full capture plus the edit list, the camera keys and the face keys. <code>sparring.json</code> itself stays the uncut capture.</li>
+		<li>Undo, or <code>sparring.clear()</code>, brings back the full 170.17 s capture exactly — the clips were never modified.</li>
+	</ol>
+
+	<div class="note"><strong>Honest limits.</strong> A cut is built from what was captured: it can drop, join and re-time, but it cannot invent a contact that was never there. The shot-remap blocks drop camera keys that straddle a cut, so look through the result before you render. The eyes' gaze on a moving target is exact where the geometry allows it and is clamped to a believable range where it does not.</div>
+
+	<footer>
+		Motion capture: OptiTrack, in “Martial Arts and Motion Capture” (GAME 294), Arizona State University — course run by <a href="https://search.asu.edu/profile/1795222">Pavan Turaga</a>, recorded by <a href="https://search.asu.edu/profile/215415">Assegid Kidane</a>.<br>
+		<a href="./">← All tutorials</a> · <a href="martial-arts-dojo.html">Build the dojo scene</a> · <a href="edit-captured-motion.html">Editing captured motion as data</a> · <a href="author-a-face.html">Authoring a face</a>
+	</footer>
+</main>
+</body>
+</html>
