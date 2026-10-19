@@ -149,7 +149,67 @@ for (const t of [6.9, 14.7, 28.6, 34.9, 40.6, 44.6])
 B.face.idle({ seed: 12 });</code></pre>
 	<p>The idle layer is <strong>seeded</strong> — the same scene renders the same blinks on every run — and it is an underlayer: it never becomes keys, <code>A.face.idle(false)</code> removes it, and the keys you authored are untouched. A held expression (<code>hold: true</code>) keeps blinks out of it. The same keys are in the <strong>Customize</strong> tab (<em>Face performance</em>) and the <strong>Animations</strong> tab's code panel; see <a href="author-a-face.html">Authoring a face</a> for expression keys and the details.</p>
 
-	<h2><span class="step">7</span> Render it and save</h2>
+	<h2><span class="step">7</span> Dress them, and let the faces act</h2>
+	<p class="lede">Captured bodies carry no performance in their faces, and the two fighters arrive in unrelated clothes. Three passes fix that: <strong>costume</strong>, an <strong>expression arc</strong> that follows the exchanges, and <strong>light and camera</strong> to match. None of it touches a vertex, a skin weight or the skeleton, so the capture still drives both rigs exactly.</p>
+
+	<p><strong>Costume.</strong> One fighter becomes a black gi, the other a white gi, both barefoot, so they read apart from any camera:</p>
+	<pre><code>(async () =&gt; {
+  const { CustomizeCommand } = await import('./commands/CustomizeCommand.js');
+  const dress = (id, top, bottom, name) =&gt; editor.execute(new CustomizeCommand(editor, editor.scene.getObjectByName(id), [
+    { op: 'recolor', target: 'part:shirt',  color: top },
+    { op: 'recolor', target: 'part:bottom', color: bottom },
+    { op: 'hide',    target: 'part:shoes' },
+  ], name));
+  dress('f1', '#262833', '#1c1d26', 'f1: black gi, barefoot');
+  dress('f2', '#ece7dc', '#e2dccd', 'f2: white gi, barefoot');
+})();</code></pre>
+
+	<p><strong>An expression arc.</strong> Faces change over time, and every change is a key you can see and move in the <strong>Animations</strong> tab (and edit from <strong>Customize → Face performance</strong>). Three held looks carry the whole piece — <em>focus</em> at rest, <em>exert</em> for whoever is attacking, <em>alert</em> for whoever is defending — switched per exchange. Times are on the cut's clock, so each exchange starts where <code>sparring.table()</code> says it does:</p>
+	<pre><code>const A = $S('#f1'), B = $S('#f2');
+const base = { browInnerUp: 0, eyeWideLeft: 0, eyeWideRight: 0, mouthSmileLeft: 0, mouthSmileRight: 0, mouthFrownLeft: 0, mouthFrownRight: 0, jawOpen: 0 };
+const LOOK = {
+  focus: { ...base, browDownLeft: 0.2,  browDownRight: 0.2,  eyeSquintLeft: 0.12, eyeSquintRight: 0.12, mouthPressLeft: 0.18, mouthPressRight: 0.18 },
+  exert: { ...base, browDownLeft: 0.45, browDownRight: 0.45, eyeSquintLeft: 0.3,  eyeSquintRight: 0.3,  mouthPressLeft: 0.35, mouthPressRight: 0.35, mouthFrownLeft: 0.12, mouthFrownRight: 0.12, jawOpen: 0.04 },
+  alert: { ...base, browDownLeft: 0.05, browDownRight: 0.05, browInnerUp: 0.28, eyeWideLeft: 0.2, eyeWideRight: 0.2, mouthPressLeft: 0.15, mouthPressRight: 0.15 },
+};
+const look = (who, name, t, ms = 400) =&gt;
+  who.face.keyAt(t, { shapes: { ...LOOK.focus, ...LOOK[name] }, duration: ms, easing: 'ease-out', hold: true });
+
+A.face.keyAt(0, { shapes: LOOK.focus, duration: 0, hold: true });
+B.face.keyAt(0, { shapes: LOOK.focus, duration: 0, hold: true });
+
+// [start, length, who leads] for each span, on the cut's clock
+const rounds = [[0, 7.4, A], [7.4, 7.5, A], [14.9, 13.6, A], [28.5, 5.9, A], [34.4, 6.0, B], [40.4, 3.9, A], [44.3, 5.9, A], [50.2, 2.7, 'both']];
+for (const [t, len, lead] of rounds) {
+  const att = lead === 'both' ? [A, B] : [lead], def = lead === 'both' ? [] : [lead === A ? B : A];
+  att.forEach(f =&gt; look(f, 'exert', t + 0.2));
+  def.forEach(f =&gt; look(f, 'alert', t + 0.2));
+  [A, B].forEach(f =&gt; look(f, 'focus', t + len + 0.8, 600));      // settle between exchanges
+}
+// the closest approach (E03): the defender flinches, then recovers
+B.face.applyPreset('surprise', 20.5, { duration: 150 });
+look(B, 'alert', 22.7, 500);</code></pre>
+	<p>Presets expand to explicit per-shape keys, so a flinch like <code>surprise</code> is just more keys. The cut removes the long lull, so the quiet beat that follows it in the uncut capture is gone; to end on a bow, finish with a held smile once the last exchange lands: <code>A.face.applyPreset('smile', 52.1, { duration: 600, hold: true })</code> on both fighters, then <code>A.gaze(52.4, 'away', { duration: 400 })</code>. The step 6 gaze keys and idle layer sit underneath all of this unchanged.</p>
+	<div class="note"><strong>The committed scene.</strong> <code>sparring.json</code> in the repository carries this look on the <em>uncut</em> capture, so its expression keys are on the source clock (the eight spans start at 1.6, 14.6, 30.8, 97.5, 104.8, 113.7, 134.7 and 158.4 s). If you cut the scene as in step 3, use the cut-clock times above.</div>
+
+	<p><strong>Light and camera.</strong> Use the same pass as the dojo: sky fill 0.85 → 0.6, sun key → 3.1, cool rim → 1.2, fog density → 0.02 (the commands are in <a href="martial-arts-dojo.html">Build the dojo scene</a>, step 10), then bring the wide camera in. This keeps each wide shot's look direction and just moves the camera closer and lower:</p>
+	<pre><code>(async () =&gt; {
+  const { editCameraTrack } = await import('./intelligence/cameraMoveEdit.js');
+  const cam = editor.scene.getObjectByName('cam-wide');
+  editCameraTrack(editor, cam, 'Camera: tighten cam-wide', track =&gt; {
+    for (const ev of track.events) {
+      const p = ev.args.props;
+      if (ev.op !== 'animate' || !p?.to?.position) continue;
+      const L = p.lookAt, q = p.to.position;
+      p.to.position = [L[0] + (q[0] - L[0]) * 0.9, 1.7, L[2] + (q[2] - L[2]) * 0.9];   // 10% closer, eye-level-ish
+      p.lookAt = [L[0], 1.02, L[2]];
+      p.fov = 38;                                                                       // was 42
+    }
+  });
+})();</code></pre>
+	<p>Run it once (it is not idempotent), and then <strong>repeat the step 4 frame check</strong> — a tighter lens is exactly what pushes a fighter's hand or foot out of frame. On this capture, every wide-shot frame at 16:9 still holds both fighters' head, hips, hands and feet.</p>
+
+	<h2><span class="step">8</span> Render it and save</h2>
 	<ol class="steps">
 		<li>Press <strong>Play</strong> in the Animations tab: the timeline is 52.9 s, both fighters move, the cameras cut, and the eyes follow.</li>
 		<li>Open the <strong>Render</strong> tab and render the camera sequence to video. Keep the tab in the foreground while it renders — browsers throttle hidden tabs, which makes frames stall.</li>

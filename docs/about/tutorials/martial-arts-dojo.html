@@ -8,7 +8,7 @@
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Step-by-step tutorial: two rigged VRoid characters share one motion-capture clip. Stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut, warm lighting and a four-camera render sequence. Part 2 swaps in two fighters from a two-person capture and turns the lesson into a sparring match — all with the JS Shell.">
-<!-- Part 2 (steps 10-13): a second pair of characters whose two clips were captured together; the lesson pair is replaced. Finished scenes: dojo.json (lesson) and sparring.json (sparring). -->
+<!-- Part 2 (steps 11-14): a second pair of characters whose two clips were captured together; the lesson pair is replaced. Finished scenes: dojo.json (lesson) and sparring.json (sparring). -->
 <!--
 	/about/tutorials/martial-arts-dojo.html — a by-hand tutorial. The two
 	characters are made outside Strata (VRM: facebind, rig: bodyrig-webCLI,
@@ -121,7 +121,7 @@
 
 	<figure>
 		<img src="./screenshots/dojo-sparring.png" alt="Two fighters sparring on the tatami mat inside the same bamboo hut">
-		<figcaption>Part 2 (steps 10–13): the same hut with a second pair of characters, now sparring for 170 s — <a href="../../#repo=tejaswigowda/test1&amp;file=sparring.json&amp;branch=main"><code>sparring.json</code></a>, seen through <code>cam-wide</code> at 12 s.</figcaption>
+		<figcaption>Part 2 (steps 11–14): the same hut with a second pair of characters, now sparring for 170 s — <a href="../../#repo=tejaswigowda/test1&amp;file=sparring.json&amp;branch=main"><code>sparring.json</code></a>, seen through <code>cam-wide</code> at 12 s.</figcaption>
 	</figure>
 
 	<div class="note"><strong>Where the pieces come from.</strong> Both characters are VRM models made with <a href="https://tejaswigowda.com/strata-editor/facebind/">facebind</a>. They were rigged and given the animation with <a href="https://tejaswigowda.com/bodyrig-webCLI/">bodyrig-webCLI</a>, which writes one GLB per character with the clip baked in. The motion itself is from <a href="https://arxiv.org/abs/2512.22690">Mesquite MoCap: Democratizing Real-Time Motion Capture with Affordable, Bodyworn IoT Sensors and WebXR SLAM</a> (arXiv:2512.22690). Both characters carry the same clip, named <code>p2</code>, 46.83 s long. Part 2 (step 10 onwards) uses a second pair from the same pipeline whose two clips, <code>st1_1072026Skeleton</code> and <code>st2_1072026Skeleton</code> (170.17 s each), were captured together. That sparring capture was recorded with an OptiTrack system in the course “Martial Arts and Motion Capture” (GAME 294) at Arizona State University, run by <a href="https://search.asu.edu/profile/1795222">Pavan Turaga</a> and recorded by <a href="https://search.asu.edu/profile/215415">Assegid Kidane</a>; see <a href="sparring-from-mocap.html">A sparring match from a two-person motion capture</a> for what to do with it.</div>
@@ -479,8 +479,85 @@ misses;    // empty = every shot has its performer fully in frame</code></pre>
    skeletons: new Set(skinned.map(m =&gt; m.skeleton)).size,
    culled: skinned.filter(m =&gt; m.frustumCulled).length });   // { meshes: 83, skeletons: 2, culled: 0 }</code></pre>
 
-	<h2><span class="step">10</span> Part 2 — swap in the sparring pair</h2>
-	<p class="lede">The lesson used one clip on two characters. A real sparring match needs the opposite: two clips <em>captured together</em>, one per fighter. These two GLBs come from the same pipeline as before and carry <code>st1_1072026Skeleton</code> and <code>st2_1072026Skeleton</code>, each 170.17 s long, with the same 109-bone VRoid skeleton. Import both (the hut, floor, lights and cameras stay), then remove the lesson pair, <strong>prune the lesson clips</strong> that were bound to them (two 46.8 s clips that would otherwise be saved with the scene for nothing), name the fighters, and clear the timeline: its directives and camera keys all pointed at the old characters.</p>
+	<h2><span class="step">10</span> Dress them, and give them a face</h2>
+	<p class="lede">The imported characters keep whatever they were exported in: here the student wears a loud floral shirt and tan trousers and is in shoes, which reads badly in a dojo. Three small passes fix the look — <strong>customize</strong> the characters, give them <strong>a face</strong> (where they look, and a blink), and adjust <strong>the light and the wide camera</strong> to match. Nothing here edits a vertex, a skin weight or the skeleton, so both rigs still animate exactly as before.</p>
+
+	<p><strong>Customize.</strong> The Customize tab (or, as here, the same ops from the Shell) changes the look through a closed, rig-safe set: tint, recolor, hide, blendshape. Label the two characters first so they have readable selectors, then dress them. The student becomes an off-white gi and goes barefoot, like the teacher; the teacher's black is lifted slightly so the folds still read against the dark wall:</p>
+	<pre><code>(async () =&gt; {
+  const { CustomizeCommand } = await import('./commands/CustomizeCommand.js');
+  const { SetLabelCommand } = await import('./commands/SetLabelCommand.js');
+  const { T, S } = window.dojo;
+  editor.execute(new SetLabelCommand(editor, T, 'teacher'));      // $S('#teacher')
+  editor.execute(new SetLabelCommand(editor, S, 'student'));      // $S('#student')
+
+  const dress = (who, ops, name) =&gt; editor.execute(new CustomizeCommand(editor, who, ops, name));
+  dress(S, [
+    { op: 'recolor', target: 'part:shirt',  color: '#ece7dc' },   // a flat colour replaces the printed shirt
+    { op: 'recolor', target: 'part:bottom', color: '#e2dccd' },
+    { op: 'hide',    target: 'part:shoes' },
+  ], 'Student: white gi, barefoot');
+  dress(T, [
+    { op: 'recolor', target: 'part:shirt',  color: '#262833' },
+    { op: 'recolor', target: 'part:bottom', color: '#1c1d26' },
+  ], 'Teacher: black gi');
+})();</code></pre>
+	<p>The Customize tab shows a rig fingerprint (<em>Verify rig</em>) that is unchanged by all of this. Parts are found by their material names (<code>…_Tops_…_CLOTH</code>, <code>…_Shoes_…</code>), which is how these VRoid exports are laid out; <code>part:hair</code>, <code>part:skin</code> and <code>part:brows</code> work the same way.</p>
+
+	<p><strong>A face.</strong> A face is two keyed channels on the same timeline as the body clip: <em>expression</em> (continuous morph weights) and <em>gaze</em> (where the eyes and head aim), with a seeded <em>idle</em> layer under them. Give both a calm, held expression, then keep each one's eyes on the other. The student watches the teacher's demos; the teacher watches the student's repeats; and the student takes a short, respectful glance away in the middle of each repeat:</p>
+	<pre><code>const teacher = $S('#teacher'), student = $S('#student');
+
+// calm and focused: small, readable values, held for the whole scene
+const calm = { browDownLeft: 0.12, browDownRight: 0.12, mouthPressLeft: 0.15, mouthPressRight: 0.15 };
+teacher.face.keyAt(0, { shapes: calm, duration: 0, hold: true });
+student.face.keyAt(0, { shapes: { ...calm, browInnerUp: 0.08 }, duration: 0, hold: true });
+
+// where they look: a selector target FOLLOWS that character as they move
+teacher.gaze(0, '#student', { duration: 0, head: 0.45 });
+student.gaze(0, '#teacher', { duration: 0, head: 0.45 });
+for (const t of [13.9, 40.5, 72.9]) teacher.gaze(t, '#student', { duration: 500, head: 0.5 });   // the student's repeats begin
+for (const t of [1, 26.8, 54.2])   student.gaze(t, '#teacher', { duration: 500, head: 0.5 });   // the teacher's demos begin
+
+// a glance away and back in the middle of each repeat ('away' is a fixed averted look)
+for (const t of [19.5, 46.5, 80]) student.gaze(t, 'away', { duration: 300, head: 0.2 }).gaze(t + 1.1, '#teacher', { duration: 400 });
+
+// not looking dead: a seeded blink, a faint breath, a little gaze micro-noise
+student.face.idle({ seed: 21 });
+teacher.face.idle({ seed: 22 });
+
+student.face.asCommand();     // the commands that rebuild this face exactly</code></pre>
+	<ul>
+		<li><strong>Presets would be the same keys.</strong> <code>face.applyPreset('focus', t)</code> writes explicit per-shape keys; a preset is never stored, only its values, so every key stays editable.</li>
+		<li><strong>The eyes lead, the head lags.</strong> On each retarget the head starts 0.1 s after the eyes and takes longer to arrive; the <code>head</code> weight is the share of the aim the head takes (<code>0</code> is a glance). Past the eyes' comfortable range the head takes over, so there are no doll eyes.</li>
+		<li><strong>Seeded.</strong> The same scene renders the same blinks on every run. The idle layer is an underlayer: it never becomes keys, <code>face.idle(false)</code> removes it, and your authored keys are untouched.</li>
+		<li><strong>The same keys are in the GUI.</strong> In the <strong>Customize</strong> tab, <em>Key at playhead</em> makes the preset and sliders write keys; <em>Face performance</em> keys a gaze and toggles the idle layer. The <strong>Animations</strong> tab shows them as blocks on each character's row and in the code panel. One undo stack covers all of it.</li>
+	</ul>
+	<p>The moments are the window starts from step 3 (teacher demos at 1, 26.8 and 54.2 s; student repeats at 13.9, 40.5 and 72.9 s), and the glances sit just before the middle of each repeat. To check the eyes, scrub to a time and measure the angle between where the eyes point and the other character's head; on this scene it stays within about 1° wherever the target is in the eyes' range. <a href="author-a-face.html">Authoring a face</a> covers expression keys, easing and the details in full.</p>
+
+	<p><strong>Light and the wide camera.</strong> The lesson's fog and fill made the hut look washed out and left the figures flat against the wall. Pull the fog back, drop the sky fill a little, lift the sun, and strengthen the cool rim light so it separates the figures from the background:</p>
+	<pre><code>const light = n =&gt; { let r; scene.traverse(o =&gt; { if (o.isLight &amp;&amp; o.name === n) r = o; }); return r; };
+const set = (o, k, v) =&gt; editor.execute(new SetValueCommand(editor, o, k, v));
+set(light('Sky Fill'), 'intensity', 0.6);      // was 0.85
+set(light('Sun Key'),  'intensity', 3.1);      // was 2.6
+set(light('Cool Rim'), 'intensity', 1.2);      // was 0.55
+set(scene.fog, 'density', 0.02);               // was 0.035</code></pre>
+	<p>The wide camera showed too much roof and floor with small figures, so bring it in: 8% closer to the point it looks at, lower (1.6 m), and a 35° field of view instead of 38°. This edits every key of the camera's move in one undoable step. Run it <strong>once</strong>: it is a change relative to the keys as they are now, so running it twice pulls the camera in twice (Undo backs it out).</p>
+	<pre><code>(async () =&gt; {
+  const { editCameraTrack } = await import('./intelligence/cameraMoveEdit.js');
+  editCameraTrack(editor, scene.getObjectByName('cam-wide'), 'Camera: tighten cam-wide', track =&gt; {
+    for (const ev of track.events) {
+      const p = ev.args.props;
+      if (ev.op !== 'animate' || !p || !p.to || !p.to.position) continue;
+      const L = p.lookAt, q = p.to.position;
+      p.to.position = [+(L[0] + (q[0] - L[0]) * 0.92).toFixed(3), 1.6, +(L[2] + (q[2] - L[2]) * 0.92).toFixed(3)];
+      p.lookAt = [L[0], 1.02, L[2]];
+      p.fov = 35;
+    }
+  });
+})();</code></pre>
+	<p>Scrub the timeline with <code>cam-wide</code> selected, or step through the Render tab's Camera Sequence, to see the result. The finished lesson scene, <a href="../../#repo=tejaswigowda/test1&amp;file=dojo.json&amp;branch=main"><code>dojo.json</code></a>, has all of this in it. The other three cameras are unchanged.</p>
+
+	<h2><span class="step">11</span> Part 2 — swap in the sparring pair</h2>
+	<p class="lede">The lesson used one clip on two characters. A real sparring match needs the opposite: two clips <em>captured together</em>, one per fighter. These two GLBs come from the same pipeline as before and carry <code>st1_1072026Skeleton</code> and <code>st2_1072026Skeleton</code>, each 170.17 s long, with the same 109-bone VRoid skeleton. Import both (the hut, floor, lights and cameras stay), then remove the lesson pair (and, with it, the look and the face from step 10), <strong>prune the lesson clips</strong> that were bound to them (two 46.8 s clips that would otherwise be saved with the scene for nothing), name the fighters, and clear the timeline: its directives and camera keys all pointed at the old characters.</p>
 	<pre><code>(async () =&gt; {
   const { SetTimelineCommand } = await import('./commands/SetTimelineCommand.js');
   const { TimelineModel } = await import('./intelligence/timeline.js');
@@ -510,7 +587,7 @@ misses;    // empty = every shot has its performer fully in frame</code></pre>
 
 	<div class="note"><strong>Import paths in the Shell.</strong> A dynamic <code>import()</code> typed into the Shell resolves relative to <code>Shell.js</code> itself, so the editor's own modules are <code>./Command.js</code>, <code>./commands/…</code> and <code>./intelligence/…</code> — not <code>./editor/js/…</code>. (<code>three/addons/…</code>, as in step 5, resolves through the page's import map.)</div>
 
-	<h2><span class="step">11</span> Play both clips from zero, and do not move them</h2>
+	<h2><span class="step">12</span> Play both clips from zero, and do not move them</h2>
 	<p class="lede">One directive each. Both clips are the same length, so both start at 0 and run to the end together; <code>duration</code> is in milliseconds and is what makes the timeline 170.17 s long.</p>
 	<pre><code>$S('#f1').at(0).play('st1_1072026Skeleton', { duration: 170170 });
 $S('#f2').at(0).play('st2_1072026Skeleton', { duration: 170170 });
@@ -549,7 +626,7 @@ holdTimelineAt(0);
 box.min.toArray().concat(box.max.toArray());   // for these clips: x -1.5..2.0, z -4.3..2.2 before the shift</code></pre>
 	<div class="note"><strong>Two hips-distance numbers worth knowing.</strong> Across the clip the fighters are between about 1.0 m and 4.2 m apart (hips), so a single fixed camera cannot frame both well the whole way: at 1 m the pair is a tight knot, at 4 m a wide stage. That is what the cameras in the next two steps are built around.</div>
 
-	<h2><span class="step">12</span> Cameras that follow the pair</h2>
+	<h2><span class="step">13</span> Cameras that follow the pair</h2>
 	<p class="lede">Reuse the four cameras from step 7 — they stay in the <code>CAMERAS</code> group — but give them new keys and new jobs. For the lesson the interesting quantity was <em>who is performing</em>. For a spar it is <em>where the pair is and how far apart they are</em>: the midpoint between the hips, and their distance. The two over-the-shoulder cameras are renamed <code>cam-f1-pov</code> and <code>cam-f2-pov</code> (each sits behind its own fighter and looks at the other), and everything is keyed every half second across all 170 s:</p>
 	<ul>
 		<li><code>cam-wide</code> — from the open front of the hut, pulling back as the pair separates: the distance is <code>5.2 + 1.2 × gap</code>, clamped to 6.5–8.2 m, and never past x = 9, because the hut's front ridge pole stands at x = 10.</li>
@@ -611,7 +688,7 @@ $S('#cam-f2-pov').setKeys(keys.p2, { smooth: true });
 window.dojo.gap = gap;                       // the next step picks shots from it
 editor.timeline.toJSON().duration;           // still 170.17</code></pre>
 
-	<h2><span class="step">13</span> Cut by distance, and check every frame</h2>
+	<h2><span class="step">14</span> Cut by distance, and check every frame</h2>
 	<p class="lede">With 170 s of continuous action there is no "demo" and "repeat" to cut on, so cut on <em>distance</em>. Every 4.5–5 s, look at the average gap over the next four seconds: if the fighters are nearly touching (&lt; 1.6 m) use the side camera, which keeps both in frame; at mid range (1.6–2.6 m) alternate the two over-the-shoulder shots; when they are far apart (&ge; 2.6 m) alternate wide and side. Never repeat the camera just used, open on the wide, and finish on it. For this pair that is 37 shots.</p>
 	<p>An over-the-shoulder shot only works if the other fighter really fits in the frame, and it cannot be judged by eye on 170 s of footage. So the block that builds the shot list also tests it: it projects the head, chest, hips and both hands of the fighter being looked at (head, chest, hips, hands and feet of <em>both</em> for the wide and side cameras) through the real, compiled camera at every half-second of every shot, and turns any over-the-shoulder shot that ever misses into a side shot. It writes the list through a small undoable command, so <kbd>Ctrl/Cmd+Z</kbd> brings the previous sequence back.</p>
 	<pre><code>(async () =&gt; {
@@ -681,7 +758,7 @@ holdTimelineAt(0);
 ({ closest: +closest.toFixed(2), outside });      // { closest: 0.63, outside: 0 }</code></pre>
 	<p>The skinned-mesh fixes from step 9 apply to the new characters too, with no extra work: the scene ends with 84 skinned meshes on 2 skeletons and none frustum-culled, and the CPU cost of playback is the same as the lesson's.</p>
 
-	<h2><span class="step">14</span> Save it</h2>
+	<h2><span class="step">15</span> Save it</h2>
 	<ol class="steps">
 		<li>Open the <strong>Git</strong> tab and set your repository, branch and token (the token is stored in your browser only).</li>
 		<li>Set <strong>Scene file</strong> to a new name for each scene — <code>dojo.json</code> for the lesson, <code>sparring.json</code> for the match — so one does not overwrite the other.</li>
