@@ -500,6 +500,7 @@ function SidebarCustomize( editor ) {
 
 		root = list.find( c => c.uuid === previous ) || list[ 0 ] || null;
 		if ( root ) characterSelect.setValue( root.uuid );
+		if ( root && /^No rigged character/.test( status.dom.textContent ) ) say( '' ); // a character arrived after the tab first looked: drop the stale warning
 		if ( ! root ) { say( 'No rigged character in the scene. Import a rigged GLB first.' ); rigStatus.dom.textContent = ''; return; }
 
 		refreshAll();
