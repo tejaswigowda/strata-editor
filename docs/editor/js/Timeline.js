@@ -18,6 +18,9 @@ import * as selectorEngine from './intelligence/selectorEngine.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import { formatClockMs } from './TimeFormat.js';
 import { eventLineMap } from './intelligence/timelineCodeMap.js';
+import { collapseCameraKeys, parseSetKeys, eventsFromSetKeys } from './intelligence/cameraKeysCode.js';
+import * as view from './intelligence/timelineView.js';
+import { registerSugarLanguage, SUGAR_LANGUAGE_ID } from './intelligence/sugarLanguage.js';
 import * as recipes from './intelligence/animationRecipes.js';
 import { applyContentAt } from './intelligence/textChange.js';
 
@@ -35,11 +38,19 @@ function Timeline( editor ) {
 
 	const LABEL_W = 120;
 	const MIN_VIEW = 4; // seconds — always show at least this span
+	const ZOOM_STEP = 1.6; // per click of the zoom buttons
+	const MIN_BLOCK_PX = 10; // a block is never drawn (or hit-tested) narrower than this
+	const HANDLE_PX = 6; // the resize grip on a block's right edge
+	const MIN_RESIZE_PX = 16; // narrower blocks have no grip: a click there selects instead of resizing
+	const SNAP_PX = 6; // how close an edge must come to a target to snap to it
 
 	let playing = false;
 	let playhead = 0;               // seconds (the shared clock)
 	editor.getTimelinePlayhead = () => playhead; // the shell's keyFromView() defaults to the playhead
-	let selectedEventId = null;
+	let selectedEventId = null;     // the primary selected event: the first of selectedIds (it owns the key options and the code line)
+	let selectedIds = new Set();    // every selected event; shift / ctrl / cmd click builds it up
+	let zoomSpan = null;            // seconds the lane shows; null = fit the whole timeline
+	let viewStart = 0;              // seconds at the lane's left edge (always 0 when fitted)
 	let followRenderCamera = true; // "Follow render camera" checkbox — viewport tracks the Camera Sequence during playback (default on)
 	let followedAway = false;       // true once WE switched editor.viewportCamera away from editor.camera, so we know to restore it
 	let followedCamera = null;      // the shot camera we last switched the viewport to (so a manual camera change isn't overridden)
@@ -105,12 +116,39 @@ function Timeline( editor ) {
 	const trashIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 	const deleteButton = new UIButton();
 	deleteButton.dom.innerHTML = trashIcon;
-	deleteButton.dom.title = 'Delete the selected event (Del / Backspace)';
-	deleteButton.dom.setAttribute( 'aria-label', 'Delete the selected event' );
+	deleteButton.dom.title = 'Delete the selected events (Del / Backspace)';
+	deleteButton.dom.setAttribute( 'aria-label', 'Delete the selected events' );
 	deleteButton.dom.style.cssText = 'width:28px;height:28px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;';
 	deleteButton.dom.disabled = true;
 	deleteButton.onClick( function () { deleteSelected(); } );
 	bar.appendChild( deleteButton.dom );
+
+	// Zoom the time axis: ctrl / cmd + wheel zooms around the cursor, these buttons around the playhead
+	const zoomGroup = document.createElement( 'div' );
+	zoomGroup.style.cssText = 'display:flex;align-items:center;gap:3px;margin-left:auto;';
+	bar.appendChild( zoomGroup );
+
+	function zoomButton( text, title, onClick ) {
+
+		const b = document.createElement( 'button' );
+		b.type = 'button';
+		b.textContent = text;
+		b.title = title;
+		b.setAttribute( 'aria-label', title );
+		b.style.cssText = 'min-width:24px;height:24px;padding:0 6px;font-size:12px;border-radius:4px;cursor:pointer;';
+		b.addEventListener( 'click', onClick );
+		zoomGroup.appendChild( b );
+		return b;
+
+	}
+
+	zoomButton( '\u2212', 'Zoom out (ctrl / cmd + wheel)', () => zoomAt( 1 / ZOOM_STEP, null ) );
+	const zoomReadout = document.createElement( 'span' );
+	zoomReadout.style.cssText = 'min-width:34px;text-align:center;font-size:11px;font-family:monospace;';
+	zoomReadout.textContent = 'Fit';
+	zoomGroup.appendChild( zoomReadout );
+	zoomButton( '+', 'Zoom in (ctrl / cmd + wheel)', () => zoomAt( ZOOM_STEP, null ) );
+	zoomButton( 'Fit', 'Show the whole timeline', fitView );
 
 	// Below the toolbar: the viewport can track whichever camera the Render
 	// tab's Camera Sequence would be using at the current playhead time (or
@@ -156,6 +194,24 @@ function Timeline( editor ) {
 	const playheadEl = document.createElement( 'div' );
 	playheadEl.style.cssText = `position:absolute;top:20px;bottom:0;width:2px;background:#f00;left:${ LABEL_W }px;pointer-events:none;z-index:20;`;
 	area.appendChild( playheadEl );
+
+	// A thin guide shown while a block's edge is snapped to the playhead or another event's edge
+	const snapGuide = document.createElement( 'div' );
+	snapGuide.style.cssText = 'position:absolute;top:20px;bottom:0;width:1px;background:#00bcd4;display:none;pointer-events:none;z-index:19;';
+	area.appendChild( snapGuide );
+
+	// the blocks' look (a class each: the track list can hold ~1000) and the resize grip, which only shows while hovering a block wide enough to have one
+	if ( ! document.getElementById( 'timeline-block-style' ) ) {
+
+		const style = document.createElement( 'style' );
+		style.id = 'timeline-block-style';
+		style.textContent = '.timeline-block{position:absolute;top:4px;bottom:4px;background:#2196F3;border-radius:3px;opacity:0.85;cursor:grab;font-size:9px;color:#fff;overflow:hidden;white-space:nowrap;padding:2px 4px;box-sizing:border-box;user-select:none;}' +
+			'.timeline-block.group{background:#00897b;}.timeline-block.face{background:#c2185b;}.timeline-block.gaze{background:#6d4c41;}' +
+			'.timeline-block.selected{background:#ff5722;}' +
+			'.timeline-block[data-resizable]:hover{box-shadow:inset -6px 0 0 rgba(255,255,255,0.45);}';
+		document.head.appendChild( style );
+
+	}
 
 	const emptyHint = document.createElement( 'div' );
 	emptyHint.style.cssText = 'padding:18px 14px;color:#888;font-size:11px;line-height:1.6;';
@@ -266,9 +322,11 @@ function Timeline( editor ) {
 
 	require( [ 'vs/editor/editor.main' ], function () {
 
+		registerSugarLanguage( monaco ); // highlighting without Monaco's TypeScript worker, which overflows its stack on long chains
+
 		monacoCodeEditor = monaco.editor.create( codePanelWrap, {
 			value: pendingCode,
-			language: 'javascript',
+			language: SUGAR_LANGUAGE_ID,
 			theme: 'vs-dark',
 			minimap: { enabled: false },
 			lineNumbers: 'on',
@@ -337,12 +395,12 @@ function Timeline( editor ) {
 		// only a deliberate move by the user in the focused editor: not the reset a re-render does (setValue), nor typing
 		if ( e.reason !== monaco.editor.CursorChangeReason.Explicit || ! monacoCodeEditor.hasTextFocus() ) return;
 		const id = lineEvents.get( e.position.lineNumber );
-		if ( ! id || id === selectedEventId ) return;
+		if ( ! id || ( id === selectedEventId && selectedIds.size === 1 ) ) return;
 
 		revealedKey = id; // the editor is already on it: do not scroll it away from the caret
 		decorateKeyLine( e.position.lineNumber );
-		selectedEventId = id;
-		render();
+		setSelection( [ id ] );
+		panToEvent( id );
 
 		// bring the key's block into the track list (the options are level with it)
 		const block = keyBlockEl();
@@ -547,6 +605,18 @@ function Timeline( editor ) {
 					const idle = FT.normalizeIdle( idleArg ? Function( `"use strict"; return (${ idleArg })` )() : true );
 					if ( idle ) model.faces[ selector ] = { idle };
 					continue;
+
+				}
+
+				// `$S('#cam').setKeys([{ t, pos, lookAt, fov }, ...], { smooth })` — a camera move refreshCode() collapsed
+				// (cameraKeysCode.js); the same statement the shell takes. Anything chained after it is still read below.
+				if ( /^\s*\.setKeys\(/.test( afterSelector ) ) {
+
+					const { specs, opts } = parseSetKeys( afterSelector );
+					const built = eventsFromSetKeys( selector, specs, opts );
+					for ( const e of built.events ) model.addEvent( selector, e );
+					if ( built.spline ) model.track( selector, true ).spline = true;
+					eventCount += built.events.length;
 
 				}
 
@@ -963,7 +1033,7 @@ function Timeline( editor ) {
 
 	function selectedAnimateEvent() {
 
-		if ( ! selectedEventId || ! editor.timeline ) return null;
+		if ( ! selectedEventId || selectedIds.size !== 1 || ! editor.timeline ) return null; // the options are for one key
 		const found = editor.timeline.findEvent( selectedEventId );
 		return found && found.event.op === 'animate' ? found : null;
 
@@ -1196,7 +1266,7 @@ function Timeline( editor ) {
 		const at = Math.round( Math.min( prevEnd, playhead ) * 1000 ) / 1000;
 		const dur = Math.round( Math.max( 0.001, playhead - at ) * 1000 ) / 1000;
 		const id = 'key_' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 6 );
-		if ( found ) selectedEventId = id; // the popover follows to the new key
+		if ( found ) setSelection( [ id ], true ); // the popover follows to the new key
 		commitMutation( m => m.addEvent( target, { id, at, op: 'animate', args: { props, easing: 'linear', duration: dur }, dur } ), 'Add key' );
 		sampleAt( playhead );
 
@@ -1220,7 +1290,7 @@ function Timeline( editor ) {
 
 	function keyBlockEl() {
 
-		return selectedEventId ? rows.querySelector( '[data-event-id="' + String( selectedEventId ).replace( /["\\]/g, '\\$&' ) + '"]' ) : null;
+		return selectedEventId ? blockEls.get( selectedEventId ) || null : null;
 
 	}
 
@@ -1314,9 +1384,7 @@ function Timeline( editor ) {
 
 	function closeKeyPopover() {
 
-		if ( ! selectedEventId ) return;
-		selectedEventId = null;
-		render();
+		setSelection( [] );
 
 	}
 
@@ -1382,6 +1450,12 @@ function Timeline( editor ) {
 
 	}
 
+	function viewSpan() {
+
+		return zoomSpan === null ? viewDuration() : Math.min( zoomSpan, viewDuration() );
+
+	}
+
 	function laneWidth() {
 
 		return Math.max( 1, area.clientWidth - LABEL_W );
@@ -1390,61 +1464,202 @@ function Timeline( editor ) {
 
 	function timeToPx( t ) {
 
-		return ( t / viewDuration() ) * laneWidth();
+		return ( ( t - viewStart ) / viewSpan() ) * laneWidth();
 
 	}
 
 	function pxToTime( px ) {
 
-		return Math.max( 0, ( px / laneWidth() ) * viewDuration() );
+		return Math.max( 0, viewStart + ( px / laneWidth() ) * viewSpan() );
+
+	}
+
+	// ── Zoom / pan ────────────────────────────────────────────────────────────
+	// zoomSpan === null shows the whole timeline (viewStart 0); otherwise the lane shows [viewStart, viewStart + zoomSpan].
+	// Every mapping above and the drag handlers go through viewStart / viewSpan(), so nothing else knows about zoom.
+	function currentView() {
+
+		return { start: viewStart, span: viewSpan() };
+
+	}
+
+	function updateZoomReadout() {
+
+		const z = zoomSpan === null ? 1 : viewDuration() / zoomSpan;
+		zoomReadout.textContent = zoomSpan === null ? 'Fit' : z.toFixed( z < 10 ? 1 : 0 ) + '\u00d7';
+
+	}
+
+	function setView( v ) {
+
+		const total = viewDuration();
+		const c = view.clampView( v.start, v.span, total );
+		const fit = c.span >= total - 1e-9;
+		zoomSpan = fit ? null : c.span;
+		viewStart = fit ? 0 : c.start;
+		updateZoomReadout();
+		render();
+		updatePlayheadUI();
+
+	}
+
+	// `anchorPx`: where across the lane the zoom is centred (null: the playhead when it is on screen, else the middle)
+	function zoomAt( factor, anchorPx ) {
+
+		const lw = laneWidth();
+		let px = anchorPx;
+		if ( px === null ) {
+
+			const p = timeToPx( playhead );
+			px = p >= 0 && p <= lw ? p : lw / 2;
+
+		}
+		setView( view.zoomView( currentView(), viewDuration(), factor, px / lw ) );
+
+	}
+
+	function fitView() {
+
+		setView( { start: 0, span: viewDuration() } );
+
+	}
+
+	function panBy( dPx ) {
+
+		if ( zoomSpan === null ) return;
+		setView( view.panView( currentView(), viewDuration(), ( dPx / laneWidth() ) * viewSpan() ) );
+
+	}
+
+	// bring an event's block into view (only when zoomed: a fitted lane shows everything)
+	function panToEvent( id ) {
+
+		const found = editor.timeline ? editor.timeline.findEvent( id ) : null;
+		if ( ! found || zoomSpan === null ) return;
+		const { at, dur } = found.event;
+		if ( at >= viewStart && at + dur <= viewStart + zoomSpan ) return;
+		setView( view.clampView( at + dur / 2 - zoomSpan / 2, zoomSpan, viewDuration() ) );
+		renderNow();
+
+	}
+
+	// ── Selection ─────────────────────────────────────────────────────────────
+	const blockEls = new Map(); // event id -> its block in the track list (only blocks inside the view exist)
+
+	// `quiet`: skip refreshing the key options (the caller is about to change the timeline, which does)
+	function setSelection( ids, quiet ) {
+
+		const next = [ ...new Set( ids ) ];
+		const prev = [ ...selectedIds ];
+		if ( next.length === prev.length && next.every( ( id, i ) => id === prev[ i ] ) ) return;
+
+		selectedIds = new Set( next );
+		selectedEventId = next.length ? next[ 0 ] : null;
+		for ( const id of [ ...prev, ...next ] ) {
+
+			const el = blockEls.get( id );
+			if ( el ) el.classList.toggle( 'selected', selectedIds.has( id ) );
+
+		}
+		deleteButton.dom.disabled = next.length === 0;
+		if ( ! quiet ) refreshKeyPanel();
 
 	}
 
 	// ── Rendering ─────────────────────────────────────────────────────────────
+	// render() / renderCode() only mark the panel dirty: any number of changes in one frame cost ONE rebuild.
+	// Moving the playhead, selecting or snapping never rebuild (they restyle what is there).
+	let framePending = false, rowsDirty = false, codeDirty = false;
+
+	function queueFrame() {
+
+		if ( framePending ) return;
+		framePending = true;
+		requestAnimationFrame( flushFrame );
+
+	}
+
+	function flushFrame() {
+
+		framePending = false;
+		if ( codeDirty ) { codeDirty = false; refreshCode(); } // first: the key options read the line map it rebuilds
+		if ( rowsDirty ) { rowsDirty = false; rebuild(); }
+
+	}
+
 	function render() {
+
+		rowsDirty = true;
+		queueFrame();
+
+	}
+
+	function renderCode() {
+
+		codeDirty = true;
+		queueFrame();
+
+	}
+
+	function renderNow() {
+
+		if ( rowsDirty ) { rowsDirty = false; rebuild(); }
+
+	}
+
+	function rebuild() {
 
 		const model = editor.timeline || new TimelineModel();
 		refreshMotionBar();
 
-		// Ruler ticks (every 1s, or 0.5s when short). Every tick gets a line, but
-		// only every Nth one a label, so the mm:ss:ms text never overlaps.
-		ruler.innerHTML = '';
-		const vd = viewDuration();
-		const step = vd <= 6 ? 0.5 : ( vd <= 20 ? 1 : Math.ceil( vd / 20 ) );
-		const labelEvery = Math.max( 1, Math.ceil( 58 / Math.max( 1, timeToPx( step ) ) ) );
-		let tickIndex = 0;
-		for ( let t = 0; t <= vd + 1e-6; t += step, tickIndex ++ ) {
+		const total = viewDuration();
+		if ( zoomSpan !== null ) {
 
-			const tick = document.createElement( 'div' );
-			tick.style.cssText = `position:absolute;left:${ timeToPx( t ) }px;top:0;bottom:0;border-left:1px solid #ddd;font-size:9px;color:#999;padding-left:2px;white-space:nowrap;`;
-			if ( tickIndex % labelEvery === 0 ) tick.textContent = formatClockMs( t );
-			ruler.appendChild( tick );
+			const c = view.clampView( viewStart, zoomSpan, total );
+			viewStart = c.start;
+			zoomSpan = c.span >= total - 1e-9 ? null : c.span;
+			if ( zoomSpan === null ) viewStart = 0;
 
 		}
+		updateZoomReadout();
 
-		rows.innerHTML = '';
+		const m = { start: viewStart, span: viewSpan(), lw: laneWidth() };
 
+		// a change (undo, a code edit, a delete) can drop events that were selected
+		const hadSelection = selectedIds.size > 0;
+		if ( hadSelection ) setSelection( [ ...selectedIds ].filter( id => model.findEvent( id ) ), true );
+
+		// Ruler: labelled ticks at least ~64 px apart, minor ticks between them, only inside the view.
+		const rulerFrag = document.createDocumentFragment();
+		for ( const { t, major } of view.rulerTicks( m.start, m.span, m.lw ).ticks ) {
+
+			const tick = document.createElement( 'div' );
+			tick.style.cssText = `position:absolute;left:${ ( ( t - m.start ) / m.span ) * m.lw }px;top:${ major ? 0 : 12 }px;bottom:0;border-left:1px solid ${ major ? '#bbb' : '#e2e2e2' };font-size:9px;color:#999;padding-left:2px;white-space:nowrap;`;
+			if ( major ) tick.textContent = formatClockMs( t );
+			rulerFrag.appendChild( tick );
+
+		}
+		ruler.replaceChildren( rulerFrag );
+
+		blockEls.clear();
 		const imported = getImportedClips( editor );
 
 		if ( model.isEmpty() && imported.length === 0 ) {
 
-			rows.appendChild( emptyHint );
+			rows.replaceChildren( emptyHint );
 			updatePlayheadUI();
-			refreshKeyPanel();
+			if ( hadSelection ) refreshKeyPanel();
 			return;
 
 		}
 
-		for ( const clip of imported ) rows.appendChild( importedClipRow( clip ) );
-
-		for ( const track of model.tracks ) {
-
-			rows.appendChild( trackRow( track ) );
-
-		}
+		const rowsFrag = document.createDocumentFragment();
+		for ( const clip of imported ) rowsFrag.appendChild( importedClipRow( clip, m ) );
+		for ( const track of model.tracks ) rowsFrag.appendChild( trackRow( track, m ) );
+		rows.replaceChildren( rowsFrag );
 
 		updatePlayheadUI();
-		refreshKeyPanel();
+		if ( hadSelection ) refreshKeyPanel(); // with no key selected the panel shows the object's pose, which a rebuild does not change
 
 	}
 
@@ -1452,7 +1667,7 @@ function Timeline( editor ) {
 	// isn't TimelineModel-backed (arbitrary per-frame keyframe data isn't
 	// expressible as `.animate()` sugar), so unlike trackRow() it has no drag/
 	// resize handlers, just a single block spanning the clip's own duration.
-	function importedClipRow( clip ) {
+	function importedClipRow( clip, m ) {
 
 		const row = document.createElement( 'div' );
 		row.style.cssText = 'display:flex;align-items:center;height:26px;border-bottom:1px solid #eee;';
@@ -1467,11 +1682,11 @@ function Timeline( editor ) {
 		row.appendChild( label );
 
 		const lane = document.createElement( 'div' );
-		lane.style.cssText = 'flex:1;height:100%;position:relative;background:rgba(0,0,0,0.02);';
+		lane.style.cssText = 'flex:1;height:100%;position:relative;background:rgba(0,0,0,0.02);overflow:hidden;';
 		row.appendChild( lane );
 
 		const block = document.createElement( 'div' );
-		block.style.cssText = `position:absolute;left:0px;width:${ Math.max( 6, timeToPx( clip.duration ) ) }px;top:4px;bottom:4px;` +
+		block.style.cssText = `position:absolute;left:${ ( ( 0 - m.start ) / m.span ) * m.lw }px;width:${ Math.max( 6, ( clip.duration / m.span ) * m.lw ) }px;top:4px;bottom:4px;` +
 			'background:#9c27b0;border-radius:3px;opacity:0.7;font-size:9px;color:#fff;overflow:hidden;white-space:nowrap;padding:2px 4px;box-sizing:border-box;cursor:default;';
 		block.textContent = 'imported: ' + ( clip.name || 'clip' );
 		block.title = clipTitle;
@@ -1520,7 +1735,7 @@ function Timeline( editor ) {
 	function deleteTrack( track ) {
 
 		const target = track.target;
-		selectedEventId = null;
+		setSelection( [], true );
 		commitMutation( m => {
 
 			// a performer's track can't be deleted alone from a registered group — the whole group goes
@@ -1532,7 +1747,7 @@ function Timeline( editor ) {
 
 	}
 
-	function trackRow( track ) {
+	function trackRow( track, m ) {
 
 		const row = document.createElement( 'div' );
 		row.style.cssText = 'display:flex;align-items:center;height:26px;border-bottom:1px solid #eee;';
@@ -1541,143 +1756,283 @@ function Timeline( editor ) {
 		row.appendChild( label );
 
 		const lane = document.createElement( 'div' );
-		lane.style.cssText = 'flex:1;height:100%;position:relative;background:rgba(0,0,0,0.02);';
+		lane.style.cssText = 'flex:1;height:100%;position:relative;background:rgba(0,0,0,0.02);overflow:hidden;';
 		row.appendChild( lane );
 
-		for ( const ev of track.events ) lane.appendChild( eventBlock( track, ev, lane ) );
+		// only the blocks inside the view (plus a block's width of margin) are built
+		const pad = ( MIN_BLOCK_PX / m.lw ) * m.span;
+		const frag = document.createDocumentFragment();
+		for ( const ev of track.events ) if ( view.inView( ev.at, ev.dur, m.start, m.span, pad ) ) frag.appendChild( eventBlock( ev, m ) );
+		lane.appendChild( frag );
 
 		return row;
 
 	}
 
-	function eventBlock( track, ev, lane ) {
+	// Blocks carry no listeners and get their title on first hover: the track list handles both for all of them
+	// (see "Block interaction"), which keeps a 1000-block rebuild cheap.
+	function eventBlock( ev, m ) {
 
 		const block = document.createElement( 'div' );
-		block.dataset.eventId = ev.id; // the key popover anchors to this block
-		const left = timeToPx( ev.at );
-		const width = Math.max( 6, timeToPx( ev.dur ) );
-		const selected = ev.id === selectedEventId;
+		block.className = 'timeline-block';
+		block.setAttribute( 'data-event-id', ev.id ); // the key popover anchors to this block
+		blockEls.set( ev.id, block );
+
+		const natural = ( ev.dur / m.span ) * m.lw;
+		const width = Math.max( MIN_BLOCK_PX, natural ); // never too thin to hit
+		block.style.cssText = `left:${ ( ( ev.at - m.start ) / m.span ) * m.lw }px;width:${ width }px;`;
 
 		// A member of a registered performance group: the block is the group's CUT (its length is the
 		// edit list's, it moves with the whole group, and each span boundary is drawn as a tick).
 		const group = ev.args && ev.args.group && editor.timeline ? editor.timeline.group( ev.args.group ) : null;
+		if ( group ) block.classList.add( 'group' );
+		else if ( ev.op === FT.FACE_OP ) block.classList.add( 'face' );
+		else if ( ev.op === FT.GAZE_OP ) block.classList.add( 'gaze' );
+		if ( selectedIds.has( ev.id ) ) block.classList.add( 'selected' );
 
-		block.style.cssText = `position:absolute;left:${ left }px;width:${ width }px;top:4px;bottom:4px;` +
-			`background:${ selected ? '#ff5722' : ( group ? '#00897b' : '#2196F3' ) };border-radius:3px;opacity:0.85;` +
-			'cursor:grab;font-size:9px;color:#fff;overflow:hidden;white-space:nowrap;padding:2px 4px;box-sizing:border-box;user-select:none;';
+		if ( width >= 24 ) block.textContent = blockLabel( ev, group ); // a thinner block has no room for the name: the tooltip has it
+
+		if ( group && group.edl ) {
+
+			for ( const r of edlTable( group.edl ).slice( 1 ) ) {
+
+				const tick = document.createElement( 'div' );
+				tick.style.cssText = `position:absolute;left:${ ( r.outStart / m.span ) * m.lw }px;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.8);pointer-events:none;`;
+				block.appendChild( tick );
+
+			}
+
+		}
+
+		if ( ! group && natural >= MIN_RESIZE_PX ) block.setAttribute( 'data-resizable', '1' ); // a thinner block selects on click: zoom in to resize it
+
+		return block;
+
+	}
+
+	function blockLabel( ev, group ) {
 
 		if ( group ) {
 
 			const spans = group.edl ? group.edl.spans.length : 0;
-			block.textContent = `${ group.broken ? '\u26A0 ' : '\u2702 ' }${ group.id }${ spans ? ` · ${ spans } span${ spans === 1 ? '' : 's' }` : ' · uncut' }`;
-			block.title = `${ group.id }: ${ group.broken ? 'registration BROKEN' : 'registered pair — edited as one unit' } @ ${ ev.at.toFixed( 2 ) }s, ${ ev.dur.toFixed( 2 ) }s — drag to move both performers; edit the cut in the code panel or with $M('${ group.id }')`;
-
-			if ( group.edl ) {
-
-				for ( const r of edlTable( group.edl ).slice( 1 ) ) {
-
-					const tick = document.createElement( 'div' );
-					tick.style.cssText = `position:absolute;left:${ timeToPx( r.outStart ) }px;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.8);pointer-events:none;`;
-					block.appendChild( tick );
-
-				}
-
-			}
-
-		} else if ( ev.op === FT.FACE_OP || ev.op === FT.GAZE_OP ) {
-
-			// authored face keys: a key ARRIVES at the block's right edge (at + dur)
-			const face = ev.op === FT.FACE_OP;
-			if ( ! selected ) block.style.background = face ? '#c2185b' : '#6d4c41';
-			const what = face ? Object.keys( ev.args.shapes || {} ).slice( 0, 2 ).join( ', ' ) + ( Object.keys( ev.args.shapes || {} ).length > 2 ? '…' : '' ) : ( Array.isArray( ev.args.target ) ? 'point' : ev.args.target );
-			block.textContent = `${ face ? 'face' : 'gaze' } · ${ what }`;
-			block.title = `${ ev.op } key arriving @ ${ ( ev.at + ev.dur ).toFixed( 2 ) }s (moves for ${ ev.dur.toFixed( 2 ) }s${ ev.args.easing ? `, ${ ev.args.easing }` : '' }) — drag to retime, drag right edge to change the duration`;
-
-		} else {
-
-			block.textContent = ev.op;
-			block.title = `${ ev.op } @ ${ ev.at.toFixed( 2 ) }s, dur ${ ev.dur.toFixed( 2 ) }s — drag to retime, drag right edge to resize`;
+			return `${ group.broken ? '\u26A0 ' : '\u2702 ' }${ group.id }${ spans ? ` · ${ spans } span${ spans === 1 ? '' : 's' }` : ' · uncut' }`;
 
 		}
 
-		// Resize handle (right edge).
-		const handle = document.createElement( 'div' );
-		handle.style.cssText = 'position:absolute;right:0;top:0;bottom:0;width:6px;cursor:ew-resize;background:rgba(255,255,255,0.35);';
-		if ( group ) handle.style.display = 'none';
-		block.appendChild( handle );
+		if ( ev.op === FT.FACE_OP || ev.op === FT.GAZE_OP ) {
 
-		// Drag to retime.
-		block.addEventListener( 'mousedown', function ( e ) {
+			const face = ev.op === FT.FACE_OP;
+			const shapes = Object.keys( ev.args.shapes || {} );
+			const what = face ? shapes.slice( 0, 2 ).join( ', ' ) + ( shapes.length > 2 ? '…' : '' ) : ( Array.isArray( ev.args.target ) ? 'point' : ev.args.target );
+			return `${ face ? 'face' : 'gaze' } · ${ what }`;
 
-			if ( e.target === handle ) return;
+		}
+
+		return ev.op;
+
+	}
+
+	function blockTitle( ev, group ) {
+
+		if ( group ) return `${ group.id }: ${ group.broken ? 'registration BROKEN' : 'registered pair — edited as one unit' } @ ${ ev.at.toFixed( 2 ) }s, ${ ev.dur.toFixed( 2 ) }s — drag to move both performers; edit the cut in the code panel or with $M('${ group.id }')`;
+
+		// authored face keys: a key ARRIVES at the block's right edge (at + dur)
+		if ( ev.op === FT.FACE_OP || ev.op === FT.GAZE_OP ) return `${ ev.op } key arriving @ ${ ( ev.at + ev.dur ).toFixed( 2 ) }s (moves for ${ ev.dur.toFixed( 2 ) }s${ ev.args.easing ? `, ${ ev.args.easing }` : '' }) — drag to retime, drag right edge to change the duration`;
+
+		return `${ ev.op } @ ${ ev.at.toFixed( 2 ) }s, dur ${ ev.dur.toFixed( 2 ) }s — drag to retime, drag right edge to resize`;
+
+	}
+
+	// ── Block interaction (one set of listeners on the track list) ────────────
+	// Click selects; shift-click extends the selection along the track, ctrl / cmd-click toggles one block.
+	// Dragging a block retimes it (and every other selected block by the same amount); dragging the grip on a
+	// wide block's right edge resizes it. Both snap to the playhead and to other events' edges unless Alt is held.
+	const round3 = v => Math.round( v * 1000 ) / 1000;
+
+	function blockAt( target ) {
+
+		const block = target && target.closest ? target.closest( '.timeline-block' ) : null;
+		return block && rows.contains( block ) ? block : null;
+
+	}
+
+	function onGrip( block, clientX ) {
+
+		return !! block.dataset.resizable && clientX >= block.getBoundingClientRect().right - HANDLE_PX;
+
+	}
+
+	rows.addEventListener( 'mousemove', function ( e ) {
+
+		if ( e.buttons ) return;
+		const block = blockAt( e.target );
+		if ( block ) block.style.cursor = onGrip( block, e.clientX ) ? 'ew-resize' : 'grab';
+
+	} );
+
+	rows.addEventListener( 'mouseover', function ( e ) {
+
+		const block = blockAt( e.target );
+		if ( ! block || block.title ) return;
+		const found = editor.timeline ? editor.timeline.findEvent( block.getAttribute( 'data-event-id' ) ) : null;
+		if ( found ) block.title = blockTitle( found.event, found.event.args && found.event.args.group && editor.timeline.group( found.event.args.group ) );
+
+	} );
+
+	rows.addEventListener( 'mousedown', function ( e ) {
+
+		if ( e.button !== 0 ) return;
+		const block = blockAt( e.target );
+
+		if ( block ) {
+
 			e.stopPropagation();
 			e.preventDefault();
-			selectedEventId = ev.id;
-			render();
+			blockMouseDown( e, block );
+			return;
 
-			const startX = e.clientX;
-			const startAt = ev.at;
-			let moved = false;
+		}
 
-			function onMove( me ) {
+		// Only scrub when clicking empty lane space (not an event block).
+		if ( e.target === rows || e.target.style.background === 'rgba(0, 0, 0, 0.02)' ) { scrubbing = true; scrubFrom( e.clientX ); }
 
-				if ( Math.abs( me.clientX - startX ) > 2 ) moved = true;
-				if ( ! moved ) return;
-				const nextAt = Math.max( 0, startAt + ( ( me.clientX - startX ) / laneWidth() ) * viewDuration() );
-				block.style.left = timeToPx( nextAt ) + 'px';
+	} );
+
+	function blockMouseDown( e, block ) {
+
+		const id = block.getAttribute( 'data-event-id' );
+		const found = editor.timeline ? editor.timeline.findEvent( id ) : null;
+		if ( ! found ) return;
+
+		if ( e.shiftKey && selectedEventId && found.track.events.some( x => x.id === selectedEventId ) ) {
+
+			const ordered = editor.timeline.sortedEvents( found.track ).map( x => x.id );
+			setSelection( [ ...selectedIds, ...view.rangeIds( ordered, selectedEventId, id ) ] );
+			return;
+
+		}
+
+		if ( e.shiftKey || e.ctrlKey || e.metaKey ) {
+
+			setSelection( view.toggleId( [ ...selectedIds ], id ) );
+			return;
+
+		}
+
+		const wasSelected = selectedIds.has( id ) && selectedIds.size > 1;
+		if ( ! wasSelected ) setSelection( [ id ] ); // dragging a block that is part of a selection keeps the selection
+
+		if ( onGrip( block, e.clientX ) ) startResize( e, found.event );
+		else startRetime( e, found.event, wasSelected );
+
+	}
+
+	function snapTargets( skip ) {
+
+		const times = [ playhead ];
+		if ( editor.timeline ) for ( const t of editor.timeline.tracks ) for ( const x of t.events ) if ( ! skip.has( x.id ) ) times.push( x.at, x.at + x.dur );
+		return view.makeSnapper( times );
+
+	}
+
+	function showSnapGuide( t ) {
+
+		snapGuide.style.display = t === null ? 'none' : 'block';
+		if ( t !== null ) snapGuide.style.left = ( LABEL_W + timeToPx( t ) ) + 'px';
+
+	}
+
+	function startRetime( e, ev, collapseOnClick ) {
+
+		const lw = laneWidth(), span = viewSpan();
+		const moving = [ ...selectedIds ].map( id => editor.timeline.findEvent( id ) ).filter( Boolean ).map( f => ( { id: f.event.id, at: f.event.at } ) );
+		const snapper = snapTargets( selectedIds );
+		const maxDist = ( SNAP_PX / lw ) * span;
+		const minAt = Math.min( ...moving.map( x => x.at ) );
+		const startX = e.clientX;
+		let moved = false, dt = 0;
+
+		function onMove( me ) {
+
+			if ( Math.abs( me.clientX - startX ) > 2 ) moved = true;
+			if ( ! moved ) return;
+			dt = Math.max( ( ( me.clientX - startX ) / lw ) * span, - minAt );
+			let guide = null;
+			if ( ! me.altKey ) {
+
+				const s = view.snapMove( snapper, ev.at + dt, ev.dur, maxDist );
+				if ( s.guide !== null ) { dt = Math.max( s.start - ev.at, - minAt ); guide = s.guide; }
 
 			}
+			for ( const x of moving ) {
 
-			function onUp( ue ) {
-
-				document.removeEventListener( 'mousemove', onMove );
-				document.removeEventListener( 'mouseup', onUp );
-				if ( moved ) {
-
-					const nextAt = Math.max( 0, startAt + ( ( ue.clientX - startX ) / laneWidth() ) * viewDuration() );
-					commitMutation( m => m.moveEvent( ev.id, Math.round( nextAt * 1000 ) / 1000 ), 'Retime event' );
-
-				}
+				const el = blockEls.get( x.id );
+				if ( el ) el.style.left = ( ( ( x.at + dt - viewStart ) / span ) * lw ) + 'px';
 
 			}
+			showSnapGuide( guide );
 
-			document.addEventListener( 'mousemove', onMove );
-			document.addEventListener( 'mouseup', onUp );
+		}
 
-		} );
+		function onUp() {
 
-		// Drag right edge to resize (dur).
-		handle.addEventListener( 'mousedown', function ( e ) {
+			document.removeEventListener( 'mousemove', onMove );
+			document.removeEventListener( 'mouseup', onUp );
+			showSnapGuide( null );
+			if ( moved ) commitMutation( m => { for ( const x of moving ) m.moveEvent( x.id, round3( x.at + dt ) ); }, moving.length > 1 ? `Retime ${ moving.length } events` : 'Retime event' );
+			else if ( collapseOnClick ) setSelection( [ ev.id ] ); // a plain click on a selected block narrows the selection to it
 
-			e.stopPropagation();
-			e.preventDefault();
-			selectedEventId = ev.id;
+		}
 
-			const startX = e.clientX;
-			const startDur = ev.dur;
+		document.addEventListener( 'mousemove', onMove );
+		document.addEventListener( 'mouseup', onUp );
 
-			function onMove( me ) {
+	}
 
-				const nextDur = Math.max( 0, startDur + ( ( me.clientX - startX ) / laneWidth() ) * viewDuration() );
-				block.style.width = Math.max( 6, timeToPx( nextDur ) ) + 'px';
+	function startResize( e, ev ) {
+
+		const lw = laneWidth(), span = viewSpan();
+		const snapper = snapTargets( new Set( [ ev.id ] ) );
+		const maxDist = ( SNAP_PX / lw ) * span;
+		const el = blockEls.get( ev.id );
+		const startX = e.clientX;
+		let nextDur = ev.dur;
+
+		function measure( me ) {
+
+			let d = Math.max( 0, ev.dur + ( ( me.clientX - startX ) / lw ) * span );
+			let guide = null;
+			if ( ! me.altKey ) {
+
+				const s = view.snapEdge( snapper, ev.at + d, maxDist );
+				if ( s.guide !== null ) { d = Math.max( 0, s.time - ev.at ); guide = s.guide; }
 
 			}
+			nextDur = d;
+			return guide;
 
-			function onUp( ue ) {
+		}
 
-				document.removeEventListener( 'mousemove', onMove );
-				document.removeEventListener( 'mouseup', onUp );
-				const nextDur = Math.max( 0, startDur + ( ( ue.clientX - startX ) / laneWidth() ) * viewDuration() );
-				commitMutation( m => m.resizeEvent( ev.id, Math.round( nextDur * 1000 ) / 1000 ), 'Resize event' );
+		function onMove( me ) {
 
-			}
+			const guide = measure( me );
+			if ( el ) el.style.width = Math.max( MIN_BLOCK_PX, ( nextDur / span ) * lw ) + 'px';
+			showSnapGuide( guide );
 
-			document.addEventListener( 'mousemove', onMove );
-			document.addEventListener( 'mouseup', onUp );
+		}
 
-		} );
+		function onUp( ue ) {
 
-		return block;
+			document.removeEventListener( 'mousemove', onMove );
+			document.removeEventListener( 'mouseup', onUp );
+			showSnapGuide( null );
+			measure( ue );
+			if ( Math.abs( nextDur - ev.dur ) > 0.0005 ) commitMutation( m => m.resizeEvent( ev.id, round3( nextDur ) ), 'Resize event' ); // a plain click on the grip only selects
+
+		}
+
+		document.addEventListener( 'mousemove', onMove );
+		document.addEventListener( 'mouseup', onUp );
 
 	}
 
@@ -1717,10 +2072,10 @@ function Timeline( editor ) {
 
 	function deleteSelected() {
 
-		if ( ! selectedEventId ) return;
-		const id = selectedEventId;
-		selectedEventId = null;
-		commitMutation( m => m.removeEvent( id ), 'Delete event' );
+		if ( ! selectedIds.size ) return;
+		const ids = [ ...selectedIds ];
+		setSelection( [] );
+		commitMutation( m => { for ( const id of ids ) m.removeEvent( id ); }, ids.length > 1 ? `Delete ${ ids.length } events` : 'Delete event' ); // one undo step
 
 	}
 
@@ -1795,23 +2150,52 @@ function Timeline( editor ) {
 
 	}
 
-	ruler.addEventListener( 'mousedown', function ( e ) { scrubbing = true; scrubFrom( e.clientX ); } );
-	rows.addEventListener( 'mousedown', function ( e ) {
-
-		// Only scrub when clicking empty lane space (not an event block).
-		if ( e.target === rows || e.target.style.background === 'rgba(0, 0, 0, 0.02)' ) { scrubbing = true; scrubFrom( e.clientX ); }
-
-	} );
+	ruler.addEventListener( 'mousedown', function ( e ) { scrubbing = true; scrubFrom( e.clientX ); } ); // the track list's own mousedown is with the blocks'
 	document.addEventListener( 'mousemove', function ( e ) { if ( scrubbing ) scrubFrom( e.clientX ); } );
 	document.addEventListener( 'mouseup', function () { scrubbing = false; } );
 
+	// ctrl / cmd + wheel (a trackpad pinch too) zooms around the cursor. Panning, when zoomed: the wheel over the
+	// ruler, shift + wheel or a sideways swipe over the tracks (a plain wheel over the tracks still scrolls them).
+	area.addEventListener( 'wheel', function ( e ) {
+
+		const px = e.clientX - area.getBoundingClientRect().left - LABEL_W;
+		if ( e.ctrlKey || e.metaKey ) {
+
+			e.preventDefault();
+			const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+			zoomAt( Math.exp( - dy * 0.0025 ), Math.min( Math.max( 0, px ), laneWidth() ) );
+			return;
+
+		}
+
+		const sideways = e.shiftKey || Math.abs( e.deltaX ) > Math.abs( e.deltaY );
+		if ( zoomSpan === null || ! ( sideways || ruler.contains( e.target ) ) ) return;
+		e.preventDefault();
+		panBy( ( e.deltaMode === 1 ? 16 : 1 ) * ( Math.abs( e.deltaX ) > Math.abs( e.deltaY ) ? e.deltaX : e.deltaY ) );
+
+	}, { passive: false } );
+
 	function updatePlayheadUI() {
 
-		const vd = viewDuration();
-		playheadEl.style.left = ( LABEL_W + timeToPx( Math.min( playhead, vd ) ) ) + 'px';
+		// playing while zoomed: turn the page when the playhead leaves the lane
+		if ( playing && zoomSpan !== null ) {
+
+			const p = timeToPx( playhead );
+			if ( p < 0 || p > laneWidth() ) {
+
+				viewStart = view.clampView( playhead - zoomSpan * 0.1, zoomSpan, viewDuration() ).start;
+				render();
+
+			}
+
+		}
+
+		const lw = laneWidth(), px = timeToPx( playhead );
+		playheadEl.style.display = px >= 0 && px <= lw ? '' : 'none';
+		playheadEl.style.left = ( LABEL_W + px ) + 'px';
 		const dur = totalDuration();
 		timeReadout.textContent = `${ formatClockMs( playhead ) } / ${ formatClockMs( dur ) }`;
-		deleteButton.dom.disabled = ! selectedEventId;
+		deleteButton.dom.disabled = selectedIds.size === 0;
 		signals.timelinePlayheadUpdated.dispatch( { time: playhead, duration: dur, playing } );
 
 	}
@@ -1961,8 +2345,21 @@ function Timeline( editor ) {
 
 			for ( const track of model.tracks ) {
 
-				const evs = model.sortedEvents( track ).filter( e => ! ( e.args && e.args.group ) );
+				let evs = model.sortedEvents( track ).filter( e => ! ( e.args && e.args.group ) );
 				if ( evs.length === 0 ) continue;
+
+				// A dense (baked) camera track is ONE setKeys statement, one key per line, with a comment saying so;
+				// only the events that are not camera keys stay in the chain below.
+				const collapsed = collapseCameraKeys( track, evs );
+				if ( collapsed ) {
+
+					trackBlocks.push( { block: blocks.length, ids: collapsed.ids, lead: collapsed.lead } );
+					blocks.push( collapsed.lines.join( '\n' ) );
+					evs = collapsed.rest;
+					if ( evs.length === 0 ) continue;
+
+				}
+
 				const chain = evs.map( e => `.at(${ Math.round( e.at * 1000 ) / 1000 }).${ e.op }(${ argList( e.op, e.args, e.dur ) })` );
 				let line = `$S('${ track.target }')` + ( evs.length === 1 ? chain[ 0 ] : chain.map( c => `\n  ${ c }` ).join( '' ) ) + ';';
 
@@ -2093,7 +2490,7 @@ function Timeline( editor ) {
 	document.addEventListener( 'keydown', function ( e ) {
 
 		if ( e.key !== 'Delete' && e.key !== 'Backspace' ) return;
-		if ( ! selectedEventId ) return;
+		if ( ! selectedIds.size ) return;
 		if ( container.dom.offsetParent === null ) return; // tab not visible
 		const tag = e.target && e.target.tagName;
 		if ( tag === 'INPUT' || tag === 'TEXTAREA' ) return;
@@ -2107,7 +2504,7 @@ function Timeline( editor ) {
 	// Esc closes the key options (it deselects the key). Not while the code editor has the focus: there Esc belongs to Monaco.
 	document.addEventListener( 'keydown', function ( e ) {
 
-		if ( e.key !== 'Escape' || ! selectedEventId || container.dom.offsetParent === null ) return;
+		if ( e.key !== 'Escape' || ! selectedIds.size || container.dom.offsetParent === null ) return;
 		if ( monacoCodeEditor && monacoCodeEditor.hasTextFocus() ) return;
 		closeKeyPopover();
 
@@ -2117,16 +2514,17 @@ function Timeline( editor ) {
 	document.addEventListener( 'scroll', positionKeyPopover, true );
 
 	// ── Signals ───────────────────────────────────────────────────────────────
-	signals.timelineChanged.add( function () { render(); refreshCode(); refreshCamRow(); } );
+	signals.timelineChanged.add( function () { render(); renderCode(); refreshCamRow(); } );
 	signals.cameraPathChanged.add( function () { refreshCamRow(); revealKeyInCode( false ); } ); // a key picked on the camera path in the viewport
 	// Imported clips (e.g. a glTF/GLB import) land on editor.scene.animations
 	// outside the TimelineModel, dispatched via animationsChanged — refresh the
 	// tab so the new clip's row/duration/code comment show up immediately.
-	signals.animationsChanged.add( function () { render(); refreshCode(); } );
+	signals.animationsChanged.add( function () { render(); renderCode(); } );
 	// Undo/redo of an imported-clip delete swaps scene.animations via SetValueCommand,
 	// which only announces objectChanged.
-	signals.objectChanged.add( function ( object ) { if ( object === editor.scene ) { render(); refreshCode(); } } );
-	signals.editorCleared.add( function () { playing = false; playhead = 0; selectedEventId = null; render(); } );	signals.objectSelected.add( function () { selectedEventId = null; refreshKeyPanel(); } );
+	signals.objectChanged.add( function ( object ) { if ( object === editor.scene ) { render(); renderCode(); } } );
+	signals.editorCleared.add( function () { playing = false; playhead = 0; setSelection( [], true ); fitView(); } );
+	signals.objectSelected.add( function () { setSelection( [], true ); refreshKeyPanel(); } );
 	signals.timelinePlayRequested.add( play ); // external trigger, e.g. the #...&play=true overlay button
 	signals.timelinePauseRequested.add( pause ); // external trigger, e.g. Present mode's transport bar
 	signals.timelineStopRequested.add( stop ); // external trigger, e.g. Present mode's transport bar

@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js';
-
 import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea } from './libs/ui.js';
 import { holdTimelineAt, getImportedClips } from './intelligence/timelineController.js';
 import { findCallcards, refreshCallcard } from './Callcard.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
+import { RENDER_CLEAR_COLOR, applyRenderSettings, webglEnvironment } from './toon/RenderPipeline.js';
 import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesEqual, newCueId } from './intelligence/subtitles.js';
 import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 
@@ -973,24 +971,15 @@ function SidebarRender( editor ) {
 			restores.push( () => renderer.dispose() );
 			renderer.setPixelRatio( 1 );
 			renderer.setSize( width, height, false );
-			renderer.setClearColor( transparent ? 0x000000 : 0xaaaaaa, transparent ? 0 : 1 );
+			renderer.setClearColor( transparent ? 0x000000 : RENDER_CLEAR_COLOR, transparent ? 0 : 1 );
+			applyRenderSettings( renderer, editor.config );
 
-			const config = editor.config;
-			renderer.shadowMap.enabled = config.getKey( 'project/renderer/shadows' ) !== false;
-			renderer.shadowMap.type = parseFloat( config.getKey( 'project/renderer/shadowType' ) ) || THREE.PCFShadowMap;
-			renderer.toneMapping = parseFloat( config.getKey( 'project/renderer/toneMapping' ) ) || THREE.NoToneMapping;
-			renderer.toneMappingExposure = parseFloat( config.getKey( 'project/renderer/toneMappingExposure' ) ) || 1;
+			const env = webglEnvironment( renderer, scene );
+			if ( env ) {
 
-			if ( scene.environment && scene.environment.isRenderTargetTexture ) {
-
-				const pmrem = new THREE.PMREMGenerator( renderer );
-				const envScene = ( scene.background && scene.background.isColor )
-					? new ColorEnvironment( scene.background )
-					: new RoomEnvironment();
-				const envRT = pmrem.fromScene( envScene, 0.04 );
 				const prevEnv = scene.environment;
-				scene.environment = envRT.texture;
-				restores.push( () => { scene.environment = prevEnv; envRT.dispose(); pmrem.dispose(); } );
+				scene.environment = env.texture;
+				restores.push( () => { scene.environment = prevEnv; env.dispose(); } );
 
 			}
 
@@ -1283,36 +1272,22 @@ function SidebarRender( editor ) {
 		const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, preserveDrawingBuffer: true } );
 		renderer.setPixelRatio( 1 );
 		renderer.setSize( width, height, false );
-		renderer.setClearColor( 0xaaaaaa ); // same base as the viewport; scene.background overrides
+		renderer.setClearColor( RENDER_CLEAR_COLOR ); // scene.background overrides
+		applyRenderSettings( renderer, editor.config );
 
-		// Mirror the project renderer settings (shadows / tone mapping) so the
-		// output matches what the viewport shows.
-		const config = editor.config;
-		renderer.shadowMap.enabled = config.getKey( 'project/renderer/shadows' ) !== false;
-		renderer.shadowMap.type = parseFloat( config.getKey( 'project/renderer/shadowType' ) ) || THREE.PCFShadowMap;
-		renderer.toneMapping = parseFloat( config.getKey( 'project/renderer/toneMapping' ) ) || THREE.NoToneMapping;
-		renderer.toneMappingExposure = parseFloat( config.getKey( 'project/renderer/toneMappingExposure' ) ) || 1;
-
-		// The viewport's PMREM environment is a render-target texture bound to the
-		// VIEWPORT's WebGL context — it cannot upload into this renderer, so PBR
-		// materials would render black ("no colors"). Regenerate an equivalent
-		// environment in THIS context and restore the original afterwards.
+		// The viewport's PMREM environment cannot upload into this renderer (PBR would render
+		// black): use an equivalent built in THIS context and restore the original afterwards.
 		const scene = editor.scene;
 		let restoreEnvironment = function () {};
-		if ( scene.environment && scene.environment.isRenderTargetTexture ) {
+		const env = webglEnvironment( renderer, scene );
+		if ( env ) {
 
-			const pmrem = new THREE.PMREMGenerator( renderer );
-			const envScene = ( scene.background && scene.background.isColor )
-				? new ColorEnvironment( scene.background )
-				: new RoomEnvironment();
-			const envRT = pmrem.fromScene( envScene, 0.04 );
 			const prevEnv = scene.environment;
-			scene.environment = envRT.texture;
+			scene.environment = env.texture;
 			restoreEnvironment = function () {
 
 				scene.environment = prevEnv;
-				envRT.dispose();
-				pmrem.dispose();
+				env.dispose();
 
 			};
 

@@ -8,7 +8,7 @@ The page makes no request that carries them, and the whole photo to bound-VRM pa
 the page has loaded.
 
 **What the claim is not.** It is not a promise about a compromised host, a hostile browser or extension, or what you
-do with the files you download. Those are listed under [Threat model](#threat-model).
+do with the files you download. Those are listed under [Threat model](#4-threat-model).
 
 ## 1. Data inventory
 

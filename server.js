@@ -625,6 +625,9 @@ const server = http.createServer((req, res) => {
 });
 
 function serveFile(filePath, stat, res) {
+    // Tells the page that this server also answers /api/config, /api/models, ... (Shell.js reads it from the
+    // navigation timing entry, so a static host, which has no such routes, is never probed and logs no 404s)
+    res.setHeader('Server-Timing', 'strata-api');
     // ── Headers required for SharedArrayBuffer / cross-origin isolation ──
     res.setHeader('Cross-Origin-Opener-Policy',   'same-origin');
     res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');

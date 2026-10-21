@@ -30,6 +30,7 @@ function MenubarFile( editor ) {
 			editor.clear();
 			localStorage.setItem( 'git-skip-autoload', '1' );
 			syncToNewScene( editor );
+			if ( editor.work ) editor.work.markClean( { fresh: true } );
 
 		}
 
@@ -109,6 +110,7 @@ function MenubarFile( editor ) {
 			const json = editor.toJSON();
 			const blob = new Blob( [ JSON.stringify( json ) ], { type: 'application/json' } );
 			editor.utils.save( blob, 'project.json' );
+			if ( editor.work ) editor.work.markClean();
 
 		} );
 	setMenuIcon( option, 'save', strings.getKey( 'menubar/file/save' ) );

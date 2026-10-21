@@ -66,7 +66,8 @@
 			import { Sidebar } from './editor/js/Sidebar.js';
 			import { Menubar } from './editor/js/Menubar.js';
 			import { Resizer } from './editor/js/Resizer.js';
-			import { autoLoadFromGit, loadSceneFromHash, showPlayOverlay, watchHashChanges } from './editor/js/Menubar.Git.js';
+			import { autoLoadFromGit, loadSceneFromHash, showPlayOverlay, watchHashChanges, currentGitSource } from './editor/js/Menubar.Git.js';
+			import { WorkGuard } from './editor/js/WorkGuard.js';
 
 			import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
@@ -105,6 +106,11 @@
 
 				window.editor = editor; // Expose editor to Console
 				window.THREE = THREE; // Expose THREE to APP Scripts and Console
+
+				// Unsaved-work guard: keyed autosave, dirty tracking, recover-on-load (see WorkGuard.js).
+				// Created before the menubar so its chip can subscribe; idle until boot finishes.
+				editor.work = new WorkGuard( editor, { getSource: currentGitSource } );
+				editor.work.start();
 
 				THREE.ObjectLoader.registerGeometry( 'TextGeometry', TextGeometry );
 
@@ -173,14 +179,19 @@
 
 				editor.storage.init( function () {
 
-					editor.storage.get( async function ( state ) {
+					editor.storage.get( async function ( legacyState ) {
 
-						if ( isLoadingFromHash ) return;
-						if ( hashScenePreloaded ) return; // already loaded from the URL hash above
+						if ( isLoadingFromHash ) { await editor.work.bootDone(); return; }
+						if ( hashScenePreloaded ) { await editor.work.bootDone(); return; } // already loaded from the URL hash above
+
+						// The autosave for the scene source the Git tab points at (the old
+						// single-slot autosave is adopted once if there is no keyed one yet).
+						const state = await editor.work.restoreForBoot( legacyState );
 
 						if ( state !== undefined ) {
 
 							await editor.fromJSON( state );
+							editor.work.restored();
 
 						} else {
 
@@ -201,53 +212,9 @@
 						// Pass whether a local autosave existed so auto-load can skip the
 						// full download when the local copy is already current.
 						await autoLoadFromGit( editor, { hasLocalScene: state !== undefined } );
+						await editor.work.bootDone();
 
 					} );
-
-					//
-
-					let timeout;
-
-					function saveState() {
-
-						if ( editor.config.getKey( 'autosave' ) === false ) {
-
-							return;
-
-						}
-
-						clearTimeout( timeout );
-
-						timeout = setTimeout( function () {
-
-							editor.signals.savingStarted.dispatch();
-
-							timeout = setTimeout( function () {
-
-								editor.storage.set( editor.toJSON() );
-
-								editor.signals.savingFinished.dispatch();
-
-							}, 100 );
-
-						}, 1000 );
-
-					}
-
-					const signals = editor.signals;
-
-					signals.geometryChanged.add( saveState );
-					signals.objectAdded.add( saveState );
-					signals.objectChanged.add( saveState );
-					signals.objectRemoved.add( saveState );
-					signals.materialChanged.add( saveState );
-					signals.sceneBackgroundChanged.add( saveState );
-					signals.sceneEnvironmentChanged.add( saveState );
-					signals.sceneFogChanged.add( saveState );
-					signals.sceneGraphChanged.add( saveState );
-					signals.scriptChanged.add( saveState );
-					signals.historyChanged.add( saveState );
-					signals.timelineChanged.add( saveState );
 
 				} );
 

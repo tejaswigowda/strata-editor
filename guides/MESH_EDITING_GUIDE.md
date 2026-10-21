@@ -1,6 +1,8 @@
 # Mesh Editing Implementation Guide
 
-This document describes the mesh editing layer that has been implemented according to the Handover Spec.
+> Part of the [Strata documentation](../README.md#documentation). Mesh editing set: [Quick start](MESH_EDITING_QUICK_START.md) · **Guide** (this page, incl. status and handover notes) · [Technical](MESH_EDITING_TECHNICAL.md) · [Roadmap](ROADMAP.md)
+
+This document describes the mesh editing layer that has been implemented according to the Handover Spec. The milestone status, limits, troubleshooting and developer checklist that used to live in `IMPLEMENTATION_STATUS.md` are in [Status and handover notes](#status-and-handover-notes) at the end.
 
 ## Architecture Overview
 
@@ -160,7 +162,7 @@ exitEditMode();
 
 | Key | Action |
 |-----|--------|
-| **Tab** | Toggle edit mode on/off |
+| **Tab** / **Esc** | Exit edit mode (bakes the geometry back; enter with `enterEditMode()`) |
 | **1** | Switch to vertex selection mode |
 | **2** | Switch to edge selection mode |
 | **3** | Switch to face selection mode |
@@ -329,6 +331,84 @@ Error: bevel: amount must be >= 0
 - `selectAll(editableMesh)` → void
 - `get count()` → number
 - `get ids()` → Set
+
+## Status and handover notes
+
+Folded in from the former `IMPLEMENTATION_STATUS.md` (every still-true fact kept; line-number references and untestable claims dropped). The roadmap-level view is in [ROADMAP.md](ROADMAP.md).
+
+### Milestone status
+
+| Milestone | State | What it covers |
+|---|---|---|
+| M1 Boolean (CSG) | Done | `booleanUnion` / `booleanSubtract` / `booleanIntersect` via three-bvh-csg (CDN-loaded through the importmap in `docs/index.html`); full undo/redo |
+| M2 Transforms | Done | `mirrorMesh` (clone + axis flip + winding fix), `arrayDuplicate` (linear/grid with offsets), `subdivide` (linear midpoint, configurable iterations) |
+| M3 Half-edge mesh | Done | `EditableMesh` with lossless `fromBufferGeometry` / `toBufferGeometry`, vertex sharing, half-edge pointers, `compact()` against leaks |
+| M4 Selection | Done | Vertex / edge / face modes, raycast picking in the viewport, `1`/`2`/`3`/`A` keys, selection feeds every op |
+| M5 Core ops | Done | `extrude`, `inset`, `bevel` (inset + slope), `deleteFaces`, `weld` (Union-Find, epsilon), `planarUV`, `boxUV` |
+| M6 AI selection criteria | Done | `selectTopFaces(count)`, `selectFacingUp(threshold)`, `selectBoundaryEdges()`, by-ID helpers for every element type |
+| M9 Sculpting | Done | `sculpt` (proportional-falloff brush), `soften` (Laplacian smoothing) |
+| `EditModeController` | Done | enter → edit → exit lifecycle, colour-coded overlay, keyboard input, gizmo moves the selection, undo/redo integration, recipe recording into `userData.recipe` |
+| Op registry + AI integration | Done | Central registry (`mesh/ops/index.js`) serialized by `serializeForAI()` into `buildSystemPrompt()`; the Shell scope exposes every op as a global, so the UI and the AI call the same functions |
+| M7 Import/export | **Not implemented as an edit-mode feature** | General glTF / GLB / OBJ import and glTF / GLB / USDZ / OBJ export exist in the editor (`Loader.js`, `Sidebar.Export.js`); what is missing is import *with edit history*, recipe-based export, and automatic `EditableMesh` creation on first edit (planned helpers: `mesh/ops/import.js`, `mesh/ops/export.js`) |
+| M8 Texture/UV | Partial | Only `planarUV` / `boxUV`. Missing: material property setters for the AI, texture assignment helpers, smart (angle-based) unwrapping, baking (planned: `mesh/ops/materials.js`) |
+
+Nice-to-have, not built: soft-select beyond the sculpt brush, numeric constraint input, snapping (grid, vertex, edge, face), loop cut, non-destructive Mirror/Array modifiers, BVH acceleration for dense-mesh picking.
+
+### Known limitations and handover notes
+
+1. **Topology assumptions.** Works best on manifold, closed meshes; open surfaces and non-manifold meshes have edge cases.
+2. **Large geometry.** Raycast picking is slow above ~50k vertices (no BVH yet).
+3. **Boolean robustness.** three-bvh-csg may fail on coplanar or edge-touching geometry.
+4. **UV preservation.** There is no automatic UV preservation while editing (basic projection only).
+5. **Attribute preservation.** Custom vertex attributes (skin weights, vertex colours) are not preserved during editing; see also [Technical → Known Limitations](MESH_EDITING_TECHNICAL.md#known-limitations).
+6. **Undo memory.** Each operation stores full geometry, which is memory-intensive for large meshes.
+
+Rough performance guidance (handover estimates, not re-measured; the three mesh guides give slightly different thresholds): edit mode is real-time below ~10k vertices, works with slight lag at 10k–50k, and is functional but not interactive above ~50k.
+
+| Mesh size | `extrude` (approx.) |
+|---|---|
+| 1k vertices | < 10 ms |
+| 10k vertices | 20–50 ms |
+| 50k vertices | 100–200 ms |
+| 100k vertices | 300–500 ms |
+
+Optimization ideas: `three-mesh-bvh` for picking; cache face normals/centers; recipe-based undo (store operations, not geometry); batch overlay updates for multi-op commands; lazy geometric queries.
+
+### Troubleshooting
+
+- **Edit mode not responding to the keyboard.** The viewport needs focus: click the 3D view first. `Tab` / `Esc` exit edit mode; enter with `enterEditMode()`.
+- **Undo not working.** Ops should emit a `SetGeometryCommand` (see `EditModeController.runOp()`); check that the wrapper in the Shell scope goes through `editor.editModeController.runOp(...)`.
+- **AI generates invalid code.** Check the operation registry is being serialized: the shell `listOps()` should print one line per op. Note the registry is only injected when the scene has no addressable parts.
+- **Geometry corrupts on edit.** Likely an `EditableMesh` / `BufferGeometry` sync problem. Log before/after `toBufferGeometry()` in `EditModeController.exit()`.
+- **Debug snippets.** See [Technical → Debugging](MESH_EDITING_TECHNICAL.md#debugging). Useful state: `editor.editModeController.active`, `.selection` (`mode`, `count`) and `.em` (`vertices`, `halfEdges`, `faces`).
+
+### For developers
+
+1. Operations live in `docs/editor/js/mesh/ops/`; follow the pattern in `extrude.js` and call `registerOp()` at the end of the file.
+2. Add the function to the Shell scope in `Shell.js` (and to its autocomplete word list) so it is a global for hand-typed and AI code.
+3. Make sure `serializeForAI()` includes it, so the AI sees it.
+4. Mutations must go through `EditModeController.runOp()` (or an explicit Command) so they are undoable.
+5. Architecture detail: [MESH_EDITING_TECHNICAL.md](MESH_EDITING_TECHNICAL.md).
+
+### Files
+
+```
+docs/editor/js/mesh/
+  EditableMesh.js          half-edge structure
+  Selection.js             sub-object selection
+  EditModeController.js    edit-mode lifecycle
+  GeometryOptimizer.js, skinIndices.js, skinnedPerf.js   (skinned-mesh / optimizer helpers)
+  ops/
+    index.js               operation registry
+    boolean.js mirror.js array.js subdivide.js   (M1, M2)
+    extrude.js inset.js bevel.js delete.js weld.js   (M5)
+    uv.js                  planarUV, boxUV
+    sculpt.js soften.js    (M9)
+docs/editor/js/AIPrompt.js   buildSystemPrompt()
+docs/editor/js/Shell.js      imports every op and exposes it in the scope
+```
+
+Compatibility: no build step and no new dependencies (browser ES modules on the existing editor infrastructure); edit mode is optional and the rest of the editor does not depend on it.
 
 ---
 

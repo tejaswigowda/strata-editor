@@ -23,7 +23,7 @@ import { MeshStandardNodeMaterial, MeshBasicNodeMaterial } from 'three/webgpu';
 import { color, float, vec3, mix, pow, saturate, dot, sin, smoothstep, time, texture, normalView, positionViewDirection, positionWorld, materialEmissive } from 'three/tsl';
 import * as ToonLook from '../toon/ToonLook.js';
 import { SetShaderCommand } from '../commands/SetShaderCommand.js';
-import { getShaderDef, normalizeShaderParams, mtoonLookSpec, isOutlineName, sceneHasShaders } from './shaderSpec.js';
+import { getShaderDef, normalizeShaderParams, mtoonLookSpec, isOutlineName, sceneHasShaders, unknownShaderMessage, splitLookSpec } from './shaderSpec.js';
 
 const isNode = m => !! ( m && m.isNodeMaterial );
 
@@ -206,6 +206,30 @@ function convert( src, id, p, custom ) {
 
 }
 
+/** Check a shader argument and its params without touching anything. Returns { custom, def, id, p } or throws. */
+function resolveShader( shader, params ) {
+
+	const custom = typeof shader === 'function' || ( shader && shader.isMaterial ) ? shader : null;
+	const def = custom ? null : getShaderDef( shader );
+	if ( ! custom && ! def ) throw new Error( unknownShaderMessage( shader ) );
+	if ( custom && params !== undefined && params !== null && ! ( typeof params === 'object' && ! Object.keys( params ).length ) ) {
+
+		throw new Error( 'shader: a material or function takes no params; build them into it' );
+
+	}
+
+	let p = {};
+	if ( def ) {
+
+		const n = normalizeShaderParams( def.id, params, def.id !== 'mtoon' );
+		if ( ! n.ok ) throw new Error( n.errors.join( '; ' ) );
+		p = n.params;
+
+	}
+	return { custom, def, id: custom ? 'custom' : def.id, p };
+
+}
+
 /**
  * Give every mesh under `roots` the shader.
  *  shader   a registry id (see listShaders), a THREE.Material (shared by every mesh), or a
@@ -217,19 +241,7 @@ function convert( src, id, p, custom ) {
 export function applyShader( roots, shader, params, options = {} ) {
 
 	const rootList = asRoots( roots );
-	const custom = typeof shader === 'function' || ( shader && shader.isMaterial ) ? shader : null;
-	const def = custom ? null : getShaderDef( shader );
-	if ( ! custom && ! def ) throw new Error( `shader: unknown shader "${ shader }"; call shaders() for the list` );
-
-	const id = custom ? 'custom' : def.id;
-	let p = {};
-	if ( def ) {
-
-		const n = normalizeShaderParams( def.id, params, def.id !== 'mtoon' );
-		if ( ! n.ok ) throw new Error( n.errors.join( '; ' ) );
-		p = n.params;
-
-	}
+	const { custom, id, p } = resolveShader( shader, params );
 
 	const meshes = collectMeshes( rootList, options );
 	const set = new Set( meshes );
@@ -269,10 +281,11 @@ export function applyShader( roots, shader, params, options = {} ) {
 
 }
 
-/** Undo applyShader outside the undo stack: restore each mesh's original material(s). Returns the mesh count. */
+/** Undo applyShader outside the undo stack: restore each mesh's original material(s). Returns { id: 'original', params: {}, meshes, materials }. */
 export function revertShader( roots, options = {} ) {
 
 	let count = 0;
+	const worn = new Set();
 	clearLook( roots );
 	for ( const mesh of collectMeshes( roots, { ...options, skipOutlines: false } ) ) {
 
@@ -289,10 +302,16 @@ export function revertShader( roots, options = {} ) {
 			return b;
 
 		} );
-		if ( changed ) { mesh.material = Array.isArray( mesh.material ) ? back : back[ 0 ]; count ++; }
+		if ( changed ) {
+
+			mesh.material = Array.isArray( mesh.material ) ? back : back[ 0 ];
+			count ++;
+			for ( const m of back ) worn.add( m );
+
+		}
 
 	}
-	return count;
+	return { id: 'original', params: {}, meshes: count, materials: worn.size };
 
 }
 
@@ -317,19 +336,32 @@ function runCommand( editor, roots, name, run ) {
 
 }
 
-/** applyShader as one undo step (also removes any toon lights it added on undo). */
+/** applyShader as one undo step (also removes any toon lights it added on undo). A bad shader or spec throws before anything is touched. */
 export function executeShader( editor, roots, shader, params, options = {} ) {
 
 	const list = asRoots( roots );
+	resolveShader( shader, params );
 	return runCommand( editor, list, 'Shader: ' + ( typeof shader === 'string' ? shader : 'custom' ), () => applyShader( list, shader, params, options ) );
 
 }
 
-/** revertShader as one undo step. Returns the number of meshes restored. */
+/** revertShader as one undo step. Returns { id: 'original', params: {}, meshes, materials }. */
 export function executeRevert( editor, roots, options = {} ) {
 
 	const list = asRoots( roots );
 	return runCommand( editor, list, 'Revert Shader', () => revertShader( list, options ) );
+
+}
+
+/** toon(): a look spec (mtoon params, or look: 'native' to revert) as one undo step; the same result shape as executeShader. */
+export function executeLook( editor, roots, spec, options = {} ) {
+
+	const { look, params } = splitLookSpec( spec );
+	if ( look === 'toon' ) return executeShader( editor, roots, 'mtoon', params, options );
+
+	const n = normalizeShaderParams( 'mtoon', params, false );
+	if ( ! n.ok ) throw new Error( n.errors.join( '; ' ) );
+	return executeRevert( editor, roots, { ...options, skipOutlines: false } );
 
 }
 

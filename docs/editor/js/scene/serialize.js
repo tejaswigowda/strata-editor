@@ -17,15 +17,30 @@
  */
 export function sceneToJSON( editor ) {
 
-	// Call-card meshes bake a live-fetched snapshot into material.map at
-	// runtime (see Callcard.js) — strip it before serializing so scene JSON
-	// (autosave, git commits) stores only the reference (isCallcard flag +
-	// embed size), never a copy of the card's pixels. Restored immediately
-	// after: toJSON() is synchronous, so there's no observable gap in the
-	// live view, and the texture object itself never changes (no GPU
-	// re-upload), only briefly detached from the material.
+	return withoutBakedTextures( editor.scene, function () {
+
+		return editor.scene.toJSON();
+
+	} );
+
+}
+
+/**
+ * Run `fn` (a synchronous serialization) with every call-card's baked material.map
+ * detached, then put it back. Call-card meshes bake a live-fetched snapshot into
+ * material.map at runtime (see Callcard.js) — strip it so scene JSON (autosave, git
+ * commits) stores only the reference (isCallcard flag + embed size), never a copy of
+ * the card's pixels. Restored immediately after: the callback is synchronous, so
+ * there's no observable gap in the live view, and the texture object itself never
+ * changes (no GPU re-upload), only briefly detached from the material.
+ *
+ * @param  {THREE.Object3D} root
+ * @param  {() => any} fn
+ */
+export function withoutBakedTextures( root, fn ) {
+
 	const stripped = [];
-	editor.scene.traverse( function ( o ) {
+	root.traverse( function ( o ) {
 
 		if ( o.userData && o.userData.isCallcard && o.material && o.material.map ) {
 
@@ -38,7 +53,7 @@ export function sceneToJSON( editor ) {
 
 	try {
 
-		return editor.scene.toJSON();
+		return fn();
 
 	} finally {
 

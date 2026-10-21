@@ -1,5 +1,6 @@
 import { UIPanel } from './libs/ui.js';
-import { listShaders, flattenMtoon } from './shaders/shaderSpec.js';
+import { listShaders } from './shaders/shaderSpec.js';
+import { helpTopic, helpMissing, helpIndex } from './shaders/shaderDocs.js';
 import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { RemoveObjectCommand } from './commands/RemoveObjectCommand.js';
 import { SetPositionCommand } from './commands/SetPositionCommand.js';
@@ -88,7 +89,7 @@ function Shell( editor ) {
 	// Same for the shader library (guides/SHADERS.md): shader() / mtoon() / unshader() stay synchronous.
 	let shaderLib = null;
 	import( './shaders/ShaderLibrary.js' ).then( m => { shaderLib = m; } ).catch( e => console.warn( 'Shell: shader library unavailable', e ) );
-	const shaderTargets = target => {
+	const shaderTargets = ( target, verb = 'shader' ) => {
 
 		if ( target && Array.isArray( target.nodes ) ) return target.nodes;
 		if ( Array.isArray( target ) ) return target.filter( Boolean );
@@ -97,18 +98,24 @@ function Shell( editor ) {
 			// a name first ("LittlestTokyo.glb" is not a selector), then a selector
 			const byName = editor.scene.getObjectByName( target );
 			const found = byName ? [ byName ] : selectorEngine.query( editor.scene, target );
-			if ( ! found.length ) throw new Error( `shader: nothing matches "${ target }"` );
+			if ( ! found.length ) throw new Error( `${ verb }: nothing matches "${ target }"` );
 			return found;
 
 		}
 		if ( target && target.isObject3D ) return [ target ];
-		throw new Error( 'shader: the target must be an object, an array of objects, or a name / selector string' );
+		throw new Error( `${ verb }: the target must be an object, an array of objects, or a name / selector string` );
 
 	};
 	const shaderOpts = ( roots, opts = {} ) => ( {
 		skipOutlines: opts.skipOutlines !== false,
 		filter: opts.scope === 'self' ? ( m => roots.includes( m ) ) : opts.filter,
 	} );
+	const needShaderLib = verb => {
+
+		if ( ! shaderLib ) throw new Error( `${ verb }: the shader library is still loading (or failed to load; see the console); try again in a moment` );
+		return shaderLib;
+
+	};
 
 	let faceBind = null;
 	import( './facebind/runtime.js' ).then( m => { faceBind = m; } ).catch( e => console.warn( 'Shell: face bind runtime unavailable', e ) );
@@ -181,10 +188,14 @@ function Shell( editor ) {
 
 	};
 
+	// The dev server (server.js) advertises its /api routes with a Server-Timing header. A static host has none, so skip
+	// the probes there instead of logging two 404s on every load.
+	const hasDevApi = ( performance.getEntriesByType( 'navigation' )[ 0 ]?.serverTiming || [] ).some( t => t.name === 'strata-api' );
+
 	// Populate WebLLM models with proper filtering based on DEV mode
 	( async () => {
 		let productionMode = true;
-		try {
+		if ( hasDevApi ) try {
 			const res = await fetch( '/api/config' );
 			const config = await res.json();
 			productionMode = ! config.dev;
@@ -231,7 +242,7 @@ function Shell( editor ) {
 		}
 
 		// Load external API models (Ollama, OpenAI, Claude) if available
-		try {
+		if ( hasDevApi ) try {
 
 			const res = await fetch( '/api/models' );
 			const data = await res.json();
@@ -399,6 +410,13 @@ function Shell( editor ) {
 	header.appendChild( clearBtn );
 	container.dom.appendChild( header );
 
+	// ── First-run hint ────────────────────────────────────────────────────────
+	// JavaScript needs nothing; the AI helper is an opt-in download. Says so, with the size.
+
+	const hint = document.createElement( 'div' );
+	hint.id = 'shell-hint';
+	container.dom.appendChild( hint );
+
 	// ── Progress bar (shown during model load) ────────────────────────────────
 
 	const progressWrap = document.createElement( 'div' );
@@ -435,7 +453,7 @@ function Shell( editor ) {
 	aiInput.type = 'text';
 	aiInput.spellcheck = false;
 	aiInput.autocomplete = 'off';
-	aiInput.placeholder = 'Describe what to do… (Enter) — load AI model first';
+	aiInput.placeholder = 'Optional AI: click Load AI first (~1.8 GB)';
 	aiInput.disabled = true;
 
 	aiRow.appendChild( aiPromptLabel );
@@ -458,7 +476,7 @@ function Shell( editor ) {
 	input.spellcheck = false;
 	input.autocomplete = 'off';
 	input.rows = 1;
-	input.placeholder = 'Enter JS — Shift+Enter for newline, ↑↓ for history';
+	input.placeholder = 'Type JavaScript, no AI needed (try help) — Shift+Enter newline, ↑↓ history';
 
 	inputRow.appendChild( prompt );
 	inputRow.appendChild( input );
@@ -2455,52 +2473,64 @@ function Shell( editor ) {
 				},
 
 				// ── Toon look (WebGPU MToon; see guides/TOON_LOOK.md) ─────────────────
-				//   toon(object, spec?)   make a character / prop toon: light-responsive banded
-				//                         shading + rim + outlines. spec: { shade, bands, toony,
-				//                         shift, rim:{color,power,lift,mix}, outline:{width,color,mode,mix} }
-				//                         toon(obj, { look: 'native' }) reverts. Materials only (a scene with
-				//                         no light gets a key + sky light, since toon is lit).
+				//   toon(target, spec?, opts?)   mtoon(target, spec) under its look-spec name; spec adds
+				//                         look: 'native' (or the string 'native') to revert. Takes the same
+				//                         targets as shader(). Materials only (a scene with no light gets
+				//                         a key + sky light, since toon is lit).
 				//   toonMaterial(color, spec?)   a standalone toon material for a new Mesh
-				toon: function ( object, spec = { look: 'toon' } ) {
+				toon: function ( target, spec, opts ) {
 
-					if ( ! toonLook ) throw new Error( 'toon: the toon module is still loading (or failed to load; see the console) — try again in a moment' );
-					return toonLook.applyToonLook( object, spec.look === undefined && spec.mode === undefined ? { look: 'toon', ...spec } : spec, { addLight: ( scene, light ) => editor.execute( new AddObjectCommand( editor, light ) ) } );
+					const lib = needShaderLib( 'toon' );
+					const roots = shaderTargets( target, 'toon' );
+					return lib.executeLook( editor, roots, spec, shaderOpts( roots, opts ) );
 
 				},
-				// ── Shaders on any object (see guides/SHADERS.md) ──────────────────────
+				// ── Shaders on any object (see guides/SHADERS.md; help('shader') prints the reference) ──
 				//   shader(target, shader, params?, opts?)   give every mesh under target a shader, as one undo
 				//        target   an object, an array, a $S() set, or a name / selector string
 				//        shader   an id from shaders() ('mtoon', 'standard', 'fresnel', 'hologram', ...),
 				//                 a THREE.Material, or a function (sourceMaterial) => Material
 				//        opts     { scope: 'self' (just that mesh), skipOutlines: true, filter(mesh) }
 				//        Meshes that shared a material keep sharing; baked "outline" meshes are left alone.
-				//   mtoon(target, spec?)    shader(target, 'mtoon', spec); spec as for toon() or flat (rimColor, outlineWidth, ...)
+				//        Returns { id, params, meshes, materials }; the params are checked by one
+				//        normaliser (shaders/shaderSpec.js) whichever verb you call.
+				//   mtoon(target, spec?)    shader(target, 'mtoon', spec); spec nested (rim:{color}) or flat (rimColor) or mixed
 				//   unshader(target)        back to the original materials, as one undo
 				//   shaders()               the registry: ids, groups, parameters and defaults
 				shader: function ( target, shader, params, opts ) {
 
-					if ( ! shaderLib ) throw new Error( 'shader: the shader library is still loading (or failed to load; see the console); try again in a moment' );
-					const roots = shaderTargets( target );
-					return shaderLib.executeShader( editor, roots, shader, params, shaderOpts( roots, opts ) );
+					const lib = needShaderLib( 'shader' );
+					const roots = shaderTargets( target, 'shader' );
+					return lib.executeShader( editor, roots, shader, params, shaderOpts( roots, opts ) );
 
 				},
 				mtoon: function ( target, spec, opts ) {
 
-					if ( ! shaderLib ) throw new Error( 'mtoon: the shader library is still loading (or failed to load; see the console); try again in a moment' );
-					const roots = shaderTargets( target );
-					return shaderLib.executeShader( editor, roots, 'mtoon', flattenMtoon( spec ), shaderOpts( roots, opts ) );
+					const lib = needShaderLib( 'mtoon' );
+					const roots = shaderTargets( target, 'mtoon' );
+					return lib.executeShader( editor, roots, 'mtoon', spec, shaderOpts( roots, opts ) );
 
 				},
 				unshader: function ( target, opts ) {
 
-					if ( ! shaderLib ) throw new Error( 'unshader: the shader library is still loading (or failed to load; see the console); try again in a moment' );
-					const roots = shaderTargets( target );
-					return shaderLib.executeRevert( editor, roots, shaderOpts( roots, { ...opts, skipOutlines: false } ) );
+					const lib = needShaderLib( 'unshader' );
+					const roots = shaderTargets( target, 'unshader' );
+					return lib.executeRevert( editor, roots, shaderOpts( roots, { ...opts, skipOutlines: false } ) );
 
 				},
 				shaders: function () {
 
 					return listShaders();
+
+				},
+				// help()          the main commands, grouped
+				// help('shader')  one command or shader (shader, mtoon, toon, unshader, shaders, any shader id), from the registry
+				help: function ( topic ) {
+
+					if ( topic === undefined ) { printHelp(); return; }
+					const lines = helpTopic( topic );
+					if ( ! lines ) throw new Error( helpMissing( topic ) );
+					lines.forEach( l => appendOutput( l, 'info' ) );
 
 				},
 				// ── Face refine (see guides/FACE_REFINE.md) ──────────────────────────
@@ -2734,6 +2764,10 @@ function Shell( editor ) {
 			const childrenCountAfter = editor.scene.children.length;
 			const historyCmdCountAfter = editor.history.undos.length;
 			const sceneChanged = childrenCountAfter !== childrenCountBefore || historyCmdCountAfter !== historyCmdCountBefore;
+
+			// Shell code can mutate the scene directly (scene.add, position.x = …) without any
+			// signal firing — tell the unsaved-work guard to re-check (debounced; see WorkGuard.js).
+			if ( ! quiet && editor.work ) editor.work.touch();
 
 			if ( result !== undefined && ! quiet ) {
 
@@ -3657,6 +3691,52 @@ ${ notes.join( '\n' ) }
 
 	} );
 
+	// ── First-run hint + opt-in download notice ───────────────────────────────
+	// Typing JavaScript needs nothing. Load AI is the only thing that downloads, so it says how much
+	// first and asks once per model (a model already loaded on this machine is cached and skips the question).
+
+	const isExternalModel = v => isClientModel( v ) || [ 'ollama:', 'gpt-', 'claude-' ].some( p => v.startsWith( p ) );
+
+	// "~1.8 GB download" for an on-device model (its size is in the dropdown label); "no download" for an API.
+	function modelSizeText() {
+
+		const opt = modelSelect.selectedOptions[ 0 ];
+		if ( opt && isExternalModel( opt.value ) ) return 'no download';
+		const m = opt && /([\d.]+) (GB|MB)/.exec( opt.textContent );
+		return '~' + ( m ? m[ 1 ] + ' ' + m[ 2 ] : '1.8 GB' ) + ' download';
+
+	}
+
+	function updateHint() {
+
+		const size = modelSizeText();
+		const download = size === 'no download';
+
+		if ( aiEngine.ready ) hint.textContent = 'AI helper loaded. Typing JavaScript works as before.';
+		else if ( download ) hint.textContent = 'Type JavaScript below, it works with no AI. The AI helper is optional: Load AI connects to the selected API and downloads nothing.';
+		else hint.textContent = 'Type JavaScript below, it works with no AI. The AI helper is optional: Load AI downloads a model (' + size.replace( ' download', '' ) + ' for the selected one, kept by the browser) only when you click it.';
+
+		loadBtn.title = download ? 'Optional: connect the AI helper (no download). JavaScript works without it.' : 'Optional: download an on-device AI model (' + size.replace( ' download', '' ) + ', once) so you can describe edits in words. JavaScript works without it.';
+		if ( aiInput.disabled ) aiInput.placeholder = 'Optional AI: click Load AI first (' + size.replace( ' download', '' ) + ')';
+
+	}
+
+	modelSelect.addEventListener( 'change', updateHint );
+	new MutationObserver( updateHint ).observe( modelSelect, { childList: true } );
+	new MutationObserver( updateHint ).observe( loadBtn, { childList: true } );
+	updateHint();
+
+	loadBtn.addEventListener( 'click', function ( e ) {
+
+		if ( aiEngine.ready || aiEngine.loading ) return;
+		const v = modelSelect.value;
+		if ( isExternalModel( v ) || localStorage.getItem( 'shell-ai-model' ) === v ) return;
+
+		const go = window.confirm( 'Download the AI model?\n\n' + v + '\n' + modelSizeText() + ' (one time; the browser keeps it afterwards).\n\nThe shell works without it: typing JavaScript never needs the AI.' );
+		if ( ! go ) e.stopImmediatePropagation();
+
+	}, true );
+
 	// ── Load AI button ────────────────────────────────────────────────────────
 
 	loadBtn.addEventListener( 'click', async function () {
@@ -4157,11 +4237,12 @@ ${ notes.join( '\n' ) }
 	// ── Welcome hint ──────────────────────────────────────────────────────────
 	// Keep startup quiet — the full command list is available via `help`.
 
-	appendOutput( 'Type help for the list of available commands.', 'info' );
+	appendOutput( 'JavaScript works right away: type help for the commands. The AI helper is optional and downloads nothing until you click Load AI (' + modelSizeText() + ').', 'info' );
 
 	// Prints the full command reference (invoked by the `help` command).
 	function printHelp() {
 
+		helpIndex().forEach( l => appendOutput( l, 'info' ) );
 		appendOutput( 'three.js editor shell  —  globals: editor  THREE  scene  camera  renderer  AddObjectCommand  RemoveObjectCommand  SetPositionCommand  SetRotationCommand  SetScaleCommand  SetMaterialColorCommand  SetValueCommand', 'info' );
 		appendOutput( 'scene lookup: findObject(name)  findAll(name)  findOfType(type)  findNear(mesh,radius)  summarize()', 'info' );
 		appendOutput( 'scene intelligence: findByDescription("right arm of the red person")  describeObject(o)  listCandidates(text)  resolvePartAI(text)', 'info' );

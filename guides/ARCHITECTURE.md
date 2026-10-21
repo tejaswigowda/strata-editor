@@ -83,8 +83,8 @@ docs/editor/js/
 
 The mesh-editing subsystem has its own deep-dive docs:
 [MESH_EDITING_GUIDE.md](MESH_EDITING_GUIDE.md),
-[MESH_EDITING_TECHNICAL.md](MESH_EDITING_TECHNICAL.md), and
-[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).
+[MESH_EDITING_TECHNICAL.md](MESH_EDITING_TECHNICAL.md), and the
+[status and handover notes](MESH_EDITING_GUIDE.md#status-and-handover-notes).
 
 ---
 

@@ -129,7 +129,7 @@ If something fails:
 console.log(editor.editModeController.selection.count);
 
 // Check available ops
-console.log(editor.ops.listOps().map(op => op.name));
+console.log(listOps());  // shell global: one "name(params) — description" line per op
 
 // Check edit mode state
 console.log(editor.editModeController.active);

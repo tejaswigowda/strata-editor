@@ -169,7 +169,7 @@ function SidebarShader( editor ) {
 		try {
 
 			await loadLib();
-			const n = lib.executeRevert( editor, roots(), { skipOutlines: false, filter: filterFor() } );
+			const n = lib.executeRevert( editor, roots(), { skipOutlines: false, filter: filterFor() } ).meshes;
 			say( n ? 'Reverted ' + n + ' mesh' + ( n === 1 ? '' : 'es' ) + '.' : 'Nothing to revert (no recorded original material).' );
 
 		} catch ( e ) {

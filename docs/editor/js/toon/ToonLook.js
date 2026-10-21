@@ -497,7 +497,9 @@ export function toonMaterial( color = 0x808080, opts = {} ) {
 
 	const base = new THREE.MeshStandardMaterial( { color } );
 	const m = toToon( base );
-	applyParams( m, normalizeLook( { look: 'toon', ...opts } ).spec || {} );
+	const n = normalizeLook( { look: 'toon', ...opts } );
+	if ( ! n.ok ) throw new Error( n.errors.join( '; ' ) );
+	applyParams( m, n.spec );
 	return m;
 
 }

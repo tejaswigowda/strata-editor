@@ -4,6 +4,7 @@ import { MenubarEdit } from './Menubar.Edit.js';
 import { MenubarFile } from './Menubar.File.js';
 import { MenubarView } from './Menubar.View.js';
 import { MenubarStatus } from './Menubar.Status.js';
+import { MenubarWork } from './Menubar.Work.js';
 import { showWelcomeOverlay } from './WelcomeOverlay.js';
 
 function Menubar( editor ) {
@@ -26,6 +27,7 @@ function Menubar( editor ) {
 	container.add( new MenubarView( editor ) );
 
 	container.add( new MenubarStatus( editor ) );
+	if ( editor.work ) container.add( new MenubarWork( editor ) );
 
 	return container;
 

@@ -124,18 +124,34 @@ function ViewportControls( editor ) {
 	shadingPanel.setBottom( '10px' );
 
 	const shadingSelect = new UISelect();
-	shadingSelect.setOptions( { 'solid': 'solid', 'normals': 'normals', 'wireframe': 'wireframe' } );
+	shadingSelect.setOptions( { 'solid': 'solid', 'normals': 'normals', 'wireframe': 'wireframe', 'render': 'as render' } );
 	shadingSelect.setValue( 'solid' );
+	shadingSelect.dom.title = 'as render: draw the viewport exactly as the Render tab will export it (WebGL stand-ins for MToon / shader materials, helpers hidden)';
 	shadingSelect.onChange( function () {
 
 		editor.setViewportShading( this.getValue() );
+		try { if ( this.getValue() === 'render' ) sessionStorage.setItem( 'strata/viewportAsRender', '1' ); else sessionStorage.removeItem( 'strata/viewportAsRender' ); } catch ( e ) { /* storage blocked */ }
 
 	} );
+
+	try {
+
+		if ( sessionStorage.getItem( 'strata/viewportAsRender' ) === '1' ) {
+
+			shadingSelect.setValue( 'render' );
+			editor.viewportShading = 'render'; // Viewport reads it each frame, no signal needed
+
+		}
+
+	} catch ( e ) { /* storage blocked */ }
 	shadingPanel.add( shadingSelect );
 
 	signals.editorCleared.add( function () {
 
 		editor.setViewportCamera( editor.camera.uuid );
+
+		// 'as render' is a working mode, not a per-scene view: it survives loading another scene
+		if ( shadingSelect.getValue() === 'render' ) return;
 
 		shadingSelect.setValue( 'solid' );
 		editor.setViewportShading( shadingSelect.getValue() );

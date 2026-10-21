@@ -28,6 +28,7 @@ import { hydrateMarkdownEmbed } from './MarkdownEmbed.js';
 import { hydrateCallcard } from './Callcard.js';
 import { CameraPath } from './CameraPath.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
+import { RenderPreview } from './toon/RenderPipeline.js';
 
 /**
  * Cube border helper: `node.userData.hasEdgeOutline` is a plain, serializable
@@ -1373,6 +1374,7 @@ function Viewport( editor ) {
 		switch ( viewportShading ) {
 
 			case 'solid':
+			case 'render':
 				scene.overrideMaterial = null;
 				break;
 
@@ -1580,11 +1582,67 @@ function Viewport( editor ) {
 	let startTime = 0;
 	let endTime = 0;
 
+	// "as render": the viewport shows what the Render tab will export. A WebGPU viewport draws the
+	// frame through RenderPreview (a WebGL renderer, same pipeline as the export) on a canvas stacked
+	// over its own; a WebGL viewport already goes through the stand-ins, so only the badge applies.
+	let renderPreview = null;
+	let previewBadge = null;
+
+	function asRenderBadge( on ) {
+
+		if ( on && previewBadge === null ) {
+
+			previewBadge = document.createElement( 'div' );
+			previewBadge.id = 'viewport-as-render-badge';
+			previewBadge.textContent = 'PREVIEW AS RENDER';
+			previewBadge.title = 'The viewport is drawing exactly what the Render tab exports: MToon / shader materials become WebGL stand-ins and helpers are hidden. Switch shading back to "solid" to see the real materials.';
+			previewBadge.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:20;padding:2px 10px;border-radius:10px;background:#e4572e;color:#fff;font:600 11px/18px sans-serif;letter-spacing:.06em;pointer-events:none;';
+			container.dom.appendChild( previewBadge );
+
+		}
+
+		if ( previewBadge !== null ) previewBadge.style.display = on ? '' : 'none';
+		if ( ! on && renderPreview !== null && renderPreview.domElement ) renderPreview.domElement.style.display = 'none';
+
+	}
+
+	function renderAsExport( width, height ) {
+
+		if ( renderPreview === null ) renderPreview = new RenderPreview( editor.config );
+		renderPreview.render( scene, editor.viewportCamera, width, height, window.devicePixelRatio );
+
+		const canvas = renderPreview.domElement;
+		canvas.style.display = '';
+
+		if ( canvas.parentNode !== container.dom ) {
+
+			canvas.style.position = 'absolute';
+			canvas.style.top = canvas.style.left = '0';
+			canvas.style.pointerEvents = 'none';
+			container.dom.insertBefore( canvas, container.dom.firstChild ); // positioned, so above the viewport canvas but under the controls
+
+		}
+
+	}
+
 	function render() {
 
 		if ( renderer === null || renderingPaused === true ) return;
 
 		startTime = performance.now();
+
+		const asRender = editor.viewportShading === 'render';
+		asRenderBadge( asRender );
+
+		if ( asRender && ! renderer.isWebGLRenderer ) {
+
+			renderAsExport( container.dom.offsetWidth, container.dom.offsetHeight );
+			if ( camera === editor.viewportCamera ) cameraPath.updateScales( camera ); else cameraPath.label.style.display = 'none';
+			endTime = performance.now();
+			editor.signals.sceneRendered.dispatch( endTime - startTime );
+			return;
+
+		}
 
 		renderer.setViewport( 0, 0, container.dom.offsetWidth, container.dom.offsetHeight );
 

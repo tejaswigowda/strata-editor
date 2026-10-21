@@ -7,11 +7,14 @@
 //   $S('#a')
 //     .at(1).animate(...)
 //     .at(2).animate(...);
+// A collapsed camera track (cameraKeysCode.js) is the selector line preceded by a comment line, then one
+// line per key; the block says how many lines come before the first key (`lead`).
 
 /**
  * @param {string[]} blocks   the panel's text blocks, in order (each may contain newlines)
- * @param {{ block: number, ids: string[] }[]} tracks   for each track block: its index in `blocks` and
- *        the event ids it prints, in the order printed
+ * @param {{ block: number, ids: string[], lead?: number }[]} tracks   for each track block: its index in
+ *        `blocks`, the event ids it prints in the order printed, and optionally the number of lines
+ *        printed before the first of them (default: 1 for a chain, 0 for a single event)
  * @returns {Map<string, number>} event id -> 1-based line number in the joined text
  */
 export function eventLineMap( blocks, tracks ) {
@@ -31,7 +34,8 @@ export function eventLineMap( blocks, tracks ) {
 		const start = starts[ t.block ];
 		if ( start === undefined ) continue;
 		const chained = t.ids.length > 1; // one event shares the selector's line, several get one line each after it
-		t.ids.forEach( ( id, i ) => lines.set( id, start + ( chained ? 1 + i : 0 ) ) );
+		const lead = t.lead !== undefined ? t.lead : ( chained ? 1 : 0 );
+		t.ids.forEach( ( id, i ) => lines.set( id, start + lead + i ) );
 
 	}
 	return lines;

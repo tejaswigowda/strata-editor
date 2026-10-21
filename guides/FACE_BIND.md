@@ -14,6 +14,10 @@ mocap / the `driveFace` shell global) animates the VRM's expressions.
   They are the unmodified [hinzka](https://github.com/hinzka/52blendshapes-for-VRoid-face) models, in
   [`docs/facebind/base/`](../docs/facebind/base/README.md); your own VRM (URL or file) overrides them.
 - **Page:** [`docs/facebind/`](../docs/facebind/index.html) (`/facebind/` on the site), with a 3D preview.
+- **webCLI cuts:** the page and the VRM editor were also cut out as zero-egress [webCLI](https://webcli.app) tools
+  (URL in, artifact out): [portrait-webCLI](https://github.com/tejaswigowda/portrait-webCLI) (this page; it embeds
+  look's editor build) and [look-webCLI](https://github.com/tejaswigowda/look-webCLI) (the VRM editor). This tree
+  still carries the page and `ops/vrmeditor/`, which is what this guide describes.
 - **Privacy audit:** [FACE_BIND_PRIVACY.md](FACE_BIND_PRIVACY.md).
 - **Code:** [`docs/editor/js/facebind/`](../docs/editor/js/facebind/bind.js).
 
@@ -382,4 +386,4 @@ node docs/editor/js/facebind/__tests__/page.test.mjs        # CSP, import-map ha
 The first two run synthetic checks plus, if present, the real VRoid male and the sample face GLB: 42 of 42 mapped,
 only the face and hair vertices change, everything else byte-identical, byte-stable output. The third is the static
 privacy audit. The browser checks (a photo run with every request aborted, offline binding, the preview, importing the
-bound VRM into Strata) are listed in [FACE_BIND_PRIVACY.md](FACE_BIND_PRIVACY.md#verify-it-yourself).
+bound VRM into Strata) are listed in [FACE_BIND_PRIVACY.md](FACE_BIND_PRIVACY.md#6-verify-it-yourself).

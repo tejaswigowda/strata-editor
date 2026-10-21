@@ -44,26 +44,23 @@ This document provides a technical breakdown of the mesh editing layer implement
 
 ### Operation Registry Pattern
 
-Every mesh operation is registered in a central registry (`editor.ops._ops Map`):
+Every mesh operation is described in a central registry (`mesh/ops/index.js`, a module-private `_ops` Map; there is no `editor.ops`). The registry holds metadata only (name, description, param schema, example); the implementations are plain functions imported by `Shell.js`:
 
 ```javascript
-registerOp('extrude', {
-  fn: (em, params) => {
-    // Implementation
-  },
-  description: 'Extrude selected faces along their normal',
-  params: [
-    { name: 'distance', type: 'number', default: 1 }
-  ],
-  example: 'extrude(2)'
-});
+registerOp( 'extrude', {
+  description: 'Extrude selected faces along their normal by distance units',
+  params: { 'distance?': 'number=1' },
+  example: 'extrude(em, selection, { distance: 2 })',
+} );
 ```
 
 **Key Functions:**
 - `registerOp(name, descriptor)` - Register an operation
 - `getOp(name)` - Retrieve by name
-- `listOps()` - Get all registered operations
-- `serializeForAI()` - Format for system prompt injection
+- `listOps()` - Get all registered operations (the shell global `listOps()` returns the serialized text, one line per op)
+- `serializeForAI()` - Format for system prompt injection (imported in `Shell.js` as `opsSchema`)
+
+(`extrude.js` currently registers `extrude` twice with near-identical descriptors; the Map keeps the last one, so it is harmless.)
 
 **Usage Points:**
 1. AI reads available operations from serialized registry
@@ -196,7 +193,7 @@ registerOp('extrude', {
 Added after hitting the limits of the M1-M6 op set: it has no way to express
 "push this region out/in smoothly." The workaround was hand-rolling per-vertex
 displacement directly against `em.vertices` from the shell (see
-[MESH_EDITING_GUIDE.md](./MESH_EDITING_GUIDE.md#sculpting-proportional-editing)
+[MESH_EDITING_GUIDE.md](./MESH_EDITING_GUIDE.md#m9-sculpting-proportional-editing)
 for the user-facing writeup) — mathematically fine, but with no soft-select
 falloff, a slightly-too-steep amplitude/width ratio (e.g. amplitude 0.14 over a
 sigma of 0.13) reads as visibly faceted, because linear normal interpolation
@@ -235,28 +232,28 @@ on `sculpt()` itself also helps but `soften()` is the general fix.
 
 ### Shell.js (Primary Integration)
 
-**Lines 550-660:** Operation function definitions
+**Shell scope (the globals object, plus the autocomplete word list near the top):** Operation function definitions (line numbers drift; search for `enterEditMode:` and `booleanUnion:`)
 - All operations expose via same function names
 - Functions delegate to EditModeController or operation registry
 - Selection helpers (selectTopFaces, etc.) directly manipulate Selection
 
-**Line 683-704:** execute() function
+**`execute()`:**
 - Uses Function() constructor with scope binding
 - Evaluates AI-generated code in sandbox with all globals available
 - Catches errors and provides validator feedback for retry
 
-**Line 778, 868:** AI system prompt generation
+**AI system prompt generation (the cached prompt builder):**
 - Calls `buildSystemPrompt(opsSchema())` instead of static SYSTEM_PROMPT
-- Injects serialized operation registry into GLOBALS section
+- Injects serialized operation registry into GLOBALS section (skipped when the scene already has addressable parts, to save prefill tokens; the registry is injected only when there are none)
 - AI receives current available operations on every generation
 
 ### AIPrompt.js (System Prompt)
 
-**Lines 15-217:** SYSTEM_PROMPT (static template)
-- 217 lines of rules and context
+**`SYSTEM_PROMPT`** (static template)
+- Rules and context
 - Includes placeholder for operation schemas (line marked with "EditMode:")
 
-**Lines 220+:** buildSystemPrompt(opsSchema)
+**`buildSystemPrompt(opsSchema)`**
 - Takes serialized registry as parameter
 - Inserts operation descriptions into GLOBALS section
 - Returns complete, ready-to-use system prompt
@@ -451,11 +448,9 @@ exitEditMode();
 
 ### Enable Verbose Logging
 
-```javascript
-// In Shell.js, add:
-editor.ops.DEBUG = true;
-editor.editModeController.DEBUG = true;
-```
+There is no `DEBUG` flag in `mesh/` or `mesh/ops/` today (an earlier version of this guide suggested
+`editor.ops.DEBUG` / `editor.editModeController.DEBUG`; neither is read by any code). Add your own
+`console.log` in `EditModeController.runOp()` / `exit()` while investigating.
 
 ### Inspect Edit Mode State
 
@@ -473,7 +468,7 @@ console.log({
 ### Inspect Operation Registry
 
 ```javascript
-editor.ops.listOps().forEach(op => console.log(op.name, '-', op.description));
+console.log(listOps());  // shell global: one "name(params) — description" line per op
 ```
 
 ### Inspect Selection

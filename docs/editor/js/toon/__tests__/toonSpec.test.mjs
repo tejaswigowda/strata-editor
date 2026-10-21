@@ -31,13 +31,22 @@ test( 'unknown modes and fields are refused, not ignored', () => {
 	ok( ! normalizeLook( { look: 'toon', outline: { mode: 'sideways' } } ).ok );
 
 } );
-test( 'ranges are checked', () => {
+test( 'ranges are clamped, as everywhere else', () => {
 
-	ok( ! normalizeLook( { look: 'toon', shift: 2 } ).ok );
-	ok( ! normalizeLook( { look: 'toon', toony: - 0.1 } ).ok );
-	ok( ! normalizeLook( { look: 'toon', rim: { power: 0 } } ).ok );
-	ok( ! normalizeLook( { look: 'toon', outline: { width: - 1 } } ).ok );
-	ok( normalizeLook( { look: 'toon', outline: { width: 0 } } ).ok, 'width 0 (outlines off) is valid' );
+	eq( normalizeLook( { look: 'toon', shift: 2 } ).spec.shift, 1 );
+	eq( normalizeLook( { look: 'toon', toony: - 0.1 } ).spec.toony, 0 );
+	eq( normalizeLook( { look: 'toon', rim: { power: 0 } } ).spec.rim.power, 0.1 );
+	eq( normalizeLook( { look: 'toon', outline: { width: - 1 } } ).spec.outline.width, 0 );
+	eq( normalizeLook( { look: 'toon', outline: { width: 0 } } ).spec.outline.width, 0, 'width 0 (outlines off) is valid' );
+	ok( ! normalizeLook( { look: 'toon', shift: 'high' } ).ok, 'a wrong type is still refused' );
+
+} );
+test( 'flat and nested spellings give the same spec', () => {
+
+	const nested = normalizeLook( { look: 'toon', rim: { color: '#fff', mix: 0.5 }, outline: { width: 0 } } ).spec;
+	const flat = normalizeLook( { look: 'toon', rimColor: '#ffffff', rimMix: 0.5, outlineWidth: 0 } ).spec;
+	eq( nested, flat );
+	eq( nested.rim.color, '#ffffff', 'short hex is expanded' );
 
 } );
 test( 'native is a valid spec (revert)', () => { ok( normalizeLook( { look: 'native' } ).ok ); } );

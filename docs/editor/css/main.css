@@ -996,6 +996,17 @@ body.sidebar-bottom #sidebar #shell {
 	flex: 0 0 auto;
 }
 
+/* First-run line under the header: JS works without the optional AI. */
+#shell-hint {
+	padding: 4px 10px;
+	background: #0d0d0d;
+	border-bottom: 1px solid #222;
+	color: #999;
+	font-size: 11px;
+	line-height: 1.4;
+	flex-shrink: 0;
+}
+
 #shell-ai-status {
 	color: #6a9;
 	font-size: 11px;

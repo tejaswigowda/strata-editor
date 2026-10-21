@@ -49,14 +49,38 @@ shading shift / toony, rim, outline) is read by nothing. Props the customizer ad
 Every field is optional. A field you leave out keeps the value in the VRM file; a non-VRM character gets
 defaults derived from its base colour. `rim.mix` 0 makes the rim glow regardless of light, 1 makes it lit by
 the lights. `outline.width` 0 turns outlines off. A spec with `bands` other than 2 is **refused**: MToon is a
-two-tone model.
+two-tone model. Numbers outside a range are clamped, an unknown field is refused with a "did you mean". The
+flat spellings (`rimColor`, `outlineWidth`, ...) mean the same as the nested ones and can be mixed with them;
+the schema is shared with `mtoon()` and the Shader tab ([SHADERS.md](SHADERS.md)):
+
+<!-- shader-docs:mtoon:start -->
+| Flat | Nested | Type | Range | Default | Meaning |
+|---|---|---|---|---|---|
+| `shade` |  | color | `#rrggbb` | `'#8a7fb0'` | Shade color |
+| `shift` |  | number | `-1 to 1` | `0` | Shading shift |
+| `toony` |  | number | `0 to 1` | `0.9` | Toonyness |
+| `rimColor` | `rim.color` | color | `#rrggbb` | `'#ffffff'` | Rim color |
+| `rimPower` | `rim.power` | number | `0.1 to 20` | `5` | Rim power |
+| `rimLift` | `rim.lift` | number | `0 to 1` | `0` | Rim lift |
+| `rimMix` | `rim.mix` | number | `0 to 1` | `0` | Rim lighting mix |
+| `outlineWidth` | `outline.width` | number | `0 to 0.05` | `0.002` | Outline width |
+| `outlineColor` | `outline.color` | color | `#rrggbb` | `'#1a0f14'` | Outline color |
+| `outlineMode` | `outline.mode` | choice | `world · screen · none` | `'world'` | Outline mode |
+| `outlineMix` | `outline.mix` | number | `0 to 1` | `1` | Outline lighting mix |
+
+Flat and nested spellings (and mixes) mean the same thing; give a setting once. `bands: 2` is `toony: 1`.
+Numbers outside the range are clamped, unknown keys are refused with a suggestion.
+<!-- shader-docs:mtoon:end -->
 
 Three ways in, all the same spec and the same code path:
 
 * **Customize op** (the headless `customize` stage / agent): `{ "op": "look", "mode": "toon", … }`. It is
   undoable, runs under the rig-invariant check, and re-applying it gives the same result.
 * **Shell:** `toon(character)`, `toon(character, { bands: 2, shade: '#241a44', rim: { color: '#fff' } })`,
-  `toon(character, { look: 'native' })`, and `toonMaterial(0x8b6a3e)` for a standalone mesh.
+  `toon(character, { look: 'native' })`, and `toonMaterial(0x8b6a3e)` for a standalone mesh. `toon()` takes the
+  same targets as `shader()` (an object, array, `$S()` set, name or selector), is one undo step, and is the same
+  call as `mtoon(target, spec)`; it returns `{ id, params, meshes, materials }`, and `{ look: 'native' }` returns
+  what `unshader()` does. `help('toon')` prints this from the registry.
 * **Module:** `applyToonLook(root, spec)` in `editor/js/toon/ToonLook.js`.
 
 `look: "toon"` plus a fixed spec on a fixed scene gives the same materials and the same fingerprint, so a

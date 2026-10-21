@@ -55,6 +55,8 @@ Serving docs/ at http://127.0.0.1:5500
   • OpenAI:    OPENAI_API_KEY env var (optional)
 ```
 
+`server.js` marks every static response with `Server-Timing: strata-api`. The Shell tab reads that from the page's navigation timing and only then asks `/api/config` and `/api/models`; on a static host (GitHub Pages, a plain file server) it makes no `/api` requests at all, so the console has no 404s.
+
 ## Using Local Models (Ollama)
 
 ### 1. Install and Start Ollama

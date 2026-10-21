@@ -5,6 +5,10 @@
 
 The shell is the **SHELL tab** in the right sidebar (toggle with **View, JS Shell**). It is the primary editing surface. Type JavaScript directly to edit manually. Optionally use the AI input row to generate code.
 
+**The AI is optional and nothing is downloaded until you ask for it.** Everything on this page works by typing JavaScript, with no model loaded. The first time you open the tab, a hint line says so; the JS input's placeholder reads "Type JavaScript, no AI needed (try help)". **Load AI** is the only thing that downloads: the default on-device model is about **1.8 GB** (the exact size of the selected model is shown in the hint, in the button's tooltip, and in a confirmation before the first download; the browser keeps it afterwards, so a model you have already loaded does not ask again). Choosing a cloud / Ollama API model downloads nothing.
+
+**`help()`** prints the main commands, grouped. **`help('shader')`**, `help('mtoon')`, `help('toon')`, `help('unshader')`, `help('shaders')` and `help('fresnel')` (any shader id) print one command's signature, return value and parameter table. That text is generated from the shader registry, so it cannot drift from the code ([SHADERS.md](SHADERS.md)).
+
 | Key / Input | Action |
 |-------------|--------|
 | `Enter` | Execute |
@@ -166,7 +170,7 @@ exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection,
 | Inspector (light): intensity / colour / distance / angle / penumbra / decay / ground colour | `$S(sel).intensity/.lightColor/.distance/.angle/.penumbra/.decay/.groundColor` | ✓ |
 | Inspector (camera): fov / near / far | `$S('camera').fov/.near/.far` | ✓ |
 | Add light | `addLight(type, opts)` | ✓ |
-| Properties: Shader tab (any shader on any object, incl. MToon) | `shader(target, id, params)` / `mtoon(target, spec)` / `unshader(target)` / `shaders()` (see [SHADERS.md](SHADERS.md)) | ✓ |
+| Properties: Shader tab (any shader on any object, incl. MToon) | `shader(target, id, params)` / `mtoon(target, spec)` / `toon(target, spec)` / `unshader(target)` / `shaders()`; all return `{ id, params, meshes, materials }`, take nested or flat MToon specs, and are explained by `help('shader')` (see [SHADERS.md](SHADERS.md)) | ✓ |
 | Animations tab / viewport: camera keys (add, drag a handle or aim, fov, time, delete, smooth, simplify, copy as command) | `$S('#cam').keys/.keyAt/.keyFromView/.moveKey/.deleteKey/.smooth/.simplify/.setKeys/.asCommand/.selectKey` (see [CAMERA_PATHS.md](CAMERA_PATHS.md)) | ✓ |
 | Scene: background / fog / environment | `setBackground` / `setFog` / `clearFog` / `setEnvironment` | signal (as UI) |
 | Edit: group / ungroup | `groupSelection` / `ungroupSelection` | ✓ |

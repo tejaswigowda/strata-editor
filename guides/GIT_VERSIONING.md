@@ -8,10 +8,10 @@ Open the **Git** menu to configure a repository and sync scenes. All calls use `
 | Action | Behaviour |
 |--------|-----------|
 | **Settings** | Repo URL, branch, an optional pinned commit/tag (empty = "latest", i.e. track the branch), scene-file path, access token (see below). |
-| **Load Scene** | Clears the scene and loads the repo's scene file. |
+| **Load Scene** | Clears the scene and loads the repo's scene file. Unsaved local work is held for recovery first (see [Unsaved work](#unsaved-work-is-never-silently-lost)). |
 | **Compare with Remote** | Opens the merge-conflict viewport (below). |
 | **Commit Scene** | The AI writes a diff-aware message (added/removed/modified vs last commit). Editable before commit. |
-| **Auto-load on open** | If a repo is configured, the scene loads from GitHub on page open (after local autosave, so GitHub wins). **File, New** suppresses this once. |
+| **Auto-load on open** | If a repo is configured, the scene loads from GitHub on page open (after local autosave, so GitHub wins). **File, New** suppresses this once. Unsaved local work is never overwritten silently: it is offered back after the load. |
 
 Reads (Load Scene, Compare with Remote, and the URL hash preload below) go through a CDN-first resolver, not the GitHub REST API: raw.githubusercontent.com and jsDelivr are tried first (raw first when authoring, for freshness; jsDelivr first in present/preview mode, for scale), and the API is used only as a last-resort fallback if both CDN edges fail. This sidesteps GitHub's 60 req/hr anonymous rate limit — the failure mode that used to hit shared-IP classrooms and widely-shared links hardest. It handles files over 1 MB and decodes UTF-8 natively. Commits (writes) always go through the GitHub API with a token, exactly as before — there is no CDN write path.
 
@@ -30,6 +30,28 @@ Animation values are also **quantized** on save (`docs/editor/js/SceneQuantize.j
 Nothing structural is quantized (uuids, indices, matrices, geometry, scale/rotation/morph tracks, the timeline model). On a 170-second two-performer capture, measured on the live scene: pretty-printed 349.9 MB → compact 107.0 MB (−69%) → compact + quantized 84.4 MB (−76% in total).
 
 Minifying does not change how a scene is *loaded*: the chunked reader still reassembles every part before parsing. When a load fails, the banner names the stage that failed (fetching the scene, fetching assets, applying the scene) and the console carries the stack.
+
+## Unsaved work is never silently lost
+
+Edits (made in the UI, the JS shell, the timeline, or by importing) are autosaved to the browser (IndexedDB, database `strata-work`) about a second after you stop, **keyed by where the scene came from**: repo + file + branch (+ commit pin), or one default key when no repo is set. The autosave holds everything `editor.toJSON()` round-trips, including the universal timeline and clips. Derived data is never persisted: call-card baked textures are stripped (`withoutBakedTextures` in `scene/serialize.js`, used by autosave, Save and Commit alike), and lazily derived object descriptors are ignored when deciding what changed.
+
+**Dirty indicator.** The editor keeps a cheap hash of the serialised scene (camera, orbit controls and undo history excluded; computed after the same debounce, never per frame) and compares it with the snapshot of the last load or commit. When they differ, an **Unsaved changes** chip appears in the menubar and the tab title gets a `●` prefix. Undoing back to the clean snapshot clears it. **Commit**, **File, Save** and **File, New** mark the scene clean.
+
+**One-step commit.** Click the chip. The popover shows when the work was last autosaved and, if a repo and token are set, a message field and a **Commit** button that runs the normal commit flow (no new auth). Without a repo or token it offers **Open Git tab** instead.
+
+**Recovering after a load.** Reloading the page, opening a `#repo=…` link, **Load Scene** and the boot auto-load all replace the scene with the repo's. If a dirty autosave exists for the same source (or the scene on screen was dirty), it is first moved to a held slot, the repo's scene loads, and a non-blocking prompt asks **Recover unsaved changes from 5 minutes ago?**
+
+- **Recover** puts your edits back; they read as unsaved, so you can commit them.
+- **Discard** deletes the held copy.
+- **Later** hides the prompt and keeps the copy for the next load.
+
+A held copy only disappears through an explicit Discard, or when it is identical to what just loaded. An autosave that is already clean, or already committed, is not offered. A second tab editing the same source cannot overwrite your unsaved autosave either: it is held the same way.
+
+**Leaving the page.** The browser's leave-page warning appears only while the scene is dirty.
+
+**JS shell.** Code run in the shell can change the scene without any editor signal, so the shell tells the guard after every run (`editor.work.touch()`) and such edits are picked up too.
+
+Code: `workState.js` (hash, dirty state machine, recover decision, wording; node tests in `__tests__/workState.test.mjs`), `WorkStore.js` (IndexedDB), `WorkGuard.js` (editor wiring), `Menubar.Work.js` (chip, popover, prompt).
 
 ## Merge-conflict viewport
 

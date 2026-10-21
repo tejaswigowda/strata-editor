@@ -716,8 +716,21 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 	await internalizeFromGit( json, parsed, branch, cfg.pat, 'authoring' );
 
 	onStatus( 0.85, 'Applying scene…' );
-	editor.clear();
-	await editor.fromJSON( json );
+
+	// Unsaved local work is held for recovery, never overwritten (see WorkGuard.js).
+	const held = editor.work ? await editor.work.holdForLoad() : null;
+
+	try {
+
+		editor.clear();
+		await editor.fromJSON( json );
+
+	} catch ( err ) {
+
+		if ( editor.work ) editor.work.abortLoad();
+		throw err;
+
+	}
 
 	localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 
@@ -726,6 +739,8 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 	if ( ! cfg.branch && ! commitCfg ) saveSettings( { ...loadSettings(), branch } );
 	syncHashFromSettings();
 	editor.signals.gitSettingsChanged.dispatch();
+
+	if ( editor.work ) await editor.work.loaded( held );
 
 	// Record the commit we just loaded so a later startup/compare can skip a
 	// redundant re-download while the local copy stays current. Best-effort —
@@ -790,6 +805,7 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 	setSyncedCommit( parsed, scenePath, branch, commit && commit.sha );
 	localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
 	syncHashFromSettings(); // the committed scene is now the one the hash should name
+	if ( editor.work ) await editor.work.markClean();
 
 	onProgress( 1, '✓ Committed' );
 
@@ -967,6 +983,17 @@ function hashFromSettings( cfg, existingHash ) {
 
 }
 
+/** The scene source the Git tab currently points at (null when no repo is set) — keys the unsaved-work autosave. */
+export function currentGitSource() {
+
+	const cfg = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl || '' );
+	if ( ! parsed ) return null;
+
+	return { repo: `${ parsed.owner }/${ parsed.repo }`, branch: cfg.branch || '', file: cfg.scenePath || 'scene.json', commit: cfg.commit || '', hasToken: !! cfg.pat };
+
+}
+
 /** A link that opens the scene the given Git settings describe, or '' if no valid repo is set. */
 export function shareUrlFromSettings( cfg ) {
 
@@ -1135,6 +1162,7 @@ export async function loadSceneFromHash( editor ) {
 
 		stage = 'applying the scene';
 		setLoadProgress( 0.85, 'Applying scene…' );
+		const held = editor.work ? await editor.work.holdForLoad() : null; // unsaved local work is held for recovery, never overwritten
 		editor.clear();
 		await editor.fromJSON( json );
 
@@ -1162,6 +1190,8 @@ export async function loadSceneFromHash( editor ) {
 		editor.signals.gitSettingsChanged.dispatch();
 		appliedHash = window.location.hash; // this hash is what was just loaded
 
+		if ( editor.work ) await editor.work.loaded( held );
+
 		// Deliberately NOT recording a synced-commit SHA here (unlike
 		// loadSceneFromRepo) — that bookkeeping exists purely so a LATER
 		// autoLoadFromGit can skip a redundant re-download, and doing it would
@@ -1179,6 +1209,7 @@ export async function loadSceneFromHash( editor ) {
 
 	} catch ( err ) {
 
+		if ( editor.work ) editor.work.abortLoad();
 		hideLoadOverlay();
 		banner.remove();
 

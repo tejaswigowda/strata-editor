@@ -54,6 +54,14 @@ cam.moveKey(1, { fov: 26 });
 cam.asCommand();   // copy this to keep or share the move
 ```
 
+## In the code panel
+
+The Animations tab's code panel shows a camera with 12 or more keys (a baked move, say a key every 0.1 s) as **one `setKeys` statement, one key per line**, under a comment line, rather than a `.at(..).animate(..)` line per key. It is exactly the command `.asCommand()` returns, so you can edit a key's `t`, `pos`, `lookAt` or `fov` in place, and **Save** rebuilds the track from it (`smooth` restores Smooth path). The timeline and the code stay linked per key: select a key (its block, or its handle in the viewport) and the panel highlights its line; put the caret on a key's line and that key is selected.
+
+The panel collapses a track only when the statement reproduces the move: keys keep their pose, easing and arrival time exactly, and a leg's start may move by up to 1.5 ms (`setKeys` always starts a leg 1 ms after the previous key arrives). A track that would not round-trip, such as one with a per-key easing or a non-key event on it, keeps its `.at(..)` chain. The logic is in `intelligence/cameraKeysCode.js`, tested in `intelligence/__tests__/cameraKeysCode.test.mjs` (including the save round trip).
+
+Dense tracks are also easier to handle on the timeline: **ctrl / cmd + wheel** zooms the time axis until each key is its own block (blocks are never drawn thinner than 10 px, and drag to retime snaps to the playhead and to other events), and **shift-click** selects a run of keys along the track to move or delete them together, as one undo step. See [Animation](ANIMATION.md).
+
 ## Limits
 
 * Handles edit position and aim point. Field of view and timing are edited in the key panel, by dragging the block in the timeline, or with `moveKey` from the shell.

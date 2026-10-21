@@ -26,9 +26,11 @@ Select an object (any object with a mesh under it) and open **Shader** next to M
 
 ```js
 shaders()                                   // the registry: ids, groups, parameters, defaults
+help('shader')                              // the verbs and parameters below, printed from the registry
 shader('Chair', 'fresnel', { color: '#ff3399' })
 shader($S('.prop'), 'standard', { roughness: 0.2, metalness: 1 })
-mtoon('LittlestTokyo.glb', { outline: { width: 0 } })
+mtoon('LittlestTokyo.glb', { toony: 0.9, outline: { width: 0 } })   // nested ...
+mtoon('LittlestTokyo.glb', { toony: 0.9, outlineWidth: 0 })         // ... or flat: the same call
 shader(mesh, 'phong', {}, { scope: 'self' })      // just that mesh, not its children
 shader(group, m => new THREE.MeshBasicMaterial({ color: 0xff00ff }))   // a function
 shader(group, myMaterial)                         // a material you built (shared by every mesh)
@@ -36,31 +38,73 @@ unshader('Chair')                                 // back to the original materi
 ```
 
 * **target**: an object, an array, a `$S()` set, or a string. A string is tried as an object name first
-  (`'LittlestTokyo.glb'` is not a selector), then as a selector.
+  (`'LittlestTokyo.glb'` is not a selector), then as a selector. Every verb takes the same targets
+  (`toon()` too).
 * **shader**: an id from `shaders()` (aliases: `toon`/`vrm`/`anime` = `mtoon`, `unlit` = `basic`, `rim` =
   `fresnel`, `holo` = `hologram`, `wire` = `wireframe`), a `THREE.Material`, or a function
-  `(sourceMaterial) => Material`, called once per source material.
-* **params**: validated against the shader's schema. Unknown keys, wrong types and bad colors throw before
-  anything changes; numbers are clamped to their range.
+  `(sourceMaterial) => Material`, called once per source material. An unknown id throws with a "did you mean".
+* **params**: validated against the shader's schema, before anything changes. Unknown keys throw (with a
+  "did you mean" and the legal spellings), wrong types and bad colors throw, numbers are clamped to their
+  range. A material or function takes no params.
 * **opts**: `{ scope: 'self', skipOutlines: true, filter(mesh) }`.
-* `mtoon(target, spec)` is `shader(target, 'mtoon', spec)`. `spec` can be the nested form `toon()` takes
-  (`{ shade, rim: { color }, outline: { width } }`) or flat (`rimColor`, `outlineWidth`).
-* The return value is `{ id, params, meshes, materials }`.
+* **MToon's spec has one shape wherever you give it.** `mtoon(target, spec)` is `shader(target, 'mtoon', spec)`
+  and `toon(target, spec)` is the same call (plus `{ look: 'native' }` to revert); the Shader tab and the
+  `look` spec (see [TOON_LOOK.md](TOON_LOOK.md)) validate through the same function. The spec can be nested
+  (`{ shade, rim: { color }, outline: { width } }`), flat (`rimColor`, `outlineWidth`) or a mix of both; it is
+  normalised to the flat form in one place. A setting given twice with different values is refused.
+* **Return value**: every verb that changes materials returns `{ id, params, meshes, materials }`: the shader
+  id, the params as applied (flat, clamped; for `mtoon` only what you gave), how many meshes and how many
+  distinct materials. `unshader()` and `toon(t, { look: 'native' })` return `{ id: 'original', params: {},
+  meshes, materials }` with `meshes` = how many were restored. `shaders()` returns the registry array.
+* **Errors** always start with the shader id or verb and say what to give instead, e.g.
+  `mtoon: unknown param "outlin" — did you mean "outline"? Legal: flat: shade, shift, … ; nested: rim:{ … }, outline:{ … }`.
+  A failed call changes nothing.
+* **help**: `help()` lists the main commands, `help('shader')`, `help('mtoon')`, `help('toon')`,
+  `help('unshader')`, `help('shaders')` or `help('fresnel')` (any shader id or alias) print the signature and the
+  parameter table, generated from the registry.
+
+### MToon parameters
+
+<!-- shader-docs:mtoon:start -->
+| Flat | Nested | Type | Range | Default | Meaning |
+|---|---|---|---|---|---|
+| `shade` |  | color | `#rrggbb` | `'#8a7fb0'` | Shade color |
+| `shift` |  | number | `-1 to 1` | `0` | Shading shift |
+| `toony` |  | number | `0 to 1` | `0.9` | Toonyness |
+| `rimColor` | `rim.color` | color | `#rrggbb` | `'#ffffff'` | Rim color |
+| `rimPower` | `rim.power` | number | `0.1 to 20` | `5` | Rim power |
+| `rimLift` | `rim.lift` | number | `0 to 1` | `0` | Rim lift |
+| `rimMix` | `rim.mix` | number | `0 to 1` | `0` | Rim lighting mix |
+| `outlineWidth` | `outline.width` | number | `0 to 0.05` | `0.002` | Outline width |
+| `outlineColor` | `outline.color` | color | `#rrggbb` | `'#1a0f14'` | Outline color |
+| `outlineMode` | `outline.mode` | choice | `world · screen · none` | `'world'` | Outline mode |
+| `outlineMix` | `outline.mix` | number | `0 to 1` | `1` | Outline lighting mix |
+
+Flat and nested spellings (and mixes) mean the same thing; give a setting once. `bands: 2` is `toony: 1`.
+Numbers outside the range are clamped, unknown keys are refused with a suggestion.
+<!-- shader-docs:mtoon:end -->
 
 ## Built-in shaders
 
-| Id | Group | Notes |
-|---|---|---|
-| `mtoon` | Toon | VRM MToon: banded shade, shift / toony, rim light, inverted-hull outlines. Params: `shade`, `shift`, `toony`, `rimColor`, `rimPower`, `rimMix`, `outlineWidth`, `outlineColor`. Only the params you give are applied. |
-| `toon-basic` | Toon | Stock stepped `MeshToonMaterial`. |
-| `standard`, `physical` | Surface | `roughness`, `metalness` (`physical` adds `clearcoat`). |
-| `lambert`, `phong`, `basic` | Surface | `phong`: `shininess`, `specular`. `basic` is unlit. |
-| `gradient` | Stylized | Two colors along a world axis (`axis`, `from`, `to`), multiplied into the texture. |
-| `fresnel` | Effects | Keeps the lit look and adds an edge glow (`color`, `power`, `intensity`). |
-| `hologram` | Effects | Translucent additive scan lines (`color`, `speed`, `lines`, `opacity`). |
-| `normal`, `wireframe` | Debug | |
+<!-- shader-docs:builtin:start -->
+| Id | Group | Aliases | What it is | Parameters |
+|---|---|---|---|---|
+| `mtoon` | Toon | `toon`, `vrm`, `anime` | Light-responsive banded toon with rim light and inverted-hull outlines, the VRM MToon model. | `shade` (default '#8a7fb0'), `shift` (-1 to 1, default 0), `toony` (0 to 1, default 0.9), `rimColor` (default '#ffffff'), `rimPower` (0.1 to 20, default 5), `rimLift` (0 to 1, default 0), `rimMix` (0 to 1, default 0), `outlineWidth` (0 to 0.05, default 0.002), `outlineColor` (default '#1a0f14'), `outlineMode` (world/screen/none, default 'world'), `outlineMix` (0 to 1, default 1) |
+| `toon-basic` | Toon | `three-toon`, `cel` | The stock MeshToonMaterial: a plain stepped ramp, no outline. | none |
+| `standard` | Surface | `pbr` | Physically based metal / roughness. | `roughness` (0 to 1, default 0.8), `metalness` (0 to 1, default 0) |
+| `physical` | Surface |  | Standard plus clearcoat. | `roughness` (0 to 1, default 0.5), `metalness` (0 to 1, default 0), `clearcoat` (0 to 1, default 1) |
+| `lambert` | Surface |  | Cheap diffuse-only lighting. | none |
+| `phong` | Surface |  | Classic specular highlight. | `shininess` (0 to 200, default 30), `specular` (default '#111111') |
+| `basic` | Surface | `unlit`, `flat` | Ignores lights; shows the color and texture as they are. | none |
+| `gradient` | Stylized |  | A two-color blend along one world axis, multiplied into the original texture. | `colorA` (default '#ff7a59'), `colorB` (default '#3b2a7a'), `axis` (x/y/z, default 'y'), `from` (-1000 to 1000, default 0), `to` (-1000 to 1000, default 1) |
+| `fresnel` | Effects | `rim` | Keeps the original lit look and adds a glowing edge that brightens at grazing angles. | `color` (default '#4fd2ff'), `power` (0.1 to 10, default 3), `intensity` (0 to 10, default 1.5) |
+| `hologram` | Effects | `holo` | Translucent additive scan lines with a fresnel edge. | `color` (default '#44ddff'), `speed` (-10 to 10, default 1), `lines` (1 to 400, default 60), `opacity` (0 to 1, default 0.7) |
+| `normal` | Debug | `normals` | Shows the surface normal as color. | none |
+| `wireframe` | Debug | `wire` | Unlit wireframe. | `color` (default '#00ff88') |
+<!-- shader-docs:builtin:end -->
 
-Colors and maps carry over from the source material where the new type has them.
+Colors and maps carry over from the source material where the new type has them. Colors are `'#rrggbb'`,
+`'#rgb'` or a `0xrrggbb` number.
 
 ## Behavior to know
 
@@ -92,13 +136,16 @@ Colors and maps carry over from the source material where the new type has them.
 
 Add a definition to `SHADERS` in `docs/editor/js/shaders/shaderSpec.js` (id, label, group, `persist`, params),
 then a builder in `ShaderLibrary.js`: a stock type goes in `NATIVE`, a TSL preset in `TSL` (`(sourceMaterial,
-params) => NodeMaterial`). The Shader tab, `shaders()`, validation and save / load pick it up from there.
+params) => NodeMaterial`). The Shader tab, `shaders()`, `help()`, validation and save / load pick it up from
+there. Then run `node scripts/gen-shader-docs.mjs` to refresh the tables in this guide.
 
 ## Verifying
 
-`node docs/editor/js/shaders/__tests__/shaderSpec.test.mjs` covers the registry and validation. The material
-side is checked in the editor: apply each shader to a sphere, undo and redo, then reload the page and confirm
-the node shaders come back.
+`node docs/editor/js/shaders/__tests__/shaderSpec.test.mjs` covers the registry and the one normaliser
+(nested / flat / mixed, typos, ranges). `node docs/editor/js/shaders/__tests__/shaderDocs.test.mjs` fails when
+the tables above, or the `help()` text, are out of date with the registry; `node scripts/gen-shader-docs.mjs
+--check` does the same from the command line. The material side is checked in the editor: apply each shader to
+a sphere, undo and redo, then reload the page and confirm the node shaders come back.
 
 ---
 

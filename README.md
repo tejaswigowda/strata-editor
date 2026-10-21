@@ -49,30 +49,67 @@ Beyond device-local (browser WebLLM), Strata runs org-sovereign: a local model o
 
 ## Documentation
 
-This README is the landing page and the thesis. The reference material is split into focused guides:
+This README is the landing page and the thesis. The reference material is split into focused guides, each listed once below. For **what exists and what is still open**, start with the Roadmap (the single status source, first row of the last group below); the Audit is a dated, code-level snapshot behind it. Link health: `node scripts/check-doc-links.mjs`.
+
+### Start here: the language and the shell
 
 | Guide | What's inside |
 |-------|---------------|
 | [**The language**](guides/LANGUAGE.md) | Selector grammar, name normalization, the closed op set, the `$S()` query/traversal API, class & id authoring, lasso, and host-enforced guards. |
-| [**`$S` / 3DOM library**](https://github.com/tejaswigowda/3dom) | The standalone "jQuery for 3D" extraction: selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, and its own undo. Versioned surface in [SPEC.md](https://github.com/tejaswigowda/3dom/blob/main/SPEC.md). Now its own package/repo: `@tejaswigowda/3dom` (https://github.com/tejaswigowda/3dom), consumed here from a pinned CDN build. Docs: http://tejaswigowda.com/3dom/, [live demo](http://tejaswigowda.com/3dom/examples/bare.html). |
-| [**Animation**](guides/ANIMATION.md) | The scene-wide universal timeline, authored with the ONE grammar: jQuery `.animate()` over CSS 3D transforms + `.at()` absolute placement, CSS easing, look-at baking, entrance/exit/attention recipes, lifecycle. Imported glTF clips (mocap) are driven by the same grammar: `$S('#mocap').at(5).play('mocap', { loop: true })`, plus `pause`/`stop`/`seek`. A keyframe P/S/R editor in the Animations tab keys poses at the playhead (rotation deferrable to look-at). The Render tab exports the timeline as video through a single camera or a multi-shot camera sequence with cut/fade transitions, with an optional subtitle track (hard-burned or exported as a sidecar `.srt`). |
-| [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription`. No vision model. |
-| [**Character customizer**](guides/CUSTOMIZER.md) | Look / wardrobe / expression for any rigged GLB — a Customize tab and a headless `customize` stage over one rig-safe op set (tint, recolor, hide, ARKit blendshapes, tags, bone-attached props). The rig-safety invariant (no vertex, weight or skeleton edits) is enforced and verified by fingerprint; added deformable clothing is an explicit skinning rig step. A customizer, not a generator. |
-| [**Camera paths**](guides/CAMERA_PATHS.md) | Edit a shot camera's move by hand: capture a key from the Edit Camera view, see and drag the path, key handles and aim points in the viewport, play it as one smooth curve, or simplify a dense baked move to a few keys. The same edits are shell verbs (`keyAt`, `moveKey`, `asCommand`, ...) on the same track. |
-| [**Shaders**](guides/SHADERS.md) | Put any shader on any object: MToon (the VRM anime toon) on a prop or a whole glTF, stock material types, TSL presets (fresnel rim glow, hologram, gradient), or your own material or function. A Shader tab in the Properties panel and the shell `shader()` / `mtoon()` / `unshader()` / `shaders()`; one undo step; materials shared in the source stay shared; baked outline meshes are left alone; saved scenes round-trip. |
-| [**Toon look**](guides/TOON_LOOK.md) | Anime render mode for the WebGPU renderer: light-responsive banded toon + rim + outlines, honouring a VRM file's own MToon parameters (three-vrm `MToonNodeMaterial`), applied to the character and its props under the same lights. A `look` spec, a customize op and a shell `toon()`; material-only, so rig-safe. |
-| [**Face refine**](guides/FACE_REFINE.md) | Shell `refineFace(vrm)`: nudges a VRoid-style VRM face toward the proportions and skin tone of a real-face reference GLB (eye size/spacing, mouth width, nose/lip/chin depth) without touching any existing blendshape. Reversible, strength-controlled. |
-| [**The authored face**](guides/FACE_TRACK.md) | Expression and gaze as keyed channels on the universal timeline: continuous morph weights with easing and duration per key (presets expand to explicit keys, never opaque state), named-target gaze (eyes lead, head lags, anatomical clamp), and a seeded deterministic idle layer (blink, breath, micro-noise) under the authored keys. Shell (`$S('#f1').face.keyAt`, `.gaze`, `.face.idle`) and GUI (Customize tab *Key at playhead*, timeline blocks, code panel) drive the same keys, one undo stack. Includes the facebind morph-delta gate result. |
-| [**Face bind**](guides/FACE_BIND.md) | `/facebind/`: start from a photo; an on-device face model (vendored MediaPipe, no CDN) makes a face-blendshape GLB and binds its morphs to a base VRM's expression blendshapes and optionally matches the photo's face shape (eyes, mouth, jaw, profile) and skin / hair / eye / brow color. Optional hair texture (wavy, curly, coily) and cut presets re-lay the VRM's own hair cards; length and fringe are lifted, not folded; a mustache or beard seen in the photo is painted into the face texture. Skeleton, weights and blendshapes untouched (byte-audited), no mesh graft; photo and face GLB local-only with GET-only zero egress. Approximate, not a likeness guarantee; 3D preview in the page (toon-lit by default, posed with the photo's expression) with an Edit button that opens the bound VRM in the embedded VRMEditorTools (texture and material editing, MIT, no network); shell `driveFace()`. Privacy audit: [FACE_BIND_PRIVACY.md](guides/FACE_BIND_PRIVACY.md). |
+| [**`$S()` method reference**](guides/API.md) | The chainable `$S()` methods by group: edit ops, looping / entrance / exit / attention animations, utility methods and live transform accessors, with examples. |
+| [**`$S` / 3DOM library**](https://github.com/tejaswigowda/3dom) | The standalone "jQuery for 3D" extraction (selectors + auto-labelling + op-chaining over any three.js scene, three as a peer dependency, its own undo). Versioned surface in [SPEC.md](https://github.com/tejaswigowda/3dom/blob/main/SPEC.md); package `@tejaswigowda/3dom`, consumed here from a pinned CDN build. Docs: http://tejaswigowda.com/3dom/, [live demo](http://tejaswigowda.com/3dom/examples/bare.html). |
 | [**JS Shell**](guides/JS_SHELL.md) | The primary editing surface: Monaco integration, core globals, object lookup, spatial helpers, modeling ops, Edit Mode, and `fetchAPI`. |
+| [**Lasso tool**](guides/LASSO_TOOL_GUIDE.md) | Freehand-boundary selection in the viewport: how it draws, samples objects and multi-selects. |
+| [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription`. No vision model. |
+
+### Animation, camera and render
+
+| Guide | What's inside |
+|-------|---------------|
+| [**Animation**](guides/ANIMATION.md) | The scene-wide universal timeline: `.animate()` / `.at()` sugar over CSS-style 3D transforms, keyframe editor and code panel in the Animations tab, recipes, imported glTF clips (`play` / `pause` / `stop` / `seek`), and the Render tab's video export. |
+| [**Camera paths**](guides/CAMERA_PATHS.md) | Edit a shot camera's move by hand: capture keys from the Edit Camera view, drag the path and aim points, play a smooth curve, simplify a baked move; the same edits are shell verbs. |
+| [**Shaders**](guides/SHADERS.md) | Any shader on any object: MToon, stock material types, TSL presets or your own material, from the Shader tab or the shell `shader()` / `mtoon()` / `unshader()` / `shaders()`. |
+| [**Toon look**](guides/TOON_LOOK.md) | Anime render mode for the WebGPU renderer: light-responsive banded toon, rim and outlines, honouring a VRM's own MToon parameters; `look` spec, customize op, shell `toon()`. |
+| [**The call card**](guides/CALLCARD.md) | The `/about` page and the living `/about/callcard` end-card every short can embed: living vs. baked, the trust boundary, and how to add it to a scene. |
+
+### Characters and faces
+
+| Guide | What's inside |
+|-------|---------------|
+| [**Character customizer**](guides/CUSTOMIZER.md) | Look / wardrobe / expression for any rigged GLB over one rig-safe op set (tint, recolor, hide, ARKit blendshapes, tags, bone-attached props); rig safety verified by fingerprint. |
+| [**The authored face**](guides/FACE_TRACK.md) | Expression and gaze as keyed timeline channels with a seeded idle layer; shell and GUI drive the same keys. Includes the facebind morph-delta gate result (open). |
+| [**Face refine**](guides/FACE_REFINE.md) | Shell `refineFace(vrm)`: nudge a VRoid-style VRM face toward a real-face reference's proportions and skin tone without touching any blendshape; reversible. |
+| [**Face bind**](guides/FACE_BIND.md) | Photo to bound VRM, on device: an on-device face model makes a face-blendshape GLB and binds it to a base VRM's expressions, optionally matching face shape, colours and hair; shell `driveFace()`. Cut out as the zero-egress webCLI tools [portrait-webCLI](https://github.com/tejaswigowda/portrait-webCLI) and [look-webCLI](https://github.com/tejaswigowda/look-webCLI) ([webcli.app](https://webcli.app) contract). |
+| [**Face bind privacy audit**](guides/FACE_BIND_PRIVACY.md) | The zero-egress audit of the face-bind page: data inventory, every network request, controls, threat model, and how to verify it yourself. |
+
+### Mesh editing
+
+| Guide | What's inside |
+|-------|---------------|
+| [**Mesh editing: quick start**](guides/MESH_EDITING_QUICK_START.md) | One-page, copy-paste reference for Edit Mode, booleans and sculpting. |
+| [**Mesh editing: guide**](guides/MESH_EDITING_GUIDE.md) | The full user guide: operations, selection, shortcuts, recipes, plus the milestone status, limits and developer checklist (the former implementation status). |
+| [**Mesh editing: technical**](guides/MESH_EDITING_TECHNICAL.md) | Architecture, half-edge structures, op registry, integration points, performance and debugging. |
+| [**Implementation status (pointer)**](guides/IMPLEMENTATION_STATUS.md) | Short redirect: the old mesh-editing handover now lives in the mesh editing guide. |
+
+### AI, git and architecture
+
+| Guide | What's inside |
+|-------|---------------|
 | [**Optional AI acceleration**](guides/AI_GUIDE.md) | The agentic loop, AI scene context, model configuration (WebLLM / external / client-side), cost tracking, and the generation eval. |
-| [**Architecture**](guides/ARCHITECTURE.md) | Two-form scene representation (git-diffable round-trip) and the full module map. |
-| [**Git versioning**](guides/GIT_VERSIONING.md) | Repository sync, the merge-conflict viewport, access-token scope, and `#repo=owner/repo&file=path` URL hash preload. |
-| [**The call card**](guides/CALLCARD.md) | The `/about` page and the living `/about/callcard` end-card every short can embed — living vs. baked, the trust boundary, and how to add it to a scene. |
-| [**Roadmap**](guides/ROADMAP.md) | Done / next / then. |
-| [**Tutorial & demo policy**](guides/TUTORIAL_POLICY.md) | Name and frame public tutorials after the capability, never the character; named or protected IP is a private-lane capability test only; the publication gate every tutorial generator must call. |
 | [**Dev Mode API**](guides/DEV_MODE_API.md) | Server-side external-model proxy and its security model. |
-| Mesh editing | [Quick start](guides/MESH_EDITING_QUICK_START.md) · [Guide](guides/MESH_EDITING_GUIDE.md) · [Technical](guides/MESH_EDITING_TECHNICAL.md) · [Status](guides/IMPLEMENTATION_STATUS.md) |
+| [**Git versioning**](guides/GIT_VERSIONING.md) | Repository sync, the merge-conflict viewport, access-token scope, and `#repo=owner/repo&file=path` URL hash preload. |
+| [**Architecture**](guides/ARCHITECTURE.md) | Two-form scene representation (git-diffable round-trip) and the full module map. |
+| [**Strata as a universal substrate**](guides/STRATA_UNIVERSAL_SUBSTRATE.md) | The thesis in one artifact: a labeled GLB feeding linear renderers and interactive runtimes, with an honesty ledger of what is verified vs. expected. |
+
+### Status, audits and policy
+
+| Guide | What's inside |
+|-------|---------------|
+| [**Roadmap**](guides/ROADMAP.md) | The one status source: what is done, what is in progress this week, next / then, and the known gaps. |
+| [**Audit**](guides/AUDIT.md) | A dated point-in-time, code-level audit (implemented ≠ validated), re-verified 2026-10-21. |
+| [**Selector engine audit**](guides/SELECTOR_ENGINE_AUDIT.md) | CSS-compliance audit of the selector engine (2026-09-09): implemented and missing features, type / id / class matching, combinators, traversal order and edge cases. |
+| [**Keyboard shortcuts audit**](guides/KEYBOARD_SHORTCUTS_AUDIT.md) | Map of every keyboard listener and shortcut handler, with where text-input focus checks belong. |
+| [**Tutorial & demo policy**](guides/TUTORIAL_POLICY.md) | Name and frame public tutorials after the capability, never the character; named or protected IP is a private-lane test only; the publication gate every tutorial generator must call. |
 
 ---
 
@@ -225,8 +262,10 @@ Selector-over-graph exists (three-query-selector, querySelectorAll). NL-to-3D ex
 
 ## Roadmap (at a glance)
 
-- **Done.** Deterministic language (selectors + ops), `$S()` API, universal timeline (absolute keyframes + `.animate()`/`.at()` sugar), git versioning, scene intelligence, constrained decoding, **eval matrix** (1.5B is viable floor), multi-op segmentation, bulk property ops, standalone [3DOM library](https://github.com/tejaswigowda/3dom) (Strata consumes via host adapter), host-side selector + op-type resolution (parity by construction, 22/22 fixture agreement, clean Haiku re-run).
+- **Done.** Deterministic language (selectors + ops), `$S()` API, universal timeline (absolute keyframes + `.animate()`/`.at()` sugar), git versioning, scene intelligence, constrained decoding, **eval matrix** (1.5B is viable floor), multi-op segmentation, bulk property ops, standalone [3DOM library](https://github.com/tejaswigowda/3dom) (Strata consumes via host adapter), host-side selector + op-type resolution (parity by construction, 22/22 fixture agreement, clean Haiku re-run), plus the shader / toon-look system, camera paths, the character customizer and face tools (face bind, authored face, face refine), and the timeline key popover with key↔code sync.
+- **In progress this week (not done).** Autosave + dirty indicator + recover-on-load; a "Preview as render" viewport mode and a render-vs-viewport comparison script; timeline zoom / pan / snapping / multi-select / collapsed baked camera tracks / render performance; shell API normalisation (nested + flat shader params, `help()` from the schema, generated shader docs).
+- **Known open items.** The face-bind morph-delta gate (`morphDeltas.test.mjs` prints `GATE FAIL`); the Render tab draws MToon through WebGL stand-ins (close to, not identical to, the viewport); the eval matrix ran but is not exhaustive. Listed in [ROADMAP.md → Known gaps](guides/ROADMAP.md#known-gaps).
 - **Next.** Resolve the 2 residual multi-op segmentation-ambiguity fixtures. Alien-syntax ablation.
 - **Then.** glTF label export, optional vision layer, renderer-agnostic pipeline, capture integration, sovereignty dashboard.
 
-Full details in [ROADMAP.md](guides/ROADMAP.md).
+Full details in [ROADMAP.md](guides/ROADMAP.md); the dated code audit is [AUDIT.md](guides/AUDIT.md).
