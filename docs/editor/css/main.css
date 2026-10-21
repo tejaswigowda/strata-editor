@@ -698,7 +698,16 @@ body.play-bar-open #play-bar {
 	display: flex;
 }
 
-body.play-bar-open #menubar,
+/* The play bar covers the menubar's menus but not the Strata logo, which stays put:
+   the bar's controls start to the right of it. */
+body.play-bar-open #menubar > :not(#menubar-logo) {
+	display: none !important;
+}
+
+body.play-bar-open #play-bar {
+	padding-left: 88px;
+}
+
 body.present-mode #play-bar {
 	display: none !important;
 }
