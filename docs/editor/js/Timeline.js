@@ -281,15 +281,20 @@ function Timeline( editor ) {
 
 		monacoCodeEditor.onDidFocusEditorText( function () { for ( const fn of codeFocusHandlers ) fn(); } );
 		monacoCodeEditor.onDidBlurEditorText( function () { for ( const fn of codeBlurHandlers ) fn(); } );
+		monacoCodeEditor.onDidChangeCursorPosition( selectKeyAtCursor );
 		revealKeyInCode( true ); // a key was selected before the editor finished loading
 
 	} );
 
-	// ── Key -> code: the line that describes the selected key ─────────────────
-	// refreshCode() rebuilds `eventLines` (event id -> 1-based line). Selecting a key, in the
-	// timeline or on the camera path in the viewport, scrolls the code panel to that line and
-	// highlights it. The editor is never focused (focus would pause playback and open Save/Cancel).
+	// ── Key <-> code: the selection and the line being edited stay in sync ────
+	// refreshCode() rebuilds `eventLines` (event id -> 1-based line) and `lineEvents` (the reverse).
+	// Key -> code: selecting a key, in the timeline or on the camera path in the viewport, scrolls the
+	// code panel to that line and highlights it; the editor is not focused (focus would pause playback
+	// and open Save/Cancel).
+	// Code -> key: moving the caret onto a key's line (click or arrow keys, not typing) selects that key,
+	// which opens its options and brings its block into the track list. The code panel is left where it is.
 	let eventLines = new Map();
+	let lineEvents = new Map();
 	let keyLineDecoration = [];
 	let revealedKey = null; // what the panel is currently showing, so a re-render does not yank the scroll back
 
@@ -301,6 +306,13 @@ function Timeline( editor ) {
 
 	}
 
+	function decorateKeyLine( line ) {
+
+		if ( ! monacoCodeEditor ) return;
+		keyLineDecoration = monacoCodeEditor.deltaDecorations( keyLineDecoration, line ? [ { range: new monaco.Range( line, 1, line, 1 ), options: { isWholeLine: true, className: 'timeline-key-line' } } ] : [] );
+
+	}
+
 	function revealKeyInCode( force ) {
 
 		if ( ! monacoCodeEditor ) return;
@@ -308,7 +320,7 @@ function Timeline( editor ) {
 		const line = id ? eventLines.get( id ) : null;
 		if ( ! line ) {
 
-			if ( keyLineDecoration.length ) keyLineDecoration = monacoCodeEditor.deltaDecorations( keyLineDecoration, [] );
+			if ( keyLineDecoration.length ) decorateKeyLine( 0 );
 			revealedKey = null;
 			return;
 
@@ -316,7 +328,32 @@ function Timeline( editor ) {
 		if ( ! force && revealedKey === id ) return;
 		revealedKey = id;
 		monacoCodeEditor.revealLineInCenter( line );
-		keyLineDecoration = monacoCodeEditor.deltaDecorations( keyLineDecoration, [ { range: new monaco.Range( line, 1, line, 1 ), options: { isWholeLine: true, className: 'timeline-key-line' } } ] );
+		decorateKeyLine( line );
+
+	}
+
+	function selectKeyAtCursor( e ) {
+
+		// only a deliberate move by the user in the focused editor: not the reset a re-render does (setValue), nor typing
+		if ( e.reason !== monaco.editor.CursorChangeReason.Explicit || ! monacoCodeEditor.hasTextFocus() ) return;
+		const id = lineEvents.get( e.position.lineNumber );
+		if ( ! id || id === selectedEventId ) return;
+
+		revealedKey = id; // the editor is already on it: do not scroll it away from the caret
+		decorateKeyLine( e.position.lineNumber );
+		selectedEventId = id;
+		render();
+
+		// bring the key's block into the track list (the options are level with it)
+		const block = keyBlockEl();
+		if ( block ) {
+
+			const br = block.getBoundingClientRect(), rr = rows.getBoundingClientRect();
+			if ( br.top < rr.top ) rows.scrollTop -= rr.top - br.top;
+			else if ( br.bottom > rr.bottom ) rows.scrollTop += br.bottom - rr.bottom;
+			positionKeyPopover();
+
+		}
 
 	}
 
@@ -787,11 +824,12 @@ function Timeline( editor ) {
 	container.dom.insertBefore( keyPanel, codePanelWrap );
 
 	// the floating shell (appended to <body> so no scrolling parent clips it) with its arrow toward the key
+	const KEY_POP_W = 272, KEY_POP_GAP = 12;
 	const keyPop = document.createElement( 'div' );
 	keyPop.className = 'timeline-key-popover';
 	keyPop.setAttribute( 'role', 'dialog' );
 	keyPop.setAttribute( 'aria-label', 'Keyframe options' );
-	keyPop.style.cssText = 'position:fixed;z-index:10000;display:none;box-sizing:border-box;width:272px;border:1px solid #888;border-radius:6px;box-shadow:0 6px 22px rgba(0,0,0,0.45);';
+	keyPop.style.cssText = `position:fixed;z-index:10000;display:none;box-sizing:border-box;width:${ KEY_POP_W }px;border:1px solid #888;border-radius:6px;box-shadow:0 6px 22px rgba(0,0,0,0.45);`;
 	const keyArrow = document.createElement( 'div' );
 	keyArrow.style.cssText = 'position:absolute;width:10px;height:10px;transform:rotate(45deg);box-sizing:border-box;pointer-events:none;';
 	keyPop.appendChild( keyArrow );
@@ -1106,7 +1144,7 @@ function Timeline( editor ) {
 		splineBox.checked = !! ( t && t.spline );
 		splineBox.disabled = ! t;
 		simplifyButton.dom.style.display = n >= 4 ? '' : 'none';
-		deleteKeyButton.dom.style.display = ! keyPopoverOn && editor.cameraPath && editor.cameraPath.selectedKeyId ? '' : 'none';
+		deleteKeyButton.dom.style.display = ! selectedAnimateEvent() && editor.cameraPath && editor.cameraPath.selectedKeyId ? '' : 'none';
 		camInfo.textContent = n ? n + ' key' + ( n === 1 ? '' : 's' ) + ( t.spline ? ', smooth path' : ', straight legs' ) + '. Click a handle in the Edit Camera view to move it.' : 'No keys yet: orbit the Edit Camera to frame the shot, set the playhead, and press + Key from view.';
 
 	}
@@ -1186,14 +1224,28 @@ function Timeline( editor ) {
 
 	}
 
+	// The popover never sits over the animation editor (timeline, code panel): it floats beside the whole
+	// tab, in the viewport next to the sidebar, level with the selected block. When the window leaves no
+	// room on either side (a narrow window, the sidebar docked at the bottom) the options stay inline.
+	function floatSide() {
+
+		if ( container.dom.offsetParent === null ) return null;
+		const rc = container.dom.getBoundingClientRect(), need = KEY_POP_W + KEY_POP_GAP + 8;
+		if ( rc.left >= need ) return 'left';
+		if ( window.innerWidth - rc.right >= need ) return 'right';
+		return null;
+
+	}
+
 	function positionKeyPopover() {
 
 		if ( ! keyPopoverOn ) return;
 		const block = keyBlockEl();
 		const vis = rows.getBoundingClientRect();
 		const r = block ? block.getBoundingClientRect() : null;
+		const side = floatSide();
 		// hidden with its tab, or while the key's block is scrolled out of the track list
-		if ( container.dom.offsetParent === null || ! r || r.bottom < vis.top || r.top > vis.bottom || r.right < vis.left || r.left > vis.right ) {
+		if ( ! side || ! r || r.bottom < vis.top || r.top > vis.bottom ) {
 
 			keyPop.style.visibility = 'hidden';
 			return;
@@ -1202,11 +1254,10 @@ function Timeline( editor ) {
 
 		keyPop.style.display = 'block';
 		keyPop.style.visibility = 'visible';
-		const pw = keyPop.offsetWidth, ph = keyPop.offsetHeight, gap = 10, m = 8;
-		const cx = Math.min( Math.max( r.left + r.width / 2, vis.left ), vis.right ); // the arrow points at the block, kept inside the lane view
-		const left = Math.min( Math.max( m, cx - pw / 2 ), Math.max( m, window.innerWidth - pw - m ) );
-		const below = r.bottom + gap + ph <= window.innerHeight - m || r.top - gap - ph < m; // above only when below does not fit and above does
-		const top = below ? Math.min( r.bottom + gap, Math.max( m, window.innerHeight - ph - m ) ) : r.top - gap - ph;
+		const rc = container.dom.getBoundingClientRect(), pw = keyPop.offsetWidth, ph = keyPop.offsetHeight, m = 8;
+		const cy = Math.min( Math.max( r.top + r.height / 2, vis.top ), vis.bottom ); // level with the block, kept inside the track list
+		const left = side === 'left' ? rc.left - KEY_POP_GAP - pw : rc.right + KEY_POP_GAP;
+		const top = Math.min( Math.max( m, cy - 28 ), Math.max( m, window.innerHeight - ph - m ) ); // fully inside the window
 		keyPop.style.left = Math.round( left ) + 'px';
 		keyPop.style.top = Math.round( top ) + 'px';
 
@@ -1214,10 +1265,11 @@ function Timeline( editor ) {
 		keyPop.style.background = colors.bg;
 		keyPop.style.color = colors.color;
 		keyArrow.style.background = colors.bg;
-		keyArrow.style.left = Math.round( Math.min( Math.max( 12, cx - left - 5 ), pw - 22 ) ) + 'px';
 		keyArrow.style.border = '1px solid #888';
-		if ( below ) { keyArrow.style.top = '-6px'; keyArrow.style.bottom = ''; keyArrow.style.borderRightColor = keyArrow.style.borderBottomColor = 'transparent'; }
-		else { keyArrow.style.bottom = '-6px'; keyArrow.style.top = ''; keyArrow.style.borderLeftColor = keyArrow.style.borderTopColor = 'transparent'; }
+		keyArrow.style.top = Math.round( Math.min( Math.max( 12, cy - top - 5 ), ph - 22 ) ) + 'px'; // points at the block's row
+		keyArrow.style.bottom = '';
+		if ( side === 'left' ) { keyArrow.style.right = '-6px'; keyArrow.style.left = ''; keyArrow.style.borderLeftColor = keyArrow.style.borderBottomColor = 'transparent'; }
+		else { keyArrow.style.left = '-6px'; keyArrow.style.right = ''; keyArrow.style.borderRightColor = keyArrow.style.borderTopColor = 'transparent'; }
 
 	}
 
@@ -1229,8 +1281,6 @@ function Timeline( editor ) {
 		if ( on ) {
 
 			keyPanel.style.cssText = KEY_POPOVER_CSS;
-			keyActions.insertBefore( keyButton.dom, keyDeleteButton.dom ); // + Key @ playhead, then Delete key
-			keyActions.style.display = 'flex';
 			keyPop.appendChild( keyPanel );
 			keyPop.style.display = 'block';
 			positionKeyPopover();
@@ -1238,10 +1288,25 @@ function Timeline( editor ) {
 		} else {
 
 			keyPop.style.display = 'none';
-			keyActions.style.display = 'none';
-			keyHeader.insertBefore( keyButton.dom, keyCodeLink );
 			keyPanel.style.cssText = KEY_INLINE_CSS;
 			container.dom.insertBefore( keyPanel, codePanelWrap );
+
+		}
+
+	}
+
+	// With a key selected the add / delete buttons sit in a row under the title; otherwise the add button is in the header
+	function layoutKeyButtons( keySelected ) {
+
+		if ( keySelected ) {
+
+			keyActions.insertBefore( keyButton.dom, keyDeleteButton.dom );
+			keyActions.style.display = 'flex';
+
+		} else {
+
+			keyActions.style.display = 'none';
+			keyHeader.insertBefore( keyButton.dom, keyCodeLink );
 
 		}
 
@@ -1262,7 +1327,8 @@ function Timeline( editor ) {
 
 		if ( found ) {
 
-			setKeyPopover( true );
+			setKeyPopover( floatSide() !== null ); // beside the tab when there is room, inline otherwise
+			layoutKeyButtons( true );
 			keyPanel.style.display = 'flex';
 			keyButton.dom.style.display = '';
 			keyTitle.textContent = `Key @ ${ found.event.at.toFixed( 2 ) }s \u00b7 ${ found.track.target }`;
@@ -1272,6 +1338,7 @@ function Timeline( editor ) {
 		} else {
 
 			setKeyPopover( false );
+			layoutKeyButtons( false );
 
 			if ( object && object !== editor.scene ) {
 
@@ -1918,6 +1985,7 @@ function Timeline( editor ) {
 		}
 
 		eventLines = eventLineMap( blocks, trackBlocks );
+		lineEvents = new Map( [ ...eventLines ].map( ( [ id, line ] ) => [ line, id ] ) );
 		codePanel.value = blocks.join( '\n\n' );
 		revealKeyInCode( true ); // setValue() resets the scroll: put the selected key's line back in view
 
@@ -2036,10 +2104,11 @@ function Timeline( editor ) {
 
 	}, true );
 
-	// Esc closes the key popover (it deselects the key).
+	// Esc closes the key options (it deselects the key). Not while the code editor has the focus: there Esc belongs to Monaco.
 	document.addEventListener( 'keydown', function ( e ) {
 
-		if ( e.key !== 'Escape' || ! keyPopoverOn || container.dom.offsetParent === null ) return;
+		if ( e.key !== 'Escape' || ! selectedEventId || container.dom.offsetParent === null ) return;
+		if ( monacoCodeEditor && monacoCodeEditor.hasTextFocus() ) return;
 		closeKeyPopover();
 
 	} );
