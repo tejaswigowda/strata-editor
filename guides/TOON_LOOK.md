@@ -98,7 +98,8 @@ render is reproducible from the scene spec alone.
 ## Route decision: three-vrm MToon (B1)
 
 `@pixiv/three-vrm` v3.5.5 ships `MToonNodeMaterial`, an MToon implementation built on three.js's node / TSL
-system, and it targets `WebGPURenderer`, so no custom shader was needed and no WebGL fallback is shipped.
+system, and it targets `WebGPURenderer`, so no custom shader was needed. The Render tab, which draws with WebGL,
+uses a patched `MeshToonMaterial` stand-in instead (see Limits).
 The file's VRM version is 0.x (UniVRM 0.79, `_MToonVersion` 37), so the compat plugin that rewrites it to
 MToon 1.0 is part of the load path. Only the **materials** packages are vendored
 (`examples/jsm/libs/three-vrm/`, MIT); the humanoid, spring-bone and expression runtime is deliberately
@@ -119,7 +120,14 @@ tool that doesn't know Strata sees plain lit PBR.
 
 ## Limits
 
-* **Not shared with other renderers.** The look lives in Strata's WebGPU path.
+* **Not shared with other renderers.** The look lives in Strata's WebGPU path. The Render tab (video and
+  snapshots) and browsers without WebGPU draw it through a stand-in: a `MeshToonMaterial` patched to MToon's
+  lighting maths (shade / shift / toony, parametric rim) with the outline hull, and a linear blend like the
+  viewport's. That brings a render to within about 1.6 / 255 of the viewport on the cafe scene (11.9 before),
+  but it is not pixel-identical: matcap, the rim-multiply / outline-width / shading-shift textures and UV
+  animation are not carried over, a shade texture shares the albedo's UV, and anti-aliased edges and the rim
+  differ by a few levels. Use the viewport shading "as render" to see exactly what will export, and
+  `node scripts/compare-render.mjs` to measure it ([SHADERS.md](SHADERS.md)).
 * **`native` on a VRM restores the unlit materials** it had at import. In a scene saved with toon on and
   reloaded, `native` gives the lit-PBR twin instead (the unlit original isn't stored).
 * MToon extras not wired to the spec: matcap, UV animation, and per-pixel shading-shift texture are read

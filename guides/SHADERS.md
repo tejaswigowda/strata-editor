@@ -115,7 +115,9 @@ Colors and maps carry over from the source material where the new type has them.
 * **MToon is lit.** A scene with no light gets a key and a sky light, once; undo removes them with the shader.
 * **Switching shaders** removes MToon's outline passes before the new material goes on.
 * **Undo / redo** restore the materials, MToon's extra draw groups, and any lights it added.
-* **The Render tab (video and snapshots) draws with WebGL**, which cannot run node materials. While rendering, MToon is swapped for a stepped `MeshToonMaterial` with the same color, maps and transparency (outline passes are left out), and other node shaders for the material they replaced. The scene gets its real materials back afterwards, so the viewport is unchanged. Rendered toon shading is therefore close to, not identical to, the viewport's MToon.
+* **The Render tab (video and snapshots) draws with WebGL**, which cannot run node materials, so while rendering MToon is swapped for a stand-in and the scene gets its real materials back afterwards (saving is never affected). The stand-in is a `MeshToonMaterial` whose lighting is patched to MToon's own maths (shade colour mixed with the lit colour by the shading shift and toony, the parametric rim, per-light and unlit), with the same colour, maps, emissive and transparency, plus the outline hull, extruded in the vertex shader in world or screen mode. The final blend is done like the viewport's: into a linear half-float buffer, then tone mapping and the sRGB transfer (`LinearOutput` in `toon/RenderPipeline.js`); without that, additive glows and semi-transparent materials come out dimmer. Other node shaders (the TSL presets) are still exported as the material they replaced, so their effect is not in the render.
+* **What still differs between the viewport and a render.** Not carried onto the stand-in: matcap, the rim-multiply, outline-width and shading-shift textures, and UV animation. A shade-multiply texture is sampled with the albedo's UV. The TSL presets (above). 360 renders (cube capture) skip the linear blend. The Render tab frames with its own output aspect, the viewport with its window. Anti-aliased edges and the rim differ by a few levels. On the cafe scene (`node scripts/compare-render.mjs`, 750x664, Neutral tone mapping, 304 MToon materials) the mean absolute error between viewport and export went from 11.9 to 1.6 (of 255), and the share of pixels more than 16 levels apart from 38.6% to 5.0%.
+* **Viewport shading "as render"** (the shading dropdown, bottom right, next to solid / normals / wireframe) draws the viewport exactly as the Render tab will export it: the same WebGL pipeline, stand-ins and outlines, on a canvas over the viewport (a badge says so). Helpers and gizmos are hidden while it is on, selection still works. It never touches the saved materials, it survives loading another scene, and it is kept for the browser session. Use it to judge a look before rendering; switch back to "solid" to edit with the real materials.
 * **Browsers without WebGPU (most Android phones) fall back to the classic WebGL renderer**, which cannot compile node materials, so the viewport draws MToon through the same stand-ins, swapped in around each frame and cached. Before this, loading a scene with MToon on such a browser failed with `Cannot read properties of undefined (reading 'replace')`. The scene itself keeps its real MToon materials, so saving is unaffected.
 * **Revert** restores the original material of each mesh. After a reload, the original of a stock-type shader
   (`standard`, `phong`, ...) is not stored, so Revert only reaches TSL / MToon shaders there.
@@ -146,6 +148,13 @@ there. Then run `node scripts/gen-shader-docs.mjs` to refresh the tables in this
 the tables above, or the `help()` text, are out of date with the registry; `node scripts/gen-shader-docs.mjs
 --check` does the same from the command line. The material side is checked in the editor: apply each shader to
 a sphere, undo and redo, then reload the page and confirm the node shaders come back.
+
+`node docs/editor/js/toon/__tests__/pixelMetrics.test.mjs` covers the image-difference maths. To measure the
+viewport against the Render tab, run `node scripts/compare-render.mjs [sceneUrl] [--times 1,60,120]` with the dev
+server up (and Playwright installed, or `PLAYWRIGHT_MODULE` pointing at it): for each playhead time it captures
+the viewport, the viewport in "as render" and a Render-tab snapshot, prints the mean absolute error (per channel),
+the RMSE and the share of pixels over a threshold for each pair, and writes side-by-side PNGs to a temp dir.
+"as render" against the snapshot should read 0.00; viewport against the snapshot is the real gap.
 
 ---
 

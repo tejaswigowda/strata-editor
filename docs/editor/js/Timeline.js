@@ -123,6 +123,23 @@ function Timeline( editor ) {
 	deleteButton.onClick( function () { deleteSelected(); } );
 	bar.appendChild( deleteButton.dom );
 
+	// Always in view, right of the delete button: a key at the playhead on the selected key's track, or on the selected object
+	const addKeyButton = new UIButton( '+ Key' );
+	addKeyButton.dom.title = 'Add a key at the playhead (on the selected key\'s track, or on the selected object): it arrives at the playhead';
+	addKeyButton.dom.setAttribute( 'aria-label', 'Add a key at the playhead' );
+	addKeyButton.dom.style.cssText = 'height:28px;padding:0 12px;border-radius:14px;display:flex;align-items:center;justify-content:center;white-space:nowrap;';
+	addKeyButton.dom.disabled = true;
+	addKeyButton.onClick( function () { addKeyAtPlayhead(); } );
+	bar.appendChild( addKeyButton.dom );
+
+	// enabled when there is somewhere to put the key: a selected key (its track) or a selected object
+	function updateAddKeyState() {
+
+		const object = editor.selected;
+		addKeyButton.dom.disabled = ! ( selectedAnimateEvent() || ( object && object !== editor.scene ) );
+
+	}
+
 	// Zoom the time axis: ctrl / cmd + wheel zooms around the cursor, these buttons around the playhead
 	const zoomGroup = document.createElement( 'div' );
 	zoomGroup.style.cssText = 'display:flex;align-items:center;gap:3px;margin-left:auto;';
@@ -1370,7 +1387,7 @@ function Timeline( editor ) {
 
 		if ( keySelected ) {
 
-			keyActions.insertBefore( keyButton.dom, keyDeleteButton.dom );
+			keyActions.appendChild( keyButton.dom ); // Delete key, then + Key @ playhead to its right
 			keyActions.style.display = 'flex';
 
 		} else {
@@ -1430,6 +1447,7 @@ function Timeline( editor ) {
 		keyCodeLink.textContent = line ? 'line ' + line : '';
 		revealKeyInCode( false );
 		positionKeyPopover(); // the title and the fields above may have changed its height
+		updateAddKeyState();
 
 	}
 
@@ -2196,6 +2214,7 @@ function Timeline( editor ) {
 		const dur = totalDuration();
 		timeReadout.textContent = `${ formatClockMs( playhead ) } / ${ formatClockMs( dur ) }`;
 		deleteButton.dom.disabled = selectedIds.size === 0;
+		updateAddKeyState();
 		signals.timelinePlayheadUpdated.dispatch( { time: playhead, duration: dur, playing } );
 
 	}

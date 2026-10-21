@@ -1582,9 +1582,9 @@ function Viewport( editor ) {
 	let startTime = 0;
 	let endTime = 0;
 
-	// "as render": the viewport shows what the Render tab will export. A WebGPU viewport draws the
-	// frame through RenderPreview (a WebGL renderer, same pipeline as the export) on a canvas stacked
-	// over its own; a WebGL viewport already goes through the stand-ins, so only the badge applies.
+	// "as render": the viewport shows what the Render tab will export. The frame is drawn through
+	// RenderPreview (a WebGL renderer running the export's own pipeline) on a canvas stacked over the
+	// viewport's, whichever backend the viewport itself uses.
 	let renderPreview = null;
 	let previewBadge = null;
 
@@ -1634,7 +1634,7 @@ function Viewport( editor ) {
 		const asRender = editor.viewportShading === 'render';
 		asRenderBadge( asRender );
 
-		if ( asRender && ! renderer.isWebGLRenderer ) {
+		if ( asRender ) {
 
 			renderAsExport( container.dom.offsetWidth, container.dom.offsetHeight );
 			if ( camera === editor.viewportCamera ) cameraPath.updateScales( camera ); else cameraPath.label.style.display = 'none';

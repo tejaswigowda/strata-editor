@@ -4,7 +4,7 @@ import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITex
 import { holdTimelineAt, getImportedClips } from './intelligence/timelineController.js';
 import { findCallcards, refreshCallcard } from './Callcard.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
-import { RENDER_CLEAR_COLOR, applyRenderSettings, webglEnvironment } from './toon/RenderPipeline.js';
+import { RENDER_CLEAR_COLOR, LinearOutput, applyRenderSettings, webglEnvironment } from './toon/RenderPipeline.js';
 import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesEqual, newCueId } from './intelligence/subtitles.js';
 import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 
@@ -969,6 +969,8 @@ function SidebarRender( editor ) {
 
 			const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true } );
 			restores.push( () => renderer.dispose() );
+			const output = new LinearOutput( renderer );
+			restores.push( () => output.dispose() );
 			renderer.setPixelRatio( 1 );
 			renderer.setSize( width, height, false );
 			renderer.setClearColor( transparent ? 0x000000 : RENDER_CLEAR_COLOR, transparent ? 0 : 1 );
@@ -1013,7 +1015,7 @@ function SidebarRender( editor ) {
 
 			}
 
-			renderer.render( scene, camera );
+			output.render( scene, camera );
 
 			return glCanvas;
 
@@ -1270,6 +1272,7 @@ function SidebarRender( editor ) {
 		previewWrap.style.display = '';
 
 		const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, preserveDrawingBuffer: true } );
+		const output = new LinearOutput( renderer );
 		renderer.setPixelRatio( 1 );
 		renderer.setSize( width, height, false );
 		renderer.setClearColor( RENDER_CLEAR_COLOR ); // scene.background overrides
@@ -1527,7 +1530,7 @@ function SidebarRender( editor ) {
 			for ( const s of shots ) warmCameras.add( cameraOf( s ) );
 			for ( const cam of warmCameras ) {
 
-				if ( is360 ) renderEquirectFace( cam ); else renderer.render( scene, cam );
+				if ( is360 ) renderEquirectFace( cam ); else output.render( scene, cam );
 
 			}
 
@@ -1567,17 +1570,17 @@ function SidebarRender( editor ) {
 				if ( state.from ) {
 
 					// crossfade: previous shot full, current shot on top with alpha
-					if ( is360 ) renderEquirectFace( state.from ); else renderer.render( scene, state.from );
+					if ( is360 ) renderEquirectFace( state.from ); else output.render( scene, state.from );
 					ctx.globalAlpha = 1;
 					ctx.drawImage( glCanvas, 0, 0 );
-					if ( is360 ) renderEquirectFace( state.camera ); else renderer.render( scene, state.camera );
+					if ( is360 ) renderEquirectFace( state.camera ); else output.render( scene, state.camera );
 					ctx.globalAlpha = state.blend;
 					ctx.drawImage( glCanvas, 0, 0 );
 					ctx.globalAlpha = 1;
 
 				} else {
 
-					if ( is360 ) renderEquirectFace( state.camera ); else renderer.render( scene, state.camera );
+					if ( is360 ) renderEquirectFace( state.camera ); else output.render( scene, state.camera );
 					ctx.drawImage( glCanvas, 0, 0 );
 
 				}
@@ -1638,6 +1641,7 @@ function SidebarRender( editor ) {
 
 			}
 
+			output.dispose();
 			renderer.dispose();
 
 			rendering = false;

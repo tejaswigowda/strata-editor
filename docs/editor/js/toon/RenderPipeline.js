@@ -2,8 +2,9 @@
 // The Render tab (video + stills) draws through an offscreen WebGLRenderer, while the viewport is
 // usually WebGPU. These are the pieces of that WebGL pipeline, shared so the viewport's
 // "as render" preview (RenderPreview below) is built from the very same code as the export:
-// project renderer settings, a WebGL-owned PMREM environment, the Uint16 skinIndex fix, and the
-// node-material stand-ins (WebGLFallback.js).
+// project renderer settings, a WebGL-owned PMREM environment, the Uint16 skinIndex fix, the
+// node-material stand-ins (WebGLFallback.js) and LinearOutput, which blends in linear light the way
+// WebGPURenderer does.
 
 import * as THREE from 'three';
 import { ColorEnvironment } from 'three/addons/environments/ColorEnvironment.js';
@@ -39,6 +40,89 @@ export function webglEnvironment( renderer, scene ) {
 		: new RoomEnvironment();
 	const target = pmrem.fromScene( envScene, 0.04 );
 	return { texture: target.texture, dispose() { target.dispose(); pmrem.dispose(); } };
+
+}
+
+const OUTPUT_VERTEX = 'varying vec2 vUv;\nvoid main() {\n\tvUv = uv;\n\tgl_Position = vec4( position.xy, 0.0, 1.0 );\n}';
+
+// toneMapped ShaderMaterial: three adds the renderer's tone mapping and output colour space, so this
+// is the same final transform WebGPURenderer applies. Premultiplied alpha is undone around it so a
+// transparent export keeps correct edges.
+const OUTPUT_FRAGMENT = `uniform sampler2D tDiffuse;
+varying vec2 vUv;
+void main() {
+	vec4 c = texture2D( tDiffuse, vUv );
+	c.rgb = c.a > 0.0 ? c.rgb / c.a : c.rgb;
+	gl_FragColor = c;
+	#include <tonemapping_fragment>
+	#include <colorspace_fragment>
+	gl_FragColor.rgb *= gl_FragColor.a;
+}`;
+
+/**
+ * WebGPURenderer draws into a half-float buffer in linear light (alpha blending, additive glows and
+ * MSAA resolve all happen there) and applies tone mapping and the sRGB transfer in a final pass. A
+ * plain WebGLRenderer encodes each fragment to sRGB BEFORE blending, which leaves additive decals and
+ * semi-transparent materials visibly dimmer. render() does the WebGPU order on a WebGLRenderer; when
+ * the GPU cannot render to half float it falls back to a direct render.
+ */
+export class LinearOutput {
+
+	constructor( renderer ) {
+
+		this.renderer = renderer;
+		this.supported = renderer.extensions.has( 'EXT_color_buffer_float' ) || renderer.extensions.has( 'EXT_color_buffer_half_float' );
+		this.target = null;
+		this.size = new THREE.Vector2();
+		this.camera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0, 1 );
+		this.scene = null;
+		this.material = null;
+
+	}
+
+	render( scene, camera ) {
+
+		const renderer = this.renderer;
+		if ( ! this.supported ) return renderer.render( scene, camera );
+
+		renderer.getDrawingBufferSize( this.size );
+
+		if ( ! this.target ) {
+
+			this.target = new THREE.WebGLRenderTarget( this.size.x, this.size.y, { type: THREE.HalfFloatType, samples: 4, colorSpace: THREE.LinearSRGBColorSpace } );
+			this.material = new THREE.ShaderMaterial( { uniforms: { tDiffuse: { value: null } }, vertexShader: OUTPUT_VERTEX, fragmentShader: OUTPUT_FRAGMENT, depthTest: false, depthWrite: false } );
+			this.scene = new THREE.Scene();
+			this.scene.add( new THREE.Mesh( new THREE.PlaneGeometry( 2, 2 ), this.material ) );
+
+		}
+
+		if ( this.target.width !== this.size.x || this.target.height !== this.size.y ) this.target.setSize( this.size.x, this.size.y );
+
+		renderer.setRenderTarget( this.target );
+		renderer.render( scene, camera );
+		renderer.setRenderTarget( null );
+
+		this.material.uniforms.tDiffuse.value = this.target.texture;
+		const autoClear = renderer.autoClear;
+		renderer.autoClear = false;
+		renderer.render( this.scene, this.camera );
+		renderer.autoClear = autoClear;
+
+	}
+
+	dispose() {
+
+		if ( this.target ) {
+
+			this.target.dispose();
+			this.material.dispose();
+			this.scene.children[ 0 ].geometry.dispose();
+
+		}
+
+		this.target = null;
+
+	}
 
 }
 
@@ -78,6 +162,7 @@ export class RenderPreview {
 
 		this.config = config;
 		this.renderer = null;
+		this.output = null;
 		this.envKey = null;
 		this.env = null;
 		this.shadowMaps = new WeakMap(); // light -> the shadow map this renderer allocated for it
@@ -96,6 +181,7 @@ export class RenderPreview {
 
 			this.renderer = new THREE.WebGLRenderer( { antialias: true } );
 			this.renderer.setClearColor( RENDER_CLEAR_COLOR );
+			this.output = new LinearOutput( this.renderer );
 
 		}
 
@@ -146,7 +232,7 @@ export class RenderPreview {
 
 		try {
 
-			renderer.render( scene, camera );
+			this.output.render( scene, camera );
 
 		} finally {
 
@@ -165,6 +251,8 @@ export class RenderPreview {
 		if ( this.env ) this.env.dispose();
 		this.env = null;
 		this.envKey = null;
+		if ( this.output ) this.output.dispose();
+		this.output = null;
 		if ( this.renderer ) this.renderer.dispose();
 		this.renderer = null;
 
