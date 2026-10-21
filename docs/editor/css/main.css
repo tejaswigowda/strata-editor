@@ -587,6 +587,17 @@ body.present-mode #present-bar {
 	cursor: default;
 }
 
+/* The line of the selected key in the Animations tab's code panel (Monaco decoration) */
+.timeline-key-line {
+	background: rgba(255, 87, 34, 0.30);
+	outline: 1px solid rgba(255, 87, 34, 0.75);
+	outline-offset: -1px;
+}
+
+/* The key popover is a child of <body>, so it gets the editor's control look from here */
+.timeline-key-popover button { font-family: inherit; }
+.timeline-key-popover button:hover { filter: brightness(1.2); }
+
 /* ── Subtitle preview — the cue active at the playhead, over the viewport ─── */
 #subtitle-preview {
 	position: absolute;

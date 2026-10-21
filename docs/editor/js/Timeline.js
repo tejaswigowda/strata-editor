@@ -17,6 +17,7 @@ import { normalizeClassName } from './intelligence/classDerive.js';
 import * as selectorEngine from './intelligence/selectorEngine.js';
 import { OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import { formatClockMs } from './TimeFormat.js';
+import { eventLineMap } from './intelligence/timelineCodeMap.js';
 import * as recipes from './intelligence/animationRecipes.js';
 import { applyContentAt } from './intelligence/textChange.js';
 
@@ -280,8 +281,44 @@ function Timeline( editor ) {
 
 		monacoCodeEditor.onDidFocusEditorText( function () { for ( const fn of codeFocusHandlers ) fn(); } );
 		monacoCodeEditor.onDidBlurEditorText( function () { for ( const fn of codeBlurHandlers ) fn(); } );
+		revealKeyInCode( true ); // a key was selected before the editor finished loading
 
 	} );
+
+	// ── Key -> code: the line that describes the selected key ─────────────────
+	// refreshCode() rebuilds `eventLines` (event id -> 1-based line). Selecting a key, in the
+	// timeline or on the camera path in the viewport, scrolls the code panel to that line and
+	// highlights it. The editor is never focused (focus would pause playback and open Save/Cancel).
+	let eventLines = new Map();
+	let keyLineDecoration = [];
+	let revealedKey = null; // what the panel is currently showing, so a re-render does not yank the scroll back
+
+	function keyIdForCode() {
+
+		if ( selectedEventId ) return selectedEventId;
+		const path = editor.cameraPath;
+		return path && path.selectedKeyId ? path.selectedKeyId : null;
+
+	}
+
+	function revealKeyInCode( force ) {
+
+		if ( ! monacoCodeEditor ) return;
+		const id = keyIdForCode();
+		const line = id ? eventLines.get( id ) : null;
+		if ( ! line ) {
+
+			if ( keyLineDecoration.length ) keyLineDecoration = monacoCodeEditor.deltaDecorations( keyLineDecoration, [] );
+			revealedKey = null;
+			return;
+
+		}
+		if ( ! force && revealedKey === id ) return;
+		revealedKey = id;
+		monacoCodeEditor.revealLineInCenter( line );
+		keyLineDecoration = monacoCodeEditor.deltaDecorations( keyLineDecoration, [ { range: new monaco.Range( line, 1, line, 1 ), options: { isWholeLine: true, className: 'timeline-key-line' } } ] );
+
+	}
 
 	const codePanel = {
 		get value() { return monacoCodeEditor ? monacoCodeEditor.getValue() : pendingCode; },
@@ -740,16 +777,33 @@ function Timeline( editor ) {
 	// selected — the fields edit THAT event (undoable via SetTimelineCommand).
 	// Rotation defers to Look At (checkbox + target dropdown): the aim bakes to
 	// rotation keyframes at compile time; the quaternion never surfaces.
+	// With a key (an `animate` block) selected, this panel is a popover anchored to that block in the
+	// timeline; with only an object selected there is no key to anchor to, so it stays inline above the
+	// code panel (it stages the pose for "+ Key @ playhead").
+	const KEY_INLINE_CSS = 'padding:6px 10px;border-top:1px solid #ccc;display:none;flex-direction:column;gap:4px;font-size:11px;flex-shrink:0;';
+	const KEY_POPOVER_CSS = 'padding:8px 10px;display:flex;flex-direction:column;gap:4px;font-size:11px;max-height:min(66vh,520px);overflow:auto;';
 	const keyPanel = document.createElement( 'div' );
-	keyPanel.style.cssText = 'padding:6px 10px;border-top:1px solid #ccc;display:none;flex-direction:column;gap:4px;font-size:11px;flex-shrink:0;';
+	keyPanel.style.cssText = KEY_INLINE_CSS;
 	container.dom.insertBefore( keyPanel, codePanelWrap );
+
+	// the floating shell (appended to <body> so no scrolling parent clips it) with its arrow toward the key
+	const keyPop = document.createElement( 'div' );
+	keyPop.className = 'timeline-key-popover';
+	keyPop.setAttribute( 'role', 'dialog' );
+	keyPop.setAttribute( 'aria-label', 'Keyframe options' );
+	keyPop.style.cssText = 'position:fixed;z-index:10000;display:none;box-sizing:border-box;width:272px;border:1px solid #888;border-radius:6px;box-shadow:0 6px 22px rgba(0,0,0,0.45);';
+	const keyArrow = document.createElement( 'div' );
+	keyArrow.style.cssText = 'position:absolute;width:10px;height:10px;transform:rotate(45deg);box-sizing:border-box;pointer-events:none;';
+	keyPop.appendChild( keyArrow );
+	document.body.appendChild( keyPop );
+	let keyPopoverOn = false;
 
 	const keyHeader = document.createElement( 'div' );
 	keyHeader.style.cssText = 'display:flex;align-items:center;gap:8px;';
 	keyPanel.appendChild( keyHeader );
 
 	const keyTitle = document.createElement( 'span' );
-	keyTitle.style.cssText = 'font-weight:bold;';
+	keyTitle.style.cssText = 'font-weight:bold;flex:1;min-width:0;overflow-wrap:anywhere;';
 	keyHeader.appendChild( keyTitle );
 
 	const keyButton = new UIButton( '+ Key @ playhead' );
@@ -758,9 +812,35 @@ function Timeline( editor ) {
 	keyButton.onClick( addKeyAtPlayhead );
 	keyHeader.appendChild( keyButton.dom );
 
+	// With a key selected the add / delete buttons sit in a row under the title (the add button moves here from the header)
+	const keyActions = document.createElement( 'div' );
+	keyActions.style.cssText = 'display:none;gap:6px;align-items:center;flex-wrap:wrap;';
+	const keyDeleteButton = new UIButton( 'Delete key' );
+	keyDeleteButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+	keyDeleteButton.dom.title = 'Delete the selected key (Del / Backspace)';
+	keyDeleteButton.onClick( function () { deleteSelected(); } );
+	keyActions.appendChild( keyDeleteButton.dom );
+
+	const keyCodeLink = document.createElement( 'button' );
+	keyCodeLink.type = 'button';
+	keyCodeLink.title = 'Show this key in the code panel';
+	keyCodeLink.style.cssText = 'height:20px;padding:0 6px;border:1px solid #888;border-radius:4px;background:transparent;color:inherit;font-size:10px;cursor:pointer;display:none;';
+	keyCodeLink.addEventListener( 'click', function () { revealKeyInCode( true ); } );
+	keyHeader.appendChild( keyCodeLink );
+
+	const keyClose = document.createElement( 'button' );
+	keyClose.type = 'button';
+	keyClose.textContent = '\u00d7';
+	keyClose.title = 'Close (Esc)';
+	keyClose.setAttribute( 'aria-label', 'Close the keyframe options' );
+	keyClose.style.cssText = 'width:20px;height:20px;padding:0;line-height:16px;border:none;border-radius:3px;background:transparent;color:inherit;font-size:15px;cursor:pointer;display:none;';
+	keyClose.addEventListener( 'click', closeKeyPopover );
+	keyHeader.appendChild( keyClose );
+
 	const keyGrid = document.createElement( 'div' );
 	keyGrid.style.cssText = 'display:grid;grid-template-columns:60px auto;gap:3px 6px;align-items:center;';
 	keyPanel.appendChild( keyGrid );
+	keyPanel.insertBefore( keyActions, keyGrid );
 
 	function keyLabel( text ) {
 
@@ -1026,7 +1106,7 @@ function Timeline( editor ) {
 		splineBox.checked = !! ( t && t.spline );
 		splineBox.disabled = ! t;
 		simplifyButton.dom.style.display = n >= 4 ? '' : 'none';
-		deleteKeyButton.dom.style.display = editor.cameraPath && editor.cameraPath.selectedKeyId ? '' : 'none';
+		deleteKeyButton.dom.style.display = ! keyPopoverOn && editor.cameraPath && editor.cameraPath.selectedKeyId ? '' : 'none';
 		camInfo.textContent = n ? n + ' key' + ( n === 1 ? '' : 's' ) + ( t.spline ? ', smooth path' : ', straight legs' ) + '. Click a handle in the Edit Camera view to move it.' : 'No keys yet: orbit the Edit Camera to frame the shot, set the playhead, and press + Key from view.';
 
 	}
@@ -1050,15 +1130,18 @@ function Timeline( editor ) {
 
 	function addKeyAtPlayhead() {
 
+		// With a key selected the new key goes on that key's track (a copy of its pose at the playhead);
+		// otherwise it goes on the selected object's track, from the staged pose fields.
+		const found = selectedAnimateEvent();
 		const object = editor.selected;
-		if ( ! object || object === editor.scene ) {
+		if ( ! found && ( ! object || object === editor.scene ) ) {
 
 			keyTitle.textContent = 'Select an object first';
 			return;
 
 		}
 
-		const target = bestSelectorFor( object );
+		const target = found ? found.track.target : bestSelectorFor( object );
 		const props = buildPropsFromFields();
 
 		// tween from the previous key on this track (or 0) so the pose ARRIVES
@@ -1074,8 +1157,101 @@ function Timeline( editor ) {
 
 		const at = Math.round( Math.min( prevEnd, playhead ) * 1000 ) / 1000;
 		const dur = Math.round( Math.max( 0.001, playhead - at ) * 1000 ) / 1000;
-		commitMutation( m => m.addEvent( target, { at, op: 'animate', args: { props, easing: 'linear', duration: dur }, dur } ), 'Add key' );
+		const id = 'key_' + Date.now().toString( 36 ) + Math.random().toString( 36 ).slice( 2, 6 );
+		if ( found ) selectedEventId = id; // the popover follows to the new key
+		commitMutation( m => m.addEvent( target, { id, at, op: 'animate', args: { props, easing: 'linear', duration: dur }, dur } ), 'Add key' );
 		sampleAt( playhead );
+
+	}
+
+	// ── Key popover: placement ────────────────────────────────────────────────
+	function themeColors() {
+
+		// the popover is outside the sidebar: take the sidebar's own background and text color
+		let el = container.dom, bg = '';
+		while ( el ) {
+
+			const c = getComputedStyle( el ).backgroundColor;
+			if ( c && c !== 'transparent' && ! /rgba\(.*,\s*0\)$/.test( c ) ) { bg = c; break; }
+			el = el.parentElement;
+
+		}
+		return { bg: bg || '#fff', color: getComputedStyle( container.dom ).color || '#222' };
+
+	}
+
+	function keyBlockEl() {
+
+		return selectedEventId ? rows.querySelector( '[data-event-id="' + String( selectedEventId ).replace( /["\\]/g, '\\$&' ) + '"]' ) : null;
+
+	}
+
+	function positionKeyPopover() {
+
+		if ( ! keyPopoverOn ) return;
+		const block = keyBlockEl();
+		const vis = rows.getBoundingClientRect();
+		const r = block ? block.getBoundingClientRect() : null;
+		// hidden with its tab, or while the key's block is scrolled out of the track list
+		if ( container.dom.offsetParent === null || ! r || r.bottom < vis.top || r.top > vis.bottom || r.right < vis.left || r.left > vis.right ) {
+
+			keyPop.style.visibility = 'hidden';
+			return;
+
+		}
+
+		keyPop.style.display = 'block';
+		keyPop.style.visibility = 'visible';
+		const pw = keyPop.offsetWidth, ph = keyPop.offsetHeight, gap = 10, m = 8;
+		const cx = Math.min( Math.max( r.left + r.width / 2, vis.left ), vis.right ); // the arrow points at the block, kept inside the lane view
+		const left = Math.min( Math.max( m, cx - pw / 2 ), Math.max( m, window.innerWidth - pw - m ) );
+		const below = r.bottom + gap + ph <= window.innerHeight - m || r.top - gap - ph < m; // above only when below does not fit and above does
+		const top = below ? Math.min( r.bottom + gap, Math.max( m, window.innerHeight - ph - m ) ) : r.top - gap - ph;
+		keyPop.style.left = Math.round( left ) + 'px';
+		keyPop.style.top = Math.round( top ) + 'px';
+
+		const colors = themeColors();
+		keyPop.style.background = colors.bg;
+		keyPop.style.color = colors.color;
+		keyArrow.style.background = colors.bg;
+		keyArrow.style.left = Math.round( Math.min( Math.max( 12, cx - left - 5 ), pw - 22 ) ) + 'px';
+		keyArrow.style.border = '1px solid #888';
+		if ( below ) { keyArrow.style.top = '-6px'; keyArrow.style.bottom = ''; keyArrow.style.borderRightColor = keyArrow.style.borderBottomColor = 'transparent'; }
+		else { keyArrow.style.bottom = '-6px'; keyArrow.style.top = ''; keyArrow.style.borderLeftColor = keyArrow.style.borderTopColor = 'transparent'; }
+
+	}
+
+	function setKeyPopover( on ) {
+
+		if ( on === keyPopoverOn ) { if ( on ) positionKeyPopover(); return; }
+		keyPopoverOn = on;
+		keyClose.style.display = on ? '' : 'none';
+		if ( on ) {
+
+			keyPanel.style.cssText = KEY_POPOVER_CSS;
+			keyActions.insertBefore( keyButton.dom, keyDeleteButton.dom ); // + Key @ playhead, then Delete key
+			keyActions.style.display = 'flex';
+			keyPop.appendChild( keyPanel );
+			keyPop.style.display = 'block';
+			positionKeyPopover();
+
+		} else {
+
+			keyPop.style.display = 'none';
+			keyActions.style.display = 'none';
+			keyHeader.insertBefore( keyButton.dom, keyCodeLink );
+			keyPanel.style.cssText = KEY_INLINE_CSS;
+			container.dom.insertBefore( keyPanel, codePanelWrap );
+
+		}
+
+	}
+
+	function closeKeyPopover() {
+
+		if ( ! selectedEventId ) return;
+		selectedEventId = null;
+		render();
 
 	}
 
@@ -1083,29 +1259,42 @@ function Timeline( editor ) {
 
 		const found = selectedAnimateEvent();
 		const object = editor.selected;
-		refreshCamRow();
 
 		if ( found ) {
 
+			setKeyPopover( true );
 			keyPanel.style.display = 'flex';
-			keyButton.dom.style.display = 'none';
-			keyTitle.textContent = `Key: ${ found.track.target } @ ${ found.event.at.toFixed( 2 ) }s — edits apply to this event`;
+			keyButton.dom.style.display = '';
+			keyTitle.textContent = `Key @ ${ found.event.at.toFixed( 2 ) }s \u00b7 ${ found.track.target }`;
 			updateLookAtOptions( null );
 			fillFieldsFromProps( found.event.args && found.event.args.props );
 
-		} else if ( object && object !== editor.scene ) {
-
-			keyPanel.style.display = 'flex';
-			keyButton.dom.style.display = '';
-			keyTitle.textContent = `Keyframe: ${ object.name || object.type }`;
-			updateLookAtOptions( object );
-			fillFieldsFromObject( object );
-
 		} else {
 
-			keyPanel.style.display = 'none';
+			setKeyPopover( false );
+
+			if ( object && object !== editor.scene ) {
+
+				keyPanel.style.display = 'flex';
+				keyButton.dom.style.display = '';
+				keyTitle.textContent = `Keyframe: ${ object.name || object.type }`;
+				updateLookAtOptions( object );
+				fillFieldsFromObject( object );
+
+			} else {
+
+				keyPanel.style.display = 'none';
+
+			}
 
 		}
+
+		refreshCamRow(); // after the popover state is known: it owns the Delete key button while a key is selected
+		const line = selectedEventId ? eventLines.get( selectedEventId ) : null;
+		keyCodeLink.style.display = found && line ? '' : 'none';
+		keyCodeLink.textContent = line ? 'line ' + line : '';
+		revealKeyInCode( false );
+		positionKeyPopover(); // the title and the fields above may have changed its height
 
 	}
 
@@ -1297,6 +1486,7 @@ function Timeline( editor ) {
 	function eventBlock( track, ev, lane ) {
 
 		const block = document.createElement( 'div' );
+		block.dataset.eventId = ev.id; // the key popover anchors to this block
 		const left = timeToPx( ev.at );
 		const width = Math.max( 6, timeToPx( ev.dur ) );
 		const selected = ev.id === selectedEventId;
@@ -1661,6 +1851,7 @@ function Timeline( editor ) {
 
 		const model = editor.timeline || new TimelineModel();
 		const blocks = [];
+		const trackBlocks = []; // for the key -> code line map: which block prints which events
 
 		// Anything the authored directives reference that no longer resolves.
 		for ( const message of editor.clipDirectiveProblems || [] ) blocks.push( `// WARNING: ${ message }` );
@@ -1719,13 +1910,16 @@ function Timeline( editor ) {
 				} ).filter( Boolean );
 				if ( notes.length ) line += `   // ${ notes.join( ', ' ) }`;
 
+				trackBlocks.push( { block: blocks.length, ids: evs.map( e => e.id ) } );
 				blocks.push( line );
 
 			}
 
 		}
 
+		eventLines = eventLineMap( blocks, trackBlocks );
 		codePanel.value = blocks.join( '\n\n' );
+		revealKeyInCode( true ); // setValue() resets the scroll: put the selected key's line back in view
 
 	}
 
@@ -1842,9 +2036,20 @@ function Timeline( editor ) {
 
 	}, true );
 
+	// Esc closes the key popover (it deselects the key).
+	document.addEventListener( 'keydown', function ( e ) {
+
+		if ( e.key !== 'Escape' || ! keyPopoverOn || container.dom.offsetParent === null ) return;
+		closeKeyPopover();
+
+	} );
+
+	// The popover is anchored to a block: follow it when any ancestor (the sidebar, the track list) scrolls.
+	document.addEventListener( 'scroll', positionKeyPopover, true );
+
 	// ── Signals ───────────────────────────────────────────────────────────────
 	signals.timelineChanged.add( function () { render(); refreshCode(); refreshCamRow(); } );
-	signals.cameraPathChanged.add( refreshCamRow );
+	signals.cameraPathChanged.add( function () { refreshCamRow(); revealKeyInCode( false ); } ); // a key picked on the camera path in the viewport
 	// Imported clips (e.g. a glTF/GLB import) land on editor.scene.animations
 	// outside the TimelineModel, dispatched via animationsChanged — refresh the
 	// tab so the new clip's row/duration/code comment show up immediately.
@@ -1871,6 +2076,7 @@ function Timeline( editor ) {
 	new ResizeObserver( function () {
 
 		if ( container.dom.offsetParent !== null ) render();
+		else positionKeyPopover(); // the tab went away: take the popover with it
 
 	} ).observe( area );
 
