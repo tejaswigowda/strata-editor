@@ -60,12 +60,28 @@ function Timeline( editor ) {
 	container.setId( 'timeline' );
 	container.dom.style.display = 'flex';
 	container.dom.style.flexDirection = 'column';
-	container.dom.style.borderBottom = '2px solid #999';
+	// the tab fills the sidebar's height (css: #sidebar #animations): the track list and the code panel share what is left
+	container.dom.style.boxSizing = 'border-box';
+	container.dom.style.height = '100%';
+	container.dom.style.minHeight = '0';
+	container.dom.style.padding = '0';
+	container.dom.style.border = '0';
+	container.dom.style.overflowY = 'auto';
+	container.dom.style.overflowX = 'hidden';
 
-	// ── Toolbar ───────────────────────────────────────────────────────────────
+	// ── Toolbar: transport, edit actions, then follow + zoom ──────────────────
 	const bar = document.createElement( 'div' );
-	bar.style.cssText = 'padding:6px 10px;border-bottom:1px solid #ccc;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;';
+	bar.style.cssText = 'padding:8px 10px 6px;border-bottom:1px solid #ccc;display:flex;flex-direction:column;gap:6px;flex-shrink:0;';
 	container.dom.appendChild( bar );
+
+	const ROW_CSS = 'display:flex;align-items:center;gap:6px;min-width:0;';
+	const transportRow = document.createElement( 'div' );
+	transportRow.style.cssText = ROW_CSS;
+	const editRow = document.createElement( 'div' );
+	editRow.style.cssText = ROW_CSS;
+	const viewRow = document.createElement( 'div' );
+	viewRow.style.cssText = ROW_CSS + 'justify-content:space-between;';
+	bar.append( transportRow, editRow, viewRow );
 
 	const playIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M3 1.5v9l7-4.5z" fill="currentColor"/></svg>';
 	const pauseIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M2 1h3v10H2zM7 1h3v10H7z" fill="currentColor"/></svg>';
@@ -78,7 +94,7 @@ function Timeline( editor ) {
 		b.dom.title = title;
 		b.dom.style.cssText = `width:30px;height:30px;padding:0;border:none;border-radius:50%;background:${ color };color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.35);cursor:pointer;display:flex;align-items:center;justify-content:center;`;
 		b.onClick( onClick );
-		bar.appendChild( b.dom );
+		transportRow.appendChild( b.dom );
 		return b;
 
 	}
@@ -88,13 +104,14 @@ function Timeline( editor ) {
 	iconButton( stopIcon, 'Stop (rewind to 0)', stop, '#e5484d' );
 
 	const timeReadout = document.createElement( 'div' );
-	timeReadout.style.cssText = 'font-family:monospace;font-size:11px;background:rgba(0,0,0,0.05);border-radius:4px;padding:3px 8px;';
+	timeReadout.style.cssText = 'margin-left:4px;font-family:monospace;font-size:12px;background:rgba(0,0,0,0.06);border-radius:4px;padding:4px 10px;white-space:nowrap;';
 	timeReadout.textContent = '00:00:000 / 00:00:000';
-	bar.appendChild( timeReadout );
+	transportRow.appendChild( timeReadout );
 
 	// Add-event-at-playhead: apply an animation to the SELECTED object at the
 	// playhead (the "Key"-style action, but placing an absolute-time event).
-	const addSelect = new UISelect().setWidth( '150px' );
+	const addSelect = new UISelect();
+	addSelect.dom.style.cssText = 'flex:1;min-width:0;height:28px;padding:2px 4px;';
 	const presetOptions = { '': '+ Event at playhead' };
 	for ( const op of Object.keys( OP_VOCABULARY ) ) {
 
@@ -111,7 +128,7 @@ function Timeline( editor ) {
 		if ( op ) addEventAtPlayhead( op );
 
 	} );
-	bar.appendChild( addSelect.dom );
+	editRow.appendChild( addSelect.dom );
 
 	const trashIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
 	const deleteButton = new UIButton();
@@ -121,16 +138,17 @@ function Timeline( editor ) {
 	deleteButton.dom.style.cssText = 'width:28px;height:28px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;';
 	deleteButton.dom.disabled = true;
 	deleteButton.onClick( function () { deleteSelected(); } );
-	bar.appendChild( deleteButton.dom );
+	deleteButton.dom.style.flexShrink = '0';
+	editRow.appendChild( deleteButton.dom );
 
 	// Always in view, right of the delete button: a key at the playhead on the selected key's track, or on the selected object
 	const addKeyButton = new UIButton( '+ Key' );
 	addKeyButton.dom.title = 'Add a key at the playhead (on the selected key\'s track, or on the selected object): it arrives at the playhead';
 	addKeyButton.dom.setAttribute( 'aria-label', 'Add a key at the playhead' );
-	addKeyButton.dom.style.cssText = 'height:28px;padding:0 12px;border-radius:14px;display:flex;align-items:center;justify-content:center;white-space:nowrap;';
+	addKeyButton.dom.style.cssText = 'height:28px;padding:0 12px;border-radius:14px;display:flex;align-items:center;justify-content:center;white-space:nowrap;flex-shrink:0;';
 	addKeyButton.dom.disabled = true;
 	addKeyButton.onClick( function () { addKeyAtPlayhead(); } );
-	bar.appendChild( addKeyButton.dom );
+	editRow.appendChild( addKeyButton.dom );
 
 	// enabled when there is somewhere to put the key: a selected key (its track) or a selected object
 	function updateAddKeyState() {
@@ -142,17 +160,17 @@ function Timeline( editor ) {
 
 	// Zoom the time axis: ctrl / cmd + wheel zooms around the cursor, these buttons around the playhead
 	const zoomGroup = document.createElement( 'div' );
-	zoomGroup.style.cssText = 'display:flex;align-items:center;gap:3px;margin-left:auto;';
-	bar.appendChild( zoomGroup );
+	zoomGroup.style.cssText = 'display:flex;align-items:center;gap:3px;flex-shrink:0;';
 
 	function zoomButton( text, title, onClick ) {
 
 		const b = document.createElement( 'button' );
 		b.type = 'button';
+		b.className = 'Button';
 		b.textContent = text;
 		b.title = title;
 		b.setAttribute( 'aria-label', title );
-		b.style.cssText = 'min-width:24px;height:24px;padding:0 6px;font-size:12px;border-radius:4px;cursor:pointer;';
+		b.style.cssText = 'min-width:26px;height:26px;padding:0 8px;border-radius:13px;';
 		b.addEventListener( 'click', onClick );
 		zoomGroup.appendChild( b );
 		return b;
@@ -161,8 +179,8 @@ function Timeline( editor ) {
 
 	zoomButton( '\u2212', 'Zoom out (ctrl / cmd + wheel)', () => zoomAt( 1 / ZOOM_STEP, null ) );
 	const zoomReadout = document.createElement( 'span' );
-	zoomReadout.style.cssText = 'min-width:34px;text-align:center;font-size:11px;font-family:monospace;';
-	zoomReadout.textContent = 'Fit';
+	zoomReadout.style.cssText = 'min-width:32px;text-align:center;font-size:11px;font-family:monospace;';
+	zoomReadout.textContent = '1\u00d7';
 	zoomGroup.appendChild( zoomReadout );
 	zoomButton( '+', 'Zoom in (ctrl / cmd + wheel)', () => zoomAt( ZOOM_STEP, null ) );
 	zoomButton( 'Fit', 'Show the whole timeline', fitView );
@@ -171,21 +189,14 @@ function Timeline( editor ) {
 	// tab's Camera Sequence would be using at the current playhead time (or
 	// editor.camera if no sequence is configured) while the timeline plays —
 	// a live preview of what the export will actually look like.
-	const followRow = document.createElement( 'div' );
-	followRow.style.cssText = 'padding:2px 10px 6px;border-bottom:1px solid #ccc;display:flex;align-items:center;gap:6px;flex-shrink:0;';
-	container.dom.appendChild( followRow );
+	const followRow = document.createElement( 'label' );
+	followRow.style.cssText = 'display:flex;align-items:center;gap:5px;min-width:0;cursor:pointer;';
+	viewRow.append( followRow, zoomGroup );
 
 	const followCheckbox = new UICheckbox( true );
 	followCheckbox.dom.title = 'While playing, switch the viewport to whichever camera the Render tab\'s Camera Sequence is using right now (or the default camera if none is set)';
 	followRow.appendChild( followCheckbox.dom );
 	const followLabel = new UIText( 'Follow render camera' ).setFontSize( '11px' );
-	followLabel.dom.style.cursor = 'pointer';
-	followLabel.dom.addEventListener( 'click', () => {
-
-		followCheckbox.setValue( ! followCheckbox.getValue() );
-		followCheckbox.dom.dispatchEvent( new Event( 'change' ) );
-
-	} );
 	followRow.appendChild( followLabel.dom );
 	followCheckbox.dom.addEventListener( 'change', function () {
 
@@ -196,7 +207,7 @@ function Timeline( editor ) {
 
 	// ── Timeline area (ruler + track rows + playhead) ─────────────────────────
 	const area = document.createElement( 'div' );
-	area.style.cssText = 'height:300px;display:flex;flex-direction:column;overflow:hidden;position:relative;';
+	area.style.cssText = 'flex:1 1 0;min-height:90px;display:flex;flex-direction:column;overflow:hidden;position:relative;';
 	container.dom.appendChild( area );
 
 	const ruler = document.createElement( 'div' );
@@ -329,8 +340,74 @@ function Timeline( editor ) {
 	// is a thin shim exposing the same value/style/addEventListener surface the
 	// rest of this file already uses — writes before Monaco is ready are queued.
 	const codePanelWrap = document.createElement( 'div' );
-	codePanelWrap.style.cssText = 'position:relative;display:block;width:100%;box-sizing:border-box;height:160px;border:none;border-top:1px solid #ccc;resize:vertical;overflow:hidden;background:#1e1e1e;';
+	codePanelWrap.style.cssText = 'position:relative;display:block;width:100%;box-sizing:border-box;flex:1 1 0;min-height:70px;border:none;overflow:hidden;background:#1e1e1e;';
 	container.dom.appendChild( codePanelWrap );
+
+	// ── Splitter: drag to trade height between the track list and the code panel ──
+	// (the two share whatever the toolbar leaves; the ratio is remembered)
+	const SPLIT_KEY = 'strata.timeline.split';
+	const MIN_AREA_PX = 90, MIN_CODE_PX = 70;
+	let split = 0.5;
+	try { const saved = parseFloat( localStorage.getItem( SPLIT_KEY ) ); if ( saved > 0.1 && saved < 0.9 ) split = saved; } catch ( e ) { /* storage blocked */ }
+
+	function applySplit() {
+
+		area.style.flexGrow = String( split );
+		codePanelWrap.style.flexGrow = String( 1 - split );
+		try { localStorage.setItem( SPLIT_KEY, String( split ) ); } catch ( e ) { /* storage blocked */ }
+
+	}
+
+	const splitter = document.createElement( 'div' );
+	splitter.id = 'timeline-splitter';
+	splitter.setAttribute( 'role', 'separator' );
+	splitter.setAttribute( 'aria-orientation', 'horizontal' );
+	splitter.setAttribute( 'aria-label', 'Resize the timeline and the code panel (drag, or use the up / down arrow keys; double-click to reset)' );
+	splitter.title = 'Drag to resize \u2022 double-click to reset';
+	splitter.tabIndex = 0;
+	container.dom.insertBefore( splitter, codePanelWrap );
+	applySplit();
+
+	function setSplitFromAreaHeight( px, total ) {
+
+		const clamped = Math.min( Math.max( px, MIN_AREA_PX ), Math.max( MIN_AREA_PX, total - MIN_CODE_PX ) );
+		split = Math.min( 0.9, Math.max( 0.1, clamped / total ) );
+		applySplit();
+
+	}
+
+	splitter.addEventListener( 'pointerdown', function ( e ) {
+
+		if ( e.button !== 0 ) return;
+		e.preventDefault();
+		splitter.setPointerCapture( e.pointerId );
+		splitter.classList.add( 'dragging' );
+		const startY = e.clientY, startArea = area.getBoundingClientRect().height;
+		const total = startArea + codePanelWrap.getBoundingClientRect().height;
+
+		function move( ev ) { setSplitFromAreaHeight( startArea + ev.clientY - startY, total ); }
+		function up() {
+
+			splitter.classList.remove( 'dragging' );
+			splitter.removeEventListener( 'pointermove', move );
+			splitter.removeEventListener( 'pointerup', up );
+			splitter.removeEventListener( 'pointercancel', up );
+
+		}
+		splitter.addEventListener( 'pointermove', move );
+		splitter.addEventListener( 'pointerup', up );
+		splitter.addEventListener( 'pointercancel', up );
+
+	} );
+	splitter.addEventListener( 'dblclick', function () { split = 0.5; applySplit(); } );
+	splitter.addEventListener( 'keydown', function ( e ) {
+
+		if ( e.key !== 'ArrowUp' && e.key !== 'ArrowDown' ) return;
+		e.preventDefault();
+		const total = area.getBoundingClientRect().height + codePanelWrap.getBoundingClientRect().height;
+		setSplitFromAreaHeight( area.getBoundingClientRect().height + ( e.key === 'ArrowDown' ? 24 : - 24 ), total );
+
+	} );
 
 	let monacoCodeEditor = null;
 	let pendingCode = '// timeline is empty';
@@ -859,7 +936,7 @@ function Timeline( editor ) {
 
 	const codeWarning = document.createElement( 'div' );
 	codeWarning.style.cssText = 'display:none;padding:4px 8px;font-size:10px;color:#ffb4b4;background:#3a1f1f;border-top:1px solid #ccc;';
-	container.dom.insertBefore( codeWarning, codePanelWrap );
+	container.dom.insertBefore( codeWarning, splitter );
 
 	function showCodeWarning( message ) {
 
@@ -908,7 +985,7 @@ function Timeline( editor ) {
 	const KEY_POPOVER_CSS = 'padding:8px 10px;display:flex;flex-direction:column;gap:4px;font-size:11px;max-height:min(66vh,520px);overflow:auto;';
 	const keyPanel = document.createElement( 'div' );
 	keyPanel.style.cssText = KEY_INLINE_CSS;
-	container.dom.insertBefore( keyPanel, codePanelWrap );
+	container.dom.insertBefore( keyPanel, splitter );
 
 	// the floating shell (appended to <body> so no scrolling parent clips it) with its arrow toward the key
 	const KEY_POP_W = 272, KEY_POP_GAP = 12;
@@ -1376,7 +1453,7 @@ function Timeline( editor ) {
 
 			keyPop.style.display = 'none';
 			keyPanel.style.cssText = KEY_INLINE_CSS;
-			container.dom.insertBefore( keyPanel, codePanelWrap );
+			container.dom.insertBefore( keyPanel, splitter );
 
 		}
 
@@ -1504,7 +1581,7 @@ function Timeline( editor ) {
 	function updateZoomReadout() {
 
 		const z = zoomSpan === null ? 1 : viewDuration() / zoomSpan;
-		zoomReadout.textContent = zoomSpan === null ? 'Fit' : z.toFixed( z < 10 ? 1 : 0 ) + '\u00d7';
+		zoomReadout.textContent = z.toFixed( z < 10 ? 1 : 0 ).replace( /\.0$/, '' ) + '\u00d7';
 
 	}
 

@@ -587,6 +587,49 @@ body.present-mode #present-bar {
 	cursor: default;
 }
 
+/* The Animations tab fills the sidebar below the tab strip (like #shell), so the track list and
+   the code panel can share the height; #timeline is padded/bordered by its own rows instead. */
+#sidebar > .Panels > #animations {
+	height: 100%;
+}
+
+#sidebar > .Panels > #animations > #timeline {
+	padding: 0;
+	border: 0;
+}
+
+/* A hairline with a 7px hit area; it only lights up when you reach for it */
+#timeline-splitter {
+	position: relative;
+	flex: 0 0 7px;
+	margin: -3px 0;
+	z-index: 2;
+	background: transparent;
+	cursor: row-resize;
+	touch-action: none;
+	outline: none;
+}
+
+#timeline-splitter::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 3px;
+	height: 1px;
+	background: rgba( 128, 128, 128, 0.35 );
+	transition: background 0.12s, top 0.12s, height 0.12s;
+}
+
+#timeline-splitter:hover::after,
+#timeline-splitter:focus-visible::after,
+#timeline-splitter.dragging::after {
+	top: 2px;
+	height: 3px;
+	background: #08f;
+	opacity: 0.8;
+}
+
 /* The line of the selected key in the Animations tab's code panel (Monaco decoration) */
 .timeline-key-line {
 	background: rgba(255, 87, 34, 0.30);
