@@ -705,16 +705,17 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 	const commitCfg = ( cfg.commit || '' ).trim() || null; // pinned SHA/tag override; empty = "latest" (use branchCfg)
 
 	onStatus( 0.15, `Fetching ${ scenePath }…` );
-	const resolved = await resolveSceneJSON( {
+	const resolved = await cancellable( resolveSceneJSON( {
 		owner: parsed.owner, repo: parsed.repo, ref: commitCfg || branchCfg, path: scenePath, mode: 'authoring',
 		apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ apiRef }`, cfg.pat ),
-	} );
+	} ) );
 	const json   = resolved.json;
 	const branch = resolved.ref; // the ref that actually resolved (commitCfg/branchCfg, or main/master if both were null)
 
 	onStatus( 0.5, 'Fetching assets…' );
-	await internalizeFromGit( json, parsed, branch, cfg.pat, 'authoring' );
+	await cancellable( internalizeFromGit( json, parsed, branch, cfg.pat, 'authoring' ) );
 
+	setLoadCancellable( false ); // from here the scene is being replaced: too late to back out
 	onStatus( 0.85, 'Applying scene…' );
 
 	// Unsaved local work is held for recovery, never overwritten (see WorkGuard.js).
@@ -931,7 +932,11 @@ export async function autoLoadFromGit( editor, opts = {} ) {
 
 	} catch ( err ) {
 
-		if ( err.status === 404 ) {
+		if ( isLoadCancelled( err ) ) {
+
+			_showBanner( 'Load cancelled — nothing was changed', 3000 );
+
+		} else if ( err.status === 404 ) {
 
 			// Scene file not committed yet — keep whatever is loaded locally and
 			// let the first commit create it. This is a normal first-run state,
@@ -1149,18 +1154,19 @@ export async function loadSceneFromHash( editor ) {
 	try {
 
 		setLoadProgress( 0.15, `Fetching ${ file }…` );
-		const resolved = await resolveSceneJSON( {
+		const resolved = await cancellable( resolveSceneJSON( {
 			owner: parsed.owner, repo: parsed.repo, ref, path: file, mode,
 			apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ file }?ref=${ apiRef }`, existingPat ),
-		} );
+		} ) );
 		const json   = resolved.json;
 		const branch = resolved.ref; // the ref that actually resolved (ref, or main/master if it was null)
 
 		stage = 'fetching assets';
 		setLoadProgress( 0.5, 'Fetching assets…' );
-		await internalizeFromGit( json, parsed, branch, existingPat, mode );
+		await cancellable( internalizeFromGit( json, parsed, branch, existingPat, mode ) );
 
 		stage = 'applying the scene';
+		setLoadCancellable( false ); // from here the scene is being replaced: too late to back out
 		setLoadProgress( 0.85, 'Applying scene…' );
 		const held = editor.work ? await editor.work.holdForLoad() : null; // unsaved local work is held for recovery, never overwritten
 		editor.clear();
@@ -1212,6 +1218,13 @@ export async function loadSceneFromHash( editor ) {
 		if ( editor.work ) editor.work.abortLoad();
 		hideLoadOverlay();
 		banner.remove();
+
+		if ( isLoadCancelled( err ) ) {
+
+			_showBanner( 'Load cancelled — nothing was changed', 3000 );
+			return false;
+
+		}
 
 		// Accurate, distinct messages per failure kind — a missing file should
 		// never be reported as "rate limited" (SceneFetchError.kind, set by
@@ -1266,6 +1279,42 @@ function _showBanner( text, durationMs = 0 ) {
 // scrolled out of sight/collapsed/on a different tab.
 let _loadOverlay = null;
 
+// Cancelling: the Cancel button rejects `_cancelPromise`, and the loaders wait on their network
+// stages through `cancellable()`, so a click ends the wait at once even mid-download (the abandoned
+// request is simply ignored). Once a loader starts replacing the scene it calls setLoadCancellable(false):
+// from there the load can no longer be abandoned half-applied.
+let _cancelPromise = null;
+let _rejectCancel = null;
+let _cancellable = false;
+
+export class LoadCancelled extends Error {
+
+	constructor() {
+
+		super( 'Load cancelled' );
+		this.name = 'LoadCancelled';
+		this.cancelled = true;
+
+	}
+
+}
+
+export const isLoadCancelled = err => !! ( err && err.cancelled );
+
+/** Await `promise`, or reject with LoadCancelled as soon as the overlay's Cancel is pressed. */
+export function cancellable( promise ) {
+
+	return _cancelPromise && _cancellable ? Promise.race( [ promise, _cancelPromise ] ) : promise;
+
+}
+
+export function setLoadCancellable( on ) {
+
+	_cancellable = !! on;
+	if ( _loadOverlay ) _loadOverlay.querySelector( '.cancel' ).style.display = on ? '' : 'none';
+
+}
+
 function _ensureLoadOverlay() {
 
 	if ( _loadOverlay ) return _loadOverlay;
@@ -1282,9 +1331,32 @@ function _ensureLoadOverlay() {
 		'<div style="width:min(320px,70%);height:10px;background:rgba(255,255,255,0.15);border-radius:5px;overflow:hidden;">' +
 			'<div class="bar" style="height:100%;width:0%;background:#08f;transition:width 0.1s linear;"></div>' +
 		'</div>' +
-		'<div class="label" style="font-size:12px;opacity:0.85;max-width:360px;"></div>';
+		'<div class="label" style="font-size:12px;opacity:0.85;max-width:360px;"></div>' +
+		'<button type="button" class="cancel" title="Stop loading and keep what is open (Esc)" ' +
+			'style="margin-top:4px;padding:6px 20px;font:600 12px sans-serif;color:#fff;cursor:pointer;' +
+			'background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.55);border-radius:16px;pointer-events:auto;">Cancel</button>';
+
+	_loadOverlay.querySelector( '.cancel' ).addEventListener( 'click', cancelLoad );
 
 	return _loadOverlay;
+
+}
+
+/** Stop the load in progress (the overlay's Cancel button, or Esc). No effect once the scene is being applied. */
+export function cancelLoad() {
+
+	if ( ! _cancellable || ! _rejectCancel ) return;
+	_cancellable = false;
+	const reject = _rejectCancel;
+	_rejectCancel = null;
+	hideLoadOverlay();
+	reject( new LoadCancelled() );
+
+}
+
+function _onLoadKey( event ) {
+
+	if ( event.key === 'Escape' && _cancellable ) { event.preventDefault(); cancelLoad(); }
 
 }
 
@@ -1293,6 +1365,12 @@ export function showLoadOverlay() {
 	const overlay = _ensureLoadOverlay();
 	const viewport = document.getElementById( 'viewport' );
 	if ( viewport && overlay.parentNode !== viewport ) viewport.appendChild( overlay );
+
+	_cancelPromise = new Promise( ( _, reject ) => { _rejectCancel = reject; } );
+	_cancelPromise.catch( () => {} ); // a cancel with nobody waiting is not an unhandled rejection
+	setLoadCancellable( true );
+	document.addEventListener( 'keydown', _onLoadKey, true );
+
 	overlay.style.display = 'flex';
 
 }
@@ -1307,6 +1385,9 @@ export function setLoadProgress( fraction, message ) {
 
 export function hideLoadOverlay() {
 
+	document.removeEventListener( 'keydown', _onLoadKey, true );
+	_cancellable = false;
+	_rejectCancel = null;
 	if ( _loadOverlay ) _loadOverlay.style.display = 'none';
 
 }

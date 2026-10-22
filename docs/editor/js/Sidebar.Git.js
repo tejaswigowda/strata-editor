@@ -5,7 +5,7 @@
 // every action button disables while busy so they can't overlap.
 
 import { UIPanel, UIRow, UIText, UIInput, UIButton, UIHorizontalRule } from './libs/ui.js';
-import { shareUrlFromSettings, loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage, showLoadOverlay, setLoadProgress, hideLoadOverlay, parseRepo, listBranches, listCommits, listRootJsonFiles } from './Menubar.Git.js';
+import { shareUrlFromSettings, loadSceneFromRepo, commitSceneToRepo, openGitCompare, generateCommitMessage, showLoadOverlay, setLoadProgress, hideLoadOverlay, isLoadCancelled, parseRepo, listBranches, listCommits, listRootJsonFiles } from './Menubar.Git.js';
 
 const LS_KEY = 'git-settings';
 
@@ -391,7 +391,7 @@ function SidebarGit( editor ) {
 
 		} catch ( err ) {
 
-			setProgress( null, `Error: ${ err.message }` );
+			setProgress( null, isLoadCancelled( err ) ? 'Load cancelled' : `Error: ${ err.message }` );
 
 		} finally {
 
