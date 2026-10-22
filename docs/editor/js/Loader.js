@@ -10,6 +10,7 @@ import { LoaderUtils } from './LoaderUtils.js';
 
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { isVRMSource } from './toon/toonSpec.js';
+import { upgradeGLTF1 } from './GLTF1Upgrader.js';
 import { normalizeSkinIndices } from './mesh/skinIndices.js';
 
 import { runImportPipeline } from './import/pipeline.js';
@@ -1217,6 +1218,19 @@ function Loader( editor ) {
 	// the file's toon parameters render (WebGPU node material) instead of being
 	// dropped for unlit MeshBasicMaterial — materials only, nothing rig-related.
 	async function parseGLTF( loader, data, filename, release ) {
+
+		try {
+
+			data = await upgradeGLTF1( data, ( uri ) => loader.manager.resolveURL( uri ) );
+
+		} catch ( e ) {
+
+			console.error( 'Loader: Failed to upgrade glTF 1.0 file "' + filename + '"', e );
+			loader.dracoLoader.dispose();
+			loader.ktx2Loader.dispose();
+			return;
+
+		}
 
 		let toon = null;
 

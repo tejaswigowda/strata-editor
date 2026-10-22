@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build a fighting-game arena scene — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: build a fighting-game arena from scratch with the JS Shell — a plank-floor stage, two class-tagged fighter placeholders, an anchored health-bar HUD and a round timer — scene only, no game logic. Includes the finished fight.json.">
+<!--
+	/about/tutorials/fight-arena-scene.html — a from-scratch, by-hand
+	tutorial. Every snippet is real Strata surface (JS Shell globals,
+	editor.execute commands) — copy/paste each block into the Shell tab
+	in order. Static page, no build step, no third-party calls.
+	Screenshot is a real capture from the scene this tutorial builds.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	kbd { background: #1e2127; border: 1px solid #2a2e36; border-radius: 4px; padding: 0.05em 0.4em; font-size: 0.88em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Build a fighting-game arena scene</h1>
+	<p class="tagline">Two fighters, a stage, a health-bar HUD and a round timer — and no game logic. Like the <a href="pong-table-view.html">pong</a> and <a href="bubble-shooter-scene.html">bubble shooter</a> tutorials, the scene's job is to hand later code well-named, class-tagged things to find and drive. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or just load the finished <a href="fight.json" download>fight.json</a> (File → Open, or drop it on the viewport).</p>
+
+	<figure>
+		<img src="screenshots/fight-arena.png" alt="A wooden-plank stage in a tavern courtyard: a red-robed fighter on the left and a larger purple-robed fighter on the right face each other beside a tall banner pole, with two health and mana bars and a 99 timer across the top." loading="lazy">
+		<figcaption>The whole scene: plank stage, tavern backdrop, two fighters, and a HUD with portraits, health and mana bars, and a round timer.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Build the data the logic needs, not the logic itself.</strong> A fighting game needs to find each fighter, shrink a health bar, and tick a timer. So the scene provides exactly that: <code>$S('.p1')</code> and <code>$S('.p2')</code> for the fighters, <code>P1 Health Fill</code> / <code>P2 Health Fill</code> meshes whose <code>scale.x</code> is the bar, and a <code>Round Timer</code> plane. Hit boxes, moves and AI would be guesses at rules nobody has written yet.</div>
+
+	<div class="note"><strong>Pasting long blocks into the Shell:</strong> if you paste a long block and <kbd>Enter</kbd> seems to do nothing, press <kbd>Esc</kbd> first (it closes the autocomplete dropdown that was swallowing the keypress), then <kbd>Enter</kbd>. On a non-empty scene, run <code>clearScene()</code> first.</div>
+
+	<h2><span class="step">1</span> Build the arena</h2>
+	<p class="lede">One <code>Group</code> holds the plank floor (planks run along the depth axis, so the camera sees them converge), a plaster back wall with a doorway, stairs, pillars, two wagon wheels, four barrels and the banner. A canvas-painted texture draws the crossed swords — no image files. One <code>AddObjectCommand</code> adds the whole group, so it is one undo step:</p>
+	<pre><code>const arena = new Group();
+arena.name = 'Fighting Arena';
+
+const plankMats = [ 0xb5562a, 0x9c4521, 0xc8693a ].map(c =&gt; new MeshStandardMaterial({ color: c, roughness: 0.75 }));
+const floor = new Group();
+floor.name = 'Stage Floor';
+for (let i = 0; i &lt; 26; i++) {
+  const plank = new Mesh(new BoxGeometry(1.15, 0.2, 18), plankMats[i % 3]);
+  plank.name = 'Plank ' + (i + 1);
+  plank.position.set(-14.375 + i * 1.15, -0.1, 0);
+  plank.receiveShadow = true;
+  floor.add(plank);
+}
+arena.add(floor);
+
+const stoneMat = new MeshStandardMaterial({ color: 0x8a7d70, roughness: 0.9 });
+const plasterMat = new MeshStandardMaterial({ color: 0xc9a67a, roughness: 0.9 });
+const darkWood = new MeshStandardMaterial({ color: 0x4a2c18, roughness: 0.85 });
+const whiteStone = new MeshStandardMaterial({ color: 0xe6e0d4, roughness: 0.6 });
+
+const wall = new Mesh(new BoxGeometry(44, 12, 0.6), plasterMat);
+wall.name = 'Back Wall'; wall.position.set(0, 6, -15);
+arena.add(wall);
+
+const doorway = new Mesh(new BoxGeometry(4.5, 5, 0.7), new MeshStandardMaterial({ color: 0x1a2a2a, roughness: 0.6 }));
+doorway.name = 'Doorway'; doorway.position.set(0, 3.2, -14.6);
+arena.add(doorway);
+
+for (let i = 0; i &lt; 5; i++) {
+  const step = new Mesh(new BoxGeometry(9 - i * 0.6, 0.3, 1.1), stoneMat);
+  step.name = 'Stair ' + (i + 1);
+  step.position.set(0, 0.15 + i * 0.3, -8.6 - i * 1.0);
+  arena.add(step);
+}
+
+[-5.5, 5.5, -11, 11].forEach((x, i) =&gt; {
+  const pillar = new Mesh(new CylinderGeometry(0.55, 0.65, 11, 16), whiteStone);
+  pillar.name = 'Pillar ' + (i + 1); pillar.position.set(x, 5.5, -14.4);
+  pillar.castShadow = true;
+  arena.add(pillar);
+});
+
+// Wagon wheels and barrels flank the stage
+function makeWheel(name, x, z, ry) {
+  const wheel = new Group();
+  wheel.name = name;
+  const rim = new Mesh(new TorusGeometry(1.5, 0.14, 8, 28), darkWood);
+  wheel.add(rim);
+  const hub = new Mesh(new CylinderGeometry(0.28, 0.28, 0.3, 12), darkWood);
+  hub.rotation.x = Math.PI / 2;
+  wheel.add(hub);
+  for (let i = 0; i &lt; 6; i++) {
+    const spoke = new Mesh(new BoxGeometry(0.14, 3, 0.12), darkWood);
+    spoke.rotation.z = i * Math.PI / 6;
+    wheel.add(spoke);
+  }
+  wheel.position.set(x, 1.5, z); wheel.rotation.y = ry;
+  return wheel;
+}
+arena.add(makeWheel('Wagon Wheel Left', -10.5, -9, 0.5));
+arena.add(makeWheel('Wagon Wheel Right', 10.5, -9, -0.5));
+
+const barrelMat = new MeshStandardMaterial({ color: 0x7a4a26, roughness: 0.8 });
+const bandMat = new MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.6 });
+[[-8, -7], [-9.2, -6.2], [8.5, -7], [9.6, -6]].forEach(([x, z], i) =&gt; {
+  const barrel = new Group();
+  barrel.name = 'Barrel ' + (i + 1);
+  const body = new Mesh(new CylinderGeometry(0.7, 0.7, 1.4, 14), barrelMat);
+  body.position.y = 0.7; body.castShadow = true;
+  barrel.add(body);
+  [0.3, 1.1].forEach(y =&gt; {
+    const band = new Mesh(new CylinderGeometry(0.72, 0.72, 0.1, 14), bandMat);
+    band.position.y = y;
+    barrel.add(band);
+  });
+  barrel.position.set(x, 0, z);
+  arena.add(barrel);
+});
+
+// Centre banner: pole, crossbar, canvas-painted crossed swords
+const pole = new Mesh(new CylinderGeometry(0.1, 0.12, 7, 8), darkWood);
+pole.name = 'Banner Pole'; pole.position.set(0, 3.5, -6);
+pole.castShadow = true;
+arena.add(pole);
+const crossbar = new Mesh(new BoxGeometry(2.6, 0.12, 0.12), darkWood);
+crossbar.name = 'Banner Crossbar'; crossbar.position.set(0, 6.6, -6);
+arena.add(crossbar);
+const bc = document.createElement('canvas');
+bc.width = 256; bc.height = 320;
+const bx = bc.getContext('2d');
+bx.fillStyle = '#8c2f1a'; bx.fillRect(0, 0, 256, 320);
+bx.strokeStyle = '#d9b36a'; bx.lineWidth = 8; bx.strokeRect(10, 10, 236, 300);
+bx.strokeStyle = '#f2f2f2'; bx.lineWidth = 14; bx.lineCap = 'round';
+bx.beginPath(); bx.moveTo(60, 70); bx.lineTo(196, 250); bx.moveTo(196, 70); bx.lineTo(60, 250); bx.stroke();
+const banner = new Mesh(new PlaneGeometry(1.8, 2.25), new MeshStandardMaterial({ map: new THREE.CanvasTexture(bc), roughness: 0.9, side: THREE.DoubleSide }));
+banner.name = 'Banner'; banner.position.set(0, 5.4, -5.95);
+arena.add(banner);
+
+arena.traverse(o =&gt; { if (o.isMesh &amp;&amp; !o.name.startsWith('Plank')) o.receiveShadow = true; });
+editor.execute(new AddObjectCommand(editor, arena));</code></pre>
+
+	<h2><span class="step">2</span> Place two fighters</h2>
+	<p class="lede">The fighters are deliberately primitive stand-ins — swap in real models later and keep the names and classes. The important detail is the axis: <strong>build each fighter facing +z</strong> (shoulders and boots on local ±x), then turn the whole group with <code>rotation.y</code>. Rotating by ±π/2 makes local +z point along world ±x, so the two face each other across the stage. Fighter 2 is scaled 1.25 so they read as different sizes. Tag each with a shared <code>.fighter</code> class plus <code>.p1</code> / <code>.p2</code>:</p>
+	<pre><code>function makeFighter(name, o) {
+  const f = new Group();
+  f.name = name;
+  const robe = new MeshStandardMaterial({ color: o.robe, roughness: 0.6 });
+  const trim = new MeshStandardMaterial({ color: o.trim, roughness: 0.35, metalness: 0.5 });
+  const dark = new MeshStandardMaterial({ color: o.dark, roughness: 0.7 });
+  const add = (mesh, n, x, y, z) =&gt; { mesh.name = n; mesh.position.set(x, y, z); mesh.castShadow = true; f.add(mesh); return mesh; };
+
+  add(new Mesh(new CylinderGeometry(0.5, 0.85, 1.7, 16), robe), 'Robe', 0, 0.95, 0);
+  add(new Mesh(new BoxGeometry(1.0, 0.5, 0.6), trim), 'Chest Plate', 0, 1.65, 0);
+  add(new Mesh(new SphereGeometry(0.42, 16, 16), trim), 'Shoulder Left', -0.6, 1.95, 0);
+  add(new Mesh(new SphereGeometry(0.42, 16, 16), trim), 'Shoulder Right', 0.6, 1.95, 0);
+  add(new Mesh(new SphereGeometry(0.36, 16, 16), dark), 'Head', 0, 2.3, 0.05);
+  add(new Mesh(new ConeGeometry(0.42, 0.7, 16), o.hood ? dark : trim), o.hood ? 'Hood' : 'Helm', 0, 2.62, 0.02);
+  add(new Mesh(new CapsuleGeometry(0.13, 0.8, 4, 8), robe), 'Arm Left', -0.75, 1.4, 0.3).rotation.x = -0.9;
+  add(new Mesh(new CapsuleGeometry(0.13, 0.8, 4, 8), robe), 'Arm Right', 0.75, 1.4, 0.4).rotation.x = -1.1;
+  add(new Mesh(new CylinderGeometry(0.06, 0.06, 2.0, 8), dark), 'Weapon Shaft', 0.75, 1.5, 0.85).rotation.x = 0.25;
+  add(new Mesh(new BoxGeometry(0.45, 0.45, 0.8), trim), 'Weapon Head', 0.75, 2.45, 0.95);
+  add(new Mesh(new BoxGeometry(0.4, 0.18, 0.8), dark), 'Boot Left', -0.3, 0.09, 0.1);
+  add(new Mesh(new BoxGeometry(0.4, 0.18, 0.8), dark), 'Boot Right', 0.3, 0.09, 0.1);
+
+  f.position.set(o.x, 0, 0);
+  f.rotation.y = o.facing;
+  f.scale.setScalar(o.scale);
+  return f;
+}
+
+const fighter1 = makeFighter('Fighter 1', { x: -3.4, facing: Math.PI / 2, scale: 1.0, robe: 0xb8391c, trim: 0xf0a030, dark: 0x1e1a1a, hood: true });
+const fighter2 = makeFighter('Fighter 2', { x: 3.4, facing: -Math.PI / 2, scale: 1.25, robe: 0x3a3a8c, trim: 0xd6b45a, dark: 0x2e4a3a, hood: false });
+editor.execute(new AddObjectCommand(editor, fighter1));
+editor.execute(new AddObjectCommand(editor, fighter2));
+tagClass(fighter1, 'fighter'); tagClass(fighter1, 'p1');
+tagClass(fighter2, 'fighter'); tagClass(fighter2, 'p2');</code></pre>
+
+	<div class="note"><strong>A bug worth checking for.</strong> The first version put the shoulders, arms and boots on local ±z — fine in the editor's default orientation, but after the π/2 turn they pointed at the camera instead of out to the sides, and the fighters looked like they were facing front. If a rotated rig looks wrong, check which local axis its "left and right" parts are on.</div>
+
+	<h2><span class="step">3</span> Add the HUD</h2>
+	<p class="lede">The HUD is a 3D group hung behind the fighters, not a screen overlay — so it is scaled (0.78) until both portraits fit inside the camera frustum. Each bar fill's geometry is translated so its origin sits on the <em>portrait-side edge</em>; later code only has to set <code>fill.scale.x</code> between 0 and 1 and the bar drains toward the centre, with no position math:</p>
+	<pre><code>// Fills have their geometry origin on the portrait-side edge, so game logic can
+// just set fill.scale.x (0..1) and the bar drains toward the centre.
+const hud = new Group();
+hud.name = 'HUD';
+hud.position.set(0, 8.4, -4);
+hud.scale.setScalar(0.78);
+const gold = new MeshStandardMaterial({ color: 0xd9b36a, roughness: 0.35, metalness: 0.7 });
+const slot = new MeshStandardMaterial({ color: 0x15171c, roughness: 0.6 });
+const emissive = c =&gt; new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.35, roughness: 0.5 });
+
+function makeHudSide(prefix, sign, healthColor, manaColor, portraitColor) {
+  const side = new Group();
+  side.name = prefix + ' HUD';
+  const frame = new Mesh(new BoxGeometry(7.4, 1.5, 0.15), slot);
+  frame.name = prefix + ' Frame'; frame.position.set(sign * 6.6, 0, 0);
+  side.add(frame);
+  const barW = 6.4, edge = sign * 9.75;
+  [['Health', 0.42, healthColor], ['Mana', -0.12, manaColor]].forEach(([n, y, c]) =&gt; {
+    const g = new BoxGeometry(barW, 0.38, 0.1);
+    g.translate(-sign * barW / 2, 0, 0);
+    const fill = new Mesh(g, emissive(c));
+    fill.name = prefix + ' ' + n + ' Fill'; fill.position.set(edge + 0, y, 0.12);
+    side.add(fill);
+  });
+  const ring = new Mesh(new CylinderGeometry(1.0, 1.0, 0.18, 32), gold);
+  ring.name = prefix + ' Portrait Ring'; ring.rotation.x = Math.PI / 2; ring.position.set(sign * 10.6, 0, 0);
+  side.add(ring);
+  const face = new Mesh(new CylinderGeometry(0.85, 0.85, 0.2, 32), new MeshStandardMaterial({ color: portraitColor, roughness: 0.5 }));
+  face.name = prefix + ' Portrait'; face.rotation.x = Math.PI / 2; face.position.set(sign * 10.6, 0, 0.02);
+  side.add(face);
+  [0, 1].forEach(i =&gt; {
+    const gem = new Mesh(new BoxGeometry(0.5, 0.5, 0.1), slot);
+    gem.name = prefix + ' Round Slot ' + (i + 1); gem.position.set(sign * (3.0 + i * 0.7), -0.95, 0.05);
+    side.add(gem);
+  });
+  return side;
+}
+const hudP1 = makeHudSide('P1', -1, 0x22a82a, 0x2a5fd9, 0xb8391c);
+const hudP2 = makeHudSide('P2', 1, 0x22a82a, 0x2a2a60, 0x3a3a8c);
+hud.add(hudP1); hud.add(hudP2);
+
+const tc = document.createElement('canvas');
+tc.width = 256; tc.height = 160;
+const tx = tc.getContext('2d');
+tx.clearRect(0, 0, 256, 160);
+tx.textAlign = 'center'; tx.textBaseline = 'middle';
+tx.fillStyle = '#ffffff'; tx.font = 'bold 120px Georgia'; tx.fillText('99', 128, 84);
+const timer = new Mesh(new PlaneGeometry(2.6, 1.6), new MeshBasicMaterial({ map: new THREE.CanvasTexture(tc), transparent: true }));
+timer.name = 'Round Timer'; timer.position.set(0, 0, 0.1);
+hud.add(timer);
+editor.execute(new AddObjectCommand(editor, hud));
+tagClass(hud, 'hud');</code></pre>
+
+	<h2><span class="step">4</span> Light the stage and set the mood</h2>
+	<p class="lede">Warm ambient fill, a shadow-casting key light, exponential fog and a clay-coloured background:</p>
+	<pre><code>editor.execute(new AddObjectCommand(editor, new AmbientLight(0xffd9b0, 0.7)));
+const sun = new DirectionalLight(0xffe2bb, 1.6);
+sun.name = 'Key Light'; sun.position.set(-6, 14, 10);
+sun.castShadow = true;
+sun.shadow.camera.left = -14; sun.shadow.camera.right = 14; sun.shadow.camera.top = 12; sun.shadow.camera.bottom = -12;
+editor.execute(new AddObjectCommand(editor, sun));
+setFog('FogExp2', '#8a5a3a', 0, 0, 0.012);
+setBackground('#7a4f35');</code></pre>
+
+	<h2><span class="step">5</span> Stand the camera at the front of the stage</h2>
+	<p class="lede">A low, close camera makes the fighters feel large. The same technique as the other tutorials — set the position, aim it, and update the controls' centre so orbiting pivots around the action:</p>
+	<pre><code>const cam = editor.camera;
+cam.position.set(0, 2.6, 12);
+cam.fov = 50;
+cam.lookAt(0, 3.2, 0);
+cam.updateProjectionMatrix();
+editor.controls.center.set(0, 3.2, 0);
+editor.signals.cameraChanged.dispatch(cam);
+editor.signals.objectChanged.dispatch(cam);</code></pre>
+
+	<h2><span class="step">6</span> Sanity-check before handing off</h2>
+	<p class="lede">Confirm the things later game code depends on, rather than eyeballing the viewport. The last two lines prove the bar anchors correctly — at half scale the left edge stays put and only the right edge moves:</p>
+	<pre><code>$S('.fighter').count();              // 2
+$S('.p1').count();                   // 1
+const fill = findObject('P1 Health Fill');
+const bounds = () => { fill.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(fill); return [b.min.x, b.max.x]; };
+fill.scale.x = 1;   bounds();        // [-7.61, -2.61]
+fill.scale.x = 0.5; bounds();        // [-7.61, -5.11]  (left edge pinned)
+fill.scale.x = 1;                    // put it back</code></pre>
+
+	<h2><span class="step">7</span> Save it as fight.json</h2>
+	<p class="lede">Use <strong>File → Save</strong> (the disk icon) to download the project as JSON, or load the ready-made one: <a href="fight.json" download>fight.json</a>. Opening it restores the names, the <code>.fighter</code> / <code>.p1</code> / <code>.p2</code> / <code>.hud</code> classes, the painted textures, the fog and the camera exactly as built here. Drop the file on the viewport, or use <strong>File → Open</strong>.</p>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="bubble-shooter-scene.html">Bubble shooter tutorial</a> · <a href="pong-table-view.html">Pong table tutorial</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
