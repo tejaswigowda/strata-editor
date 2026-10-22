@@ -6,6 +6,7 @@ import { SetValueCommand } from './commands/SetValueCommand.js';
 import { TimelineModel } from './intelligence/timeline.js';
 import { cameraKeys } from './intelligence/splineTrack.js';
 import { editCameraTrack, findCameraTrack, specFromEditCamera, moveSelector, optionsFor, simplifyAllCameras, simplifiableCameras, move as camMove } from './intelligence/cameraMoveEdit.js';
+import { cameraSelectors } from './intelligence/cameraTracks.js';
 import { holdTimelineAt, getImportedClips, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { CLIP_OPS, importedClipsOf, clipRoot, nodesForTarget } from './intelligence/clipDirectives.js';
 import { buildClipEvent } from './intelligence/clipControl.js';
@@ -190,6 +191,14 @@ function Timeline( editor ) {
 	addKeyButton.onClick( function () { addKeyAtPlayhead(); } );
 	editRow.appendChild( addKeyButton.dom );
 
+	// Always in view: thin camera keys. Enabled while a camera has something to simplify; it opens the Simplify panel
+	// for the selected key's camera (or the selected camera), else for the first camera with a dense move.
+	const simplifyToolbarButton = new UIButton( 'Simplify' );
+	simplifyToolbarButton.dom.title = 'Reduce camera keys: pick a tolerance, see "195 \u2192 27 keys", then apply (undoable). Works on the selected key\'s camera, or the first camera with a dense move';
+	simplifyToolbarButton.dom.setAttribute( 'aria-label', 'Simplify camera keys' );
+	simplifyToolbarButton.dom.style.cssText = 'height:28px;padding:0 12px;border-radius:14px;display:flex;align-items:center;justify-content:center;white-space:nowrap;flex-shrink:0;';
+	simplifyToolbarButton.onClick( function () { openSimplify(); } );
+	editRow.appendChild( simplifyToolbarButton.dom );
 	// enabled when there is somewhere to put the key: a selected key (its track) or a selected object
 	function updateAddKeyState() {
 
@@ -279,7 +288,7 @@ function Timeline( editor ) {
 		if ( on ) for ( const el of [ deleteButton.dom, addKeyButton.dom, fitButton ] ) transportRow.insertBefore( el, chevronButton );
 		else {
 
-			editRow.append( deleteButton.dom, addKeyButton.dom );
+			editRow.append( deleteButton.dom, addKeyButton.dom, simplifyToolbarButton.dom );
 			zoomGroup.appendChild( fitButton );
 
 		}
@@ -1103,7 +1112,7 @@ function Timeline( editor ) {
 	// With a key (an `animate` block) selected, this panel is a popover anchored to that block in the
 	// timeline; with only an object selected there is no key to anchor to, so it stays inline above the
 	// code panel (it stages the pose for "+ Key @ playhead").
-	const KEY_INLINE_CSS = 'padding:6px 10px;border-top:1px solid #ccc;display:none;flex-direction:column;gap:4px;font-size:11px;flex-shrink:0;';
+	const KEY_INLINE_CSS = 'padding:6px 10px;border-top:1px solid #ccc;display:none;flex-direction:column;gap:4px;font-size:11px;flex-shrink:0;max-height:42%;overflow-y:auto;';
 	const KEY_POPOVER_CSS = 'padding:8px 10px;display:flex;flex-direction:column;gap:4px;font-size:11px;max-height:min(66vh,520px);overflow:auto;';
 	const keyPanel = document.createElement( 'div' );
 	keyPanel.style.cssText = KEY_INLINE_CSS;
@@ -1425,7 +1434,37 @@ function Timeline( editor ) {
 	function selectedShotCamera() {
 
 		const o = editor.selected;
-		return o && o.isCamera && o !== editor.camera ? o : null;
+		if ( o && o.isCamera && o !== editor.camera ) return o;
+		// a selected key on a camera's track belongs to that camera, even though the camera object is not selected
+		const found = selectedAnimateEvent();
+		return found ? cameraForTrack( found.track ) : null;
+
+	}
+
+	function cameraForTrack( track ) {
+
+		return Object.values( editor.cameras || {} ).find( c => c !== editor.camera && cameraSelectors( c ).includes( track.target ) ) || null;
+
+	}
+
+	// Toolbar "Simplify": show the Simplify panel for the camera in play
+	function openSimplify() {
+
+		let cam = selectedShotCamera();
+		if ( ! cam ) {
+
+			const dense = simplifiableCameras( editor );
+			if ( ! dense.length ) { camInfo.textContent = 'No camera has 4 or more keys to simplify.'; return; }
+			cam = dense[ 0 ];
+			editor.select( cam ); // shows the camera tools (inline above the code panel) for it
+
+		}
+
+		refreshKeyPanel();
+		simplifyPanel.style.display = 'flex';
+		updateSimplifyPreview();
+		positionKeyPopover();
+		simplifyPanel.scrollIntoView( { block: 'nearest' } );
 
 	}
 

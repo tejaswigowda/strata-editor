@@ -12,7 +12,7 @@ A shot camera's motion is a track of **keys** on the [universal timeline](ANIMAT
 3. In the Edit Camera view the camera's path is drawn: a cyan line, a dot every second, a white handle per key. Click a handle to select it (green, with a label such as `key 8/20 · 6.00s`), and drag with the gizmo to move it. A magenta diamond is the key's **aim point**; drag it to change where the camera looks. Each drag is one undoable step.
 4. **Delete** (or **Delete key**) removes the selected key, never the camera. At least one key is always kept.
 5. Tick **Smooth path** to play the camera as one curve through its keys. Leave it off for straight legs between keys.
-6. **Simplify…** replaces a dense run of keys (for example a camera that was baked at 0.1 s steps) with a few that follow the same path, and turns smooth path on. See [Simplifying dense moves](#simplifying-dense-moves).
+6. **Simplify…** replaces a dense run of keys (for example a camera that was baked at 0.1 s steps) with a few that follow the same path, and turns smooth path on. You find it in three places: the camera tools of the key panel (when a shot camera is selected), in the key popover when you click any key block on a camera's track, and as the **Simplify** button in the Animations toolbar (right of **+ Key**), which opens the panel for the selected camera or, with nothing selected, for the first camera with a dense move. See [Simplifying dense moves](#simplifying-dense-moves).
 
 The path overlay shows only in the Edit Camera view and hides with the viewport's hide-cameras button (or View > Camera Helpers).
 
