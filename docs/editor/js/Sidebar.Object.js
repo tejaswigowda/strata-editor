@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { UIPanel, UIRow, UIInput, UIButton, UIColor, UICheckbox, UIInteger, UITextArea, UIText, UINumber } from './libs/ui.js';
 import { UIBoolean } from './libs/ui.three.js';
+import { tintAxes } from './AxisColors.js';
 
 import { SetUuidCommand } from './commands/SetUuidCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
@@ -109,6 +110,7 @@ function SidebarObject( editor ) {
 
 	objectPositionRow.add( new UIText( strings.getKey( 'sidebar/object/position' ) ).setClass( 'Label' ) );
 	objectPositionRow.add( objectPositionX, objectPositionY, objectPositionZ );
+	tintAxes( objectPositionX, objectPositionY, objectPositionZ );
 
 	container.add( objectPositionRow );
 
@@ -121,6 +123,7 @@ function SidebarObject( editor ) {
 
 	objectRotationRow.add( new UIText( strings.getKey( 'sidebar/object/rotation' ) ).setClass( 'Label' ) );
 	objectRotationRow.add( objectRotationX, objectRotationY, objectRotationZ );
+	tintAxes( objectRotationX, objectRotationY, objectRotationZ );
 
 	container.add( objectRotationRow );
 
@@ -133,6 +136,7 @@ function SidebarObject( editor ) {
 
 	objectScaleRow.add( new UIText( strings.getKey( 'sidebar/object/scale' ) ).setClass( 'Label' ) );
 	objectScaleRow.add( objectScaleX, objectScaleY, objectScaleZ );
+	tintAxes( objectScaleX, objectScaleY, objectScaleZ );
 
 	container.add( objectScaleRow );
 

@@ -2779,3 +2779,27 @@ html[data-theme="light"] .vl-note { color: #777; }
 html[data-theme="light"] .vl-select { background: #f4f4f6; border-color: #ccc; }
 html[data-theme="light"] .vl-reset { background: #eee; border-color: #ccc; }
 html[data-theme="light"] .empty-hint-example { background: rgba( 0, 0, 0, 0.06 ); }
+
+/* ── X / Y / Z colour cues (AxisColors.js): red / green / blue, as on the viewport gizmo ── */
+:root {
+	--axis-x: #ff4d4d;
+	--axis-y: #5fe35f;
+	--axis-z: #4d8dff;
+}
+
+html[data-theme="light"] {
+	--axis-x: #d82b2b;
+	--axis-y: #1f9d3a;
+	--axis-z: #2a5ee0;
+}
+
+.Input.Number.axis-field {
+	border-radius: 2px;
+	padding-left: 6px;
+}
+
+.Input.Number.axis-x { color: var( --axis-x ) !important; box-shadow: inset 3px 0 0 var( --axis-x ); }
+.Input.Number.axis-y { color: var( --axis-y ) !important; box-shadow: inset 3px 0 0 var( --axis-y ); }
+.Input.Number.axis-z { color: var( --axis-z ) !important; box-shadow: inset 3px 0 0 var( --axis-z ); }
+
+.Input.Number.axis-field:focus { box-shadow: inset 3px 0 0 currentColor, 0 0 0 1px currentColor; }

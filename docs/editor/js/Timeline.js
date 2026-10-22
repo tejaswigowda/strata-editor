@@ -7,6 +7,7 @@ import { TimelineModel } from './intelligence/timeline.js';
 import { cameraKeys } from './intelligence/splineTrack.js';
 import { editCameraTrack, findCameraTrack, specFromEditCamera, moveSelector, optionsFor, simplifyAllCameras, simplifiableCameras, move as camMove } from './intelligence/cameraMoveEdit.js';
 import { cameraSelectors } from './intelligence/cameraTracks.js';
+import { tintAxes } from './AxisColors.js';
 import { holdTimelineAt, getImportedClips, activeRenderCameraAt } from './intelligence/timelineController.js';
 import { CLIP_OPS, importedClipsOf, clipRoot, nodesForTarget } from './intelligence/clipDirectives.js';
 import { buildClipEvent } from './intelligence/clipControl.js';
@@ -1207,10 +1208,12 @@ function Timeline( editor ) {
 	keyLabel( 'Position' );
 	const kpX = keyNum(), kpY = keyNum(), kpZ = keyNum();
 	keyFieldRow( [ kpX, kpY, kpZ ] );
+	tintAxes( kpX, kpY, kpZ );
 
 	keyLabel( 'Rotation' );
 	const krX = keyNum( '°' ), krY = keyNum( '°' ), krZ = keyNum( '°' );
 	keyFieldRow( [ krX, krY, krZ ] );
+	tintAxes( krX, krY, krZ );
 
 	keyLabel( 'Look At' );
 	const kLookAt = document.createElement( 'input' );
@@ -1228,6 +1231,7 @@ function Timeline( editor ) {
 	keyLabel( 'Scale' );
 	const ksX = keyNum(), ksY = keyNum(), ksZ = keyNum();
 	keyFieldRow( [ ksX, ksY, ksZ ] );
+	tintAxes( ksX, ksY, ksZ );
 
 	function syncLookAtLock() {
 
