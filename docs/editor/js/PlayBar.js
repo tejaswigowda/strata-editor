@@ -1,5 +1,6 @@
 import { UIPanel } from './libs/ui.js';
 import { formatClock } from './TimeFormat.js';
+import { shotCameraName } from './ShotAt.js';
 
 // ── PlayBar.js ────────────────────────────────────────────────────────────────
 // A QuickTime-style transport controller that takes the place of the menubar
@@ -8,6 +9,13 @@ import { formatClock } from './TimeFormat.js';
 // closes it and brings the regular menubar back (playback is left alone).
 // Like PresentBar it talks to Timeline.js only through signals, so it never
 // owns the clock. body.play-bar-open swaps #menubar for #play-bar (main.css).
+// A small chip beside the clock names the camera of the current shot (the Render
+// tab's camera sequence at the playhead, else the active / followed camera), and
+// a few seconds into playback the bar fades to a low-opacity strip while the mouse
+// is away; moving over the top strip, hovering or focusing it, or pausing brings it back.
+
+const FADE_DELAY = 3000; // ms of playback with the pointer away before the bar dims
+const WAKE_STRIP = 56; // px from the top of the window that counts as "over the bar"
 
 function PlayBar( editor ) {
 
@@ -53,25 +61,74 @@ function PlayBar( editor ) {
 	timeLabel.textContent = '00:00 / 00:00';
 	container.dom.appendChild( timeLabel );
 
+	const shotChip = document.createElement( 'div' );
+	shotChip.className = 'play-bar-shot';
+	shotChip.setAttribute( 'aria-label', 'Current camera' );
+	shotChip.hidden = true;
+	container.dom.appendChild( shotChip );
+
 	button( 'cancel', closeIcon, 'Close the play bar and show the menu bar', close );
+
+	// ── auto-fade ────────────────────────────────────────────────────────────
+	let fadeTimer = null;
+	let pointerOver = false;
+
+	function wake() {
+
+		clearTimeout( fadeTimer );
+		container.dom.classList.remove( 'faded' );
+		if ( isPlaying && ! pointerOver && ! container.dom.contains( document.activeElement ) ) {
+
+			fadeTimer = setTimeout( function () { container.dom.classList.add( 'faded' ); }, FADE_DELAY );
+
+		}
+
+	}
+
+	container.dom.addEventListener( 'pointerenter', function () { pointerOver = true; wake(); } );
+	container.dom.addEventListener( 'pointerleave', function () { pointerOver = false; wake(); } );
+	container.dom.addEventListener( 'focusin', wake );
+	container.dom.addEventListener( 'focusout', wake );
+
+	document.addEventListener( 'pointermove', function ( event ) {
+
+		if ( event.clientY <= WAKE_STRIP && document.body.classList.contains( 'play-bar-open' ) ) wake();
+
+	} );
 
 	function open() {
 
 		document.body.classList.add( 'play-bar-open' );
+		wake();
 
 	}
 
 	function close() {
 
 		document.body.classList.remove( 'play-bar-open' );
+		clearTimeout( fadeTimer );
+		container.dom.classList.remove( 'faded' );
 
 	}
 
 	function setPlayingUI( info ) {
 
-		isPlaying = !! info.playing;
+		const playing = !! info.playing;
+		const changed = playing !== isPlaying;
+		isPlaying = playing;
 		playButton.classList.toggle( 'active', isPlaying );
 		pauseButton.classList.toggle( 'active', ! isPlaying && info.time > 0 && info.time < info.duration );
+		if ( changed ) wake(); // starts the fade countdown on play, restores the bar on pause
+
+	}
+
+	function updateShotChip( time ) {
+
+		const shots = editor.scene.userData && editor.scene.userData.renderShots;
+		const name = shotCameraName( shots, time, editor.cameras, editor.viewportCamera );
+		if ( name !== shotChip.textContent ) shotChip.textContent = name;
+		shotChip.title = name ? 'Camera at the playhead: ' + name : '';
+		shotChip.hidden = name === '';
 
 	}
 
@@ -97,6 +154,7 @@ function PlayBar( editor ) {
 		seek.max = String( Math.max( duration, 0.01 ) );
 		if ( ! scrubbing ) seek.value = String( info.time );
 		timeLabel.textContent = `${ formatClock( info.time ) } / ${ formatClock( duration ) }`;
+		updateShotChip( info.time );
 
 		if ( info.playing && ! isPlaying && ! document.body.classList.contains( 'present-mode' ) ) open();
 		setPlayingUI( info );

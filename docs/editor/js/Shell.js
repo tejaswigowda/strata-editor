@@ -21,6 +21,7 @@ import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT, buildSystemPrompt } from './
 import { extractCode, buildMessages, buildQAMessages, sceneContextString, addressablePartsBlock } from './AIUtils.js';
 import { AIEngine, getModelList } from './AIEngine.js';
 import { objectToJS, sceneToJS } from './scene/codegen.js';
+import { simplifyAllCameras } from './intelligence/cameraMoveEdit.js';
 import { sceneEqual } from './scene/sceneEqual.js';
 import { summarizeScene as summarizeSceneFull, getSize, getTopY, getWorldCenter, searchableLabel } from './scene/summarize.js';
 import { booleanUnion, booleanSubtract, booleanIntersect } from './mesh/ops/boolean.js';
@@ -610,7 +611,7 @@ function Shell( editor ) {
 
 		// ── Misc ──
 		{ w: 'fetchAPI', k: 'fn' }, { w: 'askScene', k: 'fn' },
-		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'shader', k: 'fn' }, { w: 'shaders', k: 'fn' }, { w: 'unshader', k: 'fn' }, { w: 'mtoon', k: 'fn' }, { w: 'refineFace', k: 'fn' }, { w: 'driveFace', k: 'fn' },
+		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'shader', k: 'fn' }, { w: 'shaders', k: 'fn' }, { w: 'unshader', k: 'fn' }, { w: 'mtoon', k: 'fn' }, { w: 'refineFace', k: 'fn' }, { w: 'driveFace', k: 'fn' }, { w: 'simplifyCameras', k: 'fn' },
 		{ w: 'evalAI', k: 'fn' }, { w: 'evalEditMatrix', k: 'fn' },
 		{ w: 'saveEvalRows', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
 		{ w: 'askExternal', k: 'fn' }, { w: 'checkApiHealth', k: 'fn' },
@@ -666,7 +667,8 @@ function Shell( editor ) {
 		{ w: 'moveKey', k: 'method', h: "(i, { pos, lookAt, fov, time })" },
 		{ w: 'deleteKey', k: 'method', h: "(i)" },
 		{ w: 'smooth', k: 'method', h: "(true|false)" },
-		{ w: 'simplify', k: 'method', h: "(tolerance?)" },
+		{ w: 'simplify', k: 'method', h: "(tolerance | 'tight'|'normal'|'loose' | { tolerance, rotation, fov, maxKeys, keepBeats })" },
+		{ w: 'simplifyPreview', k: 'method', h: "(opts?)  { before, after } without changing anything" },
 		{ w: 'setKeys', k: 'method', h: "([{ t, pos, lookAt, fov }], { smooth })" },
 		{ w: 'selectKey', k: 'method', h: "(i, 'key'|'look')" },
 		{ w: 'asCommand', k: 'method', h: "()  the command that rebuilds this move" },
@@ -1521,6 +1523,8 @@ function Shell( editor ) {
 		if ( ! quiet ) {
 
 			history.unshift( code );
+			const tryHint = hint.querySelector( '.shell-hint-try' );
+			if ( tryHint ) tryHint.remove(); // first-run examples are done once something has been run
 			if ( history.length > 500 ) history.pop();
 			historyIndex = - 1;
 			savedInput = '';
@@ -2531,6 +2535,21 @@ function Shell( editor ) {
 					const lines = helpTopic( topic );
 					if ( ! lines ) throw new Error( helpMissing( topic ) );
 					lines.forEach( l => appendOutput( l, 'info' ) );
+
+				},
+				// ── Camera moves (see guides/CAMERA_PATHS.md) ───────────────────────
+				//   simplifyCameras(opts?)  thin EVERY shot camera's dense keys in ONE undo step.
+				//                           opts: a tolerance, 'tight'|'normal'|'loose' (default), or { tolerance (units),
+				//                           rotation (deg), fov (deg), maxKeys, keepBeats (default true), dryRun }.
+				//                           keepBeats keeps first/last keys, the shot start/end keys of the Render
+				//                           Camera Sequence and the speed turning points. Returns
+				//                           { cameras, before, after, changed, report: [{ camera, before, after }] }.
+				simplifyCameras: function ( opts ) {
+
+					const { dryRun, ...rest } = opts && typeof opts === 'object' ? opts : typeof opts === 'string' ? { preset: opts } : { tolerance: opts };
+					const r = simplifyAllCameras( editor, rest, { dryRun: !! dryRun } );
+					appendOutput( `${ r.cameras } camera${ r.cameras === 1 ? '' : 's' }: ${ r.before } → ${ r.after } keys${ dryRun ? ' (preview, nothing changed)' : '' }`, 'info' );
+					return r;
 
 				},
 				// ── Face refine (see guides/FACE_REFINE.md) ──────────────────────────
@@ -3707,6 +3726,24 @@ ${ notes.join( '\n' ) }
 
 	}
 
+	// "Try" examples on the same first-run line (click puts one into the input; hidden once a command has run)
+	const tryLine = document.createElement( 'span' );
+	tryLine.className = 'shell-hint-try';
+	tryLine.append( ' Try ' );
+
+	for ( const [ i, example ] of [ 'help', 'listSelectors()' ].entries() ) {
+
+		if ( i > 0 ) tryLine.append( ' or ' );
+		const chip = document.createElement( 'button' );
+		chip.type = 'button';
+		chip.className = 'shell-hint-example';
+		chip.textContent = example;
+		chip.title = 'Put "' + example + '" in the input';
+		chip.addEventListener( 'click', function () { input.value = example; input.focus(); } );
+		tryLine.appendChild( chip );
+
+	}
+
 	function updateHint() {
 
 		const size = modelSizeText();
@@ -3715,6 +3752,8 @@ ${ notes.join( '\n' ) }
 		if ( aiEngine.ready ) hint.textContent = 'AI helper loaded. Typing JavaScript works as before.';
 		else if ( download ) hint.textContent = 'Type JavaScript below, it works with no AI. The AI helper is optional: Load AI connects to the selected API and downloads nothing.';
 		else hint.textContent = 'Type JavaScript below, it works with no AI. The AI helper is optional: Load AI downloads a model (' + size.replace( ' download', '' ) + ' for the selected one, kept by the browser) only when you click it.';
+
+		if ( history.length === 0 ) hint.appendChild( tryLine );
 
 		loadBtn.title = download ? 'Optional: connect the AI helper (no download). JavaScript works without it.' : 'Optional: download an on-device AI model (' + size.replace( ' download', '' ) + ', once) so you can describe edits in words. JavaScript works without it.';
 		if ( aiInput.disabled ) aiInput.placeholder = 'Optional AI: click Load AI first (' + size.replace( ' download', '' ) + ')';
@@ -4252,6 +4291,7 @@ ${ notes.join( '\n' ) }
 		appendOutput( 'dev API (--dev mode): External models (Ollama, OpenAI, Claude) appear in model dropdown when available  — select and click "Load AI"', 'info' );
 		appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
 		appendOutput( 'AI eval: evalAI() runs the standing eval set (pong/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
+		appendOutput( 'camera moves: $S("#cam").keys()/.keyAt()/.simplify("normal")/.simplifyPreview()  simplifyCameras({preset:"normal"})  — thin every shot camera in one undo step (guides/CAMERA_PATHS.md)', 'info' );
 		appendOutput( 'animation: addClip(obj,clip)  addSpinClip(obj,{axis:"y",turns:1,seconds:8,pingPong:true})  — open the Animations tab to play', 'info' );
 		appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
 		appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)', 'info' );

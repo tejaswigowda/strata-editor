@@ -171,7 +171,8 @@ exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection,
 | Inspector (camera): fov / near / far | `$S('camera').fov/.near/.far` | ✓ |
 | Add light | `addLight(type, opts)` | ✓ |
 | Properties: Shader tab (any shader on any object, incl. MToon) | `shader(target, id, params)` / `mtoon(target, spec)` / `toon(target, spec)` / `unshader(target)` / `shaders()`; all return `{ id, params, meshes, materials }`, take nested or flat MToon specs, and are explained by `help('shader')` (see [SHADERS.md](SHADERS.md)) | ✓ |
-| Animations tab / viewport: camera keys (add, drag a handle or aim, fov, time, delete, smooth, simplify, copy as command) | `$S('#cam').keys/.keyAt/.keyFromView/.moveKey/.deleteKey/.smooth/.simplify/.setKeys/.asCommand/.selectKey` (see [CAMERA_PATHS.md](CAMERA_PATHS.md)) | ✓ |
+| Animations tab / viewport: camera keys (add, drag a handle or aim, fov, time, delete, smooth, simplify, copy as command) | `$S('#cam').keys/.keyAt/.keyFromView/.moveKey/.deleteKey/.smooth/.simplify/.simplifyPreview/.setKeys/.asCommand/.selectKey` (see [CAMERA_PATHS.md](CAMERA_PATHS.md)) | ✓ |
+| Camera tools: Simplify all cameras | `simplifyCameras({ preset: 'normal', keepBeats: true })`, one undo step; add `dryRun: true` to preview (see [CAMERA_PATHS.md](CAMERA_PATHS.md#simplifying-dense-moves)) | ✓ |
 | Scene: background / fog / environment | `setBackground` / `setFog` / `clearFog` / `setEnvironment` | signal (as UI) |
 | Edit: group / ungroup | `groupSelection` / `ungroupSelection` | ✓ |
 | Outliner: hide others / show | `isolate` / `soloClass` / `showAll` | ✓ |

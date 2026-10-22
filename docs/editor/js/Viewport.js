@@ -29,6 +29,7 @@ import { hydrateCallcard } from './Callcard.js';
 import { CameraPath } from './CameraPath.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
 import { RenderPreview } from './toon/RenderPipeline.js';
+import { ViewLook } from './ViewLook.js';
 
 /**
  * Cube border helper: `node.userData.hasEdgeOutline` is a plain, serializable
@@ -66,6 +67,13 @@ function Viewport( editor ) {
 	const vControls = ViewportControls( editor );
 	container.add( vControls[ 0 ] );
 	container.add( vControls[ 1 ] );
+
+	// Frame guides + Look toggles (ViewLook.js): a pointer-events:none overlay under the controls and two
+	// buttons beside the shading select. Viewport-only; hidden while the Render tab renders.
+	const viewLook = new ViewLook( editor, function () { render(); } );
+	editor.viewLook = viewLook;
+	container.dom.insertBefore( viewLook.overlay, container.dom.firstChild );
+	vControls[ 1 ].dom.insertBefore( viewLook.controls, vControls[ 1 ].dom.firstChild );
 
 	//
 
@@ -1638,6 +1646,7 @@ function Viewport( editor ) {
 
 			renderAsExport( container.dom.offsetWidth, container.dom.offsetHeight );
 			if ( camera === editor.viewportCamera ) cameraPath.updateScales( camera ); else cameraPath.label.style.display = 'none';
+			viewLook.afterRender( renderPreview.domElement );
 			endTime = performance.now();
 			editor.signals.sceneRendered.dispatch( endTime - startTime );
 			return;
@@ -1645,6 +1654,10 @@ function Viewport( editor ) {
 		}
 
 		renderer.setViewport( 0, 0, container.dom.offsetWidth, container.dom.offsetHeight );
+
+		// Look popover > "Hide toon outlines": viewport-only; the outline passes are put back right after the
+		// draw (and the stand-ins below read their visibility from the originals, so order matters).
+		const restoreOutlines = viewLook.outlinesHidden() ? viewLook.hideOutlines( scene ) : null;
 
 		// Without WebGPU the editor falls back to the classic WebGLRenderer, which cannot compile
 		// node materials (MToon, TSL shaders): draw them through WebGL stand-ins for this frame.
@@ -1656,6 +1669,7 @@ function Viewport( editor ) {
 		} finally {
 
 			if ( restoreNodeMaterials ) restoreNodeMaterials();
+			if ( restoreOutlines ) restoreOutlines();
 
 		}
 
@@ -1680,6 +1694,8 @@ function Viewport( editor ) {
 			renderer.autoClear = true;
 
 		}
+
+		viewLook.afterRender( renderer.domElement );
 
 		endTime = performance.now();
 		editor.signals.sceneRendered.dispatch( endTime - startTime );

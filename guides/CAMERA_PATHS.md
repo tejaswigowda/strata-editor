@@ -12,7 +12,7 @@ A shot camera's motion is a track of **keys** on the [universal timeline](ANIMAT
 3. In the Edit Camera view the camera's path is drawn: a cyan line, a dot every second, a white handle per key. Click a handle to select it (green, with a label such as `key 8/20 · 6.00s`), and drag with the gizmo to move it. A magenta diamond is the key's **aim point**; drag it to change where the camera looks. Each drag is one undoable step.
 4. **Delete** (or **Delete key**) removes the selected key, never the camera. At least one key is always kept.
 5. Tick **Smooth path** to play the camera as one curve through its keys. Leave it off for straight legs between keys.
-6. **Simplify** replaces a dense run of keys (for example a camera that was baked at 0.1 s steps) with a few that follow the same path, and turns smooth path on.
+6. **Simplify…** replaces a dense run of keys (for example a camera that was baked at 0.1 s steps) with a few that follow the same path, and turns smooth path on. See [Simplifying dense moves](#simplifying-dense-moves).
 
 The path overlay shows only in the Edit Camera view and hides with the viewport's hide-cameras button (or View > Camera Helpers).
 
@@ -21,6 +21,26 @@ The path overlay shows only in the Edit Camera view and hides with the viewport'
 With **Smooth path** on, the track stores `spline: true` and the compiler plays one cubic curve through the key positions, aim points and fields of view. Speed is continuous through every key and the camera eases to rest at the first and last, so a key's **time** shapes the speed and its **position** shapes the route. Per-leg easing is ignored. A named aim target such as `#maya` is carried from key to key rather than curved.
 
 The curve is computed in `intelligence/splineTrack.js` (pure, with tests in `intelligence/__tests__/splineTrack.test.mjs`) and baked to ordinary 0.1 s `animate` legs when the timeline compiles, so playback, rendering and glTF export need no special handling.
+
+## Simplifying dense moves
+
+A baked camera can carry a key every 0.1 s (a 20 s move is about 200 keys). **Simplify…** in the camera tools opens a small panel:
+
+* **Tight / Normal / Loose** picks the tolerance. Each step is a position tolerance in scene units, an aim tolerance in degrees (the angle between the original and the simplified view direction), a field-of-view tolerance in degrees, and a cap on the number of keys:
+
+  | Step | position | aim | fov | most keys |
+  |---|---|---|---|---|
+  | Tight | 0.005 | 0.25° | 0.1° | 60 |
+  | Normal | 0.01 | 0.5° | 0.25° | 40 |
+  | Loose | 0.05 | 2° | 1° | 12 |
+
+* **Keep beats** (on by default) always keeps the keys that define the shot: the first and last key, the key nearest where the shot starts and where it ends in the Render tab's Camera Sequence, the keys where the speed turns around (the ease in and out of a push-in), and the closest and farthest approach to a fixed aim point. A push-in therefore ends on exactly the key it ended on before. If the beats need more keys than the cap, the cap grows to fit them.
+* A live line such as `195 → 29 keys` shows the result for the current settings. It is computed without touching the scene. `(key limit reached, looser than the tolerance)` means the cap stopped the search before every dropped key was within tolerance.
+* **Apply** commits one undo step for this camera. **Simplify all cameras** applies the same settings to every shot camera in one undo step and reports the total, for example `5 cameras: 604 → 63 keys`; its preview sits next to the button.
+
+Simplifying only ever removes keys: the surviving keys keep their time, position, aim and fov (positions are stored to 4 decimals), and the move plays as a smooth path through them. A camera with fewer than 4 keys, or one where nothing can be dropped, is left exactly as it was.
+
+Where dense keys come from: the editor has no step that bakes camera keys by itself (dense tracks come from the scene file, from an imported or scripted `setKeys`, or from the Save of the code panel), and a plain `setKeys` always reproduces its keys exactly so that `asCommand()` round-trips. Thinning is therefore opt-in: `setKeys(keys, { smooth, simplify: true })` simplifies what it just wrote with the Tight preset and beats kept (or pass any option object from the table below).
 
 ## From the JS shell
 
@@ -34,11 +54,14 @@ Everything above is also a shell verb on the same track. `$S('#cam07')` selects 
 | `.moveKey(i, { pos, lookAt, fov, time })` | Change a key. `lookAt: null` or `fov: null` clears it. | drag a handle or aim diamond, key panel |
 | `.deleteKey(i)` | Remove a key. Throws on the last one. | Delete |
 | `.smooth(true \| false)` | Smooth path on or off | Smooth path |
-| `.simplify(tolerance?)` | Collapse a dense run of keys to a few, smooth on | Simplify |
-| `.setKeys([{ t, pos, lookAt?, fov? }], { smooth })` | Replace the whole move in one step | |
+| `.simplify(opts?)` | Collapse a dense run of keys to a few, smooth on. `opts` is a position tolerance, `'tight' \| 'normal' \| 'loose'`, or `{ preset, tolerance, rotation, fov, maxKeys, keepBeats }` (see below) | Simplify… > Apply |
+| `.simplifyPreview(opts?)` | What `.simplify(opts)` would do, changing nothing: `{ before, after, changed, worst }` | the live preview line |
+| `.setKeys([{ t, pos, lookAt?, fov? }], { smooth, simplify })` | Replace the whole move in one step; `simplify` (default off) thins what it wrote | |
 | `.asCommand()` | The `setKeys(...)` command that rebuilds this move exactly | Copy as command |
 | `.selectKey(i, 'key' \| 'look')` | Select a handle (or its aim point) as if clicked | click a handle |
 
+* **Simplify options.** `tolerance` is in scene units (default 0.01), `rotation` and `fov` in degrees (left out: the aim point is checked in scene units at half weight and fov is not checked, which is the original behaviour of a bare `.simplify()`), `maxKeys` caps the result (default 20), and `keepBeats` (default `false` for `.simplify()`) keeps the beats described above, including the shot start and end times from the Camera Sequence. A preset name fills these in from the table above, and anything you pass explicitly wins over the preset: `.simplify({ preset: 'normal', keepBeats: true, tolerance: 0.02 })`.
+* **All cameras.** `simplifyCameras(opts?)` (a shell function, not a `$S` verb) simplifies every shot camera that has 4 or more keys in **one** undo step and prints `5 cameras: 604 → 63 keys`. It takes the same options plus `dryRun: true` (report only). Unlike `.simplify()`, it defaults to the `'normal'` preset with `keepBeats` **on**, and a bare number is a position tolerance on top of that preset. It returns `{ cameras, before, after, changed, report: [{ camera, before, after, worst }] }`. Example: `simplifyCameras({ preset: 'normal' })`.
 * **Indices.** `keys()[i]` is the handle labelled `key i+1/N` in the viewport, so shell indices start at 0 and the label counts from 1. Each key's `label` is exactly the text the viewport shows. Keys are ordered by arrival time, and a key keeps its identity (and its selection) when `moveKey` gives it a new time.
 * **One undo.** Every verb is one `SetTimelineCommand`, the same entry a handle drag makes, so shell and viewport edits interleave on one undo stack. A verb that throws (bad index, last key, two keys at one time) changes nothing and adds no entry.
 * **Round trip.** `.asCommand()` returns text such as `$S('#cam07').setKeys([ { t: 0.001, pos: [0.36, 0.19, 0.03], lookAt: [0.5, 0.1, 0.2], fov: 30 }, ... ], { smooth: true })`. Running it on any camera, from any state, gives the same keys.

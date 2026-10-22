@@ -1,7 +1,7 @@
 # Roadmap and status
 
 > Part of the [Strata documentation](../README.md#documentation). See also:
-> [Architecture](ARCHITECTURE.md) · [The eval matrix (thesis evidence)](../README.md#the-eval-matrix-the-editing-gate) · [Audit snapshot](AUDIT.md)
+> [Architecture](ARCHITECTURE.md) · [The eval matrix (thesis evidence)](../README.md#the-eval-matrix-the-editing-gate) · [Audit snapshot](AUDIT.md) · [Viewport look and frame guides](VIEWPORT_LOOK.md)
 
 This is the **one place for "what exists / what is next"**. Last reviewed **2026-10-21**. Three rules keep it honest:
 
@@ -50,6 +50,9 @@ DONE
   Toon look (TOON_LOOK.md): light-responsive banded toon + rim + outlines for the WebGPU renderer,
     honouring a VRM's own MToon parameters (three-vrm MToonNodeMaterial); look spec, customize op,
     shell toon(); material-only, so rig-safe
+  Viewport look + frame guides (VIEWPORT_LOOK.md): letterbox / safe-area overlay, vignette / film grain /
+    soft glow, a hide-toon-outlines preview toggle, Auto / Light / Dark theme, saved panel sizes,
+    first-run empty-state hints, play-bar shot chip + auto-fade; viewport-only, all off by default
   Character customizer (CUSTOMIZER.md): look / wardrobe / expression over one rig-safe op set
     (tint, recolor, hide, ARKit blendshapes, tags, bone-attached props), rig-safety fingerprint verified
   Authored face (FACE_TRACK.md): expression + gaze as keyed timeline channels, seeded idle layer
@@ -110,7 +113,7 @@ Under way in the working tree. None of this is shipped, so none of it is describ
 
 * **Never lose unsaved work.** Autosave, a dirty indicator and recover-on-load. (Git commit stays the explicit, versioned save; see [Git versioning](GIT_VERSIONING.md).)
 * **"Preview as render" viewport mode** and a **render-vs-viewport comparison script**, so the gap between the viewport and what the Render tab produces is measured rather than eyeballed (see the stand-in gap under [Known gaps](#known-gaps)).
-* **Timeline polish:** zoom / pan, snapping, multi-select, collapsed baked camera tracks, and render performance.
+* **Timeline polish:** zoom / pan, snapping (and a snap grid), multi-select, collapsed baked camera tracks, render performance, track colours and icons, shot markers, previous / next key, an overview mini-map, a hover card and a collapsible toolbar.
 * **Shell API normalisation:** shader parameters accepted nested and flat, `help()` generated from the schema, and generated shader docs ([JS Shell](JS_SHELL.md), [Shaders](SHADERS.md)).
 
 ## NEXT (the next lever)

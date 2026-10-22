@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 import { UIPanel, UIBreak, UIRow, UIColor, UISelect, UIText, UINumber } from './libs/ui.js';
 import { UIOutliner, UITexture } from './libs/ui.three.js';
+import { createEmptyHint } from './EmptyHint.js';
 
 function SidebarScene( editor ) {
 
@@ -203,6 +204,15 @@ function SidebarScene( editor ) {
 
 	} );
 	container.add( outliner );
+
+	// First-run hint while the scene has nothing in it (hidden once it does, or when dismissed)
+	const emptyHint = createEmptyHint( {
+		id: 'scene-outliner',
+		title: 'Nothing in the scene yet',
+		text: 'Drop a .glb, .vrm or .json file onto the viewport to load it, or add a shape from the Shell tab:',
+		examples: [ { label: 'box', code: 'editor.execute( new AddObjectCommand( editor, new THREE.Mesh( new THREE.BoxGeometry(), new THREE.MeshStandardMaterial() ) ) )' } ]
+	} );
+	container.dom.appendChild( emptyHint.dom );
 	container.add( new UIBreak() );
 
 	// background
@@ -572,6 +582,7 @@ function SidebarScene( editor ) {
 
 		outliner.setOptions( options );
 
+		emptyHint.setEmpty( scene.children.length === 0 );
 		if ( editor.selected !== null ) {
 
 			outliner.setValue( editor.selected.id );

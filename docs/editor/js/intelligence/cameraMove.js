@@ -262,8 +262,12 @@ export function setSmooth( track, on ) {
 
 }
 
-/** Replace the whole move: keys are [{ t | time, pos, lookAt?, fov? }]. At least one key. */
-export function setKeys( track, specs, { smooth } = {} ) {
+/**
+ * Replace the whole move: keys are [{ t | time, pos, lookAt?, fov? }]. At least one key.
+ * `simplify` (off by default, so asCommand() round-trips exactly) thins a dense run after writing it:
+ * true = the conservative 'tight' preset with beats kept, or any simplifyOptions() value.
+ */
+export function setKeys( track, specs, { smooth, simplify } = {} ) {
 
 	if ( ! Array.isArray( specs ) || specs.length === 0 ) throw new Error( 'setKeys: expected a non-empty array of keys' );
 	const items = specs.map( ( spec, i ) => {
@@ -278,20 +282,68 @@ export function setKeys( track, specs, { smooth } = {} ) {
 	track.events = track.events.filter( e => ! old.has( e.id ) );
 	commit( track, items );
 	if ( smooth !== undefined ) setSmooth( track, !! smooth );
+	if ( simplify ) return simplifyTrack( track, simplify === true ? { preset: 'tight', keepBeats: true } : simplify ).after;
 	return items.length;
 
 }
 
-/** Collapse a dense run of keys to a few on a smooth path (the viewport's Simplify button). */
-export function simplifyTrack( track, { tolerance = 0.01, maxKeys = 20 } = {} ) {
+/** The Tight / Normal / Loose steps of the Simplify control: position in scene units, rotation and fov in degrees. */
+export const SIMPLIFY_PRESETS = {
+	tight: { tolerance: 0.005, rotation: 0.25, fov: 0.1, maxKeys: 60 },
+	normal: { tolerance: 0.01, rotation: 0.5, fov: 0.25, maxKeys: 40 },
+	loose: { tolerance: 0.05, rotation: 2, fov: 1, maxKeys: 12 },
+};
+
+/**
+ * Simplify options from what a caller passes: a number (position tolerance), a preset name
+ * ('tight' | 'normal' | 'loose'), or { preset?, tolerance, rotation, fov, maxKeys, keepBeats, beats }.
+ * Explicit fields win over the preset. With nothing given: tolerance 0.01, aim checked as a point, 20 keys.
+ */
+export function simplifyOptions( opts ) {
+
+	const o = typeof opts === 'number' ? { tolerance: opts } : typeof opts === 'string' ? { preset: opts } : ( opts || {} );
+	if ( o.preset !== undefined && ! SIMPLIFY_PRESETS[ o.preset ] ) throw new Error( 'simplify: preset must be one of ' + Object.keys( SIMPLIFY_PRESETS ).join( ', ' ) );
+	const { preset, ...rest } = o;
+	const out = { tolerance: 0.01, maxKeys: 20, keepBeats: false, beats: [], ...( preset ? SIMPLIFY_PRESETS[ preset ] : {} ) };
+	for ( const k of Object.keys( rest ) ) if ( rest[ k ] !== undefined ) out[ k ] = rest[ k ];
+	for ( const k of [ 'tolerance', 'rotation', 'fov', 'maxKeys' ] ) {
+
+		if ( out[ k ] !== undefined && ( ! Number.isFinite( out[ k ] ) || out[ k ] < 0 ) ) throw new Error( 'simplify: ' + k + ' must be a non-negative number' );
+
+	}
+	out.keepBeats = !! out.keepBeats;
+	out.beats = ( Array.isArray( out.beats ) ? out.beats : [] ).filter( Number.isFinite );
+	return out;
+
+}
+
+function planSimplify( track, opts ) {
 
 	const keys = cameraKeys( track.events );
-	if ( keys.length < 4 ) return { before: keys.length, after: keys.length, changed: false };
-	const picked = simplifyKeys( keys, { tolerance, maxKeys } );
+	if ( keys.length < 4 ) return { keys, picked: null, before: keys.length, after: keys.length, changed: false, worst: 0 };
+	const picked = simplifyKeys( keys, simplifyOptions( opts ) );
+	const changed = picked.length < keys.length;
+	return { keys, picked, before: keys.length, after: picked.length, changed, worst: Math.round( picked.worst * 1000 ) / 1000 };
+
+}
+
+/** What simplifyTrack would do, without touching the track: { before, after, changed, worst } (worst <= 1: every dropped key is within tolerance). */
+export function previewSimplify( track, opts ) {
+
+	const { before, after, changed, worst } = planSimplify( track, opts );
+	return { before, after, changed, worst };
+
+}
+
+/** Collapse a dense run of keys to a few on a smooth path (the viewport's Simplify button). See simplifyOptions. */
+export function simplifyTrack( track, opts ) {
+
+	const { keys, picked, before, after, changed, worst } = planSimplify( track, opts );
+	if ( ! changed ) return { before, after, changed: false, worst };
 	const ids = new Set( keys.map( k => k.id ) );
 	track.events = track.events.filter( e => ! ids.has( e.id ) ).concat( eventsFromKeys( keys, picked, 'ck' ) );
 	track.spline = true;
-	return { before: keys.length, after: picked.length, changed: true };
+	return { before, after, changed: true, worst };
 
 }
 

@@ -1,4 +1,5 @@
 import { UIElement } from './libs/ui.js';
+import { clampSidebarHeight, clampSidebarWidth } from './PanelSizes.js';
 
 function Resizer( editor ) {
 
@@ -50,7 +51,7 @@ function Resizer( editor ) {
 			const cY = event.clientY < 0 ? 0 : event.clientY > offsetHeight ? offsetHeight : event.clientY;
 
 			// Sidebar grows upward from the bottom edge; keep room for the menubar.
-			const height = Math.min( offsetHeight - 80, Math.max( 150, offsetHeight - cY ) );
+			const height = clampSidebarHeight( offsetHeight - cY, offsetHeight );
 
 			root.setProperty( '--sidebar-height', height + 'px' );
 			localStorage.setItem( 'sidebar-height', height );
@@ -60,8 +61,9 @@ function Resizer( editor ) {
 			const offsetWidth = document.body.offsetWidth;
 			const cX = event.clientX < 0 ? 0 : event.clientX > offsetWidth ? offsetWidth : event.clientX;
 
-			// Right dock measures from the right edge, left dock from the left. .TabbedPanel min-width: 335px
-			const width = Math.max( 335, position === 'left' ? cX : offsetWidth - cX );
+			// Right dock measures from the right edge, left dock from the left; clamped so the dock stays
+			// usable (.TabbedPanel min-width) and the viewport keeps some room.
+			const width = clampSidebarWidth( position === 'left' ? cX : offsetWidth - cX, offsetWidth );
 
 			root.setProperty( '--sidebar-width', width + 'px' );
 			localStorage.setItem( 'sidebar-width', width );

@@ -8,34 +8,12 @@
 import { TimelineModel } from './timeline.js';
 import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import { cameraKeys } from './splineTrack.js';
+import { cameraSelectors, findCameraTrack, optionsForCamera, simplifiableIn, simplifyAllInModel } from './cameraTracks.js';
 import * as move from './cameraMove.js';
 
 export { move };
 
-/** Selectors a camera's track may be stored under, best first. */
-export function cameraSelectors( camera ) {
-
-	const out = [];
-	if ( camera.userData && camera.userData.label ) out.push( '#' + camera.userData.label );
-	if ( camera.name ) out.push( '#' + camera.name );
-	out.push( camera.uuid );
-	return out;
-
-}
-
-/** The camera's track in `timeline` (a TimelineModel), or null. */
-export function findCameraTrack( timeline, camera ) {
-
-	if ( ! timeline || ! camera ) return null;
-	for ( const sel of cameraSelectors( camera ) ) {
-
-		const t = timeline.tracks.find( t => t.target === sel );
-		if ( t ) return t;
-
-	}
-	return null;
-
-}
+export { cameraSelectors, findCameraTrack };
 
 /** The selector to read a camera's move back in: its track's target, else the best name. */
 export function moveSelector( editor, camera ) {
@@ -110,5 +88,52 @@ export function selectedKeyIndex( editor, camera ) {
 	if ( ! cp || ! track || cp.trackTarget !== track.target || ! cp.selectedKeyId ) return null;
 	const i = cameraKeys( track.events ).findIndex( k => k.id === cp.selectedKeyId );
 	return i < 0 ? null : i;
+
+}
+
+function shotsOf( editor ) {
+
+	return ( editor.scene && editor.scene.userData && editor.scene.userData.renderShots ) || [];
+
+}
+
+function shotCameras( editor ) {
+
+	return Object.values( editor.cameras || {} ).filter( c => isShotCamera( editor, c ) );
+
+}
+
+/** The shot cameras that have a camera track with something to simplify (4+ keys). */
+export function simplifiableCameras( editor ) {
+
+	return simplifiableIn( editor.timeline, shotCameras( editor ) );
+
+}
+
+/** Options for one camera: with keepBeats on, its shot start/end in the Camera Sequence join the beats. */
+export function optionsFor( editor, camera, opts ) {
+
+	return optionsForCamera( shotsOf( editor ), editor.timeline ? editor.timeline.duration : 0, camera, opts );
+
+}
+
+/**
+ * Simplify every shot camera's move. `dryRun` only reports. Otherwise it is ONE SetTimelineCommand
+ * (one undo step) over a copy of the whole timeline. Returns
+ * { cameras, before, after, changed, report: [{ camera, before, after, worst }] }.
+ * Defaults to keepBeats on (see simplifyOptions for the fields).
+ */
+export function simplifyAllCameras( editor, opts = {}, { dryRun = false, name = 'Simplify all camera keys' } = {} ) {
+
+	const json = editor.timeline ? JSON.parse( JSON.stringify( editor.timeline.toJSON() ) ) : { duration: 0, tracks: [] };
+	const model = TimelineModel.fromJSON( json );
+	const out = simplifyAllInModel( model, shotCameras( editor ), shotsOf( editor ), opts, { dryRun } );
+	if ( ! dryRun && out.changed ) {
+
+		model.recomputeDuration();
+		editor.execute( new SetTimelineCommand( editor, model.toJSON(), name ) );
+
+	}
+	return out;
 
 }

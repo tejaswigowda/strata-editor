@@ -14,6 +14,7 @@ import { TimelineModel, invalidateRestState, clearRestStateCache, withCanonicalR
 import { syncTimeline } from './intelligence/timelineController.js';
 import { findSharedMaterials } from './intelligence/editOps.js';
 import { withoutBakedTextures } from './scene/serialize.js';
+import { applyStoredTheme } from './Theme.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 
@@ -22,6 +23,8 @@ _DEFAULT_CAMERA.position.set( 0, 5, 10 );
 _DEFAULT_CAMERA.lookAt( new THREE.Vector3() );
 
 function Editor() {
+
+	applyStoredTheme(); // Auto / Light / Dark from Settings; Auto (the default) changes nothing
 
 	const Signal = signals.Signal; // eslint-disable-line no-undef
 

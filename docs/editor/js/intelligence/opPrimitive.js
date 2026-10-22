@@ -676,11 +676,24 @@ class ChainableSet {
 
 	}
 
-	/** Collapse a dense run of keys to a few on a smooth path. tolerance in world units (default 0.01). */
-	simplify( tolerance ) {
+	/**
+	 * Collapse a dense run of keys to a few on a smooth path. Takes a position tolerance in scene units
+	 * (default 0.01), a preset name ('tight' | 'normal' | 'loose'), or { preset, tolerance, rotation (deg),
+	 * fov (deg), maxKeys, keepBeats }. keepBeats keeps the first/last key, the keys at the shot's start and end
+	 * in the Camera Sequence, and the speed turning points (ease in/out). One undo step.
+	 */
+	simplify( opts ) {
 
-		const opts = tolerance && typeof tolerance === 'object' ? tolerance : ( tolerance === undefined ? {} : { tolerance } );
-		return this._editMove( 'simplify', 'Simplify camera keys', track => camMove.move.simplifyTrack( track, opts ) );
+		const cam = this._shotCamera( 'simplify' );
+		return this._editMove( 'simplify', 'Simplify camera keys', track => camMove.move.simplifyTrack( track, camMove.optionsFor( this.editor, cam, opts ) ) );
+
+	}
+
+	/** What simplify(opts) would do, without changing anything: { before, after, changed, worst }. */
+	simplifyPreview( opts ) {
+
+		const cam = this._shotCamera( 'simplifyPreview' );
+		return camMove.move.previewSimplify( camMove.liveTrack( this.editor, cam ) || { events: [] }, camMove.optionsFor( this.editor, cam, opts ) );
 
 	}
 

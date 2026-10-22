@@ -1,6 +1,7 @@
 import { UIPanel, UIRow, UISelect, UISpan, UIText } from './libs/ui.js';
 
 import { SidebarSettingsShortcuts } from './Sidebar.Settings.Shortcuts.js';
+import { getTheme, setTheme } from './Theme.js';
 
 function SidebarSettings( editor ) {
 
@@ -44,6 +45,25 @@ function SidebarSettings( editor ) {
 	languageRow.add( language );
 
 	settings.add( languageRow );
+
+	// theme: Auto (Strata's default look) / Light / Dark, applied live and remembered
+
+	const themeRow = new UIRow();
+	const theme = new UISelect().setWidth( '150px' );
+	theme.setOptions( { auto: 'Auto', light: 'Light', dark: 'Dark' } );
+	theme.setValue( getTheme() );
+	theme.dom.setAttribute( 'aria-label', 'Colour theme' );
+	theme.dom.title = 'Auto keeps Strata\u2019s default look (dark). Light and Dark switch immediately.';
+	theme.onChange( function () {
+
+		setTheme( this.getValue() );
+
+	} );
+
+	themeRow.add( new UIText( 'Theme' ).setClass( 'Label' ) );
+	themeRow.add( theme );
+
+	settings.add( themeRow );
 
 	//
 

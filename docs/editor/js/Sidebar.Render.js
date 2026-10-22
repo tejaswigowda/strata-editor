@@ -5,6 +5,7 @@ import { holdTimelineAt, getImportedClips } from './intelligence/timelineControl
 import { findCallcards, refreshCallcard } from './Callcard.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
 import { RENDER_CLEAR_COLOR, LinearOutput, applyRenderSettings, webglEnvironment } from './toon/RenderPipeline.js';
+import { createEmptyHint } from './EmptyHint.js';
 import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesEqual, newCueId } from './intelligence/subtitles.js';
 import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 
@@ -233,6 +234,17 @@ function SidebarRender( editor ) {
 	resolutionRow.add( resolutionSelect );
 	container.add( resolutionRow );
 
+	// The viewport's "Match render" frame guide (ViewLook.js) reads the flat render size from here.
+	editor.renderOutput = {
+		getSize() {
+
+			const [ width, height ] = resolutionSelect.getValue().split( 'x' ).map( Number );
+			return { width, height };
+
+		}
+	};
+	resolutionSelect.dom.addEventListener( 'change', function () { window.dispatchEvent( new CustomEvent( 'strata:render-output-changed' ) ); } );
+
 	// ── FPS ───────────────────────────────────────────────────────────────────
 
 	const fpsRow = new UIRow();
@@ -326,6 +338,15 @@ function SidebarRender( editor ) {
 	addShotButton.onClick( addShot );
 	seqControls.appendChild( addShotButton.dom );
 
+	// First-run hint while there are no shots (hidden once one exists or when dismissed)
+	const shotsHint = createEmptyHint( {
+		id: 'render-shots',
+		title: 'No shots yet',
+		text: 'A shot is a camera that takes over at a time on the timeline; add two to cut or fade between them. Until then the render uses the Edit Camera. Add a camera first, then + Add Shot. In the Shell tab:',
+		examples: [ { label: 'camera', code: 'editor.execute( new AddObjectCommand( editor, new THREE.PerspectiveCamera() ) )' } ]
+	} );
+	seqControls.appendChild( shotsHint.dom );
+
 	const shotDetail = document.createElement( 'div' );
 	shotDetail.style.cssText = 'margin-top:6px;display:none;';
 	seqControls.appendChild( shotDetail );
@@ -378,6 +399,7 @@ function SidebarRender( editor ) {
 		const shots = getShots();
 		const dur = Math.max( timelineDuration(), 0.001 );
 		seqLane.innerHTML = '';
+		shotsHint.setEmpty( shots.length === 0 );
 
 		if ( shots.length === 0 ) {
 

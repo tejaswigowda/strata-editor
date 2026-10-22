@@ -1,5 +1,6 @@
 import { UIPanel, UIRow } from './libs/ui.js';
 import { setMenuIcon, setMenuTooltip } from './Menubar.Icons.js';
+import { restorePanelSizes } from './PanelSizes.js';
 
 function MenubarStatus( editor ) {
 
@@ -22,11 +23,9 @@ function MenubarStatus( editor ) {
 
 	let sidebarIndex = Math.max( 0, SIDEBAR_POSITIONS.indexOf( localStorage.getItem( 'sidebar-position' ) ) );
 
-	// Restore any saved sizes onto the CSS variables that drive the layout.
-	const savedWidth = localStorage.getItem( 'sidebar-width' );
-	const savedHeight = localStorage.getItem( 'sidebar-height' );
-	if ( savedWidth !== null ) document.documentElement.style.setProperty( '--sidebar-width', savedWidth + 'px' );
-	if ( savedHeight !== null ) document.documentElement.style.setProperty( '--sidebar-height', savedHeight + 'px' );
+	// Restore any saved sizes onto the CSS variables that drive the layout (clamped to the current
+	// window, and re-clamped when it is resized; see PanelSizes.js).
+	restorePanelSizes();
 
 	function applySidebarPosition() {
 
