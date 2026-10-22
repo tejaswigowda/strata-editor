@@ -15,6 +15,7 @@ import { syncTimeline } from './intelligence/timelineController.js';
 import { findSharedMaterials } from './intelligence/editOps.js';
 import { withoutBakedTextures } from './scene/serialize.js';
 import { applyStoredTheme } from './Theme.js';
+import { settleBakedOutline } from './toon/bakedOutlines.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 
@@ -260,6 +261,7 @@ Editor.prototype = {
 
 		object.traverse( function ( child ) {
 
+			settleBakedOutline( child ); // a glTF's own outline hull must not hide the object it outlines
 			if ( child.geometry !== undefined ) scope.addGeometry( child.geometry );
 			if ( child.material !== undefined ) scope.addMaterial( child.material );
 

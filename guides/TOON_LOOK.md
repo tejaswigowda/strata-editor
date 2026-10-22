@@ -133,6 +133,11 @@ tool that doesn't know Strata sees plain lit PBR.
 * MToon extras not wired to the spec: matcap, UV animation, and per-pixel shading-shift texture are read
   from the file and rendered, but have no override fields.
 * Bloom, grain and the neon sign geometry are scene content, not part of this change.
+* **A glTF's own outline hulls** (a mesh or material called `outline`, front-sided, near-black: Blender's
+  inverted-hull outline, as in LittlestTokyo.glb) used to turn thin parts such as lanterns and posts solid
+  black, because the hull wrote depth in front of them. When an object is added or a scene loads, each such
+  hull is now set to draw first and not write depth (`toon/bakedOutlines.js`), so it only shows where nothing
+  else is, which is the outline. Hulls the toon look generates itself are not touched.
 
 ## Verifying
 
