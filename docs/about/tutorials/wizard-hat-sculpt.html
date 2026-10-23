@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build a wizard hat and sculpt a face into it — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: build a floppy wizard hat from lathe, cylinder and extrude primitives with the JS Shell, then sculpt a real relief smiley into it by displacing a dense mesh along its normals — one undoable step.">
+<!--
+	/about/tutorials/wizard-hat-sculpt.html — a from-scratch, by-hand
+	tutorial. Every snippet is real Strata surface (JS Shell globals,
+	editor.execute commands) — copy/paste each block into the Shell tab
+	in order. Static page, no build step, no third-party calls.
+	Screenshot is a real capture from the scene this tutorial builds.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	kbd { background: #1e2127; border: 1px solid #2a2e36; border-radius: 4px; padding: 0.05em 0.4em; font-size: 0.88em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ul.why { padding-left: 1.2em; }
+	ul.why li { margin-bottom: 0.5em; color: #c3c9d1; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Build a wizard hat and sculpt a face into it</h1>
+	<p class="tagline">Two ideas in one scene. First, a floppy purple hat assembled from primitives — a lathe-turned brim, a three-section cone that bends, a band, a buckle and extruded stars. Then the part that is not a texture: a smiley face <strong>sculpted</strong> into the cone by pushing a dense mesh's surface outward along its normals, as one undoable step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+
+	<figure>
+		<img src="screenshots/wizard-hat.png" alt="A purple wizard hat with a wide curled brim, a cone that bends at the tip, a dark band with a gold buckle, gold stars, and a raised smiley face sculpted into the front of the cone." loading="lazy">
+		<figcaption>The finished hat: lathe brim, bending cone, band and buckle, stars — and a relief smiley sculpted into the front.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Pasting long blocks into the Shell:</strong> if <kbd>Enter</kbd> seems to do nothing after a long paste, press <kbd>Esc</kbd> first (it closes the autocomplete dropdown that was swallowing the keypress), then <kbd>Enter</kbd>. On a non-empty scene, run <code>clearScene()</code> first.</div>
+
+	<h2><span class="step">1</span> Materials and the brim</h2>
+	<p class="lede">Three materials: the purple everywhere, a darker purple for the band and gold for the buckle and stars. A fourth, <code>jointMat</code>, is the same purple with a <em>polygon offset</em> — step 2 explains why. The brim is a <code>LatheGeometry</code>: one 2D profile (radius, height) spun around the y axis. The profile runs out along the underside, up the curled rim, and back along the top, so the brim has thickness and an upturned edge from a single list of points:</p>
+	<pre><code>const purple = new MeshStandardMaterial({ color: 0x6a2bb8, roughness: 0.65, side: THREE.DoubleSide });
+const bandMat = new MeshStandardMaterial({ color: 0x2e1260, roughness: 0.5 });
+const gold = new MeshStandardMaterial({ color: 0xffd54a, roughness: 0.3, metalness: 0.7, emissive: 0x3a2a00 });
+// Same purple, pushed back in depth so it never z-fights the cone walls it overlaps
+const jointMat = new MeshStandardMaterial({ color: 0x6a2bb8, roughness: 0.65, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 8, polygonOffsetUnits: 8 });
+
+const hat = new Group();
+hat.name = 'Wizard Hat';
+
+// Brim: a lathe profile that dips, then curls up at the rim (out along the underside, back along the top)
+const brimProfile = [[0.85,0.02],[1.2,0.0],[1.7,-0.02],[2.05,0.04],[2.2,0.14],[2.2,0.18],[2.15,0.19],[2.0,0.1],[1.7,0.05],[1.2,0.06],[0.85,0.08]].map(p =&gt; new THREE.Vector2(p[0], p[1]));
+const brim = new Mesh(new LatheGeometry(brimProfile, 64), purple);
+brim.name = 'Brim';
+hat.add(brim);</code></pre>
+
+	<h2><span class="step">2</span> The cone: three sections that bend</h2>
+	<p class="lede">A single cone cannot flop over, so build it in three tapering sections. Each section is a <code>Group</code> parented to the top of the previous one and rotated a little more (<code>-0.25</code>, then <code>-0.5</code> radians); the cylinder inside is offset up by half its height so the group's origin is the hinge. Because every section inherits its parent's rotation, the bend accumulates into a curl. A sphere sits at each hinge, with the same radius as the section below, to fill the wedge that opens on the outside of the bend:</p>
+	<pre><code>const H1 = 1.3, H2 = 1.2, H3 = 1.1;
+const seg1 = new Group(); seg1.name = 'Crown Section 1'; seg1.position.y = 0.07; hat.add(seg1);
+const m1 = new Mesh(new CylinderGeometry(0.72, 0.95, H1, 64), purple); m1.name = 'Crown 1'; m1.position.y = H1 / 2; seg1.add(m1);
+
+const seg2 = new Group(); seg2.name = 'Crown Section 2'; seg2.position.y = H1; seg2.rotation.z = -0.25; seg1.add(seg2);
+const j1 = new Mesh(new SphereGeometry(0.72, 64, 32), jointMat); j1.name = 'Joint 1'; seg2.add(j1);
+const m2 = new Mesh(new CylinderGeometry(0.42, 0.72, H2, 64), purple); m2.name = 'Crown 2'; m2.position.y = H2 / 2; seg2.add(m2);
+
+const seg3 = new Group(); seg3.name = 'Crown Section 3'; seg3.position.y = H2; seg3.rotation.z = -0.5; seg2.add(seg3);
+const j2 = new Mesh(new SphereGeometry(0.42, 64, 32), jointMat); j2.name = 'Joint 2'; seg3.add(j2);
+const m3 = new Mesh(new CylinderGeometry(0.05, 0.42, H3, 64), purple); m3.name = 'Crown 3'; m3.position.y = H3 / 2; seg3.add(m3);
+const tip = new Mesh(new SphereGeometry(0.07, 16, 12), purple); tip.name = 'Tip'; tip.position.y = H3; seg3.add(tip);</code></pre>
+	<div class="note"><strong>A bug worth checking for.</strong> The hinge spheres are almost, but not exactly, inside the cone walls, so with the default material they <em>z-fight</em> with them and a sawtooth edge appears at every bend (it gets worse the more finely the cone is tessellated). Shrinking the spheres does not cure it. Giving the joints their own material with <code>polygonOffset</code> pushes them slightly back in depth, so the cone walls always win the tie and the sphere only shows where the bend genuinely opens a gap. Matching the segment counts (64 on the cones and spheres) shrinks what is left.</div>
+
+	<h2><span class="step">3</span> Band, buckle and stars</h2>
+	<p class="lede">The band is a cylinder whose two radii are read off the cone's own radius function <code>r1(t)</code> (radius at height <code>t</code>), so it hugs the slope instead of floating or sinking. The buckle is a box with a smaller dark box as its hole. The stars are a 10-point <code>Shape</code> (alternating outer and inner radius) run through <code>ExtrudeGeometry</code>; each is placed on the cone at an angle and then tipped by the cone's slope so it lies flat against it:</p>
+	<pre><code>const r1 = t =&gt; 0.95 - 0.23 * (t / H1); // crown 1 radius at height t
+const band = new Mesh(new CylinderGeometry(r1(0.36) + 0.02, r1(0.14) + 0.02, 0.22, 40), bandMat);
+band.name = 'Hat Band'; band.position.y = 0.25;
+seg1.add(band);
+const buckle = new Mesh(new BoxGeometry(0.3, 0.28, 0.06), gold);
+buckle.name = 'Buckle'; buckle.position.set(0, 0.25, r1(0.25) + 0.05); buckle.rotation.x = -0.1;
+seg1.add(buckle);
+const hole = new Mesh(new BoxGeometry(0.16, 0.14, 0.07), bandMat);
+hole.name = 'Buckle Hole'; hole.position.set(0, 0.25, r1(0.25) + 0.055); hole.rotation.x = -0.1;
+seg1.add(hole);
+
+// Gold stars, tilted to hug the cone's slope
+const starShape = new Shape();
+for (let i = 0; i &lt; 10; i++) {
+  const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 0.07 : 0.17;
+  i ? starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r) : starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+}
+starShape.closePath();
+const starGeo = new ExtrudeGeometry(starShape, { depth: 0.02, bevelEnabled: false });
+const slope = Math.atan(0.23 / H1);
+[-0.9, 0.9, 2.4, 3.9].forEach((ang, i) =&gt; {
+  const star = new Mesh(starGeo, gold);
+  star.name = 'Star ' + (i + 1);
+  const t = 0.85, r = r1(t) + 0.005;
+  star.position.set(Math.sin(ang) * r, t, Math.cos(ang) * r);
+  star.rotation.order = 'YXZ';
+  star.rotation.y = ang;
+  star.rotation.x = -slope;
+  seg1.add(star);
+});
+
+editor.execute(new AddObjectCommand(editor, hat));
+tagClass(hat, 'hat');</code></pre>
+
+	<h2><span class="step">4</span> Add it to the scene</h2>
+	<p class="lede">One <code>AddObjectCommand</code> adds the whole hat, so it is one undo step. Tag the group with a class, add a cool ambient light, a white key light and a violet rim light from behind, set a dark background, and aim the camera:</p>
+	<pre><code>editor.execute(new AddObjectCommand(editor, new AmbientLight(0xcfc4ff, 0.7)));
+const key = new DirectionalLight(0xffffff, 1.6);
+key.position.set(5, 8, 6);
+editor.execute(new AddObjectCommand(editor, key));
+const rim = new DirectionalLight(0x9a7bff, 0.8);
+rim.position.set(-6, 4, -5);
+editor.execute(new AddObjectCommand(editor, rim));
+setBackground('#1b1530');
+
+const cam = editor.camera;
+cam.position.set(3.2, 2.6, 5.6);
+cam.fov = 45;
+cam.lookAt(0.4, 1.6, 0);
+cam.updateProjectionMatrix();
+editor.controls.center.set(0.4, 1.6, 0);
+editor.signals.cameraChanged.dispatch(cam);
+editor.signals.objectChanged.dispatch(cam);</code></pre>
+
+	<h2><span class="step">5</span> Sculpt the face</h2>
+	<p class="lede">The smiley is not painted on and not a separate decal object. It is the cone's own surface, pushed outward. Only the straight lower section (<code>Crown 1</code>) is sculpted, because the face lives on its front. Paste this whole block; the Shell does not allow top-level <code>await</code>, so everything runs inside an <code>async</code> function:</p>
+	<pre><code>(async () =&gt; {
+  const { SetGeometryCommand } = await import('/editor/js/commands/SetGeometryCommand.js');
+  const crown = editor.scene.getObjectByName('Crown 1');
+
+  // A dense replacement for the crown's straight section. thetaStart = PI moves the
+  // seam to the back of the hat, away from the face (the front is +z).
+  const H = 1.3, RT = 0.72, RB = 0.95, RAD = 320, HEI = 140;
+  const g = new CylinderGeometry(RT, RB, H, RAD, HEI, true, Math.PI, Math.PI * 2);
+  const rAt = t =&gt; RB - (RB - RT) * (t / H); // crown radius at height t
+
+  // Soft dome falloff: 1 at the centre, 0 at distance 1
+  const bump = d =&gt; { const w = Math.min(1, Math.max(0, 1 - d)); return w * w * (3 - 2 * w); };
+
+  // The face, in surface coordinates: u = arc length around the hat, v = height above the face centre
+  const TC = 0.8;
+  const MR = 0.21, MY = 0.02, P0 = -2.55, P1 = -0.59; // smile = the lower arc of a circle
+  const mouthDist = (u, v) =&gt; {
+    const dy = v - MY, rho = Math.hypot(u, dy), ph = Math.atan2(dy, u);
+    if (ph &gt;= P0 &amp;&amp; ph &lt;= P1) return Math.abs(rho - MR);
+    const e = p =&gt; Math.hypot(u - MR * Math.cos(p), dy - MR * Math.sin(p));
+    return Math.min(e(P0), e(P1)); // past the ends of the arc, measure to the nearest end
+  };
+  const relief = (u, v) =&gt; {
+    const base = 0.02 * bump((Math.hypot(u, v) - 0.3) / 0.06); // raised disc, flat top, soft edge
+    const eyes = [-0.12, 0.12].reduce((s, ex) =&gt; s + bump(Math.hypot((u - ex) / 0.05, (v - 0.1) / 0.075)), 0) * 0.035;
+    const mouth = bump(mouthDist(u, v) / 0.04) * 0.03;
+    return base + eyes + mouth;
+  };
+
+  // Push each vertex out along its own normal by the relief height
+  const pos = g.attributes.position, nor = g.attributes.normal;
+  for (let i = 0; i &lt; pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const ang = Math.atan2(x, z);
+    if (Math.abs(ang) &gt; 0.9) continue; // only the front of the hat can be touched
+    const t = y + H / 2;
+    const h = relief(ang * rAt(t), t - TC);
+    if (h &gt; 0) pos.setXYZ(i, x + nor.getX(i) * h, y + nor.getY(i) * h, z + nor.getZ(i) * h);
+  }
+  g.computeVertexNormals();
+
+  // computeVertexNormals leaves a lighting seam where the first and last columns meet; average them
+  for (let r = 0; r &lt;= HEI; r++) {
+    const a = r * (RAD + 1), b = a + RAD;
+    const nx = nor.getX(a) + nor.getX(b), ny = nor.getY(a) + nor.getY(b), nz = nor.getZ(a) + nor.getZ(b);
+    const len = Math.hypot(nx, ny, nz) || 1;
+    nor.setXYZ(a, nx / len, ny / len, nz / len);
+    nor.setXYZ(b, nx / len, ny / len, nz / len);
+  }
+  nor.needsUpdate = true;
+
+  editor.execute(new SetGeometryCommand(editor, crown, g)); // one undo step
+  editor.deselect();
+  return 'sculpted ' + pos.count + ' vertices';
+})()</code></pre>
+	<figure>
+		<img src="screenshots/wizard-hat-smiley.png" alt="Close-up of the hat's cone: two raised oval eyes and a curved smile on a slightly raised disc, sculpted into the purple surface, between a gold buckle below and gold stars beside." loading="lazy">
+		<figcaption>Close-up: two raised eyes and a smile on a slightly raised disc, all part of the cone's geometry.</figcaption>
+	</figure>
+	<p>Why each piece is there:</p>
+	<ul class="why">
+		<li><strong>A dense mesh.</strong> The original cone has 64 sides and one row of height, so it has nowhere to put a ridge a few hundredths of a unit wide. The replacement has 320 sides and 140 rows (about 45,000 vertices); the smile's ridge spans several vertices instead of one, which is what keeps its edges smooth instead of stair-stepped. <code>openEnded = true</code> drops the caps, which are hidden inside the hat anyway.</li>
+		<li><strong>Surface coordinates, not world coordinates.</strong> The face is defined in <code>u</code> (arc length around the hat, <code>angle × radius at that height</code>) and <code>v</code> (height above the face centre). Because the cone is narrower higher up, using the radius at each vertex's own height keeps the face from stretching into an oval.</li>
+		<li><strong>Shapes from falloffs.</strong> <code>bump(d)</code> is a smooth dome: 1 at the centre, 0 at distance 1. An eye is <code>bump</code> of the distance from the eye's centre, scaled differently in <code>u</code> and <code>v</code> to make an oval. The smile is <code>bump</code> of the distance to an arc: the lower part of a circle, measuring to the nearest end once you are past the arc's ends. The raised disc is a <code>bump</code> with a flat top. Heights add up: disc 0.02, eyes +0.035, smile 0.03.</li>
+		<li><strong>Push along the normal.</strong> Each vertex moves along its own normal by the relief height, not straight out along +z, so the relief follows the cone's slope and stays the same height everywhere.</li>
+		<li><strong>The seam.</strong> A cylinder's first and last columns of vertices sit on top of each other, and <code>computeVertexNormals</code> leaves them with different normals, which shows as a lighting line. <code>thetaStart = Math.PI</code> moves that seam to the <em>back</em> of the hat (the face is at +z, angle 0), and the loop at the end averages the two columns' normals so it disappears there too.</li>
+		<li><strong>One undo step.</strong> <code>SetGeometryCommand</code> swaps the geometry through the editor's history. It is not a Shell global, so it is imported directly. <code>undo()</code> brings back the plain cone and <code>redo()</code> brings back the face.</li>
+	</ul>
+
+	<h2><span class="step">6</span> Check it</h2>
+	<p class="lede">Confirm the geometry really changed, and that the sculpt is reversible rather than baked into the scene:</p>
+	<pre><code>const crown = () => editor.scene.getObjectByName('Crown 1').geometry.attributes.position.count;
+crown();            // 45261
+undo(); crown();    // 388 (the original 64-sided cone is back)
+redo(); crown();    // 45261
+$S('.hat').count(); // 1</code></pre>
+	<div class="note"><strong>Make the face your own.</strong> Everything lives in <code>relief(u, v)</code>. Change <code>TC</code> to move the face up or down the cone, the eye centres <code>±0.12</code> and the <code>0.035</code> eye height to change the expression, or swap the smile's arc range <code>P0</code> / <code>P1</code> and radius <code>MR</code> for a frown or a surprised mouth. Re-running the block replaces the old geometry with a freshly sculpted one.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="bubble-shooter-scene.html">Bubble shooter tutorial</a> · <a href="fight-arena-scene.html">Fighting-game arena tutorial</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
