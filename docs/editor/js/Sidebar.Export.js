@@ -12,6 +12,7 @@ import { directivesByClip, exportTracksForClip, importedClipsOf } from './intell
 import { editedExportTracks } from './intelligence/motionEditRuntime.js';
 import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/textChange.js';
 import { commitExportToRepo } from './Menubar.Git.js';
+import { promoteClassesForExport } from './scene/exportClasses.js';
 
 // Coerces an exporter's raw output (string / ArrayBuffer / Uint8Array) into
 // the Uint8Array commitExportToRepo needs.
@@ -91,6 +92,9 @@ function cloneSceneForExport( scene ) {
 		if ( child.material ) child.material = Array.isArray( child.material ) ? child.material.map( m => m.clone() ) : child.material.clone();
 
 	} );
+
+	// Downstream runtimes read extras.classes (an Array); the editor keeps custom classes in userData.customClasses.
+	promoteClassesForExport( clone );
 
 	return clone;
 
