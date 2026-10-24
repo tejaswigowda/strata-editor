@@ -111,7 +111,7 @@
 <body>
 <main>
 	<h1>Build a wizard hat and sculpt a face into it</h1>
-	<p class="tagline">Two ideas in one scene. First, a floppy purple hat assembled from primitives — a lathe-turned brim, a three-section cone that bends, a band, a buckle and extruded stars. Then the part that is not a texture: a smiley face <strong>sculpted</strong> into the cone by pushing a dense mesh's surface outward along its normals, as one undoable step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished hat, <a href="../../#repo=tejaswigowda/test1&amp;file=hat.json&amp;branch=main">hat.json</a>, and see <a href="#open-finished">step 7</a> for what the file does and does not contain.</p>
+	<p class="tagline">Two ideas in one scene. First, a floppy purple hat assembled from primitives — a lathe-turned brim, a three-section cone that bends, a band, a buckle and extruded stars. Then the part that is not a texture: a smiley face <strong>sculpted</strong> into the cone by pushing a dense mesh's surface outward along its normals, as one undoable step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished hat, <a href="../../#repo=tejaswigowda/test1&amp;file=hat.json&amp;branch=main">hat.json</a> (<a href="#open-finished">step 7</a>).</p>
 
 	<figure>
 		<img src="screenshots/wizard-hat.png" alt="A purple wizard hat with a wide curled brim, a cone that bends at the tip, a dark band with a gold buckle, gold stars, and a raised smiley face sculpted into the front of the cone." loading="lazy">
@@ -262,7 +262,15 @@ editor.signals.objectChanged.dispatch(cam);</code></pre>
   }
   nor.needsUpdate = true;
 
-  editor.execute(new SetGeometryCommand(editor, crown, g)); // one undo step
+  // A CylinderGeometry is saved by its parameters (radius, segments...), which would throw the
+  // sculpted vertices away on Save. Copy them into a plain BufferGeometry so the file keeps them.
+  const baked = new THREE.BufferGeometry();
+  baked.setAttribute('position', pos);
+  baked.setAttribute('normal', nor);
+  baked.setAttribute('uv', g.attributes.uv);
+  baked.setIndex(g.index);
+
+  editor.execute(new SetGeometryCommand(editor, crown, baked)); // one undo step
   editor.deselect();
   return 'sculpted ' + pos.count + ' vertices';
 })()</code></pre>
@@ -277,12 +285,14 @@ editor.signals.objectChanged.dispatch(cam);</code></pre>
 		<li><strong>Shapes from falloffs.</strong> <code>bump(d)</code> is a smooth dome: 1 at the centre, 0 at distance 1. An eye is <code>bump</code> of the distance from the eye's centre, scaled differently in <code>u</code> and <code>v</code> to make an oval. The smile is <code>bump</code> of the distance to an arc: the lower part of a circle, measuring to the nearest end once you are past the arc's ends. The raised disc is a <code>bump</code> with a flat top. Heights add up: disc 0.02, eyes +0.035, smile 0.03.</li>
 		<li><strong>Push along the normal.</strong> Each vertex moves along its own normal by the relief height, not straight out along +z, so the relief follows the cone's slope and stays the same height everywhere.</li>
 		<li><strong>The seam.</strong> A cylinder's first and last columns of vertices sit on top of each other, and <code>computeVertexNormals</code> leaves them with different normals, which shows as a lighting line. <code>thetaStart = Math.PI</code> moves that seam to the <em>back</em> of the hat (the face is at +z, angle 0), and the loop at the end averages the two columns' normals so it disappears there too.</li>
+		<li><strong>Bake it so Save keeps it.</strong> A <code>CylinderGeometry</code> is written to a saved project as its <em>parameters</em> (radii, segment counts), never its vertices, so a sculpted cylinder would reopen as a plain cone. Copying the finished attributes into an ordinary <code>BufferGeometry</code> makes the file store the vertices themselves.</li>
 		<li><strong>One undo step.</strong> <code>SetGeometryCommand</code> swaps the geometry through the editor's history. It is not a Shell global, so it is imported directly. <code>undo()</code> brings back the plain cone and <code>redo()</code> brings back the face.</li>
 	</ul>
 
 	<h2><span class="step">6</span> Check it</h2>
 	<p class="lede">Confirm the geometry really changed, and that the sculpt is reversible rather than baked into the scene:</p>
 	<pre><code>const crown = () => editor.scene.getObjectByName('Crown 1').geometry.attributes.position.count;
+editor.scene.getObjectByName('Crown 1').geometry.type; // 'BufferGeometry'
 crown();            // 45261
 undo(); crown();    // 388 (the original 64-sided cone is back)
 redo(); crown();    // 45261
@@ -290,8 +300,8 @@ $S('.hat').count(); // 1</code></pre>
 	<div class="note"><strong>Make the face your own.</strong> Everything lives in <code>relief(u, v)</code>. Change <code>TC</code> to move the face up or down the cone, the eye centres <code>±0.12</code> and the <code>0.035</code> eye height to change the expression, or swap the smile's arc range <code>P0</code> / <code>P1</code> and radius <code>MR</code> for a frown or a surprised mouth. Re-running the block replaces the old geometry with a freshly sculpted one.</div>
 
 	<h2 id="open-finished"><span class="step">7</span> Open the finished hat</h2>
-	<p class="lede">The finished scene is public in <code>tejaswigowda/test1</code>: <a href="../../#repo=tejaswigowda/test1&amp;file=hat.json&amp;branch=main">hat.json</a> opens straight in the editor with the brim, the bending cone, the band, buckle and stars, the three lights and the dark background, all named and tagged as built above.</p>
-	<div class="note"><strong>Saving drops the sculpt.</strong> A saved project stores primitive geometry (cylinders, spheres, and so on) by its <em>parameters</em>, not its vertices, and the sculpted crown is still a <code>CylinderGeometry</code>, so <code>hat.json</code> reopens with the plain 320-segment cone and no face. Run step 5 again after opening it to put the face back. Keeping the sculpt inside the file would mean baking the crown into raw vertex data, which for this mesh is about 8.5 MB instead of the file's current 21 KB.</div>
+	<p class="lede">The finished scene is public in <code>tejaswigowda/test1</code>: <a href="../../#repo=tejaswigowda/test1&amp;file=hat.json&amp;branch=main">hat.json</a> opens straight in the editor with the brim, the bending cone, the sculpted face, the band, buckle and stars, the three lights and the dark background, all named and tagged as built above.</p>
+	<div class="note"><strong>What is in the file.</strong> <code>hat.json</code> includes the sculpted face, because step 5 bakes the crown into plain vertex data before it is saved. Saved from the editor's Git panel, big geometry buffers go out as binary assets next to a small scene file (here about 22&nbsp;KB of JSON plus a 2.5&nbsp;MB crown buffer); <strong>File → Save</strong> writes everything inline, about 8.5&nbsp;MB. Either way the face survives a save and reload, which a <code>CylinderGeometry</code> crown would not.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="bubble-shooter-scene.html">Bubble shooter tutorial</a> · <a href="fight-arena-scene.html">Fighting-game arena tutorial</a> · <a href="../">About</a>
