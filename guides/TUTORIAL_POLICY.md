@@ -21,6 +21,10 @@ public-domain** target.
    pages that use them. The VRoid base's free / commercial / redistribute terms are fine and stay.
 4. **Title = capability.** "One dance, two characters", "Restyle a VRM into an explorer with the JS
    Shell" — never "Make X into &lt;famous character&gt;".
+5. **Assets.** Third-party game assets, including assets extracted through viewers, museums or
+   decompilation tools, are private-lane only and are deleted after measurement. Restyled,
+   retextured or re-topologised derivatives of such assets are treated identically to the originals.
+   Public scenes use original geometry, original textures, and original names.
 
 ## Target kinds
 
