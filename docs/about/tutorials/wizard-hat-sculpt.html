@@ -111,7 +111,7 @@
 <body>
 <main>
 	<h1>Build a wizard hat and sculpt a face into it</h1>
-	<p class="tagline">Two ideas in one scene. First, a floppy purple hat assembled from primitives — a lathe-turned brim, a three-section cone that bends, a band, a buckle and extruded stars. Then the part that is not a texture: a smiley face <strong>sculpted</strong> into the cone by pushing a dense mesh's surface outward along its normals, as one undoable step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+	<p class="tagline">Two ideas in one scene. First, a floppy purple hat assembled from primitives — a lathe-turned brim, a three-section cone that bends, a band, a buckle and extruded stars. Then the part that is not a texture: a smiley face <strong>sculpted</strong> into the cone by pushing a dense mesh's surface outward along its normals, as one undoable step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished hat, <a href="../../#repo=tejaswigowda/test1&amp;file=hat.json&amp;branch=main">hat.json</a>, and see <a href="#open-finished">step 7</a> for what the file does and does not contain.</p>
 
 	<figure>
 		<img src="screenshots/wizard-hat.png" alt="A purple wizard hat with a wide curled brim, a cone that bends at the tip, a dark band with a gold buckle, gold stars, and a raised smiley face sculpted into the front of the cone." loading="lazy">
@@ -288,6 +288,10 @@ undo(); crown();    // 388 (the original 64-sided cone is back)
 redo(); crown();    // 45261
 $S('.hat').count(); // 1</code></pre>
 	<div class="note"><strong>Make the face your own.</strong> Everything lives in <code>relief(u, v)</code>. Change <code>TC</code> to move the face up or down the cone, the eye centres <code>±0.12</code> and the <code>0.035</code> eye height to change the expression, or swap the smile's arc range <code>P0</code> / <code>P1</code> and radius <code>MR</code> for a frown or a surprised mouth. Re-running the block replaces the old geometry with a freshly sculpted one.</div>
+
+	<h2 id="open-finished"><span class="step">7</span> Open the finished hat</h2>
+	<p class="lede">The finished scene is public in <code>tejaswigowda/test1</code>: <a href="../../#repo=tejaswigowda/test1&amp;file=hat.json&amp;branch=main">hat.json</a> opens straight in the editor with the brim, the bending cone, the band, buckle and stars, the three lights and the dark background, all named and tagged as built above.</p>
+	<div class="note"><strong>Saving drops the sculpt.</strong> A saved project stores primitive geometry (cylinders, spheres, and so on) by its <em>parameters</em>, not its vertices, and the sculpted crown is still a <code>CylinderGeometry</code>, so <code>hat.json</code> reopens with the plain 320-segment cone and no face. Run step 5 again after opening it to put the face back. Keeping the sculpt inside the file would mean baking the crown into raw vertex data, which for this mesh is about 8.5 MB instead of the file's current 21 KB.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="bubble-shooter-scene.html">Bubble shooter tutorial</a> · <a href="fight-arena-scene.html">Fighting-game arena tutorial</a> · <a href="../">About</a>
