@@ -2,7 +2,7 @@ import { UIPanel } from './libs/ui.js';
 import { commitSceneToRepo, generateCommitMessage, currentGitSource } from './Menubar.Git.js';
 import { recoverPromptText, relativeTime } from './workState.js';
 
-// The "Unsaved changes" chip in the menubar (with its one-step Commit popover), the
+// The "Uncommitted changes" chip in the menubar (with its one-step Commit popover), the
 // document-title marker, and the "Recover unsaved changes?" prompt. The state itself
 // lives in WorkGuard (editor.work).
 
@@ -39,12 +39,12 @@ function MenubarWork( editor ) {
 
 	const button = document.createElement( 'div' );
 	button.className = 'work-chip-button';
-	button.innerHTML = '<span class="work-chip-dot"></span><span>Unsaved changes</span>';
+	button.innerHTML = '<span class="work-chip-dot"></span><span>Uncommitted changes</span>';
 	container.dom.appendChild( button );
 
 	const pop = document.createElement( 'div' );
 	pop.id = 'work-pop';
-	pop.innerHTML = '<div class="work-pop-title">Unsaved changes</div><div class="work-pop-sub"></div>';
+	pop.innerHTML = '<div class="work-pop-title">Uncommitted changes</div><div class="work-pop-sub"></div>';
 	container.dom.appendChild( pop );
 
 	const sub = pop.querySelector( '.work-pop-sub' );
@@ -167,7 +167,7 @@ function MenubarWork( editor ) {
 	guard.onChange( function ( status ) {
 
 		container.dom.classList.toggle( 'dirty', status.dirty );
-		button.title = 'Unsaved changes — click to commit';
+		button.title = 'Uncommitted changes — click to commit';
 		document.title = status.dirty ? '● ' + baseTitle : baseTitle;
 		if ( ! status.dirty ) container.dom.classList.remove( 'open' );
 
