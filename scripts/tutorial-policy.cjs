@@ -147,11 +147,12 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 	for ( const t of JSON.parse( fs.readFileSync( path.join( dir, 'tutorials.json' ), 'utf8' ) ) ) {
 
 		for ( const k of [ 'title', 'href', 'desc', 'blurb', 'group' ] ) for ( const hit of findViolations( t[ k ] ) ) add( 'tutorials.json', k + ' of "' + t.title + '"', hit );
-		if ( ! fs.existsSync( path.join( dir, t.href ) ) ) problems.push( 'tutorials.json: ' + t.href + ' does not exist' );
+		if ( ! /^https?:\/\//.test( t.href ) && ! fs.existsSync( path.join( dir, t.href ) ) ) problems.push( 'tutorials.json: ' + t.href + ' does not exist' );
 		if ( t.thumb && ! fs.existsSync( path.join( dir, t.thumb ) ) ) problems.push( 'tutorials.json: thumb ' + t.thumb + ' does not exist' );
 
 	}
-	for ( const f of fs.readdirSync( path.join( dir, 'screenshots' ) ) ) for ( const hit of findViolations( f ) ) add( 'screenshots/' + f, 'file name', hit );
+	const shotsDir = path.join( dir, 'screenshots' );
+	if ( fs.existsSync( shotsDir ) ) for ( const f of fs.readdirSync( shotsDir ) ) for ( const hit of findViolations( f ) ) add( 'screenshots/' + f, 'file name', hit );
 	const thumbsDir = path.join( dir, 'screenshots', 'thumbs' );
 	if ( fs.existsSync( thumbsDir ) ) for ( const f of fs.readdirSync( thumbsDir ) ) for ( const hit of findViolations( f ) ) add( 'screenshots/thumbs/' + f, 'file name', hit );
 	for ( const f of fs.readdirSync( dir ) ) if ( /\.(gif|png|jpe?g|webp)$/i.test( f ) ) for ( const hit of findViolations( f ) ) add( f, 'file name', hit );

@@ -120,5 +120,14 @@
 		"blurb": "Turn a two-person sparring capture into a 53-second match, checked frame by frame for collisions.",
 		"thumb": "screenshots/thumbs/sparring-from-mocap.jpg",
 		"desc": "Turn a 170-second OptiTrack capture of two people sparring (recorded in the Martial Arts and Motion Capture course, GAME 294, ASU — run by Pavan Turaga, recorded by Assegid Kidane) into a 53-second match: register the pair, cut it with a non-destructive edit list, check every frame for collisions, move the camera shots onto the new timeline, and give both fighters an eyeline and an idle face — all from the JS Shell."
+	},
+	{
+		"title": "Strata Play tutorials",
+		"href": "https://strataplay.dev/tutorials/",
+		"group": "Strata Play",
+		"blurb": "Run, fork and wire up games: the entry module, label-driven physics, and a racing circuit.",
+		"thumb": "screenshots/thumbs/strata-play.jpg",
+		"desc": "Tutorials for Strata Play, the sandboxed player for the scenes you build here: play a game from a repo URL, write your first entry module, see how labels become physics, drive one logic across many scenes, add sound and settings, and wire up the labelled racing circuit from the Strata tutorial.",
+		"hidden": true
 	}
 ]

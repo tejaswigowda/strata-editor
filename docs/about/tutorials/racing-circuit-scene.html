@@ -213,7 +213,7 @@ editor.execute(new AddObjectCommand(editor, gameplay));
 Object.assign(window.c1, { rand, M, make, two, withColor, track, trackside, environment, gameplay });
 Object.keys(M).length;   // 8</code></pre>
 	<ul class="why">
-		<li><strong>Why the <code>M_</code> prefix.</strong> Selectors in a runtime such as strata-play also match <em>material names</em>, and they match the ancestors of a matching mesh. A material called plain <code>Trigger</code> made <code>$S('.trigger')</code> return one node too many — the whole <code>Gameplay</code> group — and the runtime then gave that group a physics sensor the size of the circuit. A material name can never collide with a class if it never looks like one.</li>
+		<li><strong>Why the <code>M_</code> prefix.</strong> Selectors in a runtime such as strata-play also match <em>material names</em>, and they match the ancestors of a matching mesh. A material called plain <code>Trigger</code> made <code>$S('.trigger')</code> return one node too many — the whole <code>Gameplay</code> group — and an earlier strata-play gave that group a physics sensor the size of the circuit (current strata-play builds a body only for a mesh or a node that carries the class itself, but the extra match is still there for any selector). A material name can never collide with a class if it never looks like one.</li>
 		<li><strong>Why no labelling pass.</strong> A pass that runs afterwards has to guess what each mesh is from its shape and colour. Here the author already knows, so the answer is written once, at creation.</li>
 	</ul>
 
@@ -396,7 +396,7 @@ console.log({
 [ctx.$S('#StartLine').count, ctx.$S('.checkpoint').count, ctx.$S('.spawn-point').count, ctx.$S('.trigger').count]
 // → [1, 7, 8, 31]   (31 = StartLine + 7 checkpoints + 18 boxes + 5 pads; 32 would mean a material is named like a class)</code></pre>
 	<ul class="why">
-		<li><strong>Trigger bodies are axis-aligned.</strong> The runtime fits each trigger body to the node's world bounding box and does not apply the node's rotation, so a rotated gate gets a box larger than the gate. Test a gate crossing in the gate's own local space instead of trusting the box.</li>
+		<li><strong>Trigger boxes follow the gate's own orientation, in current strata-play.</strong> Each trigger body sits at the node's world position and rotation, with a box taken from its local geometry bounds, so a rotated gate keeps its real footprint. An earlier strata-play fitted a world-axis-aligned box that was larger than a rotated gate. Whichever version you run, check a gate crossing in the gate's own local space, which does not depend on how the runtime shapes its sensor.</li>
 		<li><strong>The look is the runtime's job.</strong> A GLB carries no tone mapping, shadow flags, environment or post-processing, so the same file looks flat by default and rich once the entry module sets them. The two images below are the same file and the same camera.</li>
 	</ul>
 	<figure>

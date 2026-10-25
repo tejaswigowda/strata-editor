@@ -136,10 +136,12 @@
 
 			for ( const t of tutorials ) {
 
+				if ( t.hidden ) continue;	// staged entries (e.g. a section that is not live yet)
+
 				const item = document.createElement( 'li' );
 
 				const link = document.createElement( 'a' );
-				link.href = '../tutorials/' + t.href;
+				link.href = /^https?:\/\//.test( t.href ) ? t.href : '../tutorials/' + t.href;
 				link.target = '_blank';
 				link.rel = 'noopener';
 				link.textContent = t.title + ' →';
