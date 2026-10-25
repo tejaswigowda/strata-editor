@@ -905,7 +905,7 @@ export function compileTimeline( model, ctx ) {
 				if ( perNodeTargetWorld && ! perNodeTargetWorld[ ni ] ) continue;
 
 				let nodeParams = perNodeTargetWorld
-					? { ...params, targetWorld: perNodeTargetWorld[ ni ], targetQuaternion: perNodeTargetQuaternion[ ni ] }
+					? { ...params, targetWorld: perNodeTargetWorld[ ni ], targetQuaternion: perNodeTargetQuaternion[ ni ], eachIndex: ni }
 					: params;
 
 				if ( params.lookAtWorld && lastAim.has( node.uuid ) ) nodeParams = { ...nodeParams, lookFromWorld: lastAim.get( node.uuid ) };

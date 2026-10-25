@@ -1625,6 +1625,11 @@ export function changeRecipe( node, params = {} ) {
  * wrong whenever the mover's parent isn't identically oriented to the
  * target's. Omitted entirely when no targetQuaternion is given, so plain
  * moveTo()/moveToEach() calls that never asked for rotation are unaffected.
+ *
+ * Optional flourish (moveToEach options; `eachIndex` is injected by compileTimeline):
+ *   spin    [turnsX, turnsY, turnsZ]  whole turns about the parent's axes, each with a random sign
+ *   arc     lift along the parent's +Z at mid-flight, in the parent's units
+ *   stagger 0..0.9, the share of the duration over which the sources' start times are spread
  */
 export function moveToRecipe( node, params = {} ) {
 
@@ -1654,25 +1659,59 @@ export function moveToRecipe( node, params = {} ) {
 
 	}
 
-	const N = ( isLinear && ! Q1 ) ? 1 : Math.min( 60, Math.max( 8, Math.ceil( duration * 12 ) ) );
+	// Optional 3D flourish (moveToEach(target, ms, { spin, arc, stagger })). All three end exactly where a
+	// plain move would: whole turns, a lift that is zero at both ends, and a start delay that is made up
+	// for by a shorter run. An edge outline is a child that must stay glued to its tile, so it is exempt.
+	const flourish = ! ( node.userData && node.userData.isEdgeOutline );
+	const spin = flourish && Array.isArray( params.spin ) ? params.spin.map( Number ).slice( 0, 3 ) : null;
+	const arc = flourish ? Number( params.arc ) || 0 : 0;
+	const stagger = flourish ? Math.min( 0.9, Math.max( 0, Number( params.stagger ) || 0 ) ) : 0;
+	const lively = !! ( spin || arc || stagger );
+
+	// A stable pseudo-random number per source (its index in the set), so every compile of the same
+	// scene gives the same tumble.
+	const index = Number( params.eachIndex ) || 0;
+	const rand = ( salt ) => { const x = Math.sin( ( index + 1 ) * 12.9898 + salt * 78.233 ) * 43758.5453; return x - Math.floor( x ); };
+	const delay = stagger * rand( 1 );                       // fraction of the whole duration
+	const run = 1 - stagger;                                 // fraction each source takes to travel
+	const turns = spin ? spin.map( ( n, axis ) => n * ( rand( 2 + axis ) < 0.5 ? - 1 : 1 ) ) : null;
+	const lift = arc * ( 0.6 + 0.8 * rand( 5 ) );            // each source flies a slightly different arc
+
+	const N = ( isLinear && ! Q1 && ! lively ) ? 1 : Math.min( 60, Math.max( 8, Math.ceil( duration * ( lively ? 15 : 12 ) ) ) );
 	const times = [];
 	const posValues = [];
 	const rotValues = [];
+	const withRotation = !! ( Q1 || spin );
+	const spinEuler = new THREE.Euler();
+	const spinQ = new THREE.Quaternion();
 
 	for ( let i = 0; i <= N; i ++ ) {
 
 		const t = i / N;
-		const k = ease( t );
+		const u = lively ? Math.min( 1, Math.max( 0, ( t - delay ) / run ) ) : t;
+		const k = ease( u );
 		times.push( t * duration );
+
+		// the lift goes along the parent's +Z, i.e. out of the figure's plane towards the viewer
+		const rise = lift * Math.sin( Math.PI * k );
 		posValues.push(
 			P0.x + ( P1.x - P0.x ) * k,
 			P0.y + ( P1.y - P0.y ) * k,
-			P0.z + ( P1.z - P0.z ) * k
+			P0.z + ( P1.z - P0.z ) * k + rise
 		);
 
-		if ( Q1 ) {
+		if ( withRotation ) {
 
-			const q = new THREE.Quaternion().copy( Q0 ).slerp( Q1, k );
+			const q = new THREE.Quaternion().copy( Q0 );
+			if ( Q1 ) q.slerp( Q1, k );
+
+			if ( turns ) {
+
+				spinEuler.set( turns[ 0 ] * 2 * Math.PI * k, turns[ 1 ] * 2 * Math.PI * k, ( turns[ 2 ] || 0 ) * 2 * Math.PI * k );
+				q.premultiply( spinQ.setFromEuler( spinEuler ) );
+
+			}
+
 			rotValues.push( q.x, q.y, q.z, q.w );
 
 		}
@@ -1680,7 +1719,7 @@ export function moveToRecipe( node, params = {} ) {
 	}
 
 	const tracks = [ vectorTrack( node.uuid, 'position', times, posValues ) ];
-	if ( Q1 ) tracks.push( quaternionTrack( node.uuid, times, rotValues ) );
+	if ( withRotation ) tracks.push( quaternionTrack( node.uuid, times, rotValues ) );
 
 	return new THREE.AnimationClip( 'MoveTo', - 1, tracks );
 

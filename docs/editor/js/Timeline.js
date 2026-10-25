@@ -991,8 +991,20 @@ function Timeline( editor ) {
 
 								if ( rest ) {
 
-									const ms = parseFloat( rest );
+									// '3000' or '3000, { spin: [1, 1, 0], arc: 3, stagger: 0.4, easing: 'ease-in-out' }'
+									const parts = Function( `"use strict"; return [${ rest }]` )();
+									const ms = parseFloat( parts[ 0 ] );
 									if ( ! isNaN( ms ) ) dur = ms / 1000;
+
+									const o = parts[ 1 ];
+									if ( op === 'moveToEach' && o && typeof o === 'object' ) {
+
+										if ( Array.isArray( o.spin ) ) args.spin = o.spin.slice( 0, 3 ).map( Number );
+										if ( o.arc !== undefined ) args.arc = Number( o.arc ) || 0;
+										if ( o.stagger !== undefined ) args.stagger = Math.min( 0.9, Math.max( 0, Number( o.stagger ) || 0 ) );
+										if ( typeof o.easing === 'string' ) args.easing = o.easing;
+
+									}
 
 								}
 
@@ -2900,7 +2912,12 @@ function Timeline( editor ) {
 		if ( op === 'moveTo' || op === 'moveToEach' ) {
 
 			const ms = Math.round( ( dur ?? args.duration ?? 0 ) * 1000 );
-			return `${ fmtVal( args.target ?? '' ) }, ${ ms }`;
+			const flourish = [];
+			if ( Array.isArray( args.spin ) ) flourish.push( `spin: [${ args.spin.join( ', ' ) }]` );
+			if ( args.arc !== undefined ) flourish.push( `arc: ${ args.arc }` );
+			if ( args.stagger !== undefined ) flourish.push( `stagger: ${ args.stagger }` );
+			if ( typeof args.easing === 'string' && args.easing !== 'linear' ) flourish.push( `easing: ${ fmtVal( args.easing ) }` );
+			return `${ fmtVal( args.target ?? '' ) }, ${ ms }${ op === 'moveToEach' && flourish.length ? `, { ${ flourish.join( ', ' ) } }` : '' }`;
 
 		}
 

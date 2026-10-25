@@ -102,7 +102,7 @@ export const OP_VOCABULARY = {
 
 	// ── Object-referenced destination tween (SET form only — the singular form
 	// overloads the existing edit `moveTo` below; see ChainableSet.moveTo()) ──
-	moveToEach:  { kind: 'anim', args: { target: 'string', duration: 'number?' },  summary: 'animate a SET of objects to a SET of target objects, paired positionally (source[i] -> target[i]). A source/target count mismatch warns (console) rather than silently truncating or wrapping.' },
+	moveToEach:  { kind: 'anim', args: { target: 'string', duration: 'number?', spin: 'vec3?', arc: 'number?', stagger: 'number?', easing: 'string?' },  summary: 'animate a SET of objects to a SET of target objects, paired positionally (source[i] -> target[i]). A source/target count mismatch warns (console) rather than silently truncating or wrapping.' },
 
 	// ── Entrance animations (appear with style) ──
 	fadeIn:        { kind: 'anim', args: { duration: 'number?' },                                         summary: 'fade in from transparent' },
@@ -597,11 +597,25 @@ class ChainableSet {
 	 * wrapping — subset your selectors so the counts match.
 	 *
 	 *   $S('#3x3-square .cube').at(3).moveToEach('#5x5-square .cellGroupA', 800)
+ *   $S('.tile').at(3).moveToEach('.cell', 3000, { spin: [1, 1, 0], arc: 3, stagger: 0.4, easing: 'ease-in-out' })
 	 */
-	moveToEach( target, dur = 400 ) {
+	moveToEach( target, dur = 400, options = {} ) {
 
 		const seconds = Math.max( 0, Number( dur ) || 0 ) / 1000;
-		return this._recordAnim( { type: 'moveToEach', target: String( target ), duration: seconds } );
+		const op = { type: 'moveToEach', target: String( target ), duration: seconds };
+
+		// Optional 3D flourish, stored on the event: spin [turnsX, turnsY, turnsZ], arc (lift towards
+		// the viewer), stagger (0..0.9), easing. See moveToRecipe in animationRecipes.js.
+		if ( options && typeof options === 'object' ) {
+
+			if ( Array.isArray( options.spin ) ) op.spin = options.spin.slice( 0, 3 ).map( Number );
+			if ( options.arc !== undefined ) op.arc = Number( options.arc ) || 0;
+			if ( options.stagger !== undefined ) op.stagger = Math.min( 0.9, Math.max( 0, Number( options.stagger ) || 0 ) );
+			if ( typeof options.easing === 'string' ) op.easing = options.easing;
+
+		}
+
+		return this._recordAnim( op );
 
 	}
 
