@@ -383,7 +383,10 @@ export function syncMaterialTransparency( editor ) {
 			// a texture that needs its OWN alpha channel even at opacity 1
 			// (e.g. a baked call card with a transparent-background QR) would
 			// otherwise render with alpha ignored, wiping out its content.
-			mat.transparent = opaque ? !! mat.userData.__fadeManagedOrigTransparent : true;
+			// A call card's baked texture carries alpha (see Callcard.js keepCallcardAlpha), so it
+			// keeps blending at full opacity whatever the saved flag says.
+			const keepsAlpha = !! mat.userData.__fadeManagedOrigTransparent || !! ( node.userData && node.userData.isCallcard );
+			mat.transparent = opaque ? keepsAlpha : true;
 			mat.depthWrite = ! invisible;
 
 		}

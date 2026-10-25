@@ -121,8 +121,29 @@ function snapshotCallcard( pxWidth, pxHeight ) {
 
 }
 
+/**
+ * The baked card has a transparent background (the QR sits on a translucent tile), so its material
+ * must keep alpha blending even at full opacity. If it does not, the transparent pixels draw as
+ * solid white and the QR comes out a blank box. Scenes saved before this was enforced (the
+ * material stored transparent: false, and the fade recipes then remembered that as "original")
+ * rendered exactly that way, so every load and every render re-asserts it.
+ */
+export function keepCallcardAlpha( object ) {
+
+	const material = object && object.material;
+	if ( ! material ) return;
+
+	material.transparent = true;
+	material.userData = material.userData || {};
+	material.userData.__fadeManagedOrigTransparent = true; // what timelineController's syncMaterialTransparency restores at opacity 1
+	material.needsUpdate = true;
+
+}
+
 /** Re-fetch the live card and bake it onto the mesh's material. Always re-fetches (never trusts a persisted bake) — returns a Promise so callers (render setup, hydration) can await it. */
 export function refreshCallcard( object ) {
+
+	keepCallcardAlpha( object );
 
 	const width = object.userData.width || DEFAULT_WIDTH;
 	const height = object.userData.height || DEFAULT_HEIGHT;
