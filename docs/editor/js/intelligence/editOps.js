@@ -13,6 +13,7 @@
 //   - Wrong resolution → flag don't report ✓
 
 import * as selectorEngine from './selectorEngine.js';
+import { numericArgs } from './opArgs.js';
 import { SetMaterialColorCommand } from '../commands/SetMaterialColorCommand.js';
 import { SetMaterialCommand } from '../commands/SetMaterialCommand.js';
 import { SetMaterialValueCommand } from '../commands/SetMaterialValueCommand.js';
@@ -474,6 +475,10 @@ export function scaleOp( editor, selector, factor, axis = null ) {
 
 	}
 
+	const checkedScale = numericArgs( { factor: [ factor, undefined ] } );
+	if ( ! checkedScale.ok ) return { success: false, message: `scaleOp: ${ checkedScale.message }` };
+	factor = checkedScale.values.factor;
+
 	const safeFactor = clamp( factor, 0.1, 10 );
 	if ( Math.abs( safeFactor - factor ) > 0.01 ) {
 
@@ -528,10 +533,13 @@ export function moveOp( editor, selector, dx, dy, dz ) {
 
 	}
 
+	const checkedMove = numericArgs( { dx: [ dx, 0 ], dy: [ dy, 0 ], dz: [ dz, 0 ] } );
+	if ( ! checkedMove.ok ) return { success: false, message: `moveOp: ${ checkedMove.message }` };
+
 	const safeOffset = {
-		x: clamp( dx, -100, 100 ),
-		y: clamp( dy, -100, 100 ),
-		z: clamp( dz, -100, 100 ),
+		x: clamp( checkedMove.values.dx, -100, 100 ),
+		y: clamp( checkedMove.values.dy, -100, 100 ),
+		z: clamp( checkedMove.values.dz, -100, 100 ),
 	};
 
 	const cmds = [];
@@ -592,7 +600,10 @@ export function rotateOp( editor, selector, axis, degrees ) {
 
 	}
 
-	const safeDegrees = clamp( degrees, -360, 360 );
+	const checkedRotate = numericArgs( { degrees: [ degrees, undefined ] } );
+	if ( ! checkedRotate.ok ) return { success: false, message: `rotateOp: ${ checkedRotate.message }` };
+
+	const safeDegrees = clamp( checkedRotate.values.degrees, -360, 360 );
 	const radians = ( safeDegrees * Math.PI ) / 180;
 
 	// Command-backed (one execution surface): build a new Euler per node and route
@@ -692,10 +703,13 @@ export function duplicateOp( editor, selector, dx, dy, dz ) {
 
 	}
 
+	const checkedOffset = numericArgs( { dx: [ dx, 0 ], dy: [ dy, 0 ], dz: [ dz, 0 ] } );
+	if ( ! checkedOffset.ok ) return { success: false, message: `duplicateOp: ${ checkedOffset.message }` };
+
 	const safeOffset = {
-		x: clamp( dx, -100, 100 ),
-		y: clamp( dy, -100, 100 ),
-		z: clamp( dz, -100, 100 ),
+		x: clamp( checkedOffset.values.dx, -100, 100 ),
+		y: clamp( checkedOffset.values.dy, -100, 100 ),
+		z: clamp( checkedOffset.values.dz, -100, 100 ),
 	};
 
 	const THREE = window.THREE;

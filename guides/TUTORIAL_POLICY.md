@@ -25,6 +25,10 @@ public-domain** target.
    decompilation tools, are private-lane only and are deleted after measurement. Restyled,
    retextured or re-topologised derivatives of such assets are treated identically to the originals.
    Public scenes use original geometry, original textures, and original names.
+6. **Vehicles.** A permissive file licence (CC0, CC-BY) does not clear a vehicle's *design*: the marque,
+   badge, grille signature, model name and trade dress belong to the manufacturer whoever modelled
+   it. Use generic or original car bodies only, and record every imported asset (source URL, licence,
+   date retrieved) even when the licence needs no attribution.
 
 ## Target kinds
 

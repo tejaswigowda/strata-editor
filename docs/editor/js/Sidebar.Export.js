@@ -13,6 +13,7 @@ import { editedExportTracks } from './intelligence/motionEditRuntime.js';
 import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/textChange.js';
 import { commitExportToRepo } from './Menubar.Git.js';
 import { promoteClassesForExport } from './scene/exportClasses.js';
+import { cloneSharedResources } from './scene/cloneShared.js';
 
 // Coerces an exporter's raw output (string / ArrayBuffer / Uint8Array) into
 // the Uint8Array commitExportToRepo needs.
@@ -60,7 +61,8 @@ function lowerChangesForExport( editor, scene ) {
 // Object3D.clone() shares the SAME material instance between original and
 // clone by reference, so writing to a "cloned" mesh's material.opacity (e.g.
 // via cloneSceneAtRestPose's mixer) would otherwise silently corrupt the live
-// scene's materials too.
+// scene's materials too. Each distinct geometry/material is cloned once (not
+// once per mesh), so sharing in the live scene survives into the export.
 function cloneSceneForExport( scene ) {
 
 	const clone = scene.clone( true );
@@ -86,12 +88,8 @@ function cloneSceneForExport( scene ) {
 
 	}
 
-	clone.traverse( ( child ) => {
-
-		if ( child.geometry ) child.geometry = child.geometry.clone();
-		if ( child.material ) child.material = Array.isArray( child.material ) ? child.material.map( m => m.clone() ) : child.material.clone();
-
-	} );
+	// Once per distinct source, so shared materials/geometry stay shared in the GLB.
+	cloneSharedResources( clone );
 
 	// Downstream runtimes read extras.classes (an Array); the editor keeps custom classes in userData.customClasses.
 	promoteClassesForExport( clone );

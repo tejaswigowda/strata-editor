@@ -37,6 +37,11 @@
 		"desc": "Assemble a floppy purple hat from a lathe brim, a three-section bending cone, a band, a buckle and extruded stars, then sculpt a real relief smiley into it: a dense mesh pushed out along its normals using surface coordinates, as one undoable step — plus the z-fighting joint bug and the cylinder-seam normals trap."
 	},
 	{
+		"title": "Build a labelled racing circuit with a script",
+		"href": "racing-circuit-scene.html",
+		"desc": "Generate a whole circuit from thirteen corner points: a road ribbon on rolling terrain, a harbour built from shared shapes, and every object named and classed at creation so a game engine can find the start line, checkpoints, grid and racing line. Check it, export it, read the GLB back, and play it in strata-play — plus the traps (a material named like a class, a sun that points the wrong way, 236 materials where ten were authored)."
+	},
+	{
 		"title": "Make your own MetaHuman",
 		"href": "make-your-own-metahuman.html",
 		"desc": "Import a MetaHuman GLB straight from the metahuman-to-glb project's URL, then make it yours with the JS Shell: hide the hair, retint the skin and swap the outfit, pose the 51 ARKit face blendshapes, tag parts with classes, and capture a still with the Render tab's Take Snapshot."

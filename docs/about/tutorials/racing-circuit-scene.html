@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build a labelled racing circuit with a script — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: generate an original racing circuit from a corner list with the JS Shell — a road ribbon on rolling terrain, shared geometry, gates, a start grid and a racing line — label every object at creation so game engines can find it, check it, export it to GLB and play it in strata-play.">
+<!--
+	/about/tutorials/racing-circuit-scene.html — a script-driven tutorial.
+	Every block is real Strata surface (JS Shell globals, editor.execute
+	commands) and was run in order on an empty scene. The Shell does not keep
+	variables between pastes, so blocks hand state to each other through one
+	object, window.c1. The full generator is circuit-build.js next to this page.
+	Static page, no build step, no third-party calls. The screenshots are real
+	captures of the scene this tutorial builds, running in strata-play.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	kbd { background: #1e2127; border: 1px solid #2a2e36; border-radius: 4px; padding: 0.05em 0.4em; font-size: 0.88em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure { margin: 1.2em 0; }
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ul.why { padding-left: 1.2em; }
+	ul.why li { margin-bottom: 0.5em; color: #c3c9d1; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+</head>
+<body>
+<main>
+	<h1>Build a labelled racing circuit with a script</h1>
+	<p class="tagline">A whole racing circuit from one short list of corner points: a road ribbon on rolling terrain, a harbour setting built from a handful of shared shapes, and — the part that matters to a game — every object given a name and classes <strong>at the moment it is created</strong>, so a game engine can find the start line, the checkpoints and the pickups by name. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order, or run the whole generator, <a href="circuit-build.js">circuit-build.js</a> (<a href="#run-all">step 8</a>).</p>
+
+	<figure>
+		<img src="screenshots/racing-circuit-aerial.jpg" alt="An aerial view of a racing circuit: a looping asphalt road with red and white kerbs on green rolling terrain, a grandstand and a pit garage, a harbour quay with stacked shipping containers and a crane along the bottom, and low hills behind." loading="lazy">
+		<figcaption>The finished circuit running in strata-play: 19,052 triangles, ten shared materials, 436 named nodes.</figcaption>
+	</figure>
+
+	<div class="note"><strong>Two Shell facts this page relies on.</strong> The Shell does <em>not</em> keep variables between pastes (a <code>const</code> from one block is gone in the next), so each block ends by storing what later blocks need on <code>window.c1</code> and begins by reading it back. And if <kbd>Enter</kbd> seems to do nothing after a long paste, press <kbd>Esc</kbd> first (it closes the autocomplete dropdown that was swallowing the keypress), then <kbd>Enter</kbd>. On a non-empty scene, run <code>clearScene()</code> first.</div>
+
+	<h2><span class="step">1</span> Plan the lap as numbers</h2>
+	<p class="lede">Decide the track before placing anything. The lap is thirteen corner points on a ground plane (x east, z south, metres). Every corner is rounded with an arc that is tangent to both straights, and a sign tells you which way it turns, so the turn balance is something you can <em>read off</em> instead of eyeball. The centreline is then sampled into points that carry their position, tangent and distance along the lap. Everything after this — road, kerbs, gates, start grid — is computed from those samples:</p>
+	<pre><code>const P = [[-58,-40],[36,-30],[84,-74],[146,-56],[164,6],[128,60],[72,24],[22,12],[-30,30],[-66,70],[-126,66],[-166,18],[-122,-72]];
+const ROAD_W = 14.5, CURB_W = 1.2, R_MAX = 70, n = P.length;
+
+const unit = (a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); return [dx / l, dz / l, l]; };
+const corners = P.map((p, i) => {
+  const prev = P[(i + n - 1) % n], next = P[(i + 1) % n];
+  const [d0x, d0z, l0] = unit(prev, p), [d1x, d1z, l1] = unit(p, next);
+  const turn = Math.atan2(d0x * d1z - d0z * d1x, d0x * d1x + d0z * d1z);   // positive = right turn
+  const phi = Math.abs(turn), sgn = Math.sign(turn), tanHalf = Math.tan(phi / 2);
+  const r = Math.min(R_MAX, 0.45 * Math.min(l0, l1) / tanHalf), t = r * tanHalf;
+  const A = [p[0] - d0x * t, p[1] - d0z * t], B = [p[0] + d1x * t, p[1] + d1z * t];   // arc start and end
+  const inN = sgn > 0 ? [-d0z, d0x] : [d0z, -d0x];
+  return { i, p, d0: [d0x, d0z], phi, sgn, r, A, B, C: [A[0] + inN[0] * r, A[1] + inN[1] * r] };
+});
+const balance = { right: corners.filter(c => c.sgn > 0).length, left: corners.filter(c => c.sgn &lt; 0).length };
+if (Math.min(...corners.map(c => c.r)) &lt; ROAD_W / 2 + CURB_W + 2) throw new Error('corner radius too tight for the road width');
+
+// Sample the centreline: the straight before each corner, then its arc. s = metres along the lap.
+const pts = [], runs = [];
+let s = 0;
+corners.forEach((c, i) => {
+  const from = corners[(i + n - 1) % n].B, len = Math.hypot(c.A[0] - from[0], c.A[1] - from[1]);
+  const steps = Math.max(1, Math.ceil(len / 12)), [dx, dz] = c.d0;
+  runs.push({ corner: i, s0: s, len });
+  for (let k = 0; k &lt; steps; k++) { pts.push({ x: from[0] + dx * len * k / steps, z: from[1] + dz * len * k / steps, tx: dx, tz: dz, s }); s += len / steps; }
+  const arcLen = c.r * c.phi, asteps = Math.max(3, Math.ceil(arcLen / 3)), a0 = Math.atan2(c.A[1] - c.C[1], c.A[0] - c.C[0]);
+  for (let k = 0; k &lt; asteps; k++) {
+    const u = k / asteps, a = a0 + c.sgn * c.phi * u, h = c.sgn * c.phi * u;
+    pts.push({ x: c.C[0] + c.r * Math.cos(a), z: c.C[1] + c.r * Math.sin(a), tx: c.d0[0] * Math.cos(h) - c.d0[1] * Math.sin(h), tz: c.d0[0] * Math.sin(h) + c.d0[1] * Math.cos(h), s });
+    s += arcLen / asteps;
+  }
+});
+const LAP = s, N = pts.length;
+
+// Position + tangent at any distance along the lap (binary search, then interpolate)
+const frameAt = (sq) => {
+  sq = ((sq % LAP) + LAP) % LAP;
+  let lo = 0, hi = N - 1; while (lo &lt; hi) { const m = (lo + hi + 1) >> 1; if (pts[m].s &lt;= sq) lo = m; else hi = m - 1; }
+  const a = pts[lo], b = pts[(lo + 1) % N], sb = lo + 1 &lt; N ? b.s : LAP, u = (sq - a.s) / Math.max(1e-6, sb - a.s);
+  let tx = a.tx + (b.tx - a.tx) * u, tz = a.tz + (b.tz - a.tz) * u; const tl = Math.hypot(tx, tz); tx /= tl; tz /= tl;
+  return { x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u, tx, tz };
+};
+window.c1 = { ROAD_W, pts, runs, LAP, N, frameAt };
+({ balance, lapMetres: Math.round(LAP), samples: N });</code></pre>
+	<ul class="why">
+		<li><strong>The result:</strong> 8 right turns, 5 left, a lap of about 816 m. Change a corner point and everything downstream moves with it; the guard throws if a corner is too tight for the road width instead of producing a kinked road.</li>
+		<li><strong>Why samples carry a tangent.</strong> Every object that has a direction (a gate, a grid slot) is later turned with <code>rotation.y = atan2(tx, tz)</code>, so its local +z points along the lap. That one convention is what lets other engines know which way is forward (step 5).</li>
+	</ul>
+
+	<h2><span class="step">2</span> One creation helper that labels at birth</h2>
+	<p class="lede">The Shell's selector language, <code>$S</code>, edits and queries what exists; it cannot create the first object. Creation goes through the editor. Rather than create everything and then run a labelling pass, one small helper, <code>make()</code>, takes the <strong>id and classes as arguments</strong> and sets them before the object ever enters the scene. Ids are PascalCase and unique; classes are kebab-case words that say what a thing <em>is</em> (<code>surface</code>, <code>trigger</code>, <code>checkpoint</code>). Ten shared materials, no textures, and a seeded random generator so a layout is repeatable:</p>
+	<pre><code>const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const rand = mulberry(20241024);   // every "random" layout choice comes from this, never Math.random()
+
+const mat = (name, o) => { const m = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, ...o }); m.name = name; return m; };
+const M = {
+  Asphalt: mat('M_Asphalt', { color: 0x3a3d42, roughness: 0.95 }),
+  Grass: mat('M_Grass', { color: 0x4f8a3c, roughness: 1 }),
+  Paint: mat('M_Paint', { vertexColors: true, roughness: 0.8 }),
+  Sea: mat('M_Sea', { color: 0x1d6f9e, roughness: 0.08, metalness: 0.2 }),
+  Concrete: mat('M_Concrete', { color: 0x9a9a94, roughness: 0.95 }),
+  Glass: mat('M_Glass', { color: 0x7fd6ff, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.35 }),
+  PickupCore: mat('M_PickupCore', { color: 0xffb020, emissive: 0xff7a00, emissiveIntensity: 0.6, roughness: 0.3, metalness: 0.5 }),
+  Gate: mat('M_GateVolume', { color: 0xff3df2, transparent: true, opacity: 0.14, roughness: 1, side: THREE.DoubleSide, depthWrite: false }),
+};
+
+// THE creation primitive: id, classes and parent are given here, once.
+const make = (id, classes, geometry, material, parent, pos, ry) => {
+  const o = geometry ? new THREE.Mesh(geometry, material) : new THREE.Group();
+  o.name = id; o.userData.label = id; o.userData.customClasses = classes.split(' ');
+  if (pos) o.position.set(pos[0], pos[1], pos[2]);
+  if (ry) o.rotation.y = ry;
+  if (parent) parent.add(o);
+  return o;
+};
+const two = (v) => String(v).padStart(2, '0');
+const withColor = (g, hex) => { const c = new THREE.Color(hex), a = new Float32Array(g.attributes.position.count * 3); for (let i = 0; i &lt; a.length; i += 3) { a[i] = c.r; a[i + 1] = c.g; a[i + 2] = c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+
+// Two scene roots. Gameplay sits at the root with an identity transform, so its children's positions are world positions.
+const course = make('Circuit1', 'course');
+const track = make('Track', 'surface', null, null, course);
+const trackside = make('Trackside', 'trackside', null, null, course);
+const environment = make('Environment', 'scenery', null, null, course);
+const gameplay = make('Gameplay', 'gameplay');
+editor.execute(new AddObjectCommand(editor, course));
+editor.execute(new AddObjectCommand(editor, gameplay));
+Object.assign(window.c1, { rand, M, make, two, withColor, track, trackside, environment, gameplay });
+Object.keys(M).length;   // 8</code></pre>
+	<ul class="why">
+		<li><strong>Why the <code>M_</code> prefix.</strong> Selectors in a runtime such as strata-play also match <em>material names</em>, and they match the ancestors of a matching mesh. A material called plain <code>Trigger</code> made <code>$S('.trigger')</code> return one node too many — the whole <code>Gameplay</code> group — and the runtime then gave that group a physics sensor the size of the circuit. A material name can never collide with a class if it never looks like one.</li>
+		<li><strong>Why no labelling pass.</strong> A pass that runs afterwards has to guess what each mesh is from its shape and colour. Here the author already knows, so the answer is written once, at creation.</li>
+	</ul>
+
+	<h2><span class="step">3</span> The road, the terrain and the sea</h2>
+	<p class="lede">A <em>ribbon</em> is a strip along the centreline between two lateral offsets: two vertices per sample, one quad between neighbours, with <code>uv.v</code> running along the lap every 10 m. The ground follows the same height function <code>H(x, z)</code> as the road, so the road always sits on the terrain, and the relief fades to flat toward the edges:</p>
+	<pre><code>const { ROAD_W, pts, N, make, M, track, environment } = window.c1;
+
+const smooth = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+const H = (x, z) => (3.2 * Math.sin(x / 62 + 0.6) * Math.cos(z / 58) + 1.6 * Math.sin((x + z) / 37)) * (1 - smooth(70, 98, Math.abs(z)));
+const rightOf = (p) => [-p.tz, p.tx];
+
+// a strip along the lap between two lateral offsets (positive = right of travel)
+const ribbon = (o0, o1, dy) => {
+  const pos = [], uv = [], idx = [];
+  for (let k = 0; k &lt; N; k++) {
+    const p = pts[k], r = rightOf(p);
+    for (const o of [o0, o1]) { const x = p.x + r[0] * o, z = p.z + r[1] * o; pos.push(x, H(x, z) + dy, z); }
+    uv.push(0, p.s / 10, 1, p.s / 10);
+  }
+  for (let k = 0; k &lt; N; k++) { const a = 2 * k, b = 2 * ((k + 1) % N); idx.push(a, a + 1, b, a + 1, b + 1, b); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
+  if (g.attributes.normal.getY(0) &lt; 0) { const ix = g.index.array; for (let i = 0; i &lt; ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } g.computeVertexNormals(); }   // wound the wrong way: flip
+  return g;
+};
+make('Road', 'surface road drivable', ribbon(-ROAD_W / 2, ROAD_W / 2, 0.03), M.Asphalt, track);
+
+// terrain: a plane displaced by the same height function
+const tg = new THREE.PlaneGeometry(400, 210, 40, 21).rotateX(-Math.PI / 2), tp = tg.attributes.position;
+for (let i = 0; i &lt; tp.count; i++) tp.setY(i, H(tp.getX(i), tp.getZ(i)) - 0.12);
+tg.computeVertexNormals();
+make('Terrain', 'surface grass offroad', tg, M.Grass, track);
+
+make('Sea', 'scenery water', new THREE.PlaneGeometry(900, 170).rotateX(-Math.PI / 2), M.Sea, environment, [0, -0.8, 190]);
+make('Quay', 'scenery', new THREE.BoxGeometry(400, 2, 14).translate(0, -0.2, 0), M.Concrete, environment, [0, 0, 98]);
+Object.assign(window.c1, { H, rightOf });
+editor.signals.sceneGraphChanged.dispatch();
+({ roadTriangles: $S('#Road').nodes[0].geometry.index.count / 3 });</code></pre>
+	<p>The road is <strong>454 triangles</strong>: one quad per ~3&nbsp;m of arc and ~12&nbsp;m of straight is all a drivable surface needs. The full script adds the kerbs, the centre dashes and the chequered start strip the same way, as extra ribbons and merged boxes (<code>circuit-build.js</code>, sections 7–8).</p>
+
+	<h2><span class="step">4</span> Shared geometry: the container stacks</h2>
+	<p class="lede">The harbour is dozens of near-identical stacks of shipping containers. Define each shape <strong>once</strong> and place it many times: every mesh that uses the same geometry object shares one copy in memory and, later, one copy in the exported file. Colour comes from per-vertex colour on a single shared <code>M_Paint</code> material, so four colours cost four small geometries and still one material. The seeded <code>rand()</code> decides where gaps go, so the quay looks irregular but is identical every run:</p>
+	<pre><code>const { rand, M, make, two, withColor, trackside } = window.c1;
+
+const colours = ['#c0392b', '#2471a3', '#d4a017', '#2e8b57'];
+const stackGeo = colours.map(hex => withColor(new THREE.BoxGeometry(12, 2.6, 2.4).translate(0, 1.3, 0), hex));   // four shapes, defined once
+
+let stack = 0;
+for (const zRow of [94.5, 100.5]) for (let x = -186; x &lt;= 186; x += 13) {
+  if (rand() &lt; 0.25) continue;
+  stack++;
+  make('ContainerStack' + two(stack), 'trackside wall', stackGeo[Math.floor(rand() * 4)], M.Paint, trackside, [x, 0.8, zRow]);
+}
+editor.signals.sceneGraphChanged.dispatch();
+({ stacks: stack, sharedGeometries: new Set($S('.trackside').nodes.filter(o => o.geometry).map(o => o.geometry)).size });</code></pre>
+	<p>In the full script the same idea builds the crane, the grandstand with its crowd, the pit garage, thirty-six shrubs, tyre barriers and the hills: a few shared shapes, placed by the seeded generator.</p>
+
+	<h2><span class="step">5</span> The part a game engine wires: gates, grid, racing line, pickups</h2>
+	<p class="lede">Everything a game needs to run a lap is an <em>anchor</em>: a named node at a known place. The scene contains no game logic; it only says where things are. All anchors live under the <code>Gameplay</code> root in world space:</p>
+	<ul class="why">
+		<li>a <code>StartLine</code> and seven <code>Checkpoint01..07</code> gates, numbered in driving order;</li>
+		<li>eight <code>SpawnPoint01..08</code> grid slots (empty nodes: position and facing only);</li>
+		<li>a <code>RacingLine</code> of 163 ordered empty nodes, one about every 5&nbsp;m down the road centre, so a bot can follow the road without reading the road mesh;</li>
+		<li>pickups: 18 item boxes (three parts each) and 5 boost pads in the full script, all classed <code>pickup</code> and <code>trigger</code>.</li>
+	</ul>
+	<p>Anything with a direction gets <code>forward: '+z'</code> written into its data, which exports as <code>extras.forward</code>: the file states its own convention instead of leaving the next author to guess.</p>
+	<pre><code>const { LAP, runs, frameAt, make, M, two, gameplay, H, rightOf } = window.c1;
+const yawOf = (p) => Math.atan2(p.tx, p.tz);                     // rotation.y that points local +z along the lap
+const fwd = (o) => { o.userData.forward = '+z'; return o; };
+const startS = runs[1].s0 + runs[1].len * 0.3;                    // start line on the straight before the second corner
+
+// one gate shape, placed eight times
+const gate = new THREE.BoxGeometry(14.5 + 4, 5, 1.2);
+const f0 = frameAt(startS);
+fwd(make('StartLine', 'trigger start-line', gate, M.Gate, gameplay, [f0.x, H(f0.x, f0.z) + 2.5, f0.z], yawOf(f0)));
+for (let k = 1; k &lt;= 7; k++) {
+  const c = frameAt(startS + LAP * k / 8);
+  fwd(make('Checkpoint' + two(k), 'trigger checkpoint', gate, M.Gate, gameplay, [c.x, H(c.x, c.z) + 2.5, c.z], yawOf(c)));
+}
+
+// eight grid slots behind the line, two abreast
+for (let k = 0; k &lt; 8; k++) {
+  const g = frameAt(startS - 9 - Math.floor(k / 2) * 7 - (k % 2) * 3.5), r = rightOf(g), o = (k % 2 ? 1 : -1) * 3.2;
+  const x = g.x + r[0] * o, z = g.z + r[1] * o;
+  fwd(make('SpawnPoint' + two(k + 1), 'spawn-point', null, null, gameplay, [x, H(x, z) + 0.3, z], yawOf(g)));
+}
+
+// racing line: empty nodes down the road centre in driving order; the last is followed by the first
+const count = Math.round(LAP / 5), line = make('RacingLine', 'racing-line', null, null, gameplay);
+for (let k = 0; k &lt; count; k++) {
+  const f = frameAt(startS + LAP * k / count);
+  fwd(make('RacingLine' + String(k + 1).padStart(3, '0'), 'racing-line-point', null, null, line, [f.x, H(f.x, f.z) + 0.03, f.z], yawOf(f)));
+}
+line.userData.closed = true;
+
+// item boxes: one definition (a glass shell round a core), a row of four across the longest straight
+const shellGeo = new THREE.BoxGeometry(1.7, 1.7, 1.7), coreGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8).rotateY(Math.PI / 4);
+const itemBoxes = make('ItemBoxes', 'pickup-set', null, null, gameplay);
+const run = runs.filter((r, i) => i !== 1).sort((a, b) => b.len - a.len)[0];
+const fm = frameAt(run.s0 + run.len / 2), rm = rightOf(fm);
+[-5.1, -1.7, 1.7, 5.1].forEach((o, i) => {
+  const id = 'ItemBox' + two(i + 1), x = fm.x + rm[0] * o, z = fm.z + rm[1] * o;
+  const b = make(id, 'pickup item-box trigger', null, null, itemBoxes, [x, H(x, z) + 1.5, z], yawOf(fm));
+  make(id + 'Shell', 'item-box-part', shellGeo, M.Glass, b);
+  make(id + 'Core', 'item-box-part', coreGeo, M.PickupCore, b);
+});
+editor.signals.sceneGraphChanged.dispatch();
+({ gates: $S('.checkpoint').count(), grid: $S('.spawn-point').count(), racingLinePoints: count, itemBoxes: $S('.item-box').count() });</code></pre>
+	<div class="note"><strong>Why <code>Gameplay</code> is its own root, not a child of the circuit.</strong> strata-play's physics harness copies each labelled node's <em>position</em> straight onto a body and assumes the node is an untransformed child of the scene root. Keeping the anchors at the root with an identity transform makes their positions world positions in every runtime, so nothing has to guess an offset.</div>
+
+	<h2><span class="step">6</span> Light, and the <code>$S</code> passes</h2>
+	<p class="lede">Now <code>$S</code> earns its keep: after creation, settings that apply to a <em>class</em> of things are one-liners. Receiving shadows belongs to everything classed <code>surface</code>; casting to scenery and trackside objects; the invisible trigger volumes do neither. The sun needs one extra line that is easy to miss, explained below:</p>
+	<pre><code>const { environment } = window.c1;
+const sunlight = new THREE.DirectionalLight(0xfff1d6, 2.2);
+sunlight.name = 'Sunlight'; sunlight.userData.label = 'Sunlight'; sunlight.userData.customClasses = ['effect'];
+sunlight.position.set(-150, 220, -120);
+sunlight.lookAt(0, 0, 0);          // see the note: the export needs a rotation, not just a position
+sunlight.castShadow = true;
+Object.assign(sunlight.shadow.camera, { left: -230, right: 230, top: 140, bottom: -140, near: 10, far: 600 });
+sunlight.shadow.mapSize.set(2048, 2048);
+const sky = new THREE.HemisphereLight(0xbfe3ff, 0x6a7f4a, 0.9);
+sky.name = 'SkyLight'; sky.userData.label = 'SkyLight'; sky.userData.customClasses = ['effect'];
+environment.add(sunlight, sky);
+setBackground('#a9d4ee');
+
+$S('.surface').receiveShadow(true);
+$S('mesh.scenery').castShadow(true);
+$S('mesh.trackside').castShadow(true);
+$S('.trigger').castShadow(false);
+editor.signals.sceneGraphChanged.dispatch();
+'ok';</code></pre>
+	<div class="note"><strong>The sun trap.</strong> A glTF directional light shines down its node's local <strong>−z</strong>. In the editor a light's direction comes from its <em>target</em>, so a light with only a position looks right on screen, but the exported file stores the node's rotation and the target is not exported. Without <code>lookAt</code>, the sun in the exported file points along −z, edge-on to the ground, and lights almost nothing. The exporter prints "Light direction may be lost" whether or not you added it, so the warning is not the check: read the file (step 9).</div>
+
+	<h2><span class="step">7</span> Check it</h2>
+	<p class="lede">Before exporting, confirm the two properties a downstream engine depends on: every labelled object resolves <strong>by name</strong>, and the whole set can be <strong>listed</strong> from the scene alone. Two lines do it:</p>
+	<pre><code>const names = [];
+editor.scene.traverse(o => { if (o !== editor.scene &amp;&amp; o.userData.label) names.push(o.name); });
+const notAddressable = names.filter(nm => $S('#' + nm).count() !== 1);
+({ labelled: names.length, notAddressable: notAddressable.length, triggers: $S('.trigger').count(), gameplayIsATrigger: $S('.trigger').nodes.some(o => o.name === 'Gameplay') });</code></pre>
+	<p>The full check, <a href="circuit-verify.js">circuit-verify.js</a>, adds a third property — <strong>totality</strong>: it fires 21 sampled operations at the scene (some deliberately wrong, such as <code>scale</code> with <code>factor: 'big'</code>) and requires each to either apply to every matched node or fail cleanly, never half-apply and never write a <code>NaN</code>. It earned its place: its first run found that <code>move</code>, <code>scale</code>, <code>rotate</code> and <code>duplicate</code> reported success while writing <code>NaN</code> into transforms when an argument was missing or not a number. That was an editor bug, now fixed. The check tests <em>this scene</em>, not the editor in general: a pass does not prove the operations are safe everywhere.</p>
+
+	<h2 id="run-all"><span class="step">8</span> Run the whole thing, and get the same bytes every time</h2>
+	<p class="lede">The blocks above are the skeleton. <a href="circuit-build.js">circuit-build.js</a> is the complete generator: the same code plus kerbs and markings, the harbour crane, grandstand and crowd, pit garage, shrubs, hills, tyre barriers, all 18 item boxes and 5 boost pads, and the camera. On a cleared scene, paste it into the Shell (it takes a few seconds). It is <strong>deterministic</strong>, which is worth designing for from the start:</p>
+	<ul class="why">
+		<li><strong>All randomness is seeded.</strong> Layout choices use <code>rand()</code> from step 2. Object uuids come from <code>Math.random</code>, which the script swaps for a second seeded generator while it builds and restores afterwards, so the uuids are stable too.</li>
+		<li><strong>Serialise only when the editor has settled.</strong> The editor fills in per-node <code>descriptors</code> asynchronously after a build. A scene saved too early differs from one saved a moment later. <a href="circuit-serialize.js">circuit-serialize.js</a> waits until that count stops changing, then writes a project with a fixed camera and an empty history.</li>
+	</ul>
+	<p>Built and serialised twice, the scene came out <strong>byte-identical</strong> (1,952,098 bytes, SHA-256 beginning <code>3d248fb9</code>). If yours differs, something in your run depended on time or order.</p>
+	<pre><code>// from circuit-build.js: the two seeded generators
+const SEED = 20241024, UUID_SEED = 7777;
+const rand = mulberry(SEED);
+const realRandom = Math.random;
+Math.random = mulberry(UUID_SEED);
+try { /* ...the whole build... */ } finally { Math.random = realRandom; }</code></pre>
+
+	<h2><span class="step">9</span> Export it and read the file back</h2>
+	<p class="lede">Open the <strong>Export</strong> tab and click the <strong>GLB</strong> label. Then check the file itself, not the editor's idea of it. This reads a GLB's JSON chunk from a file on disk; save it as <code>inspect-glb.mjs</code> and run <code>node inspect-glb.mjs scene.glb</code>:</p>
+	<pre><code>import { readFileSync } from 'node:fs';
+const b = readFileSync(process.argv[2]);
+const j = JSON.parse(b.toString('utf8', 20, 20 + b.readUInt32LE(12)));   // the JSON chunk follows the 12-byte header and 8-byte chunk header
+const sun = j.nodes.find(x => x.name === 'Sunlight');
+console.log({
+  nodes: j.nodes.length, meshes: j.meshes.length,
+  materials: [...new Set(j.materials.map(m => m.name))].sort(),
+  sunForward: sun &amp;&amp; sun.matrix ? [-sun.matrix[8], -sun.matrix[9], -sun.matrix[10]].map(v => +v.toFixed(2)) : null,
+  logic: j.scenes[j.scene].extras &amp;&amp; j.scenes[j.scene].extras['strata:logic'],
+});</code></pre>
+	<p>For the full script's scene expect <code>nodes: 436</code>, ten <code>M_</code> materials, a <code>sunForward</code> that points down and toward the middle of the track (about <code>[0.51, -0.75, 0.41]</code>), <code>meshes: 41</code> and <code>logic: 'outputs/track.js'</code>. The step-by-step blocks alone give a smaller scene (244 nodes, eight materials, no <code>logic</code>, since only the full script sets it) but the same sun direction. Each check below is a trap that was hit while building it:</p>
+	<ul class="why">
+		<li><strong>Materials counted 236, not 10.</strong> The script shared ten materials, but an exporter that clones each mesh's material gives every mesh its own copy, and a file-level count shows it. The editor's export clone now clones each distinct material and geometry once, so sharing survives into the file (the file dropped from 1.97&nbsp;MB to 0.87&nbsp;MB). Always count what is in the file.</li>
+		<li><strong>The sun pointed along −z.</strong> The <code>lookAt</code> from step 6. <code>sunForward</code> is the check.</li>
+		<li><strong><code>extras.classes</code> must be an Array.</strong> The editor keeps classes in <code>userData.customClasses</code>; the export copies them to <code>extras.classes</code>, which is what strata-play and other engines read.</li>
+		<li><strong>The scene can name its own logic.</strong> The build script sets <code>strata:logic</code> on the scene's own data (exported as the glTF scene's <code>extras</code>), so strata-play loads <code>outputs/track.js</code> without relying on the filename matching.</li>
+	</ul>
+
+	<h2><span class="step">10</span> Play it in strata-play</h2>
+	<p class="lede">Commit the GLB to a GitHub repo and open it in strata-play by repo and file: <code>#repo=&lt;owner&gt;/&lt;repo&gt;&amp;file=outputs/track.glb</code>. With no entry module it falls back to an orbit view, which is a good way to check the scene by eye. Every label should resolve from the page's console; this is the same query a game uses:</p>
+	<pre><code>// in strata-play's sandbox frame
+[ctx.$S('#StartLine').count, ctx.$S('.checkpoint').count, ctx.$S('.spawn-point').count, ctx.$S('.trigger').count]
+// → [1, 7, 8, 31]   (31 = StartLine + 7 checkpoints + 18 boxes + 5 pads; 32 would mean a material is named like a class)</code></pre>
+	<ul class="why">
+		<li><strong>Trigger bodies are axis-aligned.</strong> The runtime fits each trigger body to the node's world bounding box and does not apply the node's rotation, so a rotated gate gets a box larger than the gate. Test a gate crossing in the gate's own local space instead of trusting the box.</li>
+		<li><strong>The look is the runtime's job.</strong> A GLB carries no tone mapping, shadow flags, environment or post-processing, so the same file looks flat by default and rich once the entry module sets them. The two images below are the same file and the same camera.</li>
+	</ul>
+	<figure>
+		<img src="screenshots/racing-circuit-aerial-flat.jpg" alt="The same circuit viewed from the same aerial camera with no tone mapping, no shadows and flat lighting: flat colours, no cast shadows." loading="lazy">
+		<figcaption>As exported, with the runtime's defaults: flat light, no shadows.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/racing-circuit-aerial.jpg" alt="The same circuit from the same camera with tone mapping, cast shadows from trees, containers and the crane, a sky environment and a light post-processing pass." loading="lazy">
+		<figcaption>The same file with tone mapping, class-based shadows, a generated sky and light post-processing applied by code at runtime.</figcaption>
+	</figure>
+
+	<div class="note"><strong>What to try next.</strong> Change a corner point in step 1 and re-run: the road, kerbs, gates, grid and racing line all follow, and the scene is still byte-identical for the same corner list. Add a class to the vocabulary (say <code>pit-lane</code>), label a few nodes with it in <code>make()</code>, and query it with <code>$S('.pit-lane')</code>: that is the whole mechanism a game uses to find things.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="fight-arena-scene.html">Fighting-game arena tutorial</a> · <a href="bubble-shooter-scene.html">Bubble shooter tutorial</a> · <a href="wizard-hat-sculpt.html">Wizard hat tutorial</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
