@@ -5,7 +5,7 @@ import assert from 'node:assert';
 import {
 	hashString, workSnapshotString, hashWork, sourceKey, sourceLabel,
 	createDirtyTracker, decideRecovery, wouldClobberUnsaved, relativeTime, recoverPromptText,
-	describeChanges, sourceFile, recoverPrompt
+	describeChanges, sourceFile, recoverPrompt, currentHash
 } from '../workState.js';
 
 let pass = 0, fail = 0;
@@ -46,6 +46,14 @@ test( 'lazily derived userData (descriptors) does not count as an edit; real use
 	assert.strictEqual( hashWork( mesh( { descriptors: { v: 1 } } ) ), hashWork( mesh( undefined ) ) );
 	assert.strictEqual( hashWork( mesh( { descriptors: { v: 1 }, label: 'x' } ) ), hashWork( mesh( { label: 'x' } ) ) );
 	assert.notStrictEqual( hashWork( mesh( { label: 'x' } ) ), hashWork( mesh( { label: 'y' } ) ) );
+
+} );
+
+test( 'a font\'s glyph parse cache (filled in by playback) does not count as an edit', () => {
+
+	const text = ( glyph ) => ( { scene: { geometries: [ { type: 'TextGeometry', options: { font: { data: { glyphs: { a: glyph } } } } } ] } } );
+	assert.strictEqual( hashWork( text( { o: 'm 1 2' } ) ), hashWork( text( { o: 'm 1 2', _cachedOutline: [ 'm', '1', '2' ] } ) ) );
+	assert.notStrictEqual( hashWork( text( { o: 'm 1 2' } ) ), hashWork( text( { o: 'm 1 3' } ) ) );
 
 } );
 
@@ -116,6 +124,16 @@ test( 'decideRecovery: only unsaved work that differs from what loaded is offere
 	assert.strictEqual( decideRecovery( { ...dirty, state: undefined }, 'A' ).action, 'none' );
 	assert.strictEqual( decideRecovery( { ...dirty, hash: 'A' }, 'A' ).reason, 'clean' );
 	assert.strictEqual( decideRecovery( dirty, 'B' ).reason, 'identical' );
+
+} );
+
+test( 'currentHash re-hashes a stored copy under today\'s rules, so old cache-only differences read as the same work', () => {
+
+	const text = ( glyph ) => ( { scene: { geometries: [ { options: { font: { data: { glyphs: { a: glyph } } } } } ] } } );
+	const old = { state: text( { o: 'm 1', _cachedOutline: [ 'm' ] } ), hash: 'stale-hash-from-before' };
+	assert.strictEqual( currentHash( old ), hashWork( text( { o: 'm 1' } ) ) );
+	assert.strictEqual( currentHash( { hash: 'X' } ), 'X' );
+	assert.strictEqual( currentHash( null ), null );
 
 } );
 

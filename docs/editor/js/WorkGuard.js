@@ -10,7 +10,7 @@
 //   (editor.work.abortLoad() if the load fails after holdForLoad)
 // Callers that save: editor.work.markClean().
 
-import { hashWork, createDirtyTracker, decideRecovery, wouldClobberUnsaved, sourceKey, sourceLabel, describeChanges, sourceFile } from './workState.js';
+import { hashWork, createDirtyTracker, decideRecovery, wouldClobberUnsaved, sourceKey, sourceLabel, describeChanges, sourceFile, currentHash } from './workState.js';
 import { WorkStore } from './WorkStore.js';
 
 const DEBOUNCE_MS = 1000;
@@ -126,7 +126,7 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 			if ( seen.has( id ) ) continue;
 			seen.add( id );
 
-			if ( entry.hash === hash ) {
+			if ( entry.hash === hash || currentHash( entry ) === hash ) {
 
 				await store.removeRecover( entry ); // already exactly what is loaded — nothing to recover
 
@@ -299,7 +299,7 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 				// Hold any unsaved autosave of this source before the fresh load replaces it
 				// (write() would stash a different lineage's anyway; this makes it explicit).
 				const existing = await store.getWork( key() );
-				if ( decideRecovery( existing, hash ).action === 'prompt' ) await store.putRecover( existing );
+				if ( existing && decideRecovery( { ...existing, hash: currentHash( existing ) }, hash ).action === 'prompt' ) await store.putRecover( existing );
 
 				await write( json, hash );
 				await offerWaiting( held || undefined );

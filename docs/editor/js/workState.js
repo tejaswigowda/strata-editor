@@ -35,6 +35,8 @@ const DERIVED_USERDATA = [ 'descriptors' ];
 
 function skipDerived( key, value ) {
 
+	if ( key === '_cachedOutline' ) return undefined; // a font's per-glyph parse cache, rebuilt on demand
+
 	if ( key !== 'userData' || value === null || typeof value !== 'object' ) return value;
 	if ( ! DERIVED_USERDATA.some( k => k in value ) ) return value;
 
@@ -136,6 +138,25 @@ export function createDirtyTracker() {
 		}
 
 	};
+
+}
+
+/**
+ * A saved record's hash under today's rules. What counts as "the work" has been narrowed over time
+ * (derived data, glyph caches), so copies saved earlier can differ from the scene only by something
+ * that no longer counts; hashing their stored state again lets those read as the same work.
+ */
+export function currentHash( record ) {
+
+	try {
+
+		return record && record.state ? hashWork( record.state ) : record && record.hash;
+
+	} catch ( e ) {
+
+		return record && record.hash;
+
+	}
 
 }
 

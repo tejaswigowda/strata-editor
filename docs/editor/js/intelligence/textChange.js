@@ -70,11 +70,16 @@ const hiddenWhileEmpty = new WeakSet(); // text meshes we hid because their stri
 // replaced its geometry; generatedGeometry marks the geometries change() made, so a geometry
 // someone else swapped in (the Geometry panel) is never mistaken for playback state.
 const authoredText = new WeakMap();
+// The uuid of the geometry a label was authored with. A saved scene refers to its geometry by uuid, so the
+// authored copy must keep it however many times playback regenerates the label (see authoredGeometryFor).
+const authoredUuid = new WeakMap();
 const generatedGeometry = new WeakSet();
 
 function rememberAuthored( node ) {
 
-	if ( ! generatedGeometry.has( node.geometry ) ) authoredText.set( node, node.geometry.parameters.options.text );
+	if ( generatedGeometry.has( node.geometry ) ) return;
+	authoredText.set( node, node.geometry.parameters.options.text );
+	authoredUuid.set( node, node.geometry.uuid );
 
 }
 
@@ -425,9 +430,29 @@ function authoredGeometryFor( node, live ) {
 	if ( cached && cached.parameters.options.text === text ) return cached;
 
 	const geometry = new live.constructor( text, { ...live.parameters.options, text } );
-	geometry.uuid = live.uuid;
+	geometry.uuid = authoredUuid.get( node ) || live.uuid;
 	authoredGeometry.set( node, geometry );
 	return geometry;
+
+}
+
+// three's Font keeps a parsed outline on every glyph it has drawn (glyph._cachedOutline), and a text
+// geometry serializes its whole font. So the saved scene changed whenever playback first drew a new
+// character, which read as an edit: a scene that was only played came up "unsaved" and later offered
+// itself back as a recovery. It is a cache, so it is dropped before every serialization.
+function clearGlyphCaches( scene ) {
+
+	const seen = new Set();
+
+	scene.traverse( function ( node ) {
+
+		const font = node.geometry && node.geometry.parameters && node.geometry.parameters.options && node.geometry.parameters.options.font;
+		const glyphs = font && font.data && font.data.glyphs;
+		if ( ! glyphs || seen.has( glyphs ) ) return;
+		seen.add( glyphs );
+		for ( const key in glyphs ) if ( glyphs[ key ] && '_cachedOutline' in glyphs[ key ] ) delete glyphs[ key ]._cachedOutline;
+
+	} );
 
 }
 
@@ -439,6 +464,8 @@ function authoredGeometryFor( node, live ) {
  * mid-playback would have saved the playhead's text).
  */
 export function withAuthoredText( scene, fn ) {
+
+	clearGlyphCaches( scene );
 
 	const swaps = [];
 	const detached = [];
