@@ -563,7 +563,7 @@ User: make the ground less shiny
   $S('.ground').setMaterial(newMat);
 })();
 
-User: make a pong scene
+User: make a paddle game scene
 (function(){
   const groundMat=new MeshStandardMaterial({color:0x222222,roughness:0.9,metalness:0});
   const ground=new Mesh(new PlaneGeometry(12,8),groundMat);ground.rotation.x=-Math.PI/2;ground.name='Ground';

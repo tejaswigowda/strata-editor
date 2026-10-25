@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Build a table-view pong scene — Strata tutorials</title>
+<title>Build a table-view paddle game scene — Strata tutorials</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: build a pong scene from scratch with the JS Shell, laid out as a real receding table instead of a flat arcade screen, and frame a camera that stands behind your own paddle.">
+<meta name="description" content="Step-by-step tutorial: build a two-paddle ball game scene from scratch with the JS Shell, laid out as a real receding table instead of a flat arcade screen, and frame a camera that stands behind your own paddle.">
 <!--
-	/about/tutorials/pong-table-view.html — a from-scratch, by-hand
+	/about/tutorials/paddle-table-view.html — a from-scratch, by-hand
 	tutorial. Every snippet is real Strata surface (JS Shell globals,
 	editor.execute commands) — copy/paste each block into the Shell tab
 	in order. Static page, no build step, no third-party calls.
@@ -108,20 +108,20 @@
 </head>
 <body>
 <main>
-	<h1>Build a table-view pong scene</h1>
-	<p class="tagline">A classic arcade Pong is a flat vertical screen — both paddles the same distance from the camera, separated left/right. This tutorial builds the other kind: a physical table you stand at one end of, your own paddle close in the foreground and the opponent's paddle small in the distance — then swaps the generic arcade backdrop for a sunset desert without touching the table itself. The whole thing is one <code>Group</code> per section, assembled with plain <code>.add()</code> calls and added in a single undo step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+	<h1>Build a table-view paddle game scene</h1>
+	<p class="tagline">A classic arcade paddle game is a flat vertical screen — both paddles the same distance from the camera, separated left/right. This tutorial builds the other kind: a physical table you stand at one end of, your own paddle close in the foreground and the opponent's paddle small in the distance — then swaps the generic arcade backdrop for a sunset desert without touching the table itself. The whole thing is one <code>Group</code> per section, assembled with plain <code>.add()</code> calls and added in a single undo step. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
 	<figure>
-		<img src="screenshots/pong-table-view.png" alt="A pong scene viewed from behind the player's blue paddle, looking down a green table toward a small red paddle at the far end, framed by a backdrop and two pillars." loading="lazy">
+		<img src="screenshots/paddle-table-view.png" alt="A paddle game scene viewed from behind the player's blue paddle, looking down a green table toward a small red paddle at the far end, framed by a backdrop and two pillars." loading="lazy">
 		<figcaption>Standing at your own end of the table — the blue Player Paddle fills the foreground, the red Computer Paddle is small at the far end.</figcaption>
 	</figure>
 
-	<div class="note"><strong>Pick your depth axis before you place anything.</strong> The natural mistake is building Pong the arcade way — paddles on <code>+x</code>/<code>-x</code>, walls on <code>+y</code>/<code>-y</code>, camera parked on <code>+z</code> looking straight in — and then trying to fix the camera afterward to make one paddle look "far away." No camera angle can do that: both paddles are equidistant from the camera on that layout, so any attempt to view it obliquely just makes the thin flat parts (walls, table) foreshorten into confusing diagonal slabs. Decide up front which world axis is "the length of the table" and build paddles onto <em>that</em> axis (here, <code>z</code>) — the perspective camera then does the near/far size difference for free.</div>
+	<div class="note"><strong>Pick your depth axis before you place anything.</strong> The natural mistake is building the arcade layout — paddles on <code>+x</code>/<code>-x</code>, walls on <code>+y</code>/<code>-y</code>, camera parked on <code>+z</code> looking straight in — and then trying to fix the camera afterward to make one paddle look "far away." No camera angle can do that: both paddles are equidistant from the camera on that layout, so any attempt to view it obliquely just makes the thin flat parts (walls, table) foreshorten into confusing diagonal slabs. Decide up front which world axis is "the length of the table" and build paddles onto <em>that</em> axis (here, <code>z</code>) — the perspective camera then does the near/far size difference for free.</div>
 
 	<h2><span class="step">1</span> Lay out the table along <code>z</code>, not <code>x</code></h2>
 	<p class="lede">Keep <code>y</code> as true vertical (matches the camera's default up vector) and put the two paddles at opposite ends of <code>z</code> instead of <code>x</code>. Build every part into one <code>Group</code> with <code>.add()</code>, then add the whole group with a single <code>AddObjectCommand</code>:</p>
 	<pre><code>const group = new Group();
-group.name = 'Pong Game';
+group.name = 'Paddle Game';
 
 const tableMat = new MeshStandardMaterial({ color: 0x1c5c3a, roughness: 0.7 });
 const railMat = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
@@ -273,7 +273,7 @@ setFog('FogExp2', '#e2a565', 0, 0, 0.012);
 setBackground('#f2a45c');</code></pre>
 
 	<figure>
-		<img src="screenshots/pong-desert-background.png" alt="The same pong table now surrounded by a sunset desert: sand dunes, distant reddish mesas, cacti, scattered rocks, and a warm gradient sky with a pale sun." loading="lazy">
+		<img src="screenshots/paddle-desert-background.png" alt="The same paddle game table now surrounded by a sunset desert: sand dunes, distant reddish mesas, cacti, scattered rocks, and a warm gradient sky with a pale sun." loading="lazy">
 		<figcaption>Same table, same rails, same paddles — only <code>Background Scenery</code> was swapped for <code>Desert Scenery</code>.</figcaption>
 	</figure>
 

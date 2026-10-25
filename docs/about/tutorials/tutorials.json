@@ -26,12 +26,12 @@
 		"desc": "A focused deep-dive on just the Render tab's Camera Sequence feature — add a fixed, non-animated camera and cut it in to showcase one moment your main animated camera doesn't frame well."
 	},
 	{
-		"title": "Build a table-view pong scene",
-		"href": "pong-table-view.html",
+		"title": "Build a table-view paddle game scene",
+		"href": "paddle-table-view.html",
 		"group": "Scenes and games",
-		"blurb": "Build Pong as a receding table, and verify the camera framing by projecting points to screen space.",
-		"thumb": "screenshots/thumbs/pong-table-view.jpg",
-		"desc": "Build Pong as a real receding table instead of a flat arcade screen — pick the depth axis before placing anything, group parts with one AddObjectCommand, verify camera framing by projecting points to NDC, and swap the backdrop for a sunset desert without touching the table."
+		"blurb": "Build a paddle game as a receding table, and verify the camera framing by projecting points to screen space.",
+		"thumb": "screenshots/thumbs/paddle-table-view.jpg",
+		"desc": "Build a two-paddle ball game as a real receding table instead of a flat arcade screen — pick the depth axis before placing anything, group parts with one AddObjectCommand, verify camera framing by projecting points to NDC, and swap the backdrop for a sunset desert without touching the table."
 	},
 	{
 		"title": "Build a bubble shooter scene",

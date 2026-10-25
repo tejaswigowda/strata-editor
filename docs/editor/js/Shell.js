@@ -2342,7 +2342,7 @@ function Shell( editor ) {
 					const axisVec = new T.Vector3( axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0 );
 					const total = turns * Math.PI * 2;
 
-					// Forward sweep of angles in ≤90° steps, mirrored back for ping-pong.
+					// Forward sweep of angles in ≤90° steps, mirrored back and forth.
 					const segments = Math.max( 1, Math.ceil( Math.abs( turns ) * 4 ) );
 					const angles = [];
 					for ( let i = 0; i <= segments; i ++ ) angles.push( ( total * i ) / segments );
@@ -4290,7 +4290,7 @@ ${ notes.join( '\n' ) }
 		appendOutput( '3rd-party API: const d = await fetchAPI(url[, {method,headers,body}])  — JSON→object (network/CORS apply)', 'info' );
 		appendOutput( 'dev API (--dev mode): External models (Ollama, OpenAI, Claude) appear in model dropdown when available  — select and click "Load AI"', 'info' );
 		appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
-		appendOutput( 'AI eval: evalAI() runs the standing eval set (pong/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
+		appendOutput( 'AI eval: evalAI() runs the standing eval set (paddle game/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
 		appendOutput( 'camera moves: $S("#cam").keys()/.keyAt()/.simplify("normal")/.simplifyPreview()  simplifyCameras({preset:"normal"})  — thin every shot camera in one undo step (guides/CAMERA_PATHS.md)', 'info' );
 		appendOutput( 'animation: addClip(obj,clip)  addSpinClip(obj,{axis:"y",turns:1,seconds:8,pingPong:true})  — open the Animations tab to play', 'info' );
 		appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );

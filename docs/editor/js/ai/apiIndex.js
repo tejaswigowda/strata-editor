@@ -148,7 +148,7 @@ export function buildIndex() {
 	// exposed as globals. Surfacing `new BufferGeometry()` / `new SplineCurve()` /
 	// `new Clock()` told a capable model to "use these EXACTLY", and then the code
 	// failed at validate/runtime because those classes don't exist in scope (the
-	// observed ping-pong-table / net failure). Method/property hints stay — they're
+	// observed table-tennis-table / net failure). Method/property hints stay — they're
 	// invoked on real instances the scene already has (e.g. mesh.geometry).
 	for ( const c of THREEJS_API ) {
 

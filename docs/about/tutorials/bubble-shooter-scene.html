@@ -119,7 +119,7 @@
 	<div class="note"><strong>Build the data the logic needs, not the logic itself.</strong> "The game logic (wired later) will clone and color the bubbles" is a spec for the <em>scene</em>, not an invitation to also stub out shooting/matching/popping. One named, class-tagged template object is a complete, correct deliverable — it's exactly what <code>findObject('Bubble')</code> or <code>$S('.bubble')</code> needs to locate and <code>.clone()</code> later. Building a pre-filled grid of 40 bubbles would be guessing at a layout the actual game logic hasn't specified yet.</div>
 
 	<h2><span class="step">1</span> Build the lane</h2>
-	<p class="lede">A flat lane bounded by two rails reuses the exact structure from <a href="pong-table-view.html">the pong table tutorial</a> — a real receding surface, not a flat arcade screen, so the camera can stand at one end and look down its length:</p>
+	<p class="lede">A flat lane bounded by two rails reuses the exact structure from <a href="paddle-table-view.html">the paddle game table tutorial</a> — a real receding surface, not a flat arcade screen, so the camera can stand at one end and look down its length:</p>
 	<pre><code>const group = new Group();
 group.name = 'Bubble Shooter';
 
@@ -151,7 +151,7 @@ tagClass(bubble, 'bubble');</code></pre>
 	<div class="note"><strong>Cloning a template later, from game logic:</strong> <code>const shot = findObject('Bubble').clone(); shot.material = shot.material.clone(); shot.material.color.set('#e0455a'); editor.execute(new AddObjectCommand(editor, shot));</code> — cloning the <em>material</em> too (not just the mesh) is the part that's easy to skip, and skipping it means recoloring one bubble silently recolors every clone that still shares the original material instance.</div>
 
 	<h2><span class="step">3</span> Frame it with a rainforest</h2>
-	<p class="lede">Same flat-clearing ground technique as the desert version in the pong tutorial — measure distance from the lane's true world center, not the ground mesh's own locally-offset origin, so undergrowth never rises above the lane's own surface. Trees are a trunk cylinder plus a few stacked icosahedra for foliage:</p>
+	<p class="lede">Same flat-clearing ground technique as the desert version in the paddle game tutorial — measure distance from the lane's true world center, not the ground mesh's own locally-offset origin, so undergrowth never rises above the lane's own surface. Trees are a trunk cylinder plus a few stacked icosahedra for foliage:</p>
 	<pre><code>const jungle = new Group();
 jungle.name = 'Rainforest Scenery';
 
@@ -240,7 +240,7 @@ sign.add(panel);
 editor.execute(new AddObjectCommand(editor, sign));</code></pre>
 
 	<h2><span class="step">5</span> Stand the camera at the shooter's end</h2>
-	<p class="lede">Same technique as the pong tutorial — position behind the Bubble, elevate for a 3/4 view, and verify with NDC projection before trusting a screenshot:</p>
+	<p class="lede">Same technique as the paddle game tutorial — position behind the Bubble, elevate for a 3/4 view, and verify with NDC projection before trusting a screenshot:</p>
 	<pre><code>const cam = editor.camera;
 cam.position.set(0, 4.5, 23);
 cam.fov = 60;
@@ -258,7 +258,7 @@ editor.scene.children.length;        // top-level group count, compare to what y
 editor.history.undos.length;         // commands issued this session</code></pre>
 
 	<footer>
-		<a href="./">← All tutorials</a> · <a href="pong-table-view.html">Pong table tutorial</a> · <a href="../">About</a>
+		<a href="./">← All tutorials</a> · <a href="paddle-table-view.html">Paddle game table tutorial</a> · <a href="../">About</a>
 	</footer>
 </main>
 </body>

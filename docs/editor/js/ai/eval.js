@@ -1,6 +1,6 @@
 // ── eval.js ───────────────────────────────────────────────────────────────────
 // Standing eval set + 4-axis rubric (Change Set E). Turns the ad-hoc eval run
-// (pong / chess / ping-pong / billiards / basketball hoop) into a repeatable
+// (paddle game / chess / table tennis / billiards / basketball hoop) into a repeatable
 // regression + generalization gate.
 //
 // The four axes are the ones the live runs actually surfaced:
@@ -26,10 +26,10 @@
 
 export const EVAL_PROMPTS = [
 	// Taught — must not regress.
-	{ prompt: 'make a pong scene',        tier: 'taught',        expect: { minObjects: 4 } },
+	{ prompt: 'make a paddle game scene', tier: 'taught',        expect: { minObjects: 4 } },
 
 	// Near-neighbour — generalize from the taught example.
-	{ prompt: 'make a ping pong table',   tier: 'near-neighbor', expect: { minObjects: 4 } },
+	{ prompt: 'make a table tennis table', tier: 'near-neighbor', expect: { minObjects: 4 } },
 	{ prompt: 'make an air hockey table', tier: 'near-neighbor', expect: { minObjects: 4 } },
 
 	// Structural — flat grids / repeated layout, each a DIFFERENT structure.

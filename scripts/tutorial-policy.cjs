@@ -49,6 +49,8 @@ const DENY = [
 	'mickey\\s+mouse', 'minnie\\s+mouse', 'donald\\s+duck', 'elsa', 'simba', 'disney', 'pixar', 'marvel', 'dc\\s+comics',
 	'indiana\\s+jones', 'james\\s+bond', 'jack\\s+sparrow', 'terminator', 'rambo', 'ripley', 'predator',
 	'barbie', 'hello\\s+kitty', 'snoopy', 'spongebob', 'shrek', 'bugs\\s+bunny',
+	// A game name that is a trademark: describe the capability instead ("paddle game"). "ping-pong" the technique is not matched (hyphen).
+	'pong',
 ].map( ( p ) => new RegExp( '(?<![\\w-])(?:' + p + ')(?![\\w-])', 'i' ) );
 
 // Proper-noun uses that are only a problem capitalised (a titled location), checked
@@ -113,6 +115,10 @@ function planPublication( run ) {
 
 function textOf( html ) { return html.replace( /<[^>]+>/g, ' ' ).replace( /&[a-z#0-9]+;/gi, ' ' ); }
 
+// A file name's words: the denylist ignores a term glued to a hyphen ("ping-pong"), which would let a slug like
+// "<name>-table-view" through, so file names are checked with their separators turned into spaces.
+function words( name ) { return name.replace( /[-_.]+/g, ' ' ); }
+
 function matchesAll( html, re ) { const out = []; let m; while ( ( m = re.exec( html ) ) ) out.push( m[ 1 ] ); return out; }
 
 function lintTutorials( dir = TUTORIAL_DIR ) {
@@ -129,7 +135,7 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 		if ( dir === TUTORIAL_DIR && f !== 'callcard.html' && ! /\.\.\/brand\.js/.test( html ) ) problems.push( f + ': missing <script src="../brand.js" defer></script>' );
 
 		// URL / slug.
-		for ( const hit of findViolations( f.replace( /\.html$/, '' ) ) ) add( f, 'file slug', hit );
+		for ( const hit of findViolations( words( f.replace( /\.html$/, '' ) ) ) ) add( f, 'file slug', hit );
 
 		const body = html.replace( /<!--[\s\S]*?-->/g, '' );
 		const surfaces = [
@@ -149,16 +155,16 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 	// Manifest + index page + screenshot filenames.
 	for ( const t of JSON.parse( fs.readFileSync( path.join( dir, 'tutorials.json' ), 'utf8' ) ) ) {
 
-		for ( const k of [ 'title', 'href', 'desc', 'blurb', 'group' ] ) for ( const hit of findViolations( t[ k ] ) ) add( 'tutorials.json', k + ' of "' + t.title + '"', hit );
+		for ( const k of [ 'title', 'href', 'thumb', 'desc', 'blurb', 'group' ] ) for ( const hit of findViolations( k === 'href' || k === 'thumb' ? words( String( t[ k ] || '' ) ) : t[ k ] ) ) add( 'tutorials.json', k + ' of "' + t.title + '"', hit );
 		if ( ! /^https?:\/\//.test( t.href ) && ! fs.existsSync( path.join( dir, t.href ) ) ) problems.push( 'tutorials.json: ' + t.href + ' does not exist' );
 		if ( t.thumb && ! fs.existsSync( path.join( dir, t.thumb ) ) ) problems.push( 'tutorials.json: thumb ' + t.thumb + ' does not exist' );
 
 	}
 	const shotsDir = path.join( dir, 'screenshots' );
-	if ( fs.existsSync( shotsDir ) ) for ( const f of fs.readdirSync( shotsDir ) ) for ( const hit of findViolations( f ) ) add( 'screenshots/' + f, 'file name', hit );
+	if ( fs.existsSync( shotsDir ) ) for ( const f of fs.readdirSync( shotsDir ) ) for ( const hit of findViolations( words( f ) ) ) add( 'screenshots/' + f, 'file name', hit );
 	const thumbsDir = path.join( dir, 'screenshots', 'thumbs' );
-	if ( fs.existsSync( thumbsDir ) ) for ( const f of fs.readdirSync( thumbsDir ) ) for ( const hit of findViolations( f ) ) add( 'screenshots/thumbs/' + f, 'file name', hit );
-	for ( const f of fs.readdirSync( dir ) ) if ( /\.(gif|png|jpe?g|webp)$/i.test( f ) ) for ( const hit of findViolations( f ) ) add( f, 'file name', hit );
+	if ( fs.existsSync( thumbsDir ) ) for ( const f of fs.readdirSync( thumbsDir ) ) for ( const hit of findViolations( words( f ) ) ) add( 'screenshots/thumbs/' + f, 'file name', hit );
+	for ( const f of fs.readdirSync( dir ) ) if ( /\.(gif|png|jpe?g|webp)$/i.test( f ) ) for ( const hit of findViolations( words( f ) ) ) add( f, 'file name', hit );
 
 	return problems;
 
