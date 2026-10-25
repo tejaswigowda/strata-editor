@@ -312,11 +312,12 @@ $S('#eqn').at(60).change('a\u00B2 + b\u00B2 = c\u00B2', { transition: 'fade', du
 	<div class="note"><strong>A label per track.</strong> The two merging labels are faded out with one <code>$S</code> call each (not <code>$S('#three, #four')</code>), so each label keeps its own timeline track and the code panel reads label by label. Content is a step function: the text <em>is</em> whatever was keyed last; <code>transition: 'fade'</code> only cross-fades the swap (see <a href="../../../guides/ANIMATION.md">the animation guide</a>).</div>
 
 	<h2><span class="step">9</span> Two more triples, a quarter turn apart</h2>
-	<p class="lede">3-4-5 is not the only right triangle with whole-number sides. Two more, 5-12-13 and 8-15-17, get the same picture — a square on each leg and one on the hypotenuse — and they are placed around the camera instead of in front of it: the camera starts facing the first, and every quarter turn about Y (90°) brings the next into view. <code>makeTriple</code> builds one from its two legs and hypotenuse, scales it to about the height of the 3-4-5 so it fills the frame the same way, and turns it to face the camera that will be looking at it:</p>
-	<pre><code>// A Pythagorean triple p-q-c, laid out like the 3-4-5: a square on each leg and one on the hypotenuse.
-// The whole figure is scaled to about the height of the 3-4-5 and turned to face `yaw` degrees.
+	<p class="lede">3-4-5 is not the only right triangle with whole-number sides. Two more, 5-12-13 and 8-15-17, get the same treatment — tiles in a square on each leg that fly onto the square on the hypotenuse — and they are placed around the camera instead of in front of it: the camera starts facing the first, and every quarter turn about Y (90°) brings the next into view. <code>makeTriple</code> builds one from its two legs and hypotenuse, scales it to about the height of the 3-4-5 so it fills the frame the same way, and turns it to face the camera that will be looking at it. The hypotenuse square is made of <em>empty</em> groups, one per cell, because the tiles only need somewhere to land: they are never drawn.</p>
+	<pre><code>// A Pythagorean triple p-q-c, laid out like the 3-4-5 and built the same way: unit tiles in a square on
+// each leg, and an empty landing pad on the hypotenuse for them to fly onto. The figure is scaled to
+// about the height of the 3-4-5 and turned to face `yaw` degrees.
 function makeTriple(id, p, q, c, target, yaw) {
-  const k = 10 / (2 * q + p);                  // about the height of the 3-4-5 on screen
+  const k = 10 / (2 * q + p);
   const thin = 0.1 / k;                        // slab thickness, 0.1 in world units
   const outer = new Group();
   outer.name = id;
@@ -327,34 +328,62 @@ function makeTriple(id, p, q, c, target, yaw) {
   figure.position.set(-q / 2, -p / 2, 0);      // put the figure's bounding box on the target
   outer.add(figure);
 
-  const part = (name, geometry, material, x, y, rotZ) =&gt; {
-    const mesh = new Mesh(geometry, material);
-    mesh.name = `${id}-${name}`;
-    mesh.position.set(x, y, 0);
-    mesh.rotation.z = rotZ;
-    mesh.castShadow = mesh.receiveShadow = true;
-    mesh.userData.hasEdgeOutline = true;
-    figure.add(mesh);
+  const group = (name, x, y, rotZ) =&gt; {
+    const g = new Group();
+    g.name = `${id}-${name}`;
+    g.position.set(x, y, 0);
+    g.rotation.z = rotZ;
+    figure.add(g);
+    return g;
   };
-  const slab = (side, color) =&gt; [
-    new BoxGeometry(side, side, thin),
-    new MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 })
-  ];
-  const triangle = new ExtrudeGeometry(
-    new Shape([new Vector2(0, 0), new Vector2(q, 0), new Vector2(0, p)]),
-    { depth: 1 / k, bevelEnabled: false }
+
+  const triangle = new Mesh(
+    new ExtrudeGeometry(new Shape([new Vector2(0, 0), new Vector2(q, 0), new Vector2(0, p)]), { depth: 1 / k, bevelEnabled: false }),
+    new MeshStandardMaterial({ color: 0xd99b30, roughness: 0.9, metalness: 1 })
   );
-  triangle.translate(0, 0, -0.5 / k);
-  part('tri', triangle, new MeshStandardMaterial({ color: 0xd99b30, roughness: 0.9, metalness: 1 }), 0, 0, 0);
-  part('p', ...slab(p, 0xff6b6b), -p / 2, p / 2, 0);                       // on the vertical leg
-  part('q', ...slab(q, 0x4ecdc4), q / 2, -q / 2, 0);                       // under the horizontal leg
-  part('c', ...slab(c, 0xffe08a), (p + q) / 2, (p + q) / 2, Math.atan2(q, p));   // on the hypotenuse
+  triangle.geometry.translate(0, 0, -0.5 / k);
+  triangle.name = `${id}-tri`;
+  figure.add(triangle);
+
+  // n x n tiles; tile (i, j) is centred at place(i, j). One shared geometry, and two shades in a
+  // checkerboard, so single tiles stay visible even when they are only a few pixels wide.
+  const square = (name, n, color, place) =&gt; {
+    const g = group(name, 0, 0, 0);
+    const geometry = new BoxGeometry(0.9, 0.9, thin);
+    const shade = [color, new Color(color).offsetHSL(0, 0, 0.09)].map(c =&gt; new MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.2 }));
+    for (let i = 1; i &lt;= n; i++) {
+      for (let j = 1; j &lt;= n; j++) {
+        const tile = new Mesh(geometry, shade[(i + j) % 2]);
+        tile.name = `${id}-${name}.${i}.${j}`;
+        tile.position.set(...place(i, j), 0);
+        g.add(tile);
+      }
+    }
+  };
+  square('p', p, 0xff6b6b, (i, j) =&gt; [j - 0.5 - p, i - 0.5]);     // on the vertical leg
+  square('q', q, 0x4ecdc4, (i, j) =&gt; [j - 0.5, 0.5 - i]);         // under the horizontal leg
+
+  // the hypotenuse square: c x c empty groups, turned onto the slope, no geometry at all
+  const pad = group('pad', q, 0, Math.atan2(q, p));
+  for (let i = 1; i &lt;= c; i++) {
+    for (let j = 1; j &lt;= c; j++) {
+      const cell = new Group();
+      cell.name = `${id}-cell.${i}.${j}`;
+      cell.position.set(j - 0.5, c + 0.5 - i, 0);
+      pad.add(cell);
+    }
+  }
 
   editor.execute(new AddObjectCommand(editor, outer));
 }
 
 makeTriple('t2', 5, 12, 13, [-17, 0.68, 20], 90);    // a quarter turn to the camera's left
-makeTriple('t3', 8, 15, 17, [3, 0.68, 40], 180);     // behind the camera's start</code></pre>
+makeTriple('t3', 8, 15, 17, [3, 0.68, 40], 180);     // behind the camera's start
+
+$S('#t2-p &gt; *, #t2-q &gt; *, #t3-p &gt; *, #t3-q &gt; *').addClass('tile');
+$S('#t2-pad &gt; *, #t3-pad &gt; *').addClass('cell');
+[$S('.tile').nodes.length, $S('.cell').nodes.length]   // [458, 458]</code></pre>
+	<div class="note"><strong>Why these tiles have no black borders.</strong> The 3-4-5 tiles draw a border by carrying a child line object, and a class on a node also matches everything inside it, so <code>.cube</code> matches both the tiles and their borders. That is harmless when every target is a tile too, but here the targets are empty groups with no borders, so a selector that matched borders would pair the wrong things. These tiles are therefore plain meshes (a little under 1 wide, so a gap shows) in two shades laid out like a checkerboard. They share one geometry and two materials per square; the editor logs a warning that a shared material is animated on several nodes, which is exactly what the fade-in wants.</div>
 	<div class="note"><strong>Why the yaw is the group's own rotation.</strong> A camera that has turned <var>yaw</var>° about Y looks along a direction that turns with it, and an object with the same <code>rotation.y</code> has its front toward that camera. So the triple at <code>[-17, 0.68, 20]</code> (20 units to the left of the camera) is turned 90°, the one at <code>[3, 0.68, 40]</code> (20 units behind it) 180°, and the end card on the right 270° (−90°). Because the figure is built inside a scaled, turned group, every position inside it is written in the figure's own flat frame, exactly like the 3-4-5.</div>
 	<p>Each triple gets one caption, copied from the <code>eqn</code> label so it keeps the font, the glow and the size, then placed below its figure in the figure's own frame:</p>
 	<pre><code>// One caption per triple, copied from the first label so it keeps the font, the glow and the size.
@@ -372,30 +401,30 @@ function makeCaption(name, target, yaw) {
 makeCaption('eqn2', [-17, 0.68, 20], 90);
 makeCaption('eqn3', [3, 0.68, 40], 180);
 $S('#eqn2, #eqn3').addClass('label');</code></pre>
-	<p>Now the clock. The existing film is untouched up to 65&nbsp;s, where the theorem has been on screen for five seconds. From there each triple gets 16&nbsp;seconds: a 2.5-second quarter turn, the triangle, then one square at a time with its area as the caption, ending on the sum:</p>
-	<pre><code>// 65-81 s: a quarter turn to the right-hand side, the 5-12-13 triple
+	<p>Now the clock. The existing film is untouched up to 65&nbsp;s, where the theorem has been on screen for five seconds. From there each triple gets 16&nbsp;seconds, and they follow the same beat as the 3-4-5: a 2.5-second quarter turn, the triangle, the two squares of tiles fading in one at a time with their areas as captions, then all the tiles flying onto the hypotenuse square (3 seconds, in selector-list order, so the first leg's tiles take the first cells), ending on the sum:</p>
+	<pre><code>// 65-81 s: a quarter turn to the left, the 5-12-13 triple
 $S('#eqn2').at(0).change('');
 $S('#PerspectiveCamera').at(65).animate({ to: { rotation: [0, 90, 0] } }, 2500);
 $S('#t2-tri').at(66.5).fadeIn(1);
-$S('#t2-p').at(68.5).fadeIn(1);
-$S('#eqn2').at(68.5).change('5\u00B2 = 25', { transition: 'fade', dur: 400 });
-$S('#t2-q').at(71).fadeIn(1);
-$S('#eqn2').at(71).change('12\u00B2 = 144', { transition: 'fade', dur: 400 });
-$S('#t2-c').at(73.5).fadeIn(1);
-$S('#eqn2').at(73.5).change('13\u00B2 = 169', { transition: 'fade', dur: 400 });
-$S('#eqn2').at(76).change('25 + 144 = 169', { transition: 'fade', dur: 400 });
+$S('#t2-p .tile').at(68).fadeIn(1);
+$S('#eqn2').at(68).change('5\u00B2 = 25', { transition: 'fade', dur: 400 });
+$S('#t2-q .tile').at(70).fadeIn(1);
+$S('#eqn2').at(70).change('12\u00B2 = 144', { transition: 'fade', dur: 400 });
+$S('#t2-p .tile, #t2-q .tile').at(72.5).moveToEach('#t2-pad .cell', 3000);
+$S('#eqn2').at(72.5).change('25 + 144', { transition: 'fade', dur: 400 });
+$S('#eqn2').at(75.5).change('= 169 = 13\u00B2', { transition: 'fade', dur: 400 });
 
 // 81-97 s: another quarter turn, the 8-15-17 triple
 $S('#eqn3').at(0).change('');
 $S('#PerspectiveCamera').at(81).animate({ to: { rotation: [0, 180, 0] } }, 2500);
 $S('#t3-tri').at(82.5).fadeIn(1);
-$S('#t3-p').at(84.5).fadeIn(1);
-$S('#eqn3').at(84.5).change('8\u00B2 = 64', { transition: 'fade', dur: 400 });
-$S('#t3-q').at(87).fadeIn(1);
-$S('#eqn3').at(87).change('15\u00B2 = 225', { transition: 'fade', dur: 400 });
-$S('#t3-c').at(89.5).fadeIn(1);
-$S('#eqn3').at(89.5).change('17\u00B2 = 289', { transition: 'fade', dur: 400 });
-$S('#eqn3').at(92).change('64 + 225 = 289', { transition: 'fade', dur: 400 });</code></pre>
+$S('#t3-p .tile').at(84).fadeIn(1);
+$S('#eqn3').at(84).change('8\u00B2 = 64', { transition: 'fade', dur: 400 });
+$S('#t3-q .tile').at(86).fadeIn(1);
+$S('#eqn3').at(86).change('15\u00B2 = 225', { transition: 'fade', dur: 400 });
+$S('#t3-p .tile, #t3-q .tile').at(88.5).moveToEach('#t3-pad .cell', 3000);
+$S('#eqn3').at(88.5).change('64 + 225', { transition: 'fade', dur: 400 });
+$S('#eqn3').at(91.5).change('= 289 = 17\u00B2', { transition: 'fade', dur: 400 });</code></pre>
 
 	<h2><span class="step">10</span> The last quarter turn: the end card</h2>
 	<p class="lede">The camera does not travel anywhere, even now: one more 90° turn about Y, to 270°, points it at the end card that was placed 15 units to its right in step 5, while the card fades in. At 8× scale and a 50° field of view it fills the frame.</p>
@@ -403,8 +432,8 @@ $S('#eqn3').at(92).change('64 + 225 = 289', { transition: 'fade', dur: 400 });</
 $S('#callcard').at(97.5).fadeIn(3);
 $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500);</code></pre>
 	<figure>
-		<img src="screenshots/pythagorean-triples.png" alt="Two frames side by side: the 5-12-13 triple with its three squares and the caption 25 + 144 = 169, and the 8-15-17 triple with the caption 64 + 225 = 289." loading="lazy">
-		<figcaption>The two extra triples at the end of their beats: 25 + 144 = 169 on the left, 64 + 225 = 289 on the right.</figcaption>
+		<img src="screenshots/pythagorean-triples.png" alt="Two frames side by side: left, the 5-12-13 triple mid-flight, with red and teal tiles tumbling from the two leg squares towards the hypotenuse; right, the 8-15-17 triple after landing, with the tiles filling the square on the hypotenuse." loading="lazy">
+		<figcaption>The same dissection on the other triples: 5-12-13 mid-flight on the left (73.5 s), 8-15-17 landed on the right (94 s).</figcaption>
 	</figure>
 	<p>The timeline now runs 100.5 seconds, and the render holds the last frame for two more. The theorem stays on screen from 60 to 65&nbsp;s before the camera turns away from it. This is the whole cut sheet:</p>
 	<table class="cuts">
@@ -419,9 +448,9 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
 		<tr><td>47 – 53</td><td>"9 + 16", then the two numbers close up</td></tr>
 		<tr><td>53 – 65</td><td>"25" (3.5 s), "5²" (3.5 s), then "a² + b² = c²" (5 s)</td></tr>
 		<tr><td>65 – 67.5</td><td>The camera turns 90° to the left, to the 5-12-13 triple</td></tr>
-		<tr><td>66.5 – 76</td><td>Triangle, then the squares on 5, 12 and 13, captions "5² = 25", "12² = 144", "13² = 169", then "25 + 144 = 169" (held to 81)</td></tr>
+		<tr><td>66.5 – 75.5</td><td>Triangle; the 5×5 tiles (68 s) and 12×12 tiles (70 s) fade in with "5² = 25" and "12² = 144"; at 72.5 all 169 tiles fly onto the hypotenuse square, "25 + 144", then "= 169 = 13²" (held to 81)</td></tr>
 		<tr><td>81 – 83.5</td><td>Another 90° turn, round to the 8-15-17 triple</td></tr>
-		<tr><td>82.5 – 92</td><td>The same beats: "8² = 64", "15² = 225", "17² = 289", then "64 + 225 = 289" (held to 97)</td></tr>
+		<tr><td>82.5 – 91.5</td><td>The same beats: "8² = 64" (84 s), "15² = 225" (86 s), all 289 tiles fly over at 88.5, "64 + 225", then "= 289 = 17²" (held to 97)</td></tr>
 		<tr><td>97 – 100.5</td><td>The last 90° turn, to the call card, which fades in</td></tr>
 	</table>
 
@@ -440,16 +469,16 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
   { start: 53.0, end: 56.3, text: '25 tiles fill it exactly.' },
   { start: 56.6, end: 59.8, text: 'And 25 is 5\u00B2:\nthe square on the slanted side.' },
   { start: 60.0, end: 64.8, text: 'In every right triangle:\na\u00B2 + b\u00B2 = c\u00B2' },
-  { start: 66.0, end: 68.4, text: 'Does it hold for other triples?' },
-  { start: 68.5, end: 70.9, text: 'The square on the 5 side: 25.' },
-  { start: 71.0, end: 73.4, text: 'On the 12 side: 144.' },
-  { start: 73.5, end: 75.9, text: 'On the slanted side: 13\u00B2 = 169.' },
-  { start: 76.0, end: 80.5, text: '25 + 144 = 169.\nIt holds.' },
-  { start: 82.5, end: 84.4, text: 'One more: 8, 15, 17.' },
-  { start: 84.5, end: 86.9, text: 'The square on the 8 side: 64.' },
-  { start: 87.0, end: 89.4, text: 'On the 15 side: 225.' },
-  { start: 89.5, end: 91.9, text: 'On the slanted side: 17\u00B2 = 289.' },
-  { start: 92.0, end: 96.5, text: '64 + 225 = 289.\nIt holds again.' },
+  { start: 66.0, end: 67.9, text: 'Does it hold for other triples?' },
+  { start: 68.0, end: 69.9, text: 'The square on the 5 side:\n25 tiles.' },
+  { start: 70.0, end: 72.4, text: 'On the 12 side: 144 tiles.' },
+  { start: 72.5, end: 75.4, text: 'Do they fill the slanted side?' },
+  { start: 75.6, end: 80.5, text: 'Exactly: 169 tiles.\n5\u00B2 + 12\u00B2 = 13\u00B2.' },
+  { start: 82.5, end: 83.9, text: 'One more: 8, 15, 17.' },
+  { start: 84.0, end: 85.9, text: 'The square on the 8 side:\n64 tiles.' },
+  { start: 86.0, end: 88.4, text: 'On the 15 side: 225 tiles.' },
+  { start: 88.5, end: 91.4, text: 'Do they fit again?' },
+  { start: 91.6, end: 96.5, text: 'Exactly: 289 tiles.\n8\u00B2 + 15\u00B2 = 17\u00B2.' },
   { start: 98.0, end: 100.5, text: 'Made with Strata.' },
 ]).length   // 23</code></pre>
 	<div class="note"><strong>Writing cues that fit the picture.</strong> Each cue starts with the thing it describes (the leg at 6 and 9&nbsp;s, the unfolding square at 14 and 24&nbsp;s) and ends before the next beat; none is longer than two short lines, and none overlaps another. Keep a cue on screen at least about a second for every fifteen characters. <code>exportSrt()</code> returns the same cues as <code>.srt</code> text.</div>
@@ -469,8 +498,8 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="../../../guides/ANIMATION.md">the animation guide</a> and <a href="../../../guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
 
 	<h2 id="open-finished"><span class="step">13</span> Open the finished scene</h2>
-	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, plus the two extra triples with their captions, with the same 22 timeline tracks, the same 100.5-second clock and the same 23 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, at 78&nbsp;s the 5-12-13 sum is on screen, at 94&nbsp;s the 8-15-17 one, and from 100&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 22 timeline tracks with the same events at the same times, the same 23 subtitle cues word for word, and a frame at each of seventeen times from 0 to 98&nbsp;s that differs from the published one by under 3% of its pixels. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so two loads of the same scene can bake differently, and it was not compared. Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. Rendering (step 12) was not re-run for this revision.</div>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, plus the two extra triples (458 more tiles, their landing cells and captions), with the same 22 timeline tracks, the same 100.5-second clock and the same 23 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, at 78&nbsp;s the 5-12-13 sum is on screen, at 94&nbsp;s the 8-15-17 one, and from 100&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 22 timeline tracks with the same events at the same times, the same 23 subtitle cues word for word, and a frame at each of fourteen times from 0 to 98&nbsp;s that differs from the published one by under 3% of its pixels. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so two loads of the same scene can bake differently, and it was not compared. Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. Rendering (step 12) was not re-run for this revision. The scene file is now about 4.8&nbsp;MB, nearly all of it baked animation, chiefly the flight paths of the 483 tiles that move; the editor rebuilds them from the timeline on load, so they are a cache, not something to edit.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
