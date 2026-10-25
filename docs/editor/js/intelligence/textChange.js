@@ -15,7 +15,7 @@
 // Both paths read the SAME 'change' events off the TimelineModel; scrubbing is
 // always deterministic from the key list (never replayed edits).
 
-import { Mesh, MeshBasicMaterial } from 'three';
+import { BufferGeometry, Mesh, MeshBasicMaterial } from 'three';
 import * as selectorEngine from './selectorEngine.js';
 
 // ── shared helpers ────────────────────────────────────────────────────────────
@@ -118,6 +118,17 @@ function avoidZFighting( material ) {
 
 }
 
+// The WebGPU renderer frees a geometry's GPU buffers by looking up the attributes of the render
+// object that used it AT THE MOMENT OF DISPOSAL. Disposing the old geometry after the mesh has been
+// given a new one (as this file used to, a frame later) therefore freed the NEW geometry's buffers,
+// and the next draw of that label failed with "Vertex buffer slot N ... was not set", which invalidates
+// the whole frame. Dispose first, then swap.
+function disposeBeforeSwap( geometry ) {
+
+	geometry.dispose();
+
+}
+
 function regenerateText( node, text ) {
 
 	if ( lastText.get( node ) === text ) return;
@@ -126,17 +137,11 @@ function regenerateText( node, text ) {
 	const old = node.geometry;
 	rememberAuthored( node );
 	generatedGeometry.add( geometry );
+	disposeBeforeSwap( old );
 	node.geometry = geometry;
 	lastText.set( node, text );
 	syncEmptyVisibility( node );
 	avoidZFighting( node.material );
-
-	// Deferred dispose: disposing the OLD geometry synchronously here races the
-	// WebGPU renderer's already-in-flight frame, which can still reference the
-	// old buffer — corrupting that frame into a garbled overlap of the old and
-	// new glyphs for a single visible frame. Freeing it a frame later lets the
-	// renderer finish drawing with the new geometry first.
-	requestAnimationFrame( () => old.dispose() );
 
 }
 
@@ -177,7 +182,7 @@ function removeNextSlot( node ) {
 	const slot = node.children.find( c => c.userData && c.userData.isNextSlot );
 	if ( ! slot ) return;
 	node.remove( slot );
-	slot.geometry.dispose();
+	requestAnimationFrame( () => slot.geometry.dispose() );
 	slot.material.dispose();
 
 }
@@ -190,6 +195,12 @@ function removeNextSlot( node ) {
 // — so shadows follow every fade and every text change with no keyframes of their own.
 
 function noRaycast() {}
+
+// The geometry a shadow last copied, so it is copied again only when the label's geometry changes.
+// The shadow owns its copy: change() and the fade slots dispose the label's geometries on their own
+// schedule, and a geometry shared with a mesh that has since been disposed leaves the WebGPU
+// renderer drawing a buffer-less mesh, which invalidates the frame ("Vertex buffer slot 0 ... was not set").
+const copiedFrom = new WeakMap();
 
 /** Keep every text shadow in `scene` matching its label. Cheap; safe to call every frame. */
 export function syncTextShadows( scene ) {
@@ -214,7 +225,7 @@ export function syncTextShadows( scene ) {
 
 		if ( ! shadow ) {
 
-			shadow = new Mesh( node.geometry, new MeshBasicMaterial( { color: 0x000000, toneMapped: false, fog: false } ) );
+			shadow = new Mesh( new BufferGeometry(), new MeshBasicMaterial( { color: 0x000000, toneMapped: false, fog: false } ) );
 			shadow.name = '__textShadow';
 			shadow.userData.isTextShadow = true;
 			shadow.raycast = noRaycast;
@@ -228,13 +239,19 @@ export function syncTextShadows( scene ) {
 		const slot = node.children.find( c => c.userData && c.userData.isNextSlot );
 		const source = slot && node.material.opacity <= 0.001 ? slot : node;
 
-		if ( shadow.geometry !== source.geometry ) shadow.geometry = source.geometry;
+		if ( copiedFrom.get( shadow ) !== source.geometry ) {
+
+			disposeBeforeSwap( shadow.geometry );
+			shadow.geometry = new BufferGeometry().copy( source.geometry );
+			copiedFrom.set( shadow, source.geometry );
+
+		}
 
 		const size = ( typeof data.textShadow === 'object' && data.textShadow.size ) || 0.06;
 		const unit = ( node.geometry.parameters.options.size || 1 );
 		shadow.position.set( size * unit, - size * unit, - 0.02 * unit );
 
-		const position = source.geometry.attributes && source.geometry.attributes.position;
+		const position = shadow.geometry.attributes && shadow.geometry.attributes.position;
 		shadow.visible = !! position && position.count > 0;
 
 		const mat = shadow.material;
@@ -353,27 +370,13 @@ export function applyContentAt( editor, model, t ) {
 
 			} else {
 
-				// Settling right after a fade — adopt the pre-warmed slot's
-				// (already rendered, pipeline-hot) geometry instead of building
-				// + first-showing a fresh one exactly on this frame.
-				const nextSlot = node.children.find( c => c.userData && c.userData.isNextSlot );
-				if ( nextSlot && lastText.get( nextSlot ) === active.args.text ) {
-
-					const old = node.geometry;
-					rememberAuthored( node );
-					node.geometry = nextSlot.geometry;
-					lastText.set( node, active.args.text );
-					syncEmptyVisibility( node );
-					avoidZFighting( node.material );
-					requestAnimationFrame( () => old.dispose() );
-					node.remove( nextSlot );
-					nextSlot.material.dispose();
-
-				} else {
-
-					regenerateText( node, active.args.text );
-
-				}
+				// Settling right after a fade: the node builds its own geometry for the final text. The
+				// slot's geometry used to be handed over to the node, but two meshes sharing a geometry
+				// while the slot's mesh is removed and its buffers released left the WebGPU renderer
+				// drawing the node with a missing vertex buffer for a frame (scrubbing through a fade
+				// end invalidated every following frame). The slot only has to be warm while it fades in.
+				regenerateText( node, active.args.text );
+				removeNextSlot( node );
 
 				// A node can ALSO carry an unrelated animate()-recipe opacity
 				// track on the same material (e.g. a fadeOut() after its last

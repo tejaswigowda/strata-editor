@@ -13,6 +13,7 @@ register( 'data:text/javascript,' + encodeURIComponent(
 ) );
 const THREE = await import( threePath );
 globalThis.window = { THREE };
+globalThis.requestAnimationFrame = fn => setTimeout( fn, 0 );
 
 const { syncTextShadows, withAuthoredText } = await import( path.join( here, '..', 'textChange.js' ) );
 
@@ -47,7 +48,8 @@ test( 'a flagged label gets one black shadow, offset down and right', () => {
 	const s = shadowOf( mesh );
 	assert.strictEqual( s.material.color.getHex(), 0 );
 	assert.ok( s.position.x > 0 && s.position.y < 0 && s.position.z < 0 );
-	assert.strictEqual( s.geometry, mesh.geometry );
+	assert.notStrictEqual( s.geometry, mesh.geometry ); // its own copy, so disposing the label's geometry cannot strand it
+	assert.strictEqual( s.geometry.attributes.position.count, mesh.geometry.attributes.position.count );
 
 } );
 
@@ -68,7 +70,7 @@ test( 'the shadow follows the label geometry and opacity', () => {
 	mesh.material.opacity = 0.4;
 	syncTextShadows( scene );
 	const s = shadowOf( mesh );
-	assert.strictEqual( s.geometry, mesh.geometry );
+	assert.strictEqual( s.geometry.attributes.position.count, mesh.geometry.attributes.position.count );
 	assert.strictEqual( s.material.opacity, 0.4 );
 	assert.strictEqual( s.material.transparent, true );
 
@@ -81,6 +83,18 @@ test( 'a label with no vertices has no visible shadow', () => {
 	mesh.geometry.parameters = { options: { text: '', size: 2 } };
 	syncTextShadows( scene );
 	assert.strictEqual( shadowOf( mesh ).visible, false );
+
+} );
+
+test( 'disposing the label geometry leaves the shadow geometry alone', () => {
+
+	const { scene, mesh } = label( true );
+	syncTextShadows( scene );
+	const s = shadowOf( mesh );
+	let disposed = false;
+	s.geometry.addEventListener( 'dispose', () => { disposed = true; } );
+	mesh.geometry.dispose();
+	assert.strictEqual( disposed, false );
 
 } );
 
