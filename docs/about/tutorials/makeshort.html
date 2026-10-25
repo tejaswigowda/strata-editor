@@ -7,14 +7,15 @@
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: build an animated Pythagorean-theorem dissection short in Strata, entirely by hand via the JS Shell and the Universal Timeline.">
+<meta name="description" content="Step-by-step tutorial: build a 59-second animated 3-4-5 proof in Strata from tiles, a triangle and three text labels, entirely by hand with the JS Shell and the Universal Timeline.">
 <!--
 	/about/tutorials/makeshort.html — a from-scratch, by-hand tutorial.
 	Every snippet is real Strata surface (JS Shell globals + the public
 	$S().animate()/.at()/.moveToEach()/.change() grammar documented in
-	guides/ANIMATION.md) — copy/paste each block into the Shell tab in
-	order and the short builds up incrementally. Static page, no build
-	step, no third-party calls.
+	guides/ANIMATION.md). Paste each block into the Shell tab in order
+	and the short builds up incrementally. Static page, no build step,
+	no third-party calls. The finished scene it reproduces is pyth.json
+	in tejaswigowda/test1.
 -->
 <style>
 	:root { color-scheme: dark; }
@@ -99,6 +100,21 @@
 	.note strong { color: #d9dde3; }
 	ol.steps { padding-left: 1.2em; }
 	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
 	footer {
 		margin-top: 3.5em;
 		padding-top: 1.2em;
@@ -119,99 +135,89 @@
 	<h1>Make a Pythagorean-theorem short</h1>
 		<iframe src="../../#repo=tejaswigowda/test1&file=pyth.json&present=true"></iframe>
 
-	<p class="tagline">Three squares, a right triangle, a classic dissection proof, and a living end-card — built entirely by hand, no AI, via the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 9</a>).</p>
+	<p class="tagline">A 59-second proof that 3² + 4² = 5²: fifty tiles, one triangle, three labels and a camera that turns round to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 11</a>).</p>
 
 	<div class="note"><strong>Why the Shell, not clicking.</strong> Every edit below is a real, undoable, git-diffable command (<code>editor.execute(...)</code> under the hood) — the Shell is just the fastest way to author them. You can always inspect or hand-tweak the result afterward in the Outliner/Object panel; nothing here is a special "script mode."</div>
+	<div class="note"><strong>One paste, one scope.</strong> The Shell does not keep variables between pastes, so every block below is self-contained: it defines what it uses, and anything a later block needs is found again by name or class (<code>$S('#three')</code>, <code>$S('.cube')</code>). Start from an empty scene.</div>
 
-	<h2><span class="step">1</span> Build the three squares</h2>
-	<p class="lede">A square-of-side-<var>n</var> is just an <var>n</var>×<var>n</var> grid of unit cubes, grouped. Paste this once to get a helper, then call it three times for the 3², 4², and 5² squares.</p>
-	<pre><code>function buildSquare(name, n, color) {
-  const group = new Group();
-  group.name = name;
-  const step = 1.08; // cell size + a small gap
-  const offset = (n - 1) * step / 2;
-  for (let row = 0; row < n; row++) {
-    for (let col = 0; col < n; col++) {
-      const cube = new Mesh(
-        new BoxGeometry(1, 1, 1),
-        new MeshStandardMaterial({ color })
+	<h2><span class="step">1</span> Build the three squares out of tiles</h2>
+	<p class="lede">The proof needs the squares to come apart and go back together, so each one is made of unit tiles instead of one big box. A tile is a 1×1×0.1 slab. Tiles sit in a row or a column group, and the group sits in a square group: <code>#3x3-square</code> › <code>#3col1</code> › <code>cube_3.1.1</code>. That nesting is what lets the timeline say "the first column of the 3×3" later.</p>
+	<pre><code>// A square of side n is n lines (rows or columns) of n tiles. Each tile is a
+// 1 x 1 x 0.1 slab; each line is its own group so the timeline can address it.
+function makeSquare(n, name, color, kind, place) {
+  const square = new Group();
+  square.name = name;
+  for (let k = 1; k &lt;= n; k++) {
+    const line = new Group();
+    line.name = `${n}${kind}${k}`;
+    for (let m = 1; m &lt;= n; m++) {
+      const tile = new Mesh(
+        new BoxGeometry(1, 1, 0.1),
+        new MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 })
       );
-      cube.position.set(col * step - offset, row * step - offset, 0);
-      group.add(cube);
+      tile.name = `cube_${n}.${k}.${m}`;
+      tile.position.set(...place(k, m), 0);
+      tile.castShadow = tile.receiveShadow = true;
+      tile.userData.hasEdgeOutline = true; // black border, drawn by the viewport
+      line.add(tile);
     }
+    square.add(line);
   }
-  editor.execute(new AddObjectCommand(editor, group));
-  return group;
+  editor.execute(new AddObjectCommand(editor, square));
+  return square;
 }
 
-buildSquare('3x3-square', 3, 0xff8a5c);
-buildSquare('4x4-square', 4, 0x5cc8ff);
-buildSquare('5x5-square', 5, 0x8a5cff);</code></pre>
-	<p>Give every cell an addressable class so the timeline can target "all cubes in this square" as one selector:</p>
-	<pre><code>$S('#3x3-square > *').addClass('cube');
-$S('#4x4-square > *').addClass('cube');
-$S('#5x5-square > *').addClass('cube');</code></pre>
-	<p>Now position the three squares (side by side for now — you'll move the 3×3 and 4×4 onto the 5×5 during the reveal) and add a right triangle whose legs equal 3 and 4:</p>
-	<pre><code>$S('#3x3-square').moveTo(-6, 0, 0);
-$S('#4x4-square').moveTo(-1, -0.5, 0);
-$S('#5x5-square').moveTo(6, 0, 0);
+// 3x3 on the vertical leg: columns, column 1 touches the triangle.
+makeSquare(3, '3x3-square', 0xff6b6b, 'col', (k, m) => [1 - k, 3 - m]);
+// 4x4 under the horizontal leg: rows, row 1 touches the triangle.
+makeSquare(4, '4x4-square', 0x4ecdc4, 'row', (k, m) => [m, -k]);
+// 5x5 on the hypotenuse: built upright, then turned onto the slope.
+const big = makeSquare(5, '5x5-square', 0x333300, 'row', (k, m) => [m - 0.5, 5.5 - k]);
+big.position.set(4.5, -0.5, 0);
+big.rotation.z = Math.atan2(4, 3);   // 53.13 degrees, the angle of the 3-4-5 triangle</code></pre>
+	<p>Give everything an addressable class — squares, lines and tiles — so selectors like <code>#3x3-square #3col1 .cube</code> and <code>.cube</code> work. Class names are stored lowercase, so use lowercase everywhere:</p>
+	<pre><code>$S('#3x3-square, #4x4-square, #5x5-square').addClass('square');
+$S('#3x3-square &gt; *').addClass('col');
+$S('#4x4-square &gt; *, #5x5-square &gt; *').addClass('row');
+$S('#3x3-square &gt; * &gt; *, #4x4-square &gt; * &gt; *, #5x5-square &gt; * &gt; *').addClass('cube');
+$S('.cube').nodes.filter(n =&gt; n.name.startsWith('cube_')).length   // 50 tiles: 9 + 16 + 25</code></pre>
+	<div class="note"><strong>Selectors reach down.</strong> A class on a node also matches everything inside it, and each tile's black border is a child of the tile, so <code>$S('.cube').nodes.length</code> says 100, not 50: the 50 tiles and their 50 borders. That is harmless — the borders follow their tiles through every fade and flight, and <code>moveToEach</code> pairs borders with borders in the same order — but it is why the check above filters by name.</div>
+	<div class="note"><strong>Why the 5×5 is built upright and then turned.</strong> Its tiles end up lying on the hypotenuse, so the whole group is rotated by the triangle's angle. Because the rotation lives on the <em>group</em>, every tile inherits it — and when the other 25 tiles later fly onto these cells, they turn to match. You never type a rotation for an individual tile.</div>
 
-const tri = new Mesh(
-  new ShapeGeometry(new Shape([
-    new Vector2(0, 0),
-    new Vector2(4, 0),
-    new Vector2(0, 3),
-  ])),
-  new MeshStandardMaterial({ color: 0xd9dde3 })
+	<h2><span class="step">2</span> Add the right triangle</h2>
+	<p class="lede">Legs 4 and 3, one unit thick, with its right angle on the corner the 3×3 and the 4×4 share. The 5×5 sits on the long side.</p>
+	<pre><code>const tri = new Mesh(
+  new ExtrudeGeometry(
+    new Shape([new Vector2(0, 0), new Vector2(4, 0), new Vector2(0, 3)]),   // legs 4 and 3
+    { depth: 1, bevelEnabled: false }
+  ),
+  new MeshStandardMaterial({ color: 0xd99b30, roughness: 0.9, metalness: 1 })
 );
+tri.geometry.translate(0, 0, -0.5);        // centre the 1-unit thickness on z = 0
 tri.name = 'RightTriangle';
-editor.execute(new AddObjectCommand(editor, tri));
-$S('#RightTriangle').moveTo(-3.5, -2, 0);</code></pre>
+tri.position.set(0.5, -0.5, 0);            // right angle sits at the corner the squares share
+tri.castShadow = tri.receiveShadow = true;
+tri.userData.hasEdgeOutline = true;
+editor.execute(new AddObjectCommand(editor, tri));</code></pre>
 	<figure>
-		<img src="screenshots/pythagorean-squares.png" alt="Three squares (3×3 orange, 4×4 blue, 5×5 purple) and a right triangle laid out in the Strata viewport, built entirely from the Shell snippet above." loading="lazy">
-		<figcaption>The three squares and right triangle, right after pasting the snippet above — no manual placement.</figcaption>
+		<img src="screenshots/pythagorean-build.png" alt="The triangle with the full 3x3 square on its vertical leg and the first row of the 4x4 square along its horizontal leg, seen through the scene camera at 24 seconds, with the labels 3 squared and 4." loading="lazy">
+		<figcaption>Twenty-four seconds in, seen through the scene camera: the 3×3 has unfolded, the 4×4 is about to. (This frame comes from the finished timeline in steps 6–9.)</figcaption>
 	</figure>
 
-	<h2><span class="step">2</span> Label the squares</h2>
-	<p class="lede">Text isn't scriptable from the Shell directly (font loading needs the UI's loader) — use the <strong>Text</strong> stencil three times, then rename and set each one's content. This is the one step that's click-driven rather than pasted.</p>
+	<h2><span class="step">3</span> Three text labels</h2>
+	<p class="lede">Text isn't scriptable from the Shell directly (font loading needs the UI's loader) — use the <strong>Text</strong> stencil three times, then rename each one. This is the one click-driven step before the camera.</p>
 	<ol class="steps">
-		<li>Open <strong>Stencils → Mesh → Text</strong> and click it three times — you get three objects named <code>Text</code>, <code>Text 2</code>, <code>Text 3</code>, all reading "THREE.JS".</li>
-		<li>Select the first one. In the <strong>Object</strong> panel, set <strong>Name</strong> to <code>three</code>. In the <strong>Geometry</strong> panel, set <strong>Text</strong> to <code>3²</code>.</li>
-		<li>Select the second. Name it <code>four</code>, set its Geometry → Text to <code>4²</code>.</li>
-		<li>Select the third. Name it <code>eqn</code>, set its Geometry → Text to a single placeholder character like <code>-</code> — its real content is authored entirely via <code>.change()</code> in the next step, so anything here is just a non-empty placeholder.</li>
+		<li>Open <strong>Stencils → Mesh → Text</strong> and click it three times. You get three objects, each reading "THREE.JS".</li>
+		<li>Select the first. In the <strong>Object</strong> panel set <strong>Name</strong> to <code>three</code>. Select the second and name it <code>four</code>, the third <code>eqn</code>.</li>
 	</ol>
-	<p>Now position and class them from the Shell like anything else:</p>
-	<pre><code>$S('#three').moveTo(-6, -2.2, 0.3);
-$S('#four').moveTo(-1, -3, 0.3);
-$S('#eqn').moveTo(0, 4, 0.3);
+	<p>You never set their text in the panel. Every word they show comes from <code>.change()</code> events on the timeline, so the placeholder "THREE.JS" is overwritten at 0&nbsp;s. Position them and give them a class like anything else:</p>
+	<pre><code>$S('#three').moveTo(-1, 3.1, 1.24);     // beside the top of the vertical leg
+$S('#four').moveTo(2.5, -4.8, 1.24);    // under the 4x4
+$S('#eqn').moveTo(-1.3, -2.4, 1.24);    // where the sum will be assembled
 $S('#three, #four, #eqn').addClass('label');</code></pre>
-	<div class="note">Text meshes are lit like anything else (<code>MeshStandardMaterial</code>) — against a busy or colorful background they can wash out. Skip to <a href="#contrast">step 6</a> before you judge final contrast.</div>
 
-	<h2><span class="step">3</span> Choreograph the entrance</h2>
-	<p class="lede">Everything below is one clock. <code>.at(t)</code> places an event at an absolute time in seconds; chained <code>.animate()</code> calls without <code>.at()</code> just queue after the previous one on that same object.</p>
-	<pre><code>$S('#RightTriangle').at(0).fadeIn(1.5);
-$S('#3x3-square').at(1).fadeIn(1);
-$S('#4x4-square').at(1.5).fadeIn(1);
-$S('#eqn').at(2).change('a\u00B2 + b\u00B2 = c\u00B2');</code></pre>
-
-	<h2><span class="step">4</span> The dissection reveal</h2>
-	<p class="lede">This is the actual proof, staged as motion: the 3×3 and 4×4 squares' cells migrate onto the 5×5 square's cells. <code>moveToEach</code> pairs sources to targets <em>positionally</em> — split the 5×5's 25 cells into a 9-cell group and a 16-cell group first so the counts line up.</p>
-	<pre><code>// however you partition the 25 cells into a 9-set and a 16-set —
-// by hand-picked indices, or however suits your layout. $S takes a selector
-// or an ARRAY of nodes (not a single node), and class names are stored
-// lowercase, so use lowercase in both addClass and the selectors below.
-const cells = $S('#5x5-square .cube').nodes;
-$S(cells.slice(0, 9)).addClass('cell-a');
-$S(cells.slice(9, 25)).addClass('cell-b');
-
-$S('#3x3-square .cube').at(4).moveToEach('#5x5-square .cell-a', 3000);
-$S('#4x4-square .cube').at(4).moveToEach('#5x5-square .cell-b', 3000);
-$S('#eqn').at(5).change('9 + 16 = 25', { transition: 'fade', dur: 300 });</code></pre>
-	<div class="note"><strong>Why 3 seconds, not less.</strong> 25 cubes migrating at once reads as a blur under ~1s — slow enough to migrate for a full 3 seconds and a viewer can actually track "those 9 went there, those 16 went there." This is the exact duration used to render the real short; a faster value looks fine scrubbing by hand in the editor but reads as a pop in real-time playback.</div>
-	<p>Scrub the timeline (Animations tab) back and forth — the reveal is fully deterministic and reversible, because the destinations are baked from the 5×5 square's <em>actual</em> cell positions at compile time, not hand-typed coordinates. Move the 5×5 square and the reveal re-targets automatically.</p>
-
-	<h2><span class="step">5</span> Add a background</h2>
-	<p class="lede">A flat default background reads as unfinished. <code>makeTexture</code> is a Shell helper — hand it a function that paints a 2D canvas, and it returns a ready-to-use texture:</p>
+	<h2><span class="step">4</span> Background and a glow for the text</h2>
+	<p class="lede"><code>makeTexture</code> is a Shell helper — hand it a function that paints a 2D canvas, and it returns a ready-to-use texture. The default environment lights the scene from the background, so ask for it to be rebuilt once the background changes, otherwise the tiles keep the old, brighter lighting. Text lit only by scene lights goes faint on a dark ground, so give the labels some light of their own:</p>
 	<pre><code>scene.background = makeTexture((ctx, size) => {
   const g = ctx.createLinearGradient(0, 0, 0, size);
   g.addColorStop(0, '#1b2340');
@@ -219,63 +225,128 @@ $S('#eqn').at(5).change('9 + 16 = 25', { transition: 'fade', dur: 300 });</code>
   g.addColorStop(1, '#0a0d18');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
-}, 512);</code></pre>
+}, 512);
+setEnvironment('Default');   // rebuild the image-based lighting from the new background
 
-	<h2 id="contrast"><span class="step">6</span> Keep labels readable against it</h2>
-	<p class="lede">Text meshes lit only by scene lights can look faint against a moody background. Give them a bit of their own glow so they read consistently regardless of lighting or backdrop:</p>
-	<pre><code>$S('.label').nodes.forEach(o => {
+// text lit only by scene lights goes faint on a dark ground: give it a glow of its own
+$S('.label').nodes.forEach(o => {
   o.material.emissive = new Color(0xffffff);
   o.material.emissiveIntensity = 0.7;
   o.material.needsUpdate = true;
 });</code></pre>
 
-	<h2><span class="step">7</span> Add the living end-card</h2>
-	<p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it (or drag it into the viewport) — it inserts an addressable plane that embeds the current <a href="../callcard/">/about/callcard</a> live, already fitted to the current viewport camera (filling the frame, front-face forward and readable). For <em>this</em> reveal we want the card to only fill the frame at the <strong>end</strong> of a push-in, so reposition it behind where the camera starts instead, scaled up, hidden until the reveal:</p>
-	<pre><code>const cam = camera; // the live viewport camera
-const startPos = cam.position.clone();
-const startLookAt = new Vector3(0, 0, 0); // wherever cam is already aimed
-const dir = startLookAt.clone().sub(startPos).normalize();
+	<h2><span class="step">5</span> The camera and the end card</h2>
+	<p class="lede">The film is shot by a camera that lives in the scene, so it can be animated and chosen as a render shot. It looks straight down −Z at the middle of the figure. Behind it, 15 units away, sits the end card — the camera will simply turn round to it.</p>
+	<pre><code>const cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 2000);
+cam.name = 'PerspectiveCamera';
+cam.position.set(3, 0.68, 20);              // dead-centre on the figure, looking down -Z
+editor.execute(new AddObjectCommand(editor, cam));</code></pre>
+	<p>Open <strong>Stencils → Mesh → Call card</strong> and click it. It inserts an addressable plane that embeds the current <a href="../callcard/">/about/callcard</a> live and fits it to the viewport camera. Move it behind the real camera instead, make it landscape, and hide it until the reveal:</p>
+	<pre><code>const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;                  // landscape: the stencil's portrait 1.8 x 3.2 swapped
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(3, 0.68, 35).scaleTo(8);   // 15 units behind the camera, 8x bigger
+card.rotation.set(0, Math.PI, 0);                  // front face toward the camera's start position
+card.material.opacity = 0;</code></pre>
+	<div class="note"><strong>Three details in that block.</strong> <code>scaleTo</code> sets an absolute scale; <code>scale</code> would multiply the size the stencil already gave it. A mesh's front is its local <strong>+Z</strong>, so turning the card half a turn about Y points that front at the camera's start position; if you get it backwards the card shows mirrored (it is double-sided, so it never disappears). And the card is hidden by being fully transparent, not by <code>visible = false</code>, because the reveal only animates opacity. The viewport may show the card stretched until it is re-baked: the Render tab does that, and so does reopening the saved scene.</div>
 
-const cardScale = 8;
-const cardPos = startPos.clone().sub(dir.clone().multiplyScalar(15)); // behind the camera
-$S('#callcard').moveTo(cardPos.x, cardPos.y, cardPos.z);
-$S('#callcard').scaleTo(cardScale); // absolute: the stencil already fitted the card to the viewport at some other scale
+	<h2><span class="step">6</span> Choreograph the entrances: 3, then 4</h2>
+	<p class="lede">Everything from here on is one clock. <code>.at(t)</code> places an event at an absolute time in seconds; durations in <code>.animate()</code> are milliseconds and in <code>.fadeIn()</code> seconds. The beat is the same for both legs: a label counts the length, a one-tile-thin sliver shows up on the leg, and later the sliver unfolds into the whole square.</p>
+	<pre><code>// the triangle, then the two entrance slivers
+$S('#RightTriangle').at(0).fadeIn(1.5);
 
-// face the card toward the camera's start position, then make it fully transparent
-$S('#callcard').nodes[0].lookAt(startPos);
-$S('#callcard').nodes[0].material.opacity = 0;
+// 3: the label, the leg-thin sliver of the 3x3, then the whole square
+$S('#three').at(0).change('');
+$S('#three').at(6).change('3', { transition: 'fade', dur: 400 });
+$S('#3x3-square #3col1 .cube').at(6).animate({ to: { positionX: 0.4, scaleX: 0.2, scaleY: 0.9 } }, 100);
+$S('#3x3-square #3col1 .cube').at(6).fadeIn(0.8);
+$S('#three').at(13).animate({ to: { positionX: -1, positionY: 3.1 } }, 800);
+$S('#3x3-square #3col1 .cube').at(14).animate({ to: { positionX: 0, scaleX: 1, scaleY: 1 } }, 400);
+$S('#3x3-square #3col2 .cube, #3x3-square #3col3 .cube').at(14).fadeIn(1);
+$S('#three').at(16).change('3\u00B2', { transition: 'fade', dur: 400 });
 
-window.pushIn = { dir, cardPos, cardScale };   // the Shell does not keep variables between pastes</code></pre>
-	<div class="note"><strong>Three things in that block that are easy to get wrong.</strong> <code>scaleTo</code> sets an absolute scale; <code>scale</code> multiplies the current one, and the stencil has already scaled the card up to fill the viewport, so <code>scale(8)</code> lands at roughly 160×. <code>lookAt()</code> on a <em>mesh</em> points its local <strong>+Z</strong> (the front face) at the target; only cameras and lights aim -Z, so there is no extra 180° turn to add. This works for any relative angle. Getting the front/back backwards doesn't hide the card (the material is double-sided), it shows the card <strong>mirrored</strong>, which is the tell. And the card starts effectively hidden by being fully transparent (<code>material.opacity = 0</code>); fade it in during the reveal below rather than toggling visibility by hand. The last line is there because each paste is its own scope: the next block reads the values back from <code>window.pushIn</code>.</div>
+// 4: the same beat, on rows
+$S('#four').at(0).change('');
+$S('#four').at(9).change('4', { transition: 'fade', dur: 400 });
+$S('#4x4-square #4row1 .cube').at(9).animate({ to: { positionY: -0.6, scaleY: 0.2, scaleX: 0.9 } }, 100);
+$S('#4x4-square #4row1 .cube').at(9).fadeIn(0.8);
+$S('#four').at(23).animate({ to: { positionX: 2.5, positionY: -4.8 } }, 800);
+$S('#4x4-square #4row1 .cube').at(24).animate({ to: { positionY: -1, scaleY: 1, scaleX: 1 } }, 400);
+$S('#4x4-square #4row2 .cube, #4x4-square #4row3 .cube, #4x4-square #4row4 .cube').at(24).fadeIn(1);
+$S('#four').at(26).change('4\u00B2', { transition: 'fade', dur: 400 });</code></pre>
+	<div class="note"><strong>Why a sliver first.</strong> The 3 and the 4 are lengths before they are areas. The first column is squashed to 0.2 of a tile wide and moved 0.4 along so it hugs the leg like a ruler (<code>positionX: 0.4</code>, <code>scaleX: 0.2</code>); at 14&nbsp;s it relaxes to <code>positionX: 0, scaleX: 1</code> and the other two columns fade in beside it. The animated values are <em>absolute</em> (<code>to:</code>), which is why the "relax" event can name the resting values directly. <code>.change('')</code> at 0&nbsp;s blanks a label until its first word.</div>
 
-	<p>Now the reveal: a two-leg <strong>push-in</strong>, not a snap-to-position. Compute the distance where the card's real width exactly spans the camera's horizontal FOV, land a little closer than that (a small overfill reads as "fills the frame" better than an exact fit), and turn to face it while closing that distance:</p>
-	<pre><code>const { dir, cardPos, cardScale } = window.pushIn;
-const fov = camera.fov, aspect = 16 / 9;   // the live camera's FOV (50 by default), and a 16:9 render frame
-const cardWidth = 1.8 * cardScale;   // the call card is 1.8 wide by 3.2 tall (portrait) before scaling
-const hFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * aspect);
-const fillDistance = (cardWidth / 2) / Math.tan(hFov / 2) * 0.85; // slight overfill
+	<h2><span class="step">7</span> The proof: 9 tiles and 16 tiles onto 25 cells</h2>
+	<p class="lede">The 5×5 is only a landing pad. Make it invisible from the first frame, then send every tile of the other two squares onto one of its cells. <code>moveToEach</code> pairs sources to targets by <em>order</em>: the sources are listed 3×3 first, so the nine red tiles take the first nine cells (row 1 and the first four of row 2) and the sixteen teal tiles take the rest.</p>
+	<pre><code>// the 5x5 is only a landing pad: start it transparent so it is never seen, not even at 0 s
+$S('#5x5-square .cube').nodes.forEach(t =&gt; { t.material.transparent = true; t.material.opacity = 0; });
+$S('#5x5-square, #5x5-square *, #5x5-square .cube').at(0).fadeOut(1);
 
-const posAtDistance = (d) => cardPos.clone().add(dir.clone().multiplyScalar(d));
+// the proof: 9 tiles + 16 tiles flow onto the 25 pad cells, 3 seconds, in selector-list order
+$S('#3x3-square .cube, #4x4-square .cube').at(40).moveToEach('#5x5-square .cube', 3000);</code></pre>
+	<figure>
+		<img src="screenshots/pythagorean-proof.png" alt="Mid-flight at 42 seconds: red and teal tiles tumbling from the two small squares towards the hypotenuse of the triangle, with the labels 3 squared and 4 squared still showing." loading="lazy">
+		<figcaption>42 seconds in: the tiles are mid-flight. They turn as they travel, because the pad cells they are heading for are rotated 53.13°.</figcaption>
+	</figure>
+	<div class="note"><strong>Why 3 seconds, and why a pad.</strong> Twenty-five tiles at once blur under about a second; three seconds lets a viewer follow "those nine went there, those sixteen went there". Because the destinations are the pad's <em>actual</em> cell positions and rotations, resolved when the timeline is compiled, the reveal is deterministic and reversible when you scrub, and it re-targets itself if you move the pad. The pad is hidden by <em>starting</em> transparent — a bare <code>fadeOut</code> at 0&nbsp;s would show it for the first second.</div>
 
-$S('camera').at(8).animate({ to: { position: posAtDistance(11).toArray() }, lookAt: cardPos.toArray() }, 2500, 'ease-in-out');
-$S('camera').at(10.5).animate({ to: { position: posAtDistance(fillDistance).toArray() }, lookAt: cardPos.toArray() }, 3000, 'ease-in');
-$S('#callcard').at(8.3).fadeIn(2.2);</code></pre>
-	<p>Note the <strong>constant FOV</strong> across both legs — animating FOV and distance together is a dolly-zoom (a deliberate vertigo effect), not what a clean reveal wants. And note <code>at(8)</code> — a full second after the dissection reveal (started at <code>4</code>, 3s long) actually finishes at <code>7</code>. Don't start this beat while cubes are still mid-flight; let the proof land, hold for a moment, <em>then</em> push in.</p>
+	<h2><span class="step">8</span> The sum, read off the screen</h2>
+	<p class="lede">While the tiles are still settling, the labels slide to the bottom into the shape of the sum: <code>3² + 4²</code>, which turns into <code>9 + 16</code>, closes up into <code>25</code>, and is then restated as <code>5²</code> and as the theorem itself. All of it is <code>.change()</code> on the three labels.</p>
+	<pre><code>// 44-56 s: the sum, read off the screen
+$S('#eqn').at(0).change('');
+$S('#three').at(44).animate({ to: { positionX: -2.4, positionY: -2.4 } }, 800);
+$S('#four').at(44).animate({ to: { positionX: -0.2, positionY: -2.4 } }, 800);
+$S('#eqn').at(44).change('+', { transition: 'fade', dur: 400 });
 
+$S('#three').at(47).change('9', { transition: 'fade', dur: 400 });
+$S('#four').at(47).change('16', { transition: 'fade', dur: 400 });
 
-	<h2><span class="step">8</span> Render it</h2>
+$S('#three').at(50).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
+$S('#four').at(50).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
+$S('#three').at(51).fadeOut(0.3);
+$S('#four').at(51).fadeOut(0.3);
+$S('#eqn').at(51).change('25', { transition: 'fade', dur: 400 });
+$S('#eqn').at(53).change('5\u00B2', { transition: 'fade', dur: 400 });
+$S('#eqn').at(56).change('a\u00B2 + b\u00B2 = c\u00B2', { transition: 'fade', dur: 400 });</code></pre>
+	<div class="note"><strong>A label per track.</strong> The two merging labels are faded out with one <code>$S</code> call each (not <code>$S('#three, #four')</code>), so each label keeps its own timeline track and the code panel reads label by label. Content is a step function: the text <em>is</em> whatever was keyed last; <code>transition: 'fade'</code> only cross-fades the swap (see <a href="../../../guides/ANIMATION.md">the animation guide</a>).</div>
+
+	<h2><span class="step">9</span> Turn round to the end card</h2>
+	<p class="lede">Last, the camera does not travel anywhere: it turns 180° about Y on the spot while the card behind it fades in. The card was placed 15 units away at 8× scale, and at a 50° field of view that fills the frame.</p>
+	<pre><code>// 56.4 s: turn the camera round to the card behind it while the card fades in
+$S('#callcard').at(56.4).fadeIn(3);
+$S('#PerspectiveCamera').at(56.4).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
+	<p>The timeline now runs 59.4 seconds. This is the whole cut sheet:</p>
+	<table class="cuts">
+		<tr><th>Time</th><th>What happens</th></tr>
+		<tr><td>0</td><td>Triangle fades in (1.5 s); pad squares are invisible; labels are blank</td></tr>
+		<tr><td>6</td><td>"3" appears; the 3×3's first column shows as a thin sliver on the vertical leg</td></tr>
+		<tr><td>9</td><td>"4" appears; the 4×4's first row shows as a sliver on the horizontal leg</td></tr>
+		<tr><td>13 – 16</td><td>The 3 label settles; the sliver unfolds into the 3×3; it reads "3²"</td></tr>
+		<tr><td>23 – 26</td><td>The same for the 4×4, which reads "4²"</td></tr>
+		<tr><td>40 – 43</td><td>Nine red tiles and sixteen teal tiles fly onto the 5×5 pad</td></tr>
+		<tr><td>44 – 51</td><td>"3² + 4²" becomes "9 + 16" and closes up</td></tr>
+		<tr><td>51 – 56</td><td>"25", then "5²", then "a² + b² = c²"</td></tr>
+		<tr><td>56.4 – 59.4</td><td>The camera turns round while the call card fades in</td></tr>
+	</table>
+
+	<h2><span class="step">10</span> Choose the camera and render it</h2>
 	<ol class="steps">
-		<li>Open the <strong>Render</strong> tab.</li>
-		<li>Pick a resolution/FPS (portrait crops are a manual resolution choice today — the card itself is authored vertical/centered so it composes correctly once cropped).</li>
-		<li>Click <strong>Render &amp; Export</strong> and wait — rendering is real-time (a 60s timeline takes ~60s to render).</li>
-		<li>The card is re-fetched and re-baked <em>fresh</em> at render time — edit <code>/about/callcard</code> later and every future render picks up the change automatically, with no edits to this scene.</li>
+		<li>Open the <strong>Render</strong> tab and click <strong>+ Add Shot</strong> under <strong>Camera Sequence</strong>. The first shot lands at 0&nbsp;s on your scene camera, with a cut. <em>Without a shot the render uses the Edit Camera</em>, so the end-card turn would never be filmed — see <a href="render-camera-sequence.html">Add a static hero camera to a render sequence</a> for what a shot can do.</li>
+		<li>Pick a resolution and frame rate. The scene camera is authored 16:9 and the card is landscape; a portrait crop is a manual resolution choice.</li>
+		<li>Click <strong>Render &amp; Export</strong> and wait — rendering runs in real time, so about a minute.</li>
+		<li>The call card is re-fetched and re-baked <em>fresh</em> at render time at its true aspect — edit <code>/about/callcard</code> later and every future render picks up the change with no edits to this scene.</li>
 	</ol>
+	<figure>
+		<img src="screenshots/pythagorean-endcard.png" alt="The end card filling the frame at 59.4 seconds: the line 'The idea outlasts the engine', 'Made with Strata', and a QR code, over the dark blue gradient." loading="lazy">
+		<figcaption>59.4 seconds: the camera has turned round and the card fills the frame.</figcaption>
+	</figure>
 
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="../../../guides/ANIMATION.md">the animation guide</a> and <a href="../../../guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
 
-	<h2 id="open-finished"><span class="step">9</span> Open the finished scene</h2>
-	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is exactly what these blocks build, plus the Text and Call card stencil steps: the three squares, the triangle, the three labels, the gradient background and the call card, with the 13.5-second timeline from steps 3 to 7. Open it, then scrub the Animations tab: at 7.5&nbsp;s all 25 cells of the two small squares sit on the 5×5, and at 13.5&nbsp;s the call card fills the frame.</p>
-	<div class="note"><strong>What was checked.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, and the result was read back: the labels and triangle land where the blocks say, the 9 and 16 cells match their targets, the call card faces the camera (so it is not mirrored) and ends 7.4 units from it. Rendering (step 8) was not re-run for this revision.</div>
+	<h2 id="open-finished"><span class="step">11</span> Open the finished scene</h2>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, with the same 12 timeline tracks and the same 59.4-second clock. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, and at 59.4&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 12 timeline tracks with the same events at the same times, and a frame at each of seven times from 0 to 52&nbsp;s that differs from the published one by under 3% of its pixels. The end-card frame is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so two loads of the same scene can bake differently, and it was not compared. Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. Rendering (step 10) was not re-run for this revision.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
