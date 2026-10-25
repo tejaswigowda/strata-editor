@@ -663,6 +663,7 @@ function Shell( editor ) {
 		// Camera moves (guides/CAMERA_PATHS.md): the same keyed track the viewport edits
 		{ w: 'keys', k: 'method', h: "()  list the camera's keys" },
 		{ w: 'keyAt', k: 'method', h: "(t, { pos, lookAt, fov })" },
+		{ w: 'cameraMove', k: 'method', h: "('push'|'pull'|'orbit'|'truck'|'crane'|'drift', { start, end, amount })  one-click move for a shot camera" },
 		{ w: 'keyFromView', k: 'method', h: "(t?)  from the Edit Camera" },
 		{ w: 'moveKey', k: 'method', h: "(i, { pos, lookAt, fov, time })" },
 		{ w: 'deleteKey', k: 'method', h: "(i)" },
@@ -4291,7 +4292,7 @@ ${ notes.join( '\n' ) }
 		appendOutput( 'dev API (--dev mode): External models (Ollama, OpenAI, Claude) appear in model dropdown when available  — select and click "Load AI"', 'info' );
 		appendOutput( 'AI Q&A: prefix AI input with ? to ask questions  —  or call askScene("question") in REPL', 'info' );
 		appendOutput( 'AI eval: evalAI() runs the standing eval set (paddle game/chess/hoop…) and prints a structure/spatial/semantic table', 'info' );
-		appendOutput( 'camera moves: $S("#cam").keys()/.keyAt()/.simplify("normal")/.simplifyPreview()  simplifyCameras({preset:"normal"})  — thin every shot camera in one undo step (guides/CAMERA_PATHS.md)', 'info' );
+		appendOutput( 'camera moves: $S("#cam").cameraMove("orbit",{start:38,end:47,amount:60})/.keys()/.keyAt()/.simplify("normal")/.simplifyPreview()  simplifyCameras({preset:"normal"})  — thin every shot camera in one undo step (guides/CAMERA_PATHS.md)', 'info' );
 		appendOutput( 'animation: addClip(obj,clip)  addSpinClip(obj,{axis:"y",turns:1,seconds:8,pingPong:true})  — open the Animations tab to play', 'info' );
 		appendOutput( 'codegen: showJS()  objectToJS(obj)  sceneToJS()  sceneEqual(a,b)', 'info' );
 		appendOutput( 'modeling ops: booleanUnion(a,b)  booleanSubtract(a,b)  booleanIntersect(a,b)  mirrorMesh(m,axis)  arrayDuplicate(m,n,dx,dy,dz)  subdivide(m,iters)', 'info' );

@@ -727,7 +727,23 @@ class ChainableSet {
 
 	}
 
-	/** Select key i in the viewport (or its aim point with kind 'look'); the key panel and gizmo follow. */
+	/**
+	 * Give the shot camera a move over [start, end] seconds: 'push' | 'pull' | 'orbit' | 'truck' | 'crane' | 'drift'.
+	 * amount is a share of the distance to what the camera looks at (degrees for 'orbit'). The same move the
+	 * Render tab's Camera Sequence "Move" menu applies; it replaces the camera's keys, one undo step.
+	 *
+	 *   $S('#Shot2').cameraMove('orbit', { start: 38, end: 47, amount: 60 })
+	 */
+	cameraMove( kind, opts = {} ) {
+
+		const cam = this._shotCamera( 'cameraMove' );
+		const end = opts.end ?? ( this.editor.timeline ? this.editor.timeline.duration : undefined );
+		camMove.applyCameraMove( this.editor, cam, kind, { start: opts.start ?? 0, end, amount: opts.amount } );
+		return this;
+
+	}
+
+		/** Select key i in the viewport (or its aim point with kind 'look'); the key panel and gizmo follow. */
 	selectKey( i, kind = 'key' ) {
 
 		const cam = this._shotCamera( 'selectKey' );

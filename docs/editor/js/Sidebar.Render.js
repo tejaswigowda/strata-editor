@@ -8,6 +8,8 @@ import { RENDER_CLEAR_COLOR, LinearOutput, applyRenderSettings, webglEnvironment
 import { createEmptyHint } from './EmptyHint.js';
 import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesEqual, newCueId } from './intelligence/subtitles.js';
 import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
+import { AddObjectCommand } from './commands/AddObjectCommand.js';
+import { applyCameraMove, clearCameraMove, MOVE_PRESETS } from './intelligence/cameraMoveEdit.js';
 
 // ── hard-burn caption drawing (parse / format / sync helpers live in intelligence/subtitles.js) ──
 
@@ -335,8 +337,15 @@ function SidebarRender( editor ) {
 
 	const addShotButton = new UIButton( '+ Add Shot' );
 	addShotButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
-	addShotButton.onClick( addShot );
+	addShotButton.onClick( () => addShot() );
 	seqControls.appendChild( addShotButton.dom );
+
+	// A new scene camera from where the Edit Camera is now, cut in as the next shot.
+	const addCameraButton = new UIButton( '+ Camera from view' );
+	addCameraButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;margin-left:6px;';
+	addCameraButton.dom.title = 'Add a scene camera at the Edit Camera\'s current view and cut to it as the next shot';
+	addCameraButton.onClick( addCameraFromView );
+	seqControls.appendChild( addCameraButton.dom );
 
 	// First-run hint while there are no shots (hidden once one exists or when dismissed)
 	const shotsHint = createEmptyHint( {
@@ -352,6 +361,7 @@ function SidebarRender( editor ) {
 	seqControls.appendChild( shotDetail );
 
 	let selectedShotId = null;
+	let lastMoveKind = 'push';
 
 	function getShots() {
 
@@ -368,7 +378,7 @@ function SidebarRender( editor ) {
 
 	}
 
-	function addShot() {
+	function addShot( forcedCamera ) {
 
 		const shots = getShots();
 		const dur = Math.max( timelineDuration(), 1 );
@@ -384,13 +394,27 @@ function SidebarRender( editor ) {
 		const shot = {
 			id: 'shot-' + Math.random().toString( 36 ).slice( 2, 9 ),
 			at: Math.max( 0, at ),
-			camera: firstSceneCamera,
+			camera: forcedCamera || firstSceneCamera,
 			transition: shots.length === 0 ? 'cut' : 'fade',
 			transitionDur: 0.5,
 		};
 		shots.push( shot );
 		selectedShotId = shot.id;
 		refreshSequencer();
+
+	}
+
+	function addCameraFromView() {
+
+		const edit = editor.camera;
+		const sceneCameras = Object.keys( editor.cameras ).filter( uuid => uuid !== edit.uuid );
+		const cam = new THREE.PerspectiveCamera( edit.fov, 16 / 9, 0.1, 2000 );
+		cam.name = 'Shot ' + ( sceneCameras.length + 1 );
+		cam.position.copy( edit.position );
+		const aim = editor.controls && editor.controls.center ? editor.controls.center : edit.getWorldDirection( new THREE.Vector3() ).add( edit.position );
+		cam.lookAt( aim );
+		editor.execute( new AddObjectCommand( editor, cam ) );
+		addShot( cam.uuid );
 
 	}
 
@@ -537,6 +561,75 @@ function SidebarRender( editor ) {
 			row.appendChild( fadeNum.dom );
 
 		}
+
+		// camera move: a preset path over this shot's span (see intelligence/cameraPresets.js)
+		const moveRow = document.createElement( 'div' );
+		moveRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;margin-top:5px;';
+		shotDetail.appendChild( moveRow );
+
+		const moveLabel = document.createElement( 'span' );
+		moveLabel.textContent = 'Move';
+		moveRow.appendChild( moveLabel );
+
+		const moveSel = new UISelect().setWidth( '110px' );
+		const moveOptions = {};
+		for ( const k in MOVE_PRESETS ) moveOptions[ k ] = MOVE_PRESETS[ k ].label;
+		moveSel.setOptions( moveOptions );
+		moveSel.setValue( lastMoveKind );
+		moveRow.appendChild( moveSel.dom );
+
+		const amountNum = new UINumber( MOVE_PRESETS[ lastMoveKind ].amount ).setWidth( '44px' ).setPrecision( 3 );
+		const syncAmount = () => {
+
+			const p = MOVE_PRESETS[ moveSel.getValue() ];
+			amountNum.setRange( p.min, p.max );
+			amountNum.setValue( p.amount );
+			amountNum.dom.title = 'Amount, in ' + p.unit;
+
+		};
+		moveSel.onChange( function () { lastMoveKind = this.getValue(); syncAmount(); } );
+		syncAmount();
+		moveRow.appendChild( amountNum.dom );
+
+		const moveStatus = document.createElement( 'span' );
+		moveStatus.style.cssText = 'opacity:0.65;font-size:10px;';
+
+		const applyBtn = new UIButton( 'Apply' );
+		applyBtn.dom.style.cssText = 'height:20px;padding:0 8px;border-radius:4px;font-size:10px;';
+		applyBtn.dom.title = 'Give this shot\'s camera the move, from the start of the shot to the next shot (or the end)';
+		applyBtn.onClick( function () {
+
+			const cam = editor.cameras[ shot.camera ];
+			if ( ! cam ) return;
+			const end = index + 1 < shots.length ? shots[ index + 1 ].at : timelineDuration();
+
+			try {
+
+				applyCameraMove( editor, cam, moveSel.getValue(), { start: shot.at, end, amount: amountNum.getValue() } );
+				moveStatus.textContent = MOVE_PRESETS[ moveSel.getValue() ].label + ' · ' + shot.at.toFixed( 1 ) + '–' + end.toFixed( 1 ) + 's';
+
+			} catch ( err ) {
+
+				moveStatus.textContent = err.message;
+
+			}
+
+		} );
+		moveRow.appendChild( applyBtn.dom );
+
+		const clearBtn = new UIButton( 'Clear' );
+		clearBtn.dom.style.cssText = 'height:20px;padding:0 8px;border-radius:4px;font-size:10px;';
+		clearBtn.dom.title = 'Remove this camera\'s move keys (a rotation turn or other events stay)';
+		clearBtn.onClick( function () {
+
+			const cam = editor.cameras[ shot.camera ];
+			if ( ! cam ) return;
+			clearCameraMove( editor, cam );
+			moveStatus.textContent = 'Move cleared';
+
+		} );
+		moveRow.appendChild( clearBtn.dom );
+		moveRow.appendChild( moveStatus );
 
 		const delBtn = new UIButton( 'Delete' );
 		delBtn.dom.style.cssText = 'height:20px;padding:0 8px;border-radius:4px;font-size:10px;';

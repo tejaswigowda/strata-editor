@@ -10,6 +10,7 @@ import { SetTimelineCommand } from '../commands/SetTimelineCommand.js';
 import { cameraKeys } from './splineTrack.js';
 import { cameraSelectors, findCameraTrack, optionsForCamera, simplifiableIn, simplifyAllInModel } from './cameraTracks.js';
 import * as move from './cameraMove.js';
+import { presetKeys, MOVE_PRESETS } from './cameraPresets.js';
 
 export { move };
 
@@ -135,5 +136,72 @@ export function simplifyAllCameras( editor, opts = {}, { dryRun = false, name = 
 
 	}
 	return out;
+
+}
+
+// ── One-click moves (the Render tab's Move menu, and $S('#cam').cameraMove()) ──────────────────
+
+export { MOVE_PRESETS };
+
+/**
+ * Where a shot camera starts: the first key of its move when it has one (so applying a preset twice
+ * starts from the same place), else its own pose looking `distance` ahead, where the distance is
+ * how far away the scene's contents are along the view direction (12 for an empty scene).
+ */
+export function cameraBasePose( editor, camera ) {
+
+	const track = liveTrack( editor, camera );
+	const keys = track ? cameraKeys( track.events ) : [];
+	const first = keys[ 0 ];
+	const fov = Number.isFinite( camera.fov ) ? camera.fov : undefined;
+	if ( first && Array.isArray( first.lookAt ) ) return { pos: first.position.slice(), lookAt: first.lookAt.slice(), fov: first.fov ?? fov };
+
+	camera.updateWorldMatrix( true, false );
+	const pos = camera.position.clone();
+	const dir = camera.getWorldDirection( camera.position.clone() );
+	let distance = 12;
+
+	try {
+
+		const THREE = window.THREE;
+		const box = new THREE.Box3();
+		editor.scene.traverse( o => { if ( o.isMesh && o.geometry && o.visible ) box.expandByObject( o, false ); } );
+		if ( ! box.isEmpty() ) {
+
+			const ahead = box.getCenter( new THREE.Vector3() ).sub( pos ).dot( dir );
+			if ( ahead > 1 ) distance = Math.min( 80, Math.max( 3, ahead ) );
+
+		}
+
+	} catch ( e ) { /* keep the default */ }
+
+	const look = pos.clone().addScaledVector( dir, distance );
+	return { pos: [ pos.x, pos.y, pos.z ], lookAt: [ look.x, look.y, look.z ], fov: first && first.fov != null ? first.fov : fov };
+
+}
+
+/**
+ * Give a shot camera a move from `start` to `end` (seconds on the shared clock). ONE undo step.
+ * kind: push | pull | orbit | truck | crane | drift. amount: see MOVE_PRESETS (omit for its default).
+ * Replaces the camera's existing keys; its other events (a rotation turn, say) are left alone.
+ */
+export function applyCameraMove( editor, camera, kind, { start = 0, end, amount } = {} ) {
+
+	if ( ! isShotCamera( editor, camera ) ) throw new Error( 'camera move: pick a shot camera, not the Edit Camera' );
+	const base = cameraBasePose( editor, camera );
+	const keys = presetKeys( kind, base, { start, end, amount } );
+	return editCameraTrack( editor, camera, 'Camera move: ' + MOVE_PRESETS[ kind ].label, track => move.setKeys( track, keys, { smooth: true } ) );
+
+}
+
+/** Remove a shot camera's keys (the move), keeping any other events on its track. ONE undo step. */
+export function clearCameraMove( editor, camera ) {
+
+	return editCameraTrack( editor, camera, 'Clear camera move', track => {
+
+		const ids = new Set( cameraKeys( track.events ).map( k => k.id ) );
+		track.events = track.events.filter( e => ! ids.has( e.id ) );
+
+	} );
 
 }

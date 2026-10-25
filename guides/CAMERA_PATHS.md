@@ -57,6 +57,7 @@ Everything above is also a shell verb on the same track. `$S('#cam07')` selects 
 | `.simplify(opts?)` | Collapse a dense run of keys to a few, smooth on. `opts` is a position tolerance, `'tight' \| 'normal' \| 'loose'`, or `{ preset, tolerance, rotation, fov, maxKeys, keepBeats }` (see below) | Simplify… > Apply |
 | `.simplifyPreview(opts?)` | What `.simplify(opts)` would do, changing nothing: `{ before, after, changed, worst }` | the live preview line |
 | `.setKeys([{ t, pos, lookAt?, fov? }], { smooth, simplify })` | Replace the whole move in one step; `simplify` (default off) thins what it wrote | |
+| `.cameraMove(kind, { start, end, amount })` | A one-click move over `[start, end]` seconds (default: the whole clock): `'push'`, `'pull'`, `'orbit'`, `'truck'`, `'crane'` or `'drift'`. `amount` is a share of the distance to what the camera looks at (degrees for `'orbit'`). Starts from the camera's own pose (or its first key, so applying twice is the same), eases in and out, and replaces its keys as one undo step. | Render tab > Camera Sequence > Move > Apply |
 | `.asCommand()` | The `setKeys(...)` command that rebuilds this move exactly | Copy as command |
 | `.selectKey(i, 'key' \| 'look')` | Select a handle (or its aim point) as if clicked | click a handle |
 
