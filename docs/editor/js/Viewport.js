@@ -23,6 +23,7 @@ import { ViewportPathtracer } from './Viewport.Pathtracer.js';
 import { createProgressBanner } from './mesh/GeometryOptimizer.js';
 import { lassoSelect } from './intelligence/lassoSelect.js';
 import { releaseTimelineObject, syncMaterialTransparency } from './intelligence/timelineController.js';
+import { syncTextShadows } from './intelligence/textChange.js';
 import { hydrateHtmlEmbed } from './HtmlEmbed.js';
 import { hydrateMarkdownEmbed } from './MarkdownEmbed.js';
 import { hydrateCallcard } from './Callcard.js';
@@ -1638,6 +1639,7 @@ function Viewport( editor ) {
 		if ( renderer === null || renderingPaused === true ) return;
 
 		startTime = performance.now();
+		syncTextShadows( scene );
 
 		const asRender = editor.viewportShading === 'render';
 		asRenderBadge( asRender );

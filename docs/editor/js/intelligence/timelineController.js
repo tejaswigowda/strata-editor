@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import * as recipes from './animationRecipes.js';
 import * as selectorEngine from './selectorEngine.js';
 import { TimelineModel, compileTimeline, TIMELINE_CLIP_NAME } from './timeline.js';
-import { applyContentAt } from './textChange.js';
+import { applyContentAt, syncTextShadows } from './textChange.js';
 import { importedClipsOf, directivesByClip, sampleClipState, clipDirectiveProblems } from './clipDirectives.js';
 import { editedPlayback } from './motionEditRuntime.js';
 import { applyFaceAt } from './faceRuntime.js';
@@ -363,6 +363,8 @@ export function holdTimelineAt( editor, t ) {
  * normal alpha blending.
  */
 export function syncMaterialTransparency( editor ) {
+
+	syncTextShadows( editor.scene );
 
 	editor.scene.traverse( function ( node ) {
 

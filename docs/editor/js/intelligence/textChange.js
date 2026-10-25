@@ -15,6 +15,7 @@
 // Both paths read the SAME 'change' events off the TimelineModel; scrubbing is
 // always deterministic from the key list (never replayed edits).
 
+import { Mesh, MeshBasicMaterial } from 'three';
 import * as selectorEngine from './selectorEngine.js';
 
 // ── shared helpers ────────────────────────────────────────────────────────────
@@ -178,6 +179,72 @@ function removeNextSlot( node ) {
 	node.remove( slot );
 	slot.geometry.dispose();
 	slot.material.dispose();
+
+}
+
+// ── drop shadow for text ─────────────────────────────────────────────────────
+// A text mesh with userData.textShadow = true is drawn with a black copy of itself, offset down
+// and to the right. The copy is a transient child (never saved: withAuthoredText detaches it)
+// that mirrors whatever the label is showing right now — its current geometry (change() swaps
+// it, including the incoming string while a fade crosses over), its opacity and its visibility
+// — so shadows follow every fade and every text change with no keyframes of their own.
+
+function noRaycast() {}
+
+/** Keep every text shadow in `scene` matching its label. Cheap; safe to call every frame. */
+export function syncTextShadows( scene ) {
+
+	let stale = null;
+
+	scene.traverse( function ( node ) {
+
+		const data = node.userData;
+		if ( ! data ) return;
+
+		if ( data.isTextShadow ) {
+
+			if ( ! node.parent || ! node.parent.userData || ! node.parent.userData.textShadow ) ( stale || ( stale = [] ) ).push( node );
+			return;
+
+		}
+
+		if ( ! data.textShadow || ! isTextMesh( node ) ) return;
+
+		let shadow = node.children.find( c => c.userData && c.userData.isTextShadow );
+
+		if ( ! shadow ) {
+
+			shadow = new Mesh( node.geometry, new MeshBasicMaterial( { color: 0x000000, toneMapped: false, fog: false } ) );
+			shadow.name = '__textShadow';
+			shadow.userData.isTextShadow = true;
+			shadow.raycast = noRaycast;
+			shadow.castShadow = false;
+			shadow.receiveShadow = false;
+			node.add( shadow );
+
+		}
+
+		// While a fade has handed over to the incoming string, that slot is what's visible.
+		const slot = node.children.find( c => c.userData && c.userData.isNextSlot );
+		const source = slot && node.material.opacity <= 0.001 ? slot : node;
+
+		if ( shadow.geometry !== source.geometry ) shadow.geometry = source.geometry;
+
+		const size = ( typeof data.textShadow === 'object' && data.textShadow.size ) || 0.06;
+		const unit = ( node.geometry.parameters.options.size || 1 );
+		shadow.position.set( size * unit, - size * unit, - 0.02 * unit );
+
+		const position = source.geometry.attributes && source.geometry.attributes.position;
+		shadow.visible = !! position && position.count > 0;
+
+		const mat = shadow.material;
+		mat.opacity = source.material.opacity;
+		mat.transparent = mat.opacity < 0.999 || !! source.material.transparent;
+		mat.depthWrite = source.material.depthWrite;
+
+	} );
+
+	if ( stale ) for ( const node of stale ) node.parent && node.parent.remove( node );
 
 }
 
@@ -376,7 +443,7 @@ export function withAuthoredText( scene, fn ) {
 
 	scene.traverse( function ( node ) {
 
-		if ( node.userData && ( node.userData.isNextSlot || node.userData.isChangeGhost ) && node.parent ) detached.push( [ node.parent, node ] );
+		if ( node.userData && ( node.userData.isNextSlot || node.userData.isChangeGhost || node.userData.isTextShadow ) && node.parent ) detached.push( [ node.parent, node ] );
 		if ( hiddenWhileEmpty.has( node ) ) shown.push( node );
 		if ( node.geometry && generatedGeometry.has( node.geometry ) && authoredText.has( node ) ) swaps.push( [ node, node.geometry ] );
 
@@ -449,6 +516,9 @@ export function lowerChangeEventsForExport( editor, clonedScene, THREE ) {
 
 			const options = node.geometry.parameters.options;
 			const baseScale = node.scale.clone();
+
+			// The mirrored drop shadow would keep drawing the label's old geometry once it is cleared below.
+			for ( const shadow of node.children.filter( c => c.userData && c.userData.isTextShadow ) ) node.remove( shadow );
 
 			const states = changeEvents.map( ( e, i ) => ( {
 				text: e.args.text,

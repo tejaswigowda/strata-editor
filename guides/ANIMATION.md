@@ -115,6 +115,14 @@ glTF has no "animate the string on this node" channel — only TRS (translation/
 
 **Non-goals:** no glyph-level tweening (letters don't morph into each other), no new text-rendering system, and content is piecewise-constant, not interpolated — there is no "70% of the way from `3` to `9`".
 
+### Drop shadow for text
+
+Set `userData.textShadow = true` on a text mesh (or `{ size: 0.1 }` for a longer shadow; the default is 0.06 of the font size) and the editor draws a black copy of the label behind it, offset down and to the right. The copy is a transient child (`__textShadow`) that mirrors whatever the label shows right now: it follows every `change()` string, fade, move and hide with no keyframes of its own, is never saved in the scene (only the flag is), and is dropped from glTF export of labels that use `change()`.
+
+```js
+$S('.label').nodes.forEach(o => { o.userData.textShadow = true; });
+```
+
 ## `.moveTo()` / `.moveToEach()` — object-referenced destination animation
 
 Animate an object (or a **set** of objects) to the position of *another object*, referenced by selector — not a raw coordinate. Useful whenever a destination is more naturally "where that other thing is" than a magic-number triple, e.g. a dissection reveal where source cubes migrate onto the cells of a target square.

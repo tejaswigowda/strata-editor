@@ -56,6 +56,10 @@ function drawBurnedCaption( ctx, width, height, text ) {
 	ctx.fillStyle = '#fff';
 	ctx.strokeStyle = 'rgba(0,0,0,0.85)';
 	ctx.lineWidth = fontSize * 0.08;
+	ctx.shadowColor = '#000';
+	ctx.shadowBlur = fontSize * 0.12;
+	ctx.shadowOffsetX = fontSize * 0.04;
+	ctx.shadowOffsetY = fontSize * 0.06;
 
 	lines.forEach( ( l, i ) => {
 
