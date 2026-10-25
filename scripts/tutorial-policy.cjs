@@ -125,6 +125,9 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 
 		const html = fs.readFileSync( path.join( dir, f ), 'utf8' );
 
+		// Every editor tutorial carries the Strata mark (docs/about/brand.js). Other repos' folders are not held to this.
+		if ( dir === TUTORIAL_DIR && f !== 'callcard.html' && ! /\.\.\/brand\.js/.test( html ) ) problems.push( f + ': missing <script src="../brand.js" defer></script>' );
+
 		// URL / slug.
 		for ( const hit of findViolations( f.replace( /\.html$/, '' ) ) ) add( f, 'file slug', hit );
 
