@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea } from './libs/ui.js';
+import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea, UIInput } from './libs/ui.js';
 import { holdTimelineAt, getImportedClips } from './intelligence/timelineController.js';
 import { findCallcards, refreshCallcard } from './Callcard.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
@@ -9,6 +9,8 @@ import { createEmptyHint } from './EmptyHint.js';
 import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesEqual, newCueId } from './intelligence/subtitles.js';
 import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 import { AddObjectCommand } from './commands/AddObjectCommand.js';
+import { renderBaseName, DEFAULT_VIDEO_TEMPLATE, DEFAULT_SNAPSHOT_TEMPLATE } from './intelligence/renderFileName.js';
+import { sourceFile } from './workState.js';
 import { applyCameraMove, clearCameraMove, MOVE_PRESETS } from './intelligence/cameraMoveEdit.js';
 
 // ── hard-burn caption drawing (parse / format / sync helpers live in intelligence/subtitles.js) ──
@@ -261,6 +263,58 @@ function SidebarRender( editor ) {
 	fpsRow.add( fpsSelect );
 	container.add( fpsRow );
 
+	// ── File name (a template; blank = the default) ──────────────────────────
+
+	const nameRow = new UIRow();
+	nameRow.add( new UIText( 'File name' ).setClass( 'Label' ) );
+	const nameInput = new UIInput().setWidth( '160px' );
+	nameInput.dom.placeholder = DEFAULT_VIDEO_TEMPLATE;
+	nameInput.dom.title = 'Tokens: {project} {duration} {res} {fps} {date} {time} {camera} {360}. Leave blank for the default.';
+	try { nameInput.setValue( localStorage.getItem( 'strata.render.fileName' ) || '' ); } catch ( e ) { /* storage blocked */ }
+	nameRow.add( nameInput );
+	container.add( nameRow );
+
+	const namePreview = new UIText( '' );
+	namePreview.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px 90px;word-break:break-all;';
+	container.add( namePreview );
+
+	// What the downloaded file is called: the loaded scene's file name, then a readable summary of the render.
+	function projectForNames() {
+
+		const status = editor.work && editor.work.status ? editor.work.status() : null;
+		const file = status ? sourceFile( status.key ) : '';
+		if ( file ) return file;
+		const sceneName = editor.scene.name;
+		return sceneName && sceneName !== 'Scene' ? sceneName : '';
+
+	}
+
+	function videoBaseName( { width, height, fps, duration, is360 } ) {
+
+		return renderBaseName( { template: nameInput.getValue().trim() || DEFAULT_VIDEO_TEMPLATE, project: projectForNames(), width, height, fps, duration, is360 } );
+
+	}
+
+	function refreshNamePreview() {
+
+		const [ width, height ] = resolutionSelect.getValue().split( 'x' ).map( Number );
+		const d = timelineDuration();
+		namePreview.setValue( '\u2192 ' + videoBaseName( { width, height, fps: parseInt( fpsSelect.getValue(), 10 ), duration: d > 0 ? outputDuration( d ) : 0, is360: false } ) + '.mp4' );
+
+	}
+
+	nameInput.dom.addEventListener( 'input', function () {
+
+		try { localStorage.setItem( 'strata.render.fileName', nameInput.getValue() ); } catch ( e ) { /* storage blocked */ }
+		refreshNamePreview();
+
+	} );
+	resolutionSelect.dom.addEventListener( 'change', refreshNamePreview );
+	fpsSelect.dom.addEventListener( 'change', refreshNamePreview );
+	// The scene's file name is only known once a load finishes, so also refresh when the scene changes or the panel is used.
+	signals.sceneGraphChanged.add( refreshNamePreview );
+	container.dom.addEventListener( 'pointerenter', refreshNamePreview );
+
 	// ── Skip First (trims the render's in-point, e.g. to cut a static lead-in) ─
 
 	const skipRow = new UIRow();
@@ -314,6 +368,7 @@ function SidebarRender( editor ) {
 		durationText.setValue( d > 0 ? `${ d.toFixed( 2 ) } s (renders ${ outputDuration( d ).toFixed( 2 ) } s)` : 'Timeline is empty' );
 		renderButton.dom.disabled = ( d <= 0 ) || rendering;
 		equirectButton.dom.disabled = ( d <= 0 ) || rendering;
+		refreshNamePreview();
 
 	}
 
@@ -822,7 +877,7 @@ function SidebarRender( editor ) {
 	exportSrtButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
 	exportSrtButton.onClick( function () {
 
-		downloadBlob( new Blob( [ cuesToSrt( getCues() ) ], { type: 'text/plain' } ), 'subtitles.srt' );
+		downloadBlob( new Blob( [ cuesToSrt( getCues() ) ], { type: 'text/plain' } ), `${ renderBaseName( { template: '{project}_subtitles', project: projectForNames(), width: 0, height: 0 } ) }.srt` );
 
 	} );
 	subsControls.appendChild( exportSrtButton.dom );
@@ -1220,11 +1275,8 @@ function SidebarRender( editor ) {
 			const blob = await new Promise( resolve => out.toBlob( resolve, mime, 0.92 ) );
 			if ( ! blob ) throw new Error( 'The browser could not encode a ' + format.toUpperCase() + ' image' );
 
-			const sceneName = ( editor.scene.children[ 0 ] && editor.scene.children[ 0 ].name || 'scene' ).replace( /[^\w\-]+/g, '_' );
-			const camName = ( camera.name || 'camera' ).replace( /[^\w\-]+/g, '_' );
-			const stamp = new Date().toISOString().replace( /[-:]/g, '' ).replace( /\..*/, '' ).replace( 'T', '-' );
 			const ext = format === 'jpeg' ? 'jpg' : format;
-			const filename = `snapshot-${ sceneName }-${ camName }-${ width }x${ height }-${ stamp }.${ ext }`;
+			const filename = `${ renderBaseName( { template: DEFAULT_SNAPSHOT_TEMPLATE, project: projectForNames(), camera: camera.name, width, height } ) }.${ ext }`;
 
 			downloadBlob( blob, filename );
 
@@ -1788,8 +1840,7 @@ function SidebarRender( editor ) {
 
 		}
 
-		const label = shots.length > 0 ? 'sequence' : ( fallbackCamera.name || 'camera' ).replace( /[^\w\-]+/g, '_' );
-		const baseName = `render-${ is360 ? '360-' : '' }${ label }-${ width }x${ height }-${ fps }fps`;
+		const baseName = videoBaseName( { width, height, fps, duration: outputDuration( duration ), is360 } );
 
 		// One output per recorder (360 mode may have recorded MP4 + WebM in
 		// parallel off the same stream) — MP4 first so it's always the

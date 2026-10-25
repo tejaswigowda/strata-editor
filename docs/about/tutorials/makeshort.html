@@ -528,6 +528,7 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
 	<ol class="steps">
 		<li>Open the <strong>Render</strong> tab and click <strong>+ Add Shot</strong> under <strong>Camera Sequence</strong>. The first shot lands at 0&nbsp;s on your scene camera, with a cut. <em>Without a shot the render uses the Edit Camera</em>, so none of the quarter turns would be filmed — see <a href="render-camera-sequence.html">Add a static hero camera to a render sequence</a> for what a shot can do.</li>
 		<li>Pick a resolution and frame rate. The scene camera is authored 16:9 and the card is landscape; a portrait crop is a manual resolution choice.</li>
+		<li>Optionally set <strong>File name</strong>. The line under it shows what the download will be called, by default <code>pyth_1m43s_720p_30fps_2026-10-25.mp4</code>: the scene's file, the length of the video (with the two-second hold at the end), the resolution, the frame rate and the date. Type your own template with <code>{project}</code>, <code>{duration}</code>, <code>{res}</code>, <code>{fps}</code>, <code>{date}</code>, <code>{time}</code>, <code>{camera}</code> and <code>{360}</code>, for example <code>Pythagoras {res}</code>.</li>
 		<li>Click <strong>Render &amp; Export</strong> and wait — rendering runs in real time, so about a minute and three quarters.</li>
 		<li>The call card is re-fetched and re-baked <em>fresh</em> at render time at its true aspect — edit <code>/about/callcard</code> later and every future render picks up the change with no edits to this scene.</li>
 	</ol>
