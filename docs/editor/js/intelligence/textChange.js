@@ -63,6 +63,29 @@ const lastText = new WeakMap(); // node -> last text applied (regen-avoidance ca
 // opacity we forced to 0 mid-fade; on a fade-managed label (one with a fadeIn/fadeOut track)
 // the label stayed invisible after its first fade unless we put the value back ourselves.
 const mixerOpacity = new WeakMap();
+const hiddenWhileEmpty = new WeakSet(); // text meshes we hid because their string is empty
+
+// A zero-vertex mesh has no GPU vertex buffers, and WebGPU rejects even a zero-count draw that
+// reads them ("Vertex buffer slot 1 ... was not set"). One such draw invalidates the whole
+// command buffer, so the viewport stops updating for every frame it is in. A blank label
+// (change('')) must therefore not be drawn at all.
+function syncEmptyVisibility( node ) {
+
+	const position = node.geometry && node.geometry.attributes && node.geometry.attributes.position;
+	const empty = ! position || position.count === 0;
+	if ( empty && node.visible ) {
+
+		node.visible = false;
+		hiddenWhileEmpty.add( node );
+
+	} else if ( ! empty && hiddenWhileEmpty.has( node ) ) {
+
+		node.visible = true;
+		hiddenWhileEmpty.delete( node );
+
+	}
+
+}
 const warnedNodes = new WeakSet(); // non-text nodes we already warned about once
 const offsetApplied = new WeakSet(); // materials we've already nudged (avoid re-touching every frame)
 
@@ -90,6 +113,7 @@ function regenerateText( node, text ) {
 	const old = node.geometry;
 	node.geometry = geometry;
 	lastText.set( node, text );
+	syncEmptyVisibility( node );
 	avoidZFighting( node.material );
 
 	// Deferred dispose: disposing the OLD geometry synchronously here races the
@@ -179,6 +203,7 @@ export function applyContentAt( editor, model, t ) {
 				removeNextSlot( node );
 				node.material.opacity = 1;
 				mixerOpacity.delete( node );
+				syncEmptyVisibility( node );
 
 			}
 
@@ -231,7 +256,6 @@ export function applyContentAt( editor, model, t ) {
 				regenerateText( nextSlot, active.args.text );
 				nextSlot.material.transparent = true;
 				nextSlot.material.depthWrite = false;
-				nextSlot.visible = true;
 
 				if ( fadeRatio < 0.5 ) {
 
@@ -257,6 +281,7 @@ export function applyContentAt( editor, model, t ) {
 					const old = node.geometry;
 					node.geometry = nextSlot.geometry;
 					lastText.set( node, active.args.text );
+					syncEmptyVisibility( node );
 					avoidZFighting( node.material );
 					requestAnimationFrame( () => old.dispose() );
 					node.remove( nextSlot );
