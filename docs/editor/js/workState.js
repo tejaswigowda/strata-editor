@@ -187,3 +187,105 @@ export function recoverPromptText( savedAt, label, now = Date.now() ) {
 	return `Recover unsaved changes from ${ when }${ label ? ` (${ label })` : '' }?`;
 
 }
+
+// ── What would recovering change? ────────────────────────────────────────────
+
+function sceneObjects( json ) {
+
+	const byId = new Map();
+
+	// The scene root also carries the timeline, subtitles and render shots; those are reported on
+	// their own, so they must not make the root count as an edited object.
+	const SEPARATELY_REPORTED = [ 'timeline', 'renderSubtitles', 'renderShots' ];
+
+	( function walk( node, isRoot ) {
+
+		if ( ! node || typeof node !== 'object' ) return;
+		const { children, ...own } = node;
+
+		if ( isRoot && own.userData ) {
+
+			own.userData = { ...own.userData };
+			for ( const k of SEPARATELY_REPORTED ) delete own.userData[ k ];
+
+		}
+
+		if ( node.uuid ) byId.set( node.uuid, JSON.stringify( own, skipDerived ) );
+		if ( Array.isArray( children ) ) children.forEach( c => walk( c, false ) );
+
+	} )( json && json.scene && json.scene.object, true );
+
+	return byId;
+
+}
+
+function byUuid( list ) {
+
+	const map = new Map();
+	for ( const item of Array.isArray( list ) ? list : [] ) if ( item && item.uuid ) map.set( item.uuid, JSON.stringify( item ) );
+	return map;
+
+}
+
+function countDiff( a, b ) {
+
+	let added = 0, removed = 0, changed = 0;
+	for ( const [ id, v ] of b ) { if ( ! a.has( id ) ) added ++; else if ( a.get( id ) !== v ) changed ++; }
+	for ( const id of a.keys() ) if ( ! b.has( id ) ) removed ++;
+	return { added, removed, changed };
+
+}
+
+const plural = ( n, word ) => `${ n } ${ word }${ n === 1 ? '' : 's' }`;
+
+/**
+ * Short, human description of how the saved work differs from the scene that is open now, e.g.
+ * ['2 objects edited', 'timeline changed']. The list is empty only when nothing nameable differs.
+ * Both arguments are editor.toJSON() results.
+ */
+export function describeChanges( current, saved ) {
+
+	if ( ! current || ! saved ) return [];
+
+	const out = [];
+	const objects = countDiff( sceneObjects( current ), sceneObjects( saved ) );
+	if ( objects.changed ) out.push( `${ plural( objects.changed, 'object' ) } edited` );
+	if ( objects.added ) out.push( `${ plural( objects.added, 'object' ) } added` );
+	if ( objects.removed ) out.push( `${ plural( objects.removed, 'object' ) } removed` );
+
+	const materials = countDiff( byUuid( current.scene && current.scene.materials ), byUuid( saved.scene && saved.scene.materials ) );
+	if ( materials.added + materials.removed + materials.changed ) out.push( `${ plural( materials.added + materials.removed + materials.changed, 'material' ) } changed` );
+
+	const userData = json => ( json.scene && json.scene.object && json.scene.object.userData ) || {};
+	const same = ( key ) => JSON.stringify( userData( current )[ key ] ) === JSON.stringify( userData( saved )[ key ] );
+	if ( ! same( 'timeline' ) ) out.push( 'timeline changed' );
+	if ( ! same( 'renderSubtitles' ) ) out.push( 'subtitles changed' );
+	if ( ! same( 'renderShots' ) ) out.push( 'render shots changed' );
+	if ( JSON.stringify( current.scripts ) !== JSON.stringify( saved.scripts ) ) out.push( 'scripts changed' );
+	if ( current.backgroundType !== saved.backgroundType || current.environmentType !== saved.environmentType ) out.push( 'background changed' );
+
+	return out;
+
+}
+
+/** The file name of a source key: 'git:owner/repo@main:folder/pyth.json' → 'pyth.json'. */
+export function sourceFile( key ) {
+
+	if ( ! key || key === 'local' ) return '';
+	const file = key.replace( /^git:[^:]*:/, '' ).replace( /#.*$/, '' );
+	return file.split( '/' ).pop();
+
+}
+
+/**
+ * The recover prompt: what scene, how long ago, what is in it, how many other copies exist.
+ * `changes` comes from describeChanges.
+ */
+export function recoverPrompt( { savedAt, file, changes = [], more = 0, now = Date.now() } ) {
+
+	const what = file ? ` to ${ file }` : '';
+	const detail = changes.length ? ` — ${ changes.slice( 0, 3 ).join( ', ' ) }${ changes.length > 3 ? ' …' : '' }` : '';
+	const others = more === 0 ? '' : more === 1 ? ' 1 older copy is also saved.' : ` ${ more } older copies are also saved.`;
+	return `Recover unsaved changes${ what } from ${ relativeTime( savedAt, now ) }${ detail }?${ others }`;
+
+}

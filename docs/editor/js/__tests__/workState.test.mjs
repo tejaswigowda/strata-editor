@@ -4,7 +4,8 @@
 import assert from 'node:assert';
 import {
 	hashString, workSnapshotString, hashWork, sourceKey, sourceLabel,
-	createDirtyTracker, decideRecovery, wouldClobberUnsaved, relativeTime, recoverPromptText
+	createDirtyTracker, decideRecovery, wouldClobberUnsaved, relativeTime, recoverPromptText,
+	describeChanges, sourceFile, recoverPrompt
 } from '../workState.js';
 
 let pass = 0, fail = 0;
@@ -142,6 +143,49 @@ test( 'relativeTime wording', () => {
 	assert.strictEqual( relativeTime( now - 2 * 86400e3, now ), '2 days ago' );
 	assert.strictEqual( recoverPromptText( now - 5 * 60000, '', now ), 'Recover unsaved changes from 5 minutes ago?' );
 	assert.strictEqual( recoverPromptText( now - 5 * 60000, 'me/s · x.json', now ), 'Recover unsaved changes from 5 minutes ago (me/s · x.json)?' );
+
+} );
+
+const obj = ( uuid, extra = {}, children = [] ) => ( { uuid, type: 'Mesh', name: uuid, ...extra, children } );
+const scene = ( children, extra = {} ) => ( { scene: { object: { uuid: 's', type: 'Scene', userData: extra.userData || {}, children }, materials: extra.materials || [] }, scripts: {}, backgroundType: 'Default', environmentType: 'Default' } );
+
+test( 'describeChanges names what differs, and nothing when the scenes match', () => {
+
+	const base = scene( [ obj( 'a' ), obj( 'b', {}, [ obj( 'c' ) ] ) ] );
+	assert.deepStrictEqual( describeChanges( base, JSON.parse( JSON.stringify( base ) ) ), [] );
+
+	const edited = scene( [ obj( 'a', { name: 'renamed' } ), obj( 'b', {}, [ obj( 'c', { visible: false } ), obj( 'd' ) ] ) ] );
+	assert.deepStrictEqual( describeChanges( base, edited ), [ '2 objects edited', '1 object added' ] );
+	assert.deepStrictEqual( describeChanges( edited, base ), [ '2 objects edited', '1 object removed' ] );
+
+} );
+
+test( 'describeChanges reports the timeline, subtitles and materials', () => {
+
+	const base = scene( [ obj( 'a' ) ], { materials: [ { uuid: 'm', color: 1 } ], userData: { timeline: { duration: 5 } } } );
+	const next = scene( [ obj( 'a' ) ], { materials: [ { uuid: 'm', color: 2 } ], userData: { timeline: { duration: 6 }, renderSubtitles: [ { text: 'hi' } ] } } );
+	assert.deepStrictEqual( describeChanges( base, next ), [ '1 material changed', 'timeline changed', 'subtitles changed' ] );
+
+} );
+
+test( 'describeChanges ignores derived descriptors and survives missing input', () => {
+
+	const a = scene( [ obj( 'a', { userData: { label: 'x', descriptors: { v: 1 } } } ) ] );
+	const b = scene( [ obj( 'a', { userData: { label: 'x', descriptors: { v: 2 } } } ) ] );
+	assert.deepStrictEqual( describeChanges( a, b ), [] );
+	assert.deepStrictEqual( describeChanges( null, b ), [] );
+
+} );
+
+test( 'sourceFile and recoverPrompt', () => {
+
+	assert.strictEqual( sourceFile( 'git:me/repo@main:scenes/pyth.json#abc' ), 'pyth.json' );
+	assert.strictEqual( sourceFile( 'local' ), '' );
+	const now = 1e12;
+	assert.strictEqual( recoverPrompt( { savedAt: now - 11 * 60000, file: 'pyth.json', changes: [ '3 objects edited', 'timeline changed' ], more: 2, now } ),
+		'Recover unsaved changes to pyth.json from 11 minutes ago — 3 objects edited, timeline changed? 2 older copies are also saved.' );
+	assert.strictEqual( recoverPrompt( { savedAt: now - 5 * 60000, now } ), 'Recover unsaved changes from 5 minutes ago?' );
+	assert.strictEqual( recoverPrompt( { savedAt: now, file: 'a.json', more: 1, now } ), 'Recover unsaved changes to a.json from just now? 1 older copy is also saved.' );
 
 } );
 

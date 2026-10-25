@@ -64,6 +64,18 @@ const lastText = new WeakMap(); // node -> last text applied (regen-avoidance ca
 // the label stayed invisible after its first fade unless we put the value back ourselves.
 const mixerOpacity = new WeakMap();
 const hiddenWhileEmpty = new WeakSet(); // text meshes we hid because their string is empty
+// Playback rewrites a label's geometry, but a saved scene must hold what was authored, not whatever
+// the playhead last showed. authoredText remembers the string a node had before change() first
+// replaced its geometry; generatedGeometry marks the geometries change() made, so a geometry
+// someone else swapped in (the Geometry panel) is never mistaken for playback state.
+const authoredText = new WeakMap();
+const generatedGeometry = new WeakSet();
+
+function rememberAuthored( node ) {
+
+	if ( ! generatedGeometry.has( node.geometry ) ) authoredText.set( node, node.geometry.parameters.options.text );
+
+}
 
 // A zero-vertex mesh has no GPU vertex buffers, and WebGPU rejects even a zero-count draw that
 // reads them ("Vertex buffer slot 1 ... was not set"). One such draw invalidates the whole
@@ -111,6 +123,8 @@ function regenerateText( node, text ) {
 	const options = node.geometry.parameters.options;
 	const geometry = new node.geometry.constructor( text, { ...options, text } );
 	const old = node.geometry;
+	rememberAuthored( node );
+	generatedGeometry.add( geometry );
 	node.geometry = geometry;
 	lastText.set( node, text );
 	syncEmptyVisibility( node );
@@ -279,6 +293,7 @@ export function applyContentAt( editor, model, t ) {
 				if ( nextSlot && lastText.get( nextSlot ) === active.args.text ) {
 
 					const old = node.geometry;
+					rememberAuthored( node );
 					node.geometry = nextSlot.geometry;
 					lastText.set( node, active.args.text );
 					syncEmptyVisibility( node );
@@ -324,6 +339,64 @@ export function applyContentAt( editor, model, t ) {
 			}
 
 		}
+
+	}
+
+}
+
+// One authored-text geometry per node, kept so repeated serializations see the same geometry
+// (a fresh TextGeometry draws new shape ids every time, which would read as an edit).
+const authoredGeometry = new WeakMap();
+
+function authoredGeometryFor( node, live ) {
+
+	const text = authoredText.get( node );
+	const cached = authoredGeometry.get( node );
+	if ( cached && cached.parameters.options.text === text ) return cached;
+
+	const geometry = new live.constructor( text, { ...live.parameters.options, text } );
+	geometry.uuid = live.uuid;
+	authoredGeometry.set( node, geometry );
+	return geometry;
+
+}
+
+/**
+ * Run `fn()` (a scene serialization) with every change() label showing what was authored rather
+ * than what the playhead last drew: authored strings back in place, blank-label hiding undone,
+ * and the transient fade slots detached. Restored synchronously afterwards, so nothing flickers.
+ * Without this, scrubbing or playing a timeline made the scene look edited (and a commit made
+ * mid-playback would have saved the playhead's text).
+ */
+export function withAuthoredText( scene, fn ) {
+
+	const swaps = [];
+	const detached = [];
+	const shown = [];
+
+	scene.traverse( function ( node ) {
+
+		if ( node.userData && ( node.userData.isNextSlot || node.userData.isChangeGhost ) && node.parent ) detached.push( [ node.parent, node ] );
+		if ( hiddenWhileEmpty.has( node ) ) shown.push( node );
+		if ( node.geometry && generatedGeometry.has( node.geometry ) && authoredText.has( node ) ) swaps.push( [ node, node.geometry ] );
+
+	} );
+
+	for ( const [ parent, node ] of detached ) parent.remove( node );
+	for ( const node of shown ) node.visible = true;
+
+	for ( const [ node, live ] of swaps ) node.geometry = authoredGeometryFor( node, live );
+
+	try {
+
+		return fn();
+
+	} finally {
+
+		for ( const [ node, live ] of swaps ) node.geometry = live;
+
+		for ( const node of shown ) node.visible = false;
+		for ( const [ parent, node ] of detached ) parent.add( node );
 
 	}
 

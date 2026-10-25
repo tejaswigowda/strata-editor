@@ -12,6 +12,7 @@ import { Storage as _Storage } from './Storage.js';
 import { Selector } from './Selector.js';
 import { TimelineModel, invalidateRestState, clearRestStateCache, withCanonicalRestState, withoutEdgeOutlines } from './intelligence/timeline.js';
 import { syncTimeline } from './intelligence/timelineController.js';
+import { withAuthoredText } from './intelligence/textChange.js';
 import { findSharedMaterials } from './intelligence/editOps.js';
 import { withoutBakedTextures } from './scene/serialize.js';
 import { applyStoredTheme } from './Theme.js';
@@ -946,7 +947,7 @@ Editor.prototype = {
 			// withCanonicalRestState's own doc comment for why this matters. Also
 			// strip edge-outline helper children (see withoutEdgeOutlines) since
 			// their EdgesGeometry can't round-trip through ObjectLoader.
-			scene: withCanonicalRestState( this.scene, () => withoutEdgeOutlines( this.scene, () => withoutBakedTextures( this.scene, () => this.scene.toJSON() ) ) ),
+			scene: withAuthoredText( this.scene, () => withCanonicalRestState( this.scene, () => withoutEdgeOutlines( this.scene, () => withoutBakedTextures( this.scene, () => this.scene.toJSON() ) ) ) ),
 			animations: animations,
 			scripts: this.scripts,
 			history: this.history.toJSON(),

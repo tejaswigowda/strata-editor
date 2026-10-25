@@ -1,6 +1,6 @@
 import { UIPanel } from './libs/ui.js';
 import { commitSceneToRepo, generateCommitMessage, currentGitSource } from './Menubar.Git.js';
-import { recoverPromptText, relativeTime } from './workState.js';
+import { recoverPrompt, relativeTime } from './workState.js';
 
 // The "Uncommitted changes" chip in the menubar (with its one-step Commit popover), the
 // document-title marker, and the "Recover unsaved changes?" prompt. The state itself
@@ -181,7 +181,7 @@ function MenubarWork( editor ) {
 
 let promptEl = null;
 
-function showRecoverPrompt( guard, { entry, label, more } ) {
+function showRecoverPrompt( guard, { entry, file, changes, more, entries } ) {
 
 	if ( promptEl ) promptEl.remove();
 
@@ -190,7 +190,8 @@ function showRecoverPrompt( guard, { entry, label, more } ) {
 	promptEl = el;
 
 	const text = document.createElement( 'span' );
-	text.textContent = recoverPromptText( entry.savedAt, label ) + ( more > 0 ? ` (+${ more } older)` : '' );
+	text.textContent = recoverPrompt( { savedAt: entry.savedAt, file, changes, more } );
+	text.title = 'Autosaved in this browser. Recover puts these changes back on screen; Discard deletes this copy.';
 	el.appendChild( text );
 
 	function add( label, className, handler ) {
@@ -227,6 +228,7 @@ function showRecoverPrompt( guard, { entry, label, more } ) {
 
 	add( 'Recover', '', run( e => guard.recover( e ) ) );
 	add( 'Discard', '', run( e => guard.discard( e ) ) );
+	if ( more > 0 ) add( 'Discard all', '', run( () => guard.discardAll( entries ) ) );
 	add( 'Later', 'work-later', function () { if ( promptEl === el ) promptEl = null; el.remove(); } );
 
 	document.body.appendChild( el );

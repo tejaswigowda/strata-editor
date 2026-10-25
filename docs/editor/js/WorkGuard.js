@@ -10,7 +10,7 @@
 //   (editor.work.abortLoad() if the load fails after holdForLoad)
 // Callers that save: editor.work.markClean().
 
-import { hashWork, createDirtyTracker, decideRecovery, wouldClobberUnsaved, sourceKey, sourceLabel } from './workState.js';
+import { hashWork, createDirtyTracker, decideRecovery, wouldClobberUnsaved, sourceKey, sourceLabel, describeChanges, sourceFile } from './workState.js';
 import { WorkStore } from './WorkStore.js';
 
 const DEBOUNCE_MS = 1000;
@@ -148,7 +148,19 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 		if ( entries.length === 0 ) return;
 
 		const entry = entries[ 0 ];
-		emit( 'offer', { entry, label: entry.key === key() ? '' : sourceLabel( entry.key ), more: entries.length - 1 } );
+		let changes = [];
+
+		try {
+
+			changes = describeChanges( snapshot().json, entry.state );
+
+		} catch ( e ) {
+
+			console.warn( 'WorkGuard: could not describe the saved changes —', e );
+
+		}
+
+		emit( 'offer', { entry, label: entry.key === key() ? '' : sourceLabel( entry.key ), file: sourceFile( entry.key ), changes, more: entries.length - 1, entries } );
 
 	}
 
@@ -346,6 +358,14 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 		async discard( entry ) {
 
 			await store.removeRecover( entry );
+			await offerWaiting();
+
+		},
+
+		/** Drop every saved copy that is waiting for a yes/no (the prompt's "Discard all"). */
+		async discardAll( entries ) {
+
+			for ( const entry of entries ) await store.removeRecover( entry );
 			await offerWaiting();
 
 		}

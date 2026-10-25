@@ -54,6 +54,10 @@ function captureRestState( node ) {
 	if ( node.material && ! Array.isArray( node.material ) && typeof node.material.opacity === 'number' ) {
 
 		state.opacity = node.material.opacity;
+		// The fade recipes and syncMaterialTransparency flip these with the playhead; the saved
+		// scene must keep the authored values (see withCanonicalRestState).
+		state.transparent = node.material.transparent;
+		state.depthWrite = node.material.depthWrite;
 
 	}
 
@@ -124,6 +128,8 @@ export function withCanonicalRestState( scene, fn ) {
 			quaternion: node.quaternion.clone(),
 			scale: node.scale.clone(),
 			opacity: ( node.material && ! Array.isArray( node.material ) ) ? node.material.opacity : undefined,
+			transparent: ( node.material && ! Array.isArray( node.material ) ) ? node.material.transparent : undefined,
+			depthWrite: ( node.material && ! Array.isArray( node.material ) ) ? node.material.depthWrite : undefined,
 			fov: typeof node.fov === 'number' ? node.fov : undefined,
 		} );
 
@@ -131,6 +137,13 @@ export function withCanonicalRestState( scene, fn ) {
 		node.quaternion.copy( rest.quaternion );
 		node.scale.copy( rest.scale );
 		if ( rest.opacity !== undefined && node.material && ! Array.isArray( node.material ) ) node.material.opacity = rest.opacity;
+		if ( rest.transparent !== undefined && node.material && ! Array.isArray( node.material ) ) {
+
+			node.material.transparent = rest.transparent;
+			node.material.depthWrite = rest.depthWrite;
+
+		}
+
 		if ( rest.fov !== undefined ) node.fov = rest.fov;
 		node.updateMatrix();
 
@@ -151,6 +164,13 @@ export function withCanonicalRestState( scene, fn ) {
 			node.quaternion.copy( prev.quaternion );
 			node.scale.copy( prev.scale );
 			if ( prev.opacity !== undefined && node.material && ! Array.isArray( node.material ) ) node.material.opacity = prev.opacity;
+			if ( prev.transparent !== undefined && node.material && ! Array.isArray( node.material ) ) {
+
+				node.material.transparent = prev.transparent;
+				node.material.depthWrite = prev.depthWrite;
+
+			}
+
 			if ( prev.fov !== undefined ) node.fov = prev.fov;
 			node.updateMatrix();
 
