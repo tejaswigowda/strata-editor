@@ -5,11 +5,18 @@
 <title>Tutorials — Strata</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorials for building animated 3D shorts with Strata.">
+<meta name="description" content="Step-by-step Strata tutorials, by hand with no AI required: scenes and games, animation and rendering, characters, and motion capture.">
 <!--
 	/about/tutorials — index of step-by-step tutorials. Static, no build
-	step, same-origin only. Add a new <li> here whenever a new tutorial
-	page is added under this folder.
+	step, same-origin only. The list is NOT written here: it is rendered from
+	tutorials.json (the same file the welcome page reads), so adding a tutorial
+	is one entry there plus its thumbnail:
+	  { title, href, group, blurb, desc, thumb, embed? }
+	  group  one of GROUPS below (an unknown group lands under "More")
+	  blurb  one short sentence for the card; desc is the long form
+	  thumb  640x400 JPEG under screenshots/thumbs/
+	  embed  optional editor hash for an "Open example" link
+	`node scripts/tutorial-policy.cjs lint` checks every entry.
 -->
 <style>
 	:root { color-scheme: dark; }
@@ -21,7 +28,7 @@
 		line-height: 1.6;
 	}
 	main {
-		max-width: 720px;
+		max-width: 1080px;
 		margin: 0 auto;
 		padding: 8vh 24px 12vh;
 	}
@@ -32,24 +39,69 @@
 		color: #f3f5f8;
 	}
 	.tagline {
-		margin: 0 0 2.2em;
+		margin: 0 0 1.4em;
 		color: #9aa4b2;
 		font-size: 1.05rem;
+		max-width: 640px;
 	}
 	a { color: #7db2ff; text-decoration: none; }
 	a:hover { text-decoration: underline; }
-	.links {
-		list-style: none;
-		margin: 0;
-		padding: 0;
+
+	.jump { display: flex; flex-wrap: wrap; gap: 0.5em; margin: 0 0 0.5em; }
+	.jump a {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 999px;
+		padding: 0.25em 0.9em;
+		font-size: 0.88rem;
+		color: #c3c9d1;
+	}
+	.jump a:hover { border-color: #3a4152; color: #f3f5f8; text-decoration: none; }
+	.jump .n { color: #7d8794; margin-left: 0.35em; font-variant-numeric: tabular-nums; }
+
+	section { margin-top: 2.6em; }
+	section h2 {
+		margin: 0 0 0.15em;
+		font-size: 1.25rem;
+		color: #f3f5f8;
+		scroll-margin-top: 1.5em;
+	}
+	section .note { margin: 0 0 1.1em; color: #7d8794; font-size: 0.92rem; }
+
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+		gap: 20px;
+	}
+	.card {
+		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 0.9em;
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 10px;
+		overflow: hidden;
+		transition: border-color 0.15s, transform 0.15s;
 	}
-	.links a { font-size: 1.08rem; font-weight: 600; }
-	.links .desc { color: #7d8794; font-size: 0.9rem; margin-top: 0.2em; }
+	.card:hover, .card:focus-within { border-color: #3d5a8a; transform: translateY(-2px); }
+	.card .thumb { display: block; aspect-ratio: 16 / 10; background: #0f1114; border-bottom: 1px solid #2a2e36; }
+	.card .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+	.card .body { display: flex; flex-direction: column; gap: 0.35em; padding: 0.85em 1em 1em; flex: 1; }
+	.card h3 { margin: 0; font-size: 1.02rem; line-height: 1.35; color: #f3f5f8; }
+	.card h3 a { color: inherit; }
+	.card h3 a:hover { text-decoration: none; color: #7db2ff; }
+	/* the title link covers the whole card, so the card is one big click target */
+	.card h3 a::after { content: ""; position: absolute; inset: 0; }
+	.card p { margin: 0; color: #9aa4b2; font-size: 0.88rem; line-height: 1.5; }
+	.card .try {
+		position: relative; z-index: 1; align-self: flex-start;
+		margin-top: auto; padding-top: 0.5em;
+		font-size: 0.84rem;
+	}
+
+	.status { color: #9aa4b2; }
 	footer {
-		margin-top: 3em;
+		margin-top: 3.5em;
 		padding-top: 1.2em;
 		border-top: 1px solid #2a2e36;
 		color: #5b6470;
@@ -60,62 +112,148 @@
 <body>
 <main>
 	<h1>Tutorials</h1>
-	<p class="tagline">Step-by-step walkthroughs for building animated 3D shorts with Strata — by hand, no AI required.</p>
+	<p class="tagline">Step-by-step walkthroughs for building scenes, games, animation and characters with Strata — by hand, no AI required. <span id="count"></span></p>
 
-	<ul class="links">
-		<li>
-			<a href="makeshort.html">Make a Pythagorean-theorem short →</a>
-			<div class="desc">Build three squares and a right triangle, animate the classic dissection proof, add a background, and end on a living call-card — all with the JS Shell and the Universal Timeline.</div>
-		</li>
-		<li>
-			<a href="build-a-scene.html">Build a night scene from scratch →</a>
-			<div class="desc">Reusable helper functions, a noise-displaced ground, a grouped structure, night lighting (and the Environment setting that silently undoes it), a moving object, and a static hero camera — the full from-scratch workflow.</div>
-		</li>
-		<li>
-			<a href="render-camera-sequence.html">Add a static hero camera to a render sequence →</a>
-			<div class="desc">A focused deep-dive on just the Render tab's Camera Sequence feature — add a fixed, non-animated camera and cut it in to showcase one moment your main animated camera doesn't frame well.</div>
-		</li>
-		<li>
-			<a href="pong-table-view.html">Build a table-view pong scene →</a>
-			<div class="desc">Build Pong as a real receding table instead of a flat arcade screen — pick the depth axis before placing anything, group parts with one AddObjectCommand, verify camera framing by projecting points to NDC, and swap the backdrop for a sunset desert without touching the table.</div>
-		</li>
-		<li>
-			<a href="bubble-shooter-scene.html">Build a bubble shooter scene →</a>
-			<div class="desc">Build the scene, not the game: a lane, exactly one class-tagged Bubble template for runtime logic to clone and recolor, a rainforest background, and a wooden single-score sign — plus two real bugs (a local-space distance offset, and JavaScript's negative modulo) worth checking for.</div>
-		</li>
-		<li>
-			<a href="fight-arena-scene.html">Build a fighting-game arena scene →</a>
-			<div class="desc">Build the scene, not the game: a plank-floor stage with a tavern backdrop, two class-tagged fighter placeholders facing each other, a health-and-mana HUD whose fills are anchored so game code only sets scale.x, and a round timer — plus the rotated-rig axis bug, and a ready-made fight.json to open.</div>
-		</li>
-		<li>
-			<a href="wizard-hat-sculpt.html">Build a wizard hat and sculpt a face into it →</a>
-			<div class="desc">Assemble a floppy purple hat from a lathe brim, a three-section bending cone, a band, a buckle and extruded stars, then sculpt a real relief smiley into it: a dense mesh pushed out along its normals using surface coordinates, as one undoable step — plus the z-fighting joint bug and the cylinder-seam normals trap.</div>
-		</li>
-		<li>
-			<a href="racing-circuit-scene.html">Build a labelled racing circuit with a script →</a>
-			<div class="desc">Generate a whole circuit from thirteen corner points: a road ribbon on rolling terrain, a harbour built from shared shapes, and every object named and classed at creation so a game engine can find the start line, checkpoints, grid and racing line. Check it, export it, read the GLB back, and play it in strata-play — plus the traps (a material named like a class, a sun that points the wrong way, 236 materials where ten were authored).</div>
-		</li>
-		<li>
-			<a href="make-your-own-metahuman.html">Make your own MetaHuman →</a>
-			<div class="desc">Import a MetaHuman GLB straight from the metahuman-to-glb project's URL, then make it yours with the JS Shell: hide the hair, retint the skin and swap the outfit, pose the 51 ARKit face blendshapes, tag parts with classes, and capture a still with the Render tab's Take Snapshot.</div>
-		</li>
-		<li>
-			<a href="two-character-dance.html">One dance, two characters →</a>
-			<div class="desc">Two different sources — a Mixamo FBX and a MetaHuman GLB — map natively into Strata through bodyrig-webCLI: download The Boss from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both, then stage them on a blank white stage: Bruce leads, The Boss copies three seconds later, and an orbiting camera keeps their faces in frame.</div>
-		</li>
-		<li>
-			<a href="vrm-restyle-explorer.html">Restyle a VRM into an explorer with the JS Shell →</a>
-			<div class="desc">Download the free VRoid base model from 52blendshapes-for-VRoid-face, import the .vrm, and restyle it into a generic expedition explorer with the JS Shell: retint hair and skin, cut the clothes into a crop top and shorts, attach a belt, satchel and headband to the skeleton, lower the arms, and pose a smirk with the ARKit blendshapes.</div>
-		</li>
-		<li>
-			<a href="martial-arts-dojo.html">A martial-arts lesson, then a sparring match, in a bamboo dojo →</a>
-			<div class="desc">Two rigged VRoid characters share one mocap clip: stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut with warm lantern lighting, and a four-camera render sequence — plus the two skinned-mesh pitfalls (parts vanishing, slow playback) that two characters expose. Part 2 swaps in two fighters from a two-person capture and turns the lesson into a 170-second sparring match, with cameras that follow the pair and shots cut by distance and verified frame by frame.</div>
-		</li>
-	</ul>
+	<nav class="jump" id="jump" aria-label="Sections"></nav>
+
+	<div id="list"><p class="status">Loading tutorials…</p></div>
+	<noscript><p class="status">This page lists the tutorials from <a href="tutorials.json">tutorials.json</a> using a little JavaScript. With scripting off, open that file, or go <a href="../">back to about</a>.</p></noscript>
 
 	<footer>
 		<a href="../">← Back to about</a>
 	</footer>
 </main>
+<script>
+( function () {
+
+	// Section order and a one-line note for each. Unknown groups are listed last, under "More".
+	const GROUPS = [
+		{ name: 'Scenes and games', note: 'Build a scene, label it, and leave the behaviour to game code.' },
+		{ name: 'Animation and rendering', note: 'Timelines, cameras and shots.' },
+		{ name: 'Characters', note: 'Import, restyle, pose and animate a character.' },
+		{ name: 'Motion capture', note: 'Work from recorded performances.' },
+	];
+
+	const list = document.getElementById( 'list' );
+	const jump = document.getElementById( 'jump' );
+
+	const slug = ( s ) => s.toLowerCase().replace( /[^a-z0-9]+/g, '-' ).replace( /^-|-$/g, '' );
+
+	function card( t ) {
+
+		const el = document.createElement( 'article' );
+		el.className = 'card';
+
+		if ( t.thumb ) {
+
+			const thumb = document.createElement( 'a' );
+			thumb.className = 'thumb';
+			thumb.href = t.href;
+			thumb.tabIndex = - 1;
+			thumb.setAttribute( 'aria-hidden', 'true' );
+			const img = document.createElement( 'img' );
+			img.src = t.thumb;
+			img.alt = '';
+			img.width = 640;
+			img.height = 400;
+			img.loading = 'lazy';
+			thumb.appendChild( img );
+			el.appendChild( thumb );
+
+		}
+
+		const body = document.createElement( 'div' );
+		body.className = 'body';
+
+		const h = document.createElement( 'h3' );
+		const a = document.createElement( 'a' );
+		a.href = t.href;
+		a.textContent = t.title;
+		h.appendChild( a );
+		body.appendChild( h );
+
+		const p = document.createElement( 'p' );
+		p.textContent = t.blurb || t.desc;
+		body.appendChild( p );
+
+		if ( t.embed ) {
+
+			const open = document.createElement( 'a' );
+			open.className = 'try';
+			open.href = '../../' + t.embed;
+			open.textContent = 'Open example →';
+			open.title = 'Open the finished scene in the editor';
+			body.appendChild( open );
+
+		}
+
+		el.appendChild( body );
+		return el;
+
+	}
+
+	function render( tutorials ) {
+
+		const byGroup = new Map();
+		for ( const t of tutorials ) {
+
+			const known = GROUPS.some( ( g ) => g.name === t.group );
+			const key = known ? t.group : 'More';
+			if ( ! byGroup.has( key ) ) byGroup.set( key, [] );
+			byGroup.get( key ).push( t );
+
+		}
+
+		const order = GROUPS.map( ( g ) => g.name ).concat( 'More' ).filter( ( n ) => byGroup.has( n ) );
+		list.innerHTML = '';
+		jump.innerHTML = '';
+
+		for ( const name of order ) {
+
+			const items = byGroup.get( name );
+			const note = ( GROUPS.find( ( g ) => g.name === name ) || {} ).note;
+
+			const nav = document.createElement( 'a' );
+			nav.href = '#' + slug( name );
+			nav.textContent = name;
+			const n = document.createElement( 'span' );
+			n.className = 'n';
+			n.textContent = items.length;
+			nav.appendChild( n );
+			jump.appendChild( nav );
+
+			const section = document.createElement( 'section' );
+			const h2 = document.createElement( 'h2' );
+			h2.id = slug( name );
+			h2.textContent = name;
+			section.appendChild( h2 );
+			if ( note ) {
+
+				const np = document.createElement( 'p' );
+				np.className = 'note';
+				np.textContent = note;
+				section.appendChild( np );
+
+			}
+
+			const grid = document.createElement( 'div' );
+			grid.className = 'grid';
+			for ( const t of items ) grid.appendChild( card( t ) );
+			section.appendChild( grid );
+			list.appendChild( section );
+
+		}
+
+		document.getElementById( 'count' ).textContent = tutorials.length + ' tutorials.';
+
+	}
+
+	fetch( 'tutorials.json' )
+		.then( ( r ) => r.ok ? r.json() : Promise.reject( new Error( 'HTTP ' + r.status ) ) )
+		.then( render )
+		.catch( ( e ) => { list.innerHTML = ''; const p = document.createElement( 'p' ); p.className = 'status'; p.textContent = 'Could not load tutorials.json (' + e.message + '). If you opened this file directly, serve the folder over http instead.'; list.appendChild( p ); } );
+
+}() );
+</script>
 </body>
 </html>
