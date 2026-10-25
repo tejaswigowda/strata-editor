@@ -3,7 +3,7 @@
 		"title": "Make a Pythagorean-theorem short",
 		"href": "makeshort.html",
 		"group": "Animation and rendering",
-		"blurb": "Build a 68-second animated proof that 3² + 4² = 5² from tiles, a triangle and three labels, with subtitles, using the JS Shell and the Universal Timeline.",
+		"blurb": "Build a 100-second animated proof that 3² + 4² = 5², extend it to two more triples with quarter turns of the camera, and add subtitles, using the JS Shell and the Universal Timeline.",
 		"thumb": "screenshots/thumbs/makeshort.jpg",
 		"desc": "Build the tile squares and a right triangle, choreograph the proof on the timeline, move 25 tiles onto the hypotenuse square, and end by turning the camera to a living call-card — all with the JS Shell and the Universal Timeline.",
 		"embed": "#repo=tejaswigowda/test1&file=pyth.json&present=true"

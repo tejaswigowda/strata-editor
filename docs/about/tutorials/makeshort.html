@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: build a 68-second animated 3-4-5 proof with subtitles in Strata from tiles, a triangle and three text labels, entirely by hand with the JS Shell and the Universal Timeline.">
+<meta name="description" content="Step-by-step tutorial: build a 100-second animated proof that 3² + 4² = 5², extended to the 5-12-13 and 8-15-17 triples, with subtitles, in Strata entirely by hand with the JS Shell and the Universal Timeline.">
 <!--
 	/about/tutorials/makeshort.html — a from-scratch, by-hand tutorial.
 	Every snippet is real Strata surface (JS Shell globals + the public
@@ -135,7 +135,7 @@
 	<h1>Make a Pythagorean-theorem short</h1>
 		<iframe src="../../#repo=tejaswigowda/test1&file=pyth.json&present=true"></iframe>
 
-	<p class="tagline">A 68-second proof that 3² + 4² = 5², with subtitles: fifty tiles, one triangle, three labels and a camera that turns round to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 12</a>).</p>
+	<p class="tagline">A 100-second proof that 3² + 4² = 5², with subtitles. It starts with fifty tiles, one triangle and three labels; then the camera makes quarter turns to show two more triples, 5-12-13 and 8-15-17, and a last one to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 13</a>).</p>
 
 	<div class="note"><strong>Why the Shell, not clicking.</strong> Every edit below is a real, undoable, git-diffable command (<code>editor.execute(...)</code> under the hood) — the Shell is just the fastest way to author them. You can always inspect or hand-tweak the result afterward in the Outliner/Object panel; nothing here is a special "script mode."</div>
 	<div class="note"><strong>One paste, one scope.</strong> The Shell does not keep variables between pastes, so every block below is self-contained: it defines what it uses, and anything a later block needs is found again by name or class (<code>$S('#three')</code>, <code>$S('.cube')</code>). Start from an empty scene.</div>
@@ -236,20 +236,20 @@ $S('.label').nodes.forEach(o => {
 });</code></pre>
 
 	<h2><span class="step">5</span> The camera and the end card</h2>
-	<p class="lede">The film is shot by a camera that lives in the scene, so it can be animated and chosen as a render shot. It looks straight down −Z at the middle of the figure. Behind it, 15 units away, sits the end card — the camera will simply turn round to it.</p>
+	<p class="lede">The film is shot by a camera that lives in the scene, so it can be animated and chosen as a render shot. It looks straight down −Z at the middle of the figure. The rest of the film is the camera turning on the spot, a quarter turn at a time: left to a second triple, round to a third, and finally to the end card, which sits 15 units off to the camera's right.</p>
 	<pre><code>const cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 2000);
 cam.name = 'PerspectiveCamera';
 cam.position.set(3, 0.68, 20);              // dead-centre on the figure, looking down -Z
 editor.execute(new AddObjectCommand(editor, cam));</code></pre>
-	<p>Open <strong>Stencils → Mesh → Call card</strong> and click it. It inserts an addressable plane that embeds the current <a href="../callcard/">/about/callcard</a> live and fits it to the viewport camera. Move it behind the real camera instead, make it landscape, and hide it until the reveal:</p>
+	<p>Open <strong>Stencils → Mesh → Call card</strong> and click it. It inserts an addressable plane that embeds the current <a href="../callcard/">/about/callcard</a> live and fits it to the viewport camera. Move it off to the camera's right instead, make it landscape, and hide it until the reveal:</p>
 	<pre><code>const card = $S('#callcard').nodes[0];
 card.userData.width = 3.2;                  // landscape: the stencil's portrait 1.8 x 3.2 swapped
 card.userData.height = 1.8;
 card.geometry = new PlaneGeometry(3.2, 1.8);
-$S('#callcard').moveTo(3, 0.68, 35).scaleTo(8);   // 15 units behind the camera, 8x bigger
-card.rotation.set(0, Math.PI, 0);                  // front face toward the camera's start position
+$S('#callcard').moveTo(18, 0.68, 20).scaleTo(8);   // 15 units to the camera's right, 8x bigger
+card.rotation.set(0, -Math.PI / 2, 0);             // front face toward the camera's start position
 card.material.opacity = 0;</code></pre>
-	<div class="note"><strong>Three details in that block.</strong> <code>scaleTo</code> sets an absolute scale; <code>scale</code> would multiply the size the stencil already gave it. A mesh's front is its local <strong>+Z</strong>, so turning the card half a turn about Y points that front at the camera's start position; if you get it backwards the card shows mirrored (it is double-sided, so it never disappears). And the card is hidden by being fully transparent, not by <code>visible = false</code>, because the reveal only animates opacity. The viewport may show the card stretched until it is re-baked: the Render tab does that, and so does reopening the saved scene.</div>
+	<div class="note"><strong>Three details in that block.</strong> <code>scaleTo</code> sets an absolute scale; <code>scale</code> would multiply the size the stencil already gave it. A mesh's front is its local <strong>+Z</strong>, so turning the card a quarter turn about Y (−90°) points that front back at the camera's start position; if you get it backwards the card shows mirrored (it is double-sided, so it never disappears). And the card is hidden by being fully transparent, not by <code>visible = false</code>, because the reveal only animates opacity. The viewport may show the card stretched until it is re-baked: the Render tab does that, and so does reopening the saved scene.</div>
 
 	<h2><span class="step">6</span> Choreograph the entrances: 3, then 4</h2>
 	<p class="lede">Everything from here on is one clock. <code>.at(t)</code> places an event at an absolute time in seconds; durations in <code>.animate()</code> are milliseconds and in <code>.fadeIn()</code> seconds. The beat is the same for both legs: a label counts the length, a one-tile-thin sliver shows up on the leg, and later the sliver unfolds into the whole square.</p>
@@ -311,12 +311,102 @@ $S('#eqn').at(56.5).change('5\u00B2', { transition: 'fade', dur: 400 });
 $S('#eqn').at(60).change('a\u00B2 + b\u00B2 = c\u00B2', { transition: 'fade', dur: 400 });</code></pre>
 	<div class="note"><strong>A label per track.</strong> The two merging labels are faded out with one <code>$S</code> call each (not <code>$S('#three, #four')</code>), so each label keeps its own timeline track and the code panel reads label by label. Content is a step function: the text <em>is</em> whatever was keyed last; <code>transition: 'fade'</code> only cross-fades the swap (see <a href="../../../guides/ANIMATION.md">the animation guide</a>).</div>
 
-	<h2><span class="step">9</span> Turn round to the end card</h2>
-	<p class="lede">Last, the camera does not travel anywhere: it turns 180° about Y on the spot while the card behind it fades in. The card was placed 15 units away at 8× scale, and at a 50° field of view that fills the frame.</p>
-	<pre><code>// 65 s: turn the camera round to the card behind it while the card fades in
-$S('#callcard').at(65).fadeIn(3);
-$S('#PerspectiveCamera').at(65).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
-	<p>The timeline now runs 68 seconds, and the render holds the last frame for two more. The theorem stays on screen from 60 to 65&nbsp;s before the camera turns away from it. This is the whole cut sheet:</p>
+	<h2><span class="step">9</span> Two more triples, a quarter turn apart</h2>
+	<p class="lede">3-4-5 is not the only right triangle with whole-number sides. Two more, 5-12-13 and 8-15-17, get the same picture — a square on each leg and one on the hypotenuse — and they are placed around the camera instead of in front of it: the camera starts facing the first, and every quarter turn about Y (90°) brings the next into view. <code>makeTriple</code> builds one from its two legs and hypotenuse, scales it to about the height of the 3-4-5 so it fills the frame the same way, and turns it to face the camera that will be looking at it:</p>
+	<pre><code>// A Pythagorean triple p-q-c, laid out like the 3-4-5: a square on each leg and one on the hypotenuse.
+// The whole figure is scaled to about the height of the 3-4-5 and turned to face `yaw` degrees.
+function makeTriple(id, p, q, c, target, yaw) {
+  const k = 10 / (2 * q + p);                  // about the height of the 3-4-5 on screen
+  const thin = 0.1 / k;                        // slab thickness, 0.1 in world units
+  const outer = new Group();
+  outer.name = id;
+  outer.position.set(...target);
+  outer.rotation.y = THREE.MathUtils.degToRad(yaw);
+  outer.scale.setScalar(k);
+  const figure = new Group();
+  figure.position.set(-q / 2, -p / 2, 0);      // put the figure's bounding box on the target
+  outer.add(figure);
+
+  const part = (name, geometry, material, x, y, rotZ) =&gt; {
+    const mesh = new Mesh(geometry, material);
+    mesh.name = `${id}-${name}`;
+    mesh.position.set(x, y, 0);
+    mesh.rotation.z = rotZ;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.userData.hasEdgeOutline = true;
+    figure.add(mesh);
+  };
+  const slab = (side, color) =&gt; [
+    new BoxGeometry(side, side, thin),
+    new MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 })
+  ];
+  const triangle = new ExtrudeGeometry(
+    new Shape([new Vector2(0, 0), new Vector2(q, 0), new Vector2(0, p)]),
+    { depth: 1 / k, bevelEnabled: false }
+  );
+  triangle.translate(0, 0, -0.5 / k);
+  part('tri', triangle, new MeshStandardMaterial({ color: 0xd99b30, roughness: 0.9, metalness: 1 }), 0, 0, 0);
+  part('p', ...slab(p, 0xff6b6b), -p / 2, p / 2, 0);                       // on the vertical leg
+  part('q', ...slab(q, 0x4ecdc4), q / 2, -q / 2, 0);                       // under the horizontal leg
+  part('c', ...slab(c, 0xffe08a), (p + q) / 2, (p + q) / 2, Math.atan2(q, p));   // on the hypotenuse
+
+  editor.execute(new AddObjectCommand(editor, outer));
+}
+
+makeTriple('t2', 5, 12, 13, [-17, 0.68, 20], 90);    // a quarter turn to the camera's left
+makeTriple('t3', 8, 15, 17, [3, 0.68, 40], 180);     // behind the camera's start</code></pre>
+	<div class="note"><strong>Why the yaw is the group's own rotation.</strong> A camera that has turned <var>yaw</var>° about Y looks along a direction that turns with it, and an object with the same <code>rotation.y</code> has its front toward that camera. So the triple at <code>[-17, 0.68, 20]</code> (20 units to the left of the camera) is turned 90°, the one at <code>[3, 0.68, 40]</code> (20 units behind it) 180°, and the end card on the right 270° (−90°). Because the figure is built inside a scaled, turned group, every position inside it is written in the figure's own flat frame, exactly like the 3-4-5.</div>
+	<p>Each triple gets one caption, copied from the <code>eqn</code> label so it keeps the font, the glow and the size, then placed below its figure in the figure's own frame:</p>
+	<pre><code>// One caption per triple, copied from the first label so it keeps the font, the glow and the size.
+const src = $S('#eqn').nodes[0];
+function makeCaption(name, target, yaw) {
+  const a = THREE.MathUtils.degToRad(yaw);
+  const [dx, dy, dz] = [-3.7, -6.5, 1.24];   // below the figure, in the figure's own screen frame
+  const label = new Mesh(src.geometry.clone(), src.material.clone());
+  label.name = name;
+  label.scale.copy(src.scale);
+  label.rotation.y = a;
+  label.position.set(target[0] + dx * Math.cos(a) + dz * Math.sin(a), target[1] + dy, target[2] - dx * Math.sin(a) + dz * Math.cos(a));
+  editor.execute(new AddObjectCommand(editor, label));
+}
+makeCaption('eqn2', [-17, 0.68, 20], 90);
+makeCaption('eqn3', [3, 0.68, 40], 180);
+$S('#eqn2, #eqn3').addClass('label');</code></pre>
+	<p>Now the clock. The existing film is untouched up to 65&nbsp;s, where the theorem has been on screen for five seconds. From there each triple gets 16&nbsp;seconds: a 2.5-second quarter turn, the triangle, then one square at a time with its area as the caption, ending on the sum:</p>
+	<pre><code>// 65-81 s: a quarter turn to the right-hand side, the 5-12-13 triple
+$S('#eqn2').at(0).change('');
+$S('#PerspectiveCamera').at(65).animate({ to: { rotation: [0, 90, 0] } }, 2500);
+$S('#t2-tri').at(66.5).fadeIn(1);
+$S('#t2-p').at(68.5).fadeIn(1);
+$S('#eqn2').at(68.5).change('5\u00B2 = 25', { transition: 'fade', dur: 400 });
+$S('#t2-q').at(71).fadeIn(1);
+$S('#eqn2').at(71).change('12\u00B2 = 144', { transition: 'fade', dur: 400 });
+$S('#t2-c').at(73.5).fadeIn(1);
+$S('#eqn2').at(73.5).change('13\u00B2 = 169', { transition: 'fade', dur: 400 });
+$S('#eqn2').at(76).change('25 + 144 = 169', { transition: 'fade', dur: 400 });
+
+// 81-97 s: another quarter turn, the 8-15-17 triple
+$S('#eqn3').at(0).change('');
+$S('#PerspectiveCamera').at(81).animate({ to: { rotation: [0, 180, 0] } }, 2500);
+$S('#t3-tri').at(82.5).fadeIn(1);
+$S('#t3-p').at(84.5).fadeIn(1);
+$S('#eqn3').at(84.5).change('8\u00B2 = 64', { transition: 'fade', dur: 400 });
+$S('#t3-q').at(87).fadeIn(1);
+$S('#eqn3').at(87).change('15\u00B2 = 225', { transition: 'fade', dur: 400 });
+$S('#t3-c').at(89.5).fadeIn(1);
+$S('#eqn3').at(89.5).change('17\u00B2 = 289', { transition: 'fade', dur: 400 });
+$S('#eqn3').at(92).change('64 + 225 = 289', { transition: 'fade', dur: 400 });</code></pre>
+
+	<h2><span class="step">10</span> The last quarter turn: the end card</h2>
+	<p class="lede">The camera does not travel anywhere, even now: one more 90° turn about Y, to 270°, points it at the end card that was placed 15 units to its right in step 5, while the card fades in. At 8× scale and a 50° field of view it fills the frame.</p>
+	<pre><code>// 97 s: the last quarter turn, to the end card on the camera's right
+$S('#callcard').at(97.5).fadeIn(3);
+$S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500);</code></pre>
+	<figure>
+		<img src="screenshots/pythagorean-triples.png" alt="Two frames side by side: the 5-12-13 triple with its three squares and the caption 25 + 144 = 169, and the 8-15-17 triple with the caption 64 + 225 = 289." loading="lazy">
+		<figcaption>The two extra triples at the end of their beats: 25 + 144 = 169 on the left, 64 + 225 = 289 on the right.</figcaption>
+	</figure>
+	<p>The timeline now runs 100.5 seconds, and the render holds the last frame for two more. The theorem stays on screen from 60 to 65&nbsp;s before the camera turns away from it. This is the whole cut sheet:</p>
 	<table class="cuts">
 		<tr><th>Time</th><th>What happens</th></tr>
 		<tr><td>0</td><td>Triangle fades in (1.5 s); pad squares are invisible; labels are blank</td></tr>
@@ -328,10 +418,14 @@ $S('#PerspectiveCamera').at(65).animate({ to: { rotation: [0, 180, 0] } }, 3000)
 		<tr><td>44 – 47</td><td>"3² + 4²" slides into a row</td></tr>
 		<tr><td>47 – 53</td><td>"9 + 16", then the two numbers close up</td></tr>
 		<tr><td>53 – 65</td><td>"25" (3.5 s), "5²" (3.5 s), then "a² + b² = c²" (5 s)</td></tr>
-		<tr><td>65 – 68</td><td>The camera turns round while the call card fades in</td></tr>
+		<tr><td>65 – 67.5</td><td>The camera turns 90° to the left, to the 5-12-13 triple</td></tr>
+		<tr><td>66.5 – 76</td><td>Triangle, then the squares on 5, 12 and 13, captions "5² = 25", "12² = 144", "13² = 169", then "25 + 144 = 169" (held to 81)</td></tr>
+		<tr><td>81 – 83.5</td><td>Another 90° turn, round to the 8-15-17 triple</td></tr>
+		<tr><td>82.5 – 92</td><td>The same beats: "8² = 64", "15² = 225", "17² = 289", then "64 + 225 = 289" (held to 97)</td></tr>
+		<tr><td>97 – 100.5</td><td>The last 90° turn, to the call card, which fades in</td></tr>
 	</table>
 
-	<h2><span class="step">10</span> Subtitles</h2>
+	<h2><span class="step">11</span> Subtitles</h2>
 	<p class="lede">Subtitles are cues kept on the scene itself (<code>scene.userData.renderSubtitles</code>), so they are saved, versioned and committed with it. <code>setSubtitles</code> replaces the whole list in one undoable step. Times are output-video seconds, which here equal timeline seconds because the render starts at 0. They show over the viewport while you play or scrub, and the Render tab can burn them into the picture or export an <code>.srt</code>.</p>
 	<pre><code>setSubtitles([
   { start: 0.8,  end: 5.5,  text: 'A right triangle.\nOne leg is 3, the other is 4.' },
@@ -346,27 +440,37 @@ $S('#PerspectiveCamera').at(65).animate({ to: { rotation: [0, 180, 0] } }, 3000)
   { start: 53.0, end: 56.3, text: '25 tiles fill it exactly.' },
   { start: 56.6, end: 59.8, text: 'And 25 is 5\u00B2:\nthe square on the slanted side.' },
   { start: 60.0, end: 64.8, text: 'In every right triangle:\na\u00B2 + b\u00B2 = c\u00B2' },
-  { start: 65.2, end: 68.0, text: 'Made with Strata.' },
-]).length   // 13</code></pre>
+  { start: 66.0, end: 68.4, text: 'Does it hold for other triples?' },
+  { start: 68.5, end: 70.9, text: 'The square on the 5 side: 25.' },
+  { start: 71.0, end: 73.4, text: 'On the 12 side: 144.' },
+  { start: 73.5, end: 75.9, text: 'On the slanted side: 13\u00B2 = 169.' },
+  { start: 76.0, end: 80.5, text: '25 + 144 = 169.\nIt holds.' },
+  { start: 82.5, end: 84.4, text: 'One more: 8, 15, 17.' },
+  { start: 84.5, end: 86.9, text: 'The square on the 8 side: 64.' },
+  { start: 87.0, end: 89.4, text: 'On the 15 side: 225.' },
+  { start: 89.5, end: 91.9, text: 'On the slanted side: 17\u00B2 = 289.' },
+  { start: 92.0, end: 96.5, text: '64 + 225 = 289.\nIt holds again.' },
+  { start: 98.0, end: 100.5, text: 'Made with Strata.' },
+]).length   // 23</code></pre>
 	<div class="note"><strong>Writing cues that fit the picture.</strong> Each cue starts with the thing it describes (the leg at 6 and 9&nbsp;s, the unfolding square at 14 and 24&nbsp;s) and ends before the next beat; none is longer than two short lines, and none overlaps another. Keep a cue on screen at least about a second for every fifteen characters. <code>exportSrt()</code> returns the same cues as <code>.srt</code> text.</div>
 
-	<h2><span class="step">11</span> Choose the camera and render it</h2>
+	<h2><span class="step">12</span> Choose the camera and render it</h2>
 	<ol class="steps">
-		<li>Open the <strong>Render</strong> tab and click <strong>+ Add Shot</strong> under <strong>Camera Sequence</strong>. The first shot lands at 0&nbsp;s on your scene camera, with a cut. <em>Without a shot the render uses the Edit Camera</em>, so the end-card turn would never be filmed — see <a href="render-camera-sequence.html">Add a static hero camera to a render sequence</a> for what a shot can do.</li>
+		<li>Open the <strong>Render</strong> tab and click <strong>+ Add Shot</strong> under <strong>Camera Sequence</strong>. The first shot lands at 0&nbsp;s on your scene camera, with a cut. <em>Without a shot the render uses the Edit Camera</em>, so none of the quarter turns would be filmed — see <a href="render-camera-sequence.html">Add a static hero camera to a render sequence</a> for what a shot can do.</li>
 		<li>Pick a resolution and frame rate. The scene camera is authored 16:9 and the card is landscape; a portrait crop is a manual resolution choice.</li>
-		<li>Click <strong>Render &amp; Export</strong> and wait — rendering runs in real time, so about a minute.</li>
+		<li>Click <strong>Render &amp; Export</strong> and wait — rendering runs in real time, so about a minute and three quarters.</li>
 		<li>The call card is re-fetched and re-baked <em>fresh</em> at render time at its true aspect — edit <code>/about/callcard</code> later and every future render picks up the change with no edits to this scene.</li>
 	</ol>
 	<figure>
-		<img src="screenshots/pythagorean-endcard.png" alt="The end card filling the frame at 68 seconds: the line 'The idea outlasts the engine', 'Made with Strata', and a QR code, over the dark blue gradient." loading="lazy">
-		<figcaption>68 seconds: the camera has turned round and the card fills the frame.</figcaption>
+		<img src="screenshots/pythagorean-endcard.png" alt="The end card filling the frame at the end of the film: the line 'The idea outlasts the engine', 'Made with Strata', and a QR code, over the dark blue gradient." loading="lazy">
+		<figcaption>The end of the film: the camera has made its last quarter turn and the card fills the frame.</figcaption>
 	</figure>
 
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="../../../guides/ANIMATION.md">the animation guide</a> and <a href="../../../guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
 
-	<h2 id="open-finished"><span class="step">12</span> Open the finished scene</h2>
-	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, with the same 12 timeline tracks, the same 68-second clock and the same 13 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, and from 65&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 12 timeline tracks with the same events at the same times, the same 13 subtitle cues word for word, and a frame at each of ten times from 0 to 62&nbsp;s that differs from the published one by under 3% of its pixels. The end-card frame is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so two loads of the same scene can bake differently, and it was not compared. Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. Rendering (step 11) was not re-run for this revision.</div>
+	<h2 id="open-finished"><span class="step">13</span> Open the finished scene</h2>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, plus the two extra triples with their captions, with the same 22 timeline tracks, the same 100.5-second clock and the same 23 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, at 78&nbsp;s the 5-12-13 sum is on screen, at 94&nbsp;s the 8-15-17 one, and from 100&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 22 timeline tracks with the same events at the same times, the same 23 subtitle cues word for word, and a frame at each of seventeen times from 0 to 98&nbsp;s that differs from the published one by under 3% of its pixels. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so two loads of the same scene can bake differently, and it was not compared. Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. Rendering (step 12) was not re-run for this revision.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
