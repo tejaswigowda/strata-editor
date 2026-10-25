@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: build a 59-second animated 3-4-5 proof in Strata from tiles, a triangle and three text labels, entirely by hand with the JS Shell and the Universal Timeline.">
+<meta name="description" content="Step-by-step tutorial: build a 68-second animated 3-4-5 proof with subtitles in Strata from tiles, a triangle and three text labels, entirely by hand with the JS Shell and the Universal Timeline.">
 <!--
 	/about/tutorials/makeshort.html — a from-scratch, by-hand tutorial.
 	Every snippet is real Strata surface (JS Shell globals + the public
@@ -135,7 +135,7 @@
 	<h1>Make a Pythagorean-theorem short</h1>
 		<iframe src="../../#repo=tejaswigowda/test1&file=pyth.json&present=true"></iframe>
 
-	<p class="tagline">A 59-second proof that 3² + 4² = 5²: fifty tiles, one triangle, three labels and a camera that turns round to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 11</a>).</p>
+	<p class="tagline">A 68-second proof that 3² + 4² = 5², with subtitles: fifty tiles, one triangle, three labels and a camera that turns round to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 12</a>).</p>
 
 	<div class="note"><strong>Why the Shell, not clicking.</strong> Every edit below is a real, undoable, git-diffable command (<code>editor.execute(...)</code> under the hood) — the Shell is just the fastest way to author them. You can always inspect or hand-tweak the result afterward in the Outliner/Object panel; nothing here is a special "script mode."</div>
 	<div class="note"><strong>One paste, one scope.</strong> The Shell does not keep variables between pastes, so every block below is self-contained: it defines what it uses, and anything a later block needs is found again by name or class (<code>$S('#three')</code>, <code>$S('.cube')</code>). Start from an empty scene.</div>
@@ -292,31 +292,31 @@ $S('#3x3-square .cube, #4x4-square .cube').at(40).moveToEach('#5x5-square .cube'
 	<div class="note"><strong>Why 3 seconds, and why a pad.</strong> Twenty-five tiles at once blur under about a second; three seconds lets a viewer follow "those nine went there, those sixteen went there". Because the destinations are the pad's <em>actual</em> cell positions and rotations, resolved when the timeline is compiled, the reveal is deterministic and reversible when you scrub, and it re-targets itself if you move the pad. The pad is hidden by <em>starting</em> transparent — a bare <code>fadeOut</code> at 0&nbsp;s would show it for the first second.</div>
 
 	<h2><span class="step">8</span> The sum, read off the screen</h2>
-	<p class="lede">While the tiles are still settling, the labels slide to the bottom into the shape of the sum: <code>3² + 4²</code>, which turns into <code>9 + 16</code>, closes up into <code>25</code>, and is then restated as <code>5²</code> and as the theorem itself. All of it is <code>.change()</code> on the three labels.</p>
-	<pre><code>// 44-56 s: the sum, read off the screen
+	<p class="lede">While the tiles are still settling, the labels slide to the bottom into the shape of the sum: <code>3² + 4²</code>, which turns into <code>9 + 16</code>, closes up into <code>25</code>, and is then restated as <code>5²</code> and as the theorem itself. All of it is <code>.change()</code> on the three labels. Each phrase is held for three to five seconds, because a viewer needs that long to read it and connect it to what just happened on screen.</p>
+	<pre><code>// 44-60 s: the sum, read off the screen. Each phrase stays up 3-5 s: long enough to read.
 $S('#eqn').at(0).change('');
-$S('#three').at(44).animate({ to: { positionX: -2.4, positionY: -2.4 } }, 800);
+$S('#three').at(44).animate({ to: { positionX: -2.9, positionY: -2.4 } }, 800);
 $S('#four').at(44).animate({ to: { positionX: -0.2, positionY: -2.4 } }, 800);
 $S('#eqn').at(44).change('+', { transition: 'fade', dur: 400 });
 
 $S('#three').at(47).change('9', { transition: 'fade', dur: 400 });
 $S('#four').at(47).change('16', { transition: 'fade', dur: 400 });
 
-$S('#three').at(50).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
-$S('#four').at(50).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
-$S('#three').at(51).fadeOut(0.3);
-$S('#four').at(51).fadeOut(0.3);
-$S('#eqn').at(51).change('25', { transition: 'fade', dur: 400 });
-$S('#eqn').at(53).change('5\u00B2', { transition: 'fade', dur: 400 });
-$S('#eqn').at(56).change('a\u00B2 + b\u00B2 = c\u00B2', { transition: 'fade', dur: 400 });</code></pre>
+$S('#three').at(52).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
+$S('#four').at(52).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
+$S('#three').at(53).fadeOut(0.3);
+$S('#four').at(53).fadeOut(0.3);
+$S('#eqn').at(53).change('25', { transition: 'fade', dur: 400 });
+$S('#eqn').at(56.5).change('5\u00B2', { transition: 'fade', dur: 400 });
+$S('#eqn').at(60).change('a\u00B2 + b\u00B2 = c\u00B2', { transition: 'fade', dur: 400 });</code></pre>
 	<div class="note"><strong>A label per track.</strong> The two merging labels are faded out with one <code>$S</code> call each (not <code>$S('#three, #four')</code>), so each label keeps its own timeline track and the code panel reads label by label. Content is a step function: the text <em>is</em> whatever was keyed last; <code>transition: 'fade'</code> only cross-fades the swap (see <a href="../../../guides/ANIMATION.md">the animation guide</a>).</div>
 
 	<h2><span class="step">9</span> Turn round to the end card</h2>
 	<p class="lede">Last, the camera does not travel anywhere: it turns 180° about Y on the spot while the card behind it fades in. The card was placed 15 units away at 8× scale, and at a 50° field of view that fills the frame.</p>
-	<pre><code>// 56.4 s: turn the camera round to the card behind it while the card fades in
-$S('#callcard').at(56.4).fadeIn(3);
-$S('#PerspectiveCamera').at(56.4).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
-	<p>The timeline now runs 59.4 seconds. This is the whole cut sheet:</p>
+	<pre><code>// 65 s: turn the camera round to the card behind it while the card fades in
+$S('#callcard').at(65).fadeIn(3);
+$S('#PerspectiveCamera').at(65).animate({ to: { rotation: [0, 180, 0] } }, 3000);</code></pre>
+	<p>The timeline now runs 68 seconds, and the render holds the last frame for two more. The theorem stays on screen from 60 to 65&nbsp;s before the camera turns away from it. This is the whole cut sheet:</p>
 	<table class="cuts">
 		<tr><th>Time</th><th>What happens</th></tr>
 		<tr><td>0</td><td>Triangle fades in (1.5 s); pad squares are invisible; labels are blank</td></tr>
@@ -325,12 +325,32 @@ $S('#PerspectiveCamera').at(56.4).animate({ to: { rotation: [0, 180, 0] } }, 300
 		<tr><td>13 – 16</td><td>The 3 label settles; the sliver unfolds into the 3×3; it reads "3²"</td></tr>
 		<tr><td>23 – 26</td><td>The same for the 4×4, which reads "4²"</td></tr>
 		<tr><td>40 – 43</td><td>Nine red tiles and sixteen teal tiles fly onto the 5×5 pad</td></tr>
-		<tr><td>44 – 51</td><td>"3² + 4²" becomes "9 + 16" and closes up</td></tr>
-		<tr><td>51 – 56</td><td>"25", then "5²", then "a² + b² = c²"</td></tr>
-		<tr><td>56.4 – 59.4</td><td>The camera turns round while the call card fades in</td></tr>
+		<tr><td>44 – 47</td><td>"3² + 4²" slides into a row</td></tr>
+		<tr><td>47 – 53</td><td>"9 + 16", then the two numbers close up</td></tr>
+		<tr><td>53 – 65</td><td>"25" (3.5 s), "5²" (3.5 s), then "a² + b² = c²" (5 s)</td></tr>
+		<tr><td>65 – 68</td><td>The camera turns round while the call card fades in</td></tr>
 	</table>
 
-	<h2><span class="step">10</span> Choose the camera and render it</h2>
+	<h2><span class="step">10</span> Subtitles</h2>
+	<p class="lede">Subtitles are cues kept on the scene itself (<code>scene.userData.renderSubtitles</code>), so they are saved, versioned and committed with it. <code>setSubtitles</code> replaces the whole list in one undoable step. Times are output-video seconds, which here equal timeline seconds because the render starts at 0. They show over the viewport while you play or scrub, and the Render tab can burn them into the picture or export an <code>.srt</code>.</p>
+	<pre><code>setSubtitles([
+  { start: 0.8,  end: 5.5,  text: 'A right triangle.\nOne leg is 3, the other is 4.' },
+  { start: 6.0,  end: 8.8,  text: 'The short leg is 3 long.' },
+  { start: 9.0,  end: 13.0, text: 'The long leg is 4 long.' },
+  { start: 14.0, end: 20.0, text: 'A square on the short leg:\n3 \u00D7 3 = 9 tiles.' },
+  { start: 24.0, end: 30.0, text: 'A square on the long leg:\n4 \u00D7 4 = 16 tiles.' },
+  { start: 31.5, end: 38.5, text: 'Do 9 and 16 tiles fill a square\non the slanted side?' },
+  { start: 40.2, end: 43.8, text: 'Watch them move.' },
+  { start: 44.0, end: 46.8, text: '3\u00B2 plus 4\u00B2\u2026' },
+  { start: 47.0, end: 51.8, text: '\u2026is 9 + 16 tiles.' },
+  { start: 53.0, end: 56.3, text: '25 tiles fill it exactly.' },
+  { start: 56.6, end: 59.8, text: 'And 25 is 5\u00B2:\nthe square on the slanted side.' },
+  { start: 60.0, end: 64.8, text: 'In every right triangle:\na\u00B2 + b\u00B2 = c\u00B2' },
+  { start: 65.2, end: 68.0, text: 'Made with Strata.' },
+]).length   // 13</code></pre>
+	<div class="note"><strong>Writing cues that fit the picture.</strong> Each cue starts with the thing it describes (the leg at 6 and 9&nbsp;s, the unfolding square at 14 and 24&nbsp;s) and ends before the next beat; none is longer than two short lines, and none overlaps another. Keep a cue on screen at least about a second for every fifteen characters. <code>exportSrt()</code> returns the same cues as <code>.srt</code> text.</div>
+
+	<h2><span class="step">11</span> Choose the camera and render it</h2>
 	<ol class="steps">
 		<li>Open the <strong>Render</strong> tab and click <strong>+ Add Shot</strong> under <strong>Camera Sequence</strong>. The first shot lands at 0&nbsp;s on your scene camera, with a cut. <em>Without a shot the render uses the Edit Camera</em>, so the end-card turn would never be filmed — see <a href="render-camera-sequence.html">Add a static hero camera to a render sequence</a> for what a shot can do.</li>
 		<li>Pick a resolution and frame rate. The scene camera is authored 16:9 and the card is landscape; a portrait crop is a manual resolution choice.</li>
@@ -338,15 +358,15 @@ $S('#PerspectiveCamera').at(56.4).animate({ to: { rotation: [0, 180, 0] } }, 300
 		<li>The call card is re-fetched and re-baked <em>fresh</em> at render time at its true aspect — edit <code>/about/callcard</code> later and every future render picks up the change with no edits to this scene.</li>
 	</ol>
 	<figure>
-		<img src="screenshots/pythagorean-endcard.png" alt="The end card filling the frame at 59.4 seconds: the line 'The idea outlasts the engine', 'Made with Strata', and a QR code, over the dark blue gradient." loading="lazy">
-		<figcaption>59.4 seconds: the camera has turned round and the card fills the frame.</figcaption>
+		<img src="screenshots/pythagorean-endcard.png" alt="The end card filling the frame at 68 seconds: the line 'The idea outlasts the engine', 'Made with Strata', and a QR code, over the dark blue gradient." loading="lazy">
+		<figcaption>68 seconds: the camera has turned round and the card fills the frame.</figcaption>
 	</figure>
 
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="../../../guides/ANIMATION.md">the animation guide</a> and <a href="../../../guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
 
-	<h2 id="open-finished"><span class="step">11</span> Open the finished scene</h2>
-	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, with the same 12 timeline tracks and the same 59.4-second clock. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, and at 59.4&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 12 timeline tracks with the same events at the same times, and a frame at each of seven times from 0 to 52&nbsp;s that differs from the published one by under 3% of its pixels. The end-card frame is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so two loads of the same scene can bake differently, and it was not compared. Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. Rendering (step 10) was not re-run for this revision.</div>
+	<h2 id="open-finished"><span class="step">12</span> Open the finished scene</h2>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, with the same 12 timeline tracks, the same 68-second clock and the same 13 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, and from 65&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 12 timeline tracks with the same events at the same times, the same 13 subtitle cues word for word, and a frame at each of ten times from 0 to 62&nbsp;s that differs from the published one by under 3% of its pixels. The end-card frame is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so two loads of the same scene can bake differently, and it was not compared. Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. Rendering (step 11) was not re-run for this revision.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

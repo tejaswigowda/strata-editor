@@ -58,6 +58,11 @@ function changeEventsOf( track ) {
 // ── LIVE render: sample content + optional fade at time t ────────────────────
 
 const lastText = new WeakMap(); // node -> last text applied (regen-avoidance cache)
+// node -> the opacity the animation mixer last wrote, saved before a fade window overwrote it.
+// The mixer only writes a property when its sampled value changes, so it never repairs an
+// opacity we forced to 0 mid-fade; on a fade-managed label (one with a fadeIn/fadeOut track)
+// the label stayed invisible after its first fade unless we put the value back ourselves.
+const mixerOpacity = new WeakMap();
 const warnedNodes = new WeakSet(); // non-text nodes we already warned about once
 const offsetApplied = new WeakSet(); // materials we've already nudged (avoid re-touching every frame)
 
@@ -173,6 +178,7 @@ export function applyContentAt( editor, model, t ) {
 				removeGhost( node );
 				removeNextSlot( node );
 				node.material.opacity = 1;
+				mixerOpacity.delete( node );
 
 			}
 
@@ -219,6 +225,7 @@ export function applyContentAt( editor, model, t ) {
 				removeGhost( node );
 				node.material.transparent = true;
 				node.material.depthWrite = false;
+				if ( ! mixerOpacity.has( node ) ) mixerOpacity.set( node, node.material.opacity );
 
 				const nextSlot = getOrCreateNextSlot( node );
 				regenerateText( nextSlot, active.args.text );
@@ -276,7 +283,15 @@ export function applyContentAt( editor, model, t ) {
 					node.material.opacity = 1;
 					node.material.depthWrite = true;
 
+				} else if ( mixerOpacity.has( node ) ) {
+
+					// A fade window just closed on a fade-managed label: hand back the
+					// value the mixer believes it already wrote (see mixerOpacity).
+					node.material.opacity = mixerOpacity.get( node );
+
 				}
+
+				mixerOpacity.delete( node );
 
 				removeGhost( node );
 				removeNextSlot( node );
