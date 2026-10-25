@@ -162,7 +162,7 @@ exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection,
 
 | UI action | Shell / `$S` | Undoable |
 |---|---|---|
-| Move / rotate / scale gizmo | `$S(sel).move/rotate/scale`, `.moveTo/.rotateTo/.scaleTo`, `.position/.rotation/.scale/.quaternion` | ✓ |
+| Move / rotate / scale gizmo | `$S(sel).move/rotate/scale`, `.moveTo/.rotateTo/.scaleTo`, `.position/.rotation/.scale/.quaternion` (`.move` keeps objects at y ≥ 0; `.moveTo` places exactly, including below zero; `.scale` multiplies, `.scaleTo` sets) | ✓ |
 | Inspector: material colour | `$S(sel).recolor(color)` / `.emissive(color)` | ✓ |
 | Inspector: metalness / roughness / emissive intensity / flat shading / side | `$S(sel).metalness/.roughness/.emissiveIntensity/.flatShading/.doubleSided` | ✓ |
 | Inspector: opacity / visibility / wireframe | `$S(sel).setOpacity/.setVisible/.show/.hide/.wireframe` | ✓ |

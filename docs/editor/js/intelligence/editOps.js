@@ -980,9 +980,11 @@ export function moveToOp( editor, selector, x, y, z ) {
 
 	}
 
+	// Absolute coordinates are taken as typed. (The relative `move` keeps objects at y >= 0; moveTo does not,
+	// because a scene may legitimately sit below zero: a track with relief, a tutorial's labels under a row of squares.)
 	const safePos = {
 		x: clamp( parseFloat( x ) || 0, -1000, 1000 ),
-		y: clamp( parseFloat( y ) || 0, 0, 1000 ),
+		y: clamp( parseFloat( y ) || 0, -1000, 1000 ),
 		z: clamp( parseFloat( z ) || 0, -1000, 1000 ),
 	};
 

@@ -119,7 +119,7 @@
 	<h1>Make a Pythagorean-theorem short</h1>
 		<iframe src="../../#repo=tejaswigowda/test1&file=pyth.json&present=true"></iframe>
 
-	<p class="tagline">Three squares, a right triangle, a classic dissection proof, and a living end-card — built entirely by hand, no AI, via the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
+	<p class="tagline">Three squares, a right triangle, a classic dissection proof, and a living end-card — built entirely by hand, no AI, via the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 9</a>).</p>
 
 	<div class="note"><strong>Why the Shell, not clicking.</strong> Every edit below is a real, undoable, git-diffable command (<code>editor.execute(...)</code> under the hood) — the Shell is just the fastest way to author them. You can always inspect or hand-tweak the result afterward in the Outliner/Object panel; nothing here is a special "script mode."</div>
 
@@ -197,13 +197,15 @@ $S('#eqn').at(2).change('a\u00B2 + b\u00B2 = c\u00B2');</code></pre>
 	<h2><span class="step">4</span> The dissection reveal</h2>
 	<p class="lede">This is the actual proof, staged as motion: the 3×3 and 4×4 squares' cells migrate onto the 5×5 square's cells. <code>moveToEach</code> pairs sources to targets <em>positionally</em> — split the 5×5's 25 cells into a 9-cell group and a 16-cell group first so the counts line up.</p>
 	<pre><code>// however you partition the 25 cells into a 9-set and a 16-set —
-// by hand-picked indices, or however suits your layout:
+// by hand-picked indices, or however suits your layout. $S takes a selector
+// or an ARRAY of nodes (not a single node), and class names are stored
+// lowercase, so use lowercase in both addClass and the selectors below.
 const cells = $S('#5x5-square .cube').nodes;
-cells.slice(0, 9).forEach(c => $S(c).addClass('cellA'));
-cells.slice(9, 25).forEach(c => $S(c).addClass('cellB'));
+$S(cells.slice(0, 9)).addClass('cell-a');
+$S(cells.slice(9, 25)).addClass('cell-b');
 
-$S('#3x3-square .cube').at(4).moveToEach('#5x5-square .cellA', 3000);
-$S('#4x4-square .cube').at(4).moveToEach('#5x5-square .cellB', 3000);
+$S('#3x3-square .cube').at(4).moveToEach('#5x5-square .cell-a', 3000);
+$S('#4x4-square .cube').at(4).moveToEach('#5x5-square .cell-b', 3000);
 $S('#eqn').at(5).change('9 + 16 = 25', { transition: 'fade', dur: 300 });</code></pre>
 	<div class="note"><strong>Why 3 seconds, not less.</strong> 25 cubes migrating at once reads as a blur under ~1s — slow enough to migrate for a full 3 seconds and a viewer can actually track "those 9 went there, those 16 went there." This is the exact duration used to render the real short; a faster value looks fine scrubbing by hand in the editor but reads as a pop in real-time playback.</div>
 	<p>Scrub the timeline (Animations tab) back and forth — the reveal is fully deterministic and reversible, because the destinations are baked from the 5×5 square's <em>actual</em> cell positions at compile time, not hand-typed coordinates. Move the 5×5 square and the reveal re-targets automatically.</p>
@@ -237,12 +239,19 @@ const dir = startLookAt.clone().sub(startPos).normalize();
 const cardScale = 8;
 const cardPos = startPos.clone().sub(dir.clone().multiplyScalar(15)); // behind the camera
 $S('#callcard').moveTo(cardPos.x, cardPos.y, cardPos.z);
-$S('#callcard').scale(cardScale);</code></pre>
-	<div class="note">Face it back toward the camera's start position — <code>lookAt()</code> aims the plane's local -Z at its target, which points the FRONT (+Z) face <em>away</em> from it, so follow with a 180° turn to flip the front face back around. This works for <strong>any</strong> relative angle, not just "same side" vs. "opposite side": <code>$S('#callcard').nodes[0].lookAt(startPos); $S('#callcard').nodes[0].rotateY(Math.PI);</code> (the same math <code>fitCallcardToCamera()</code> in <code>docs/editor/js/Callcard.js</code> uses to auto-orient a freshly-added card). Getting the front/back backwards doesn't hide the card (the material is double-sided) — it shows the card <strong>mirrored</strong>, which is the tell. It starts effectively hidden by being fully transparent (<code>$S('#callcard').nodes[0].material.opacity = 0</code>); fade it in during the reveal below rather than toggling visibility by hand.</div>
+$S('#callcard').scaleTo(cardScale); // absolute: the stencil already fitted the card to the viewport at some other scale
+
+// face the card toward the camera's start position, then make it fully transparent
+$S('#callcard').nodes[0].lookAt(startPos);
+$S('#callcard').nodes[0].material.opacity = 0;
+
+window.pushIn = { dir, cardPos, cardScale };   // the Shell does not keep variables between pastes</code></pre>
+	<div class="note"><strong>Three things in that block that are easy to get wrong.</strong> <code>scaleTo</code> sets an absolute scale; <code>scale</code> multiplies the current one, and the stencil has already scaled the card up to fill the viewport, so <code>scale(8)</code> lands at roughly 160×. <code>lookAt()</code> on a <em>mesh</em> points its local <strong>+Z</strong> (the front face) at the target; only cameras and lights aim -Z, so there is no extra 180° turn to add. This works for any relative angle. Getting the front/back backwards doesn't hide the card (the material is double-sided), it shows the card <strong>mirrored</strong>, which is the tell. And the card starts effectively hidden by being fully transparent (<code>material.opacity = 0</code>); fade it in during the reveal below rather than toggling visibility by hand. The last line is there because each paste is its own scope: the next block reads the values back from <code>window.pushIn</code>.</div>
 
 	<p>Now the reveal: a two-leg <strong>push-in</strong>, not a snap-to-position. Compute the distance where the card's real width exactly spans the camera's horizontal FOV, land a little closer than that (a small overfill reads as "fills the frame" better than an exact fit), and turn to face it while closing that distance:</p>
-	<pre><code>const fov = 36, aspect = 16 / 9;
-const cardWidth = 1.8 * cardScale;
+	<pre><code>const { dir, cardPos, cardScale } = window.pushIn;
+const fov = camera.fov, aspect = 16 / 9;   // the live camera's FOV (50 by default), and a 16:9 render frame
+const cardWidth = 1.8 * cardScale;   // the call card is 1.8 wide by 3.2 tall (portrait) before scaling
 const hFov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(fov) / 2) * aspect);
 const fillDistance = (cardWidth / 2) / Math.tan(hFov / 2) * 0.85; // slight overfill
 
@@ -263,6 +272,10 @@ $S('#callcard').at(8.3).fadeIn(2.2);</code></pre>
 	</ol>
 
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="../../../guides/ANIMATION.md">the animation guide</a> and <a href="../../../guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
+
+	<h2 id="open-finished"><span class="step">9</span> Open the finished scene</h2>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is exactly what these blocks build, plus the Text and Call card stencil steps: the three squares, the triangle, the three labels, the gradient background and the call card, with the 13.5-second timeline from steps 3 to 7. Open it, then scrub the Animations tab: at 7.5&nbsp;s all 25 cells of the two small squares sit on the 5×5, and at 13.5&nbsp;s the call card fills the frame.</p>
+	<div class="note"><strong>What was checked.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, and the result was read back: the labels and triangle land where the blocks say, the 9 and 16 cells match their targets, the call card faces the camera (so it is not mirrored) and ends 7.4 units from it. Rendering (step 8) was not re-run for this revision.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
