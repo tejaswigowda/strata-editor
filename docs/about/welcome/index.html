@@ -73,12 +73,34 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.8em;
+		gap: 0.9em;
 	}
+	.links li.entry { display: flex; gap: 14px; align-items: flex-start; }
+	.links .thumb {
+		flex: 0 0 120px;
+		display: block;
+		line-height: 0;
+	}
+	.links .thumb img {
+		width: 120px;
+		aspect-ratio: 8 / 5;
+		object-fit: cover;
+		border-radius: 6px;
+		border: 1px solid #2a2e36;
+		background: #1a1d23;
+		transition: border-color 0.15s;
+	}
+	.links .thumb:hover img { border-color: #3d5a8a; }
+	.links .body { min-width: 0; }
 	.links a { font-size: 1.02rem; font-weight: 600; }
+	.links .thumb { font-size: 0; }
 	.links .desc { color: #7d8794; font-size: 0.88rem; margin-top: 0.2em; }
 	.links .try { font-size: 0.82rem; font-weight: 400; margin-left: 0.6em; }
 	.status { color: #7d8794; font-size: 0.9rem; }
+	@media (max-width: 420px) {
+		.links .thumb { flex-basis: 84px; }
+		.links .thumb img { width: 84px; }
+	}
 	footer {
 		padding-top: 1em;
 		border-top: 1px solid #2a2e36;
@@ -139,13 +161,43 @@
 				if ( t.hidden ) continue;	// staged entries (e.g. a section that is not live yet)
 
 				const item = document.createElement( 'li' );
+				item.className = 'entry';
+
+				const href = /^https?:\/\//.test( t.href ) ? t.href : '../tutorials/' + t.href;
+
+				// The thumbnail is a second link to the same page, so it is hidden from keyboard
+				// and screen-reader users, who already have the title link.
+				if ( t.thumb ) {
+
+					const thumbLink = document.createElement( 'a' );
+					thumbLink.className = 'thumb';
+					thumbLink.href = href;
+					thumbLink.target = '_blank';
+					thumbLink.rel = 'noopener';
+					thumbLink.tabIndex = - 1;
+					thumbLink.setAttribute( 'aria-hidden', 'true' );
+
+					const img = document.createElement( 'img' );
+					img.src = '../tutorials/' + t.thumb;
+					img.alt = '';
+					img.loading = 'lazy';
+					img.width = 120;
+					img.height = 75;
+					thumbLink.appendChild( img );
+					item.appendChild( thumbLink );
+
+				}
+
+				const body = document.createElement( 'div' );
+				body.className = 'body';
+				item.appendChild( body );
 
 				const link = document.createElement( 'a' );
-				link.href = /^https?:\/\//.test( t.href ) ? t.href : '../tutorials/' + t.href;
+				link.href = href;
 				link.target = '_blank';
 				link.rel = 'noopener';
 				link.textContent = t.title + ' →';
-				item.appendChild( link );
+				body.appendChild( link );
 
 				if ( t.embed ) {
 
@@ -160,14 +212,14 @@
 						tryInCurrentInstance( t.embed );
 
 					} );
-					item.appendChild( tryLink );
+					body.appendChild( tryLink );
 
 				}
 
 				const desc = document.createElement( 'div' );
 				desc.className = 'desc';
 				desc.textContent = t.desc || '';
-				item.appendChild( desc );
+				body.appendChild( desc );
 
 				list.appendChild( item );
 
