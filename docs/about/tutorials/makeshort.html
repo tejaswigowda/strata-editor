@@ -316,6 +316,31 @@ $S('#four').at(53).fadeOut(0.3);
 $S('#eqn').at(53).change('25', { transition: 'fade', dur: 400 });
 $S('#eqn').at(56.5).change('5\u00B2', { transition: 'fade', dur: 400 });
 $S('#eqn').at(60).change('a\u00B2 + b\u00B2 = c\u00B2', { transition: 'fade', dur: 400 });</code></pre>
+	<p>The theorem is stated with letters, so name the sides it talks about. Three more labels, copied from <code>eqn</code> so they keep its font, glow and shadow, sit beside the triangle: <code>a</code> on the vertical leg, <code>b</code> on the horizontal one, and <code>c</code> on the hypotenuse, the side opposite the right angle. They appear one at a time while the subtitle says what each one is, and are gone before the camera turns away at 65&nbsp;s:</p>
+	<pre><code>// 60-65 s: name the sides the theorem talks about: a and b are the legs, c is the hypotenuse
+const src = $S('#eqn').nodes[0];
+function makeSide(name, x, y) {
+  const label = new Mesh(src.geometry.clone(), src.material.clone());
+  label.name = name;
+  label.scale.copy(src.scale).multiplyScalar(0.75);   // smaller than the equation, so they fit beside the figure
+  label.userData.textShadow = true;
+  label.position.set(x, y, 1.24);
+  editor.execute(new AddObjectCommand(editor, label));
+}
+makeSide('sideA', -0.7, 0.9);    // left of the vertical leg
+makeSide('sideB', 2.3, -1.3);    // under the horizontal leg
+makeSide('sideC', 2.8, 1.45);     // just off the hypotenuse
+$S('#sideA, #sideB, #sideC').addClass('label');
+
+$S('#sideA').at(0).change('');
+$S('#sideB').at(0).change('');
+$S('#sideC').at(0).change('');
+$S('#sideA').at(60.5).change('a', { transition: 'fade', dur: 300 });
+$S('#sideB').at(61.3).change('b', { transition: 'fade', dur: 300 });
+$S('#sideC').at(63.2).change('c', { transition: 'fade', dur: 300 });   // as the cue says "hypotenuse"
+$S('#sideA').at(64.5).change('', { transition: 'fade', dur: 300 });
+$S('#sideB').at(64.5).change('', { transition: 'fade', dur: 300 });
+$S('#sideC').at(64.5).change('', { transition: 'fade', dur: 300 });</code></pre>
 	<div class="note"><strong>A label per track.</strong> The two merging labels are faded out with one <code>$S</code> call each (not <code>$S('#three, #four')</code>), so each label keeps its own timeline track and the code panel reads label by label. Content is a step function: the text <em>is</em> whatever was keyed last; <code>transition: 'fade'</code> only cross-fades the swap (see <a href="../../../guides/ANIMATION.md">the animation guide</a>).</div>
 
 	<h2><span class="step">9</span> Two more triples, a quarter turn apart</h2>
@@ -457,7 +482,7 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
 		<tr><td>40 – 43</td><td>Nine red tiles and sixteen teal tiles fly onto the 5×5 pad</td></tr>
 		<tr><td>44 – 47</td><td>"3² + 4²" slides into a row</td></tr>
 		<tr><td>47 – 53</td><td>"9 + 16", then the two numbers close up</td></tr>
-		<tr><td>53 – 65</td><td>"25" (3.5 s), "5²" (3.5 s), then "a² + b² = c²" (5 s)</td></tr>
+		<tr><td>53 – 65</td><td>"25" (3.5 s), "5²" (3.5 s), then "a² + b² = c²" (5 s); the sides are named <em>a</em> (60.5 s), <em>b</em> (61.3 s) and <em>c</em>, the hypotenuse (63.2 s), and the names go at 64.5 s</td></tr>
 		<tr><td>65 – 67.5</td><td>The camera turns 90° to the left, to the 5-12-13 triple</td></tr>
 		<tr><td>66.5 – 75.5</td><td>Triangle; the 5×5 tiles (68 s) and 12×12 tiles (70 s) fade in with "5² = 25" and "12² = 144"; at 72.5 all 169 tiles fly onto the hypotenuse square, "25 + 144", then "= 169 = 13²" (held to 81)</td></tr>
 		<tr><td>81 – 83.5</td><td>Another 90° turn, round to the 8-15-17 triple</td></tr>
@@ -473,17 +498,18 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
   { start: 9.0,  end: 13.0, text: 'The long leg is 4 long.' },
   { start: 14.0, end: 20.0, text: 'A square on the short leg:\n3 \u00D7 3 = 9 tiles.' },
   { start: 24.0, end: 30.0, text: 'A square on the long leg:\n4 \u00D7 4 = 16 tiles.' },
-  { start: 31.5, end: 38.5, text: 'Do 9 and 16 tiles fill a square\non the slanted side?' },
+  { start: 31.5, end: 38.5, text: 'Do 9 and 16 tiles fill a square\non the hypotenuse, the slanted side?' },
   { start: 40.2, end: 43.8, text: 'Watch them move.' },
   { start: 44.0, end: 46.8, text: '3\u00B2 plus 4\u00B2\u2026' },
   { start: 47.0, end: 51.8, text: '\u2026is 9 + 16 tiles.' },
   { start: 53.0, end: 56.3, text: '25 tiles fill it exactly.' },
-  { start: 56.6, end: 59.8, text: 'And 25 is 5\u00B2:\nthe square on the slanted side.' },
-  { start: 60.0, end: 64.8, text: 'In every right triangle:\na\u00B2 + b\u00B2 = c\u00B2' },
+  { start: 56.6, end: 59.8, text: 'And 25 is 5\u00B2:\nthe square on the hypotenuse.' },
+  { start: 60.0, end: 62.4, text: 'In every right triangle:\na\u00B2 + b\u00B2 = c\u00B2' },
+  { start: 62.5, end: 64.9, text: 'a and b are the legs;\nc is the hypotenuse.' },
   { start: 66.0, end: 67.9, text: 'Does it hold for other triples?' },
   { start: 68.0, end: 69.9, text: 'The square on the 5 side:\n25 tiles.' },
   { start: 70.0, end: 72.4, text: 'On the 12 side: 144 tiles.' },
-  { start: 72.5, end: 75.4, text: 'Do they fill the slanted side?' },
+  { start: 72.5, end: 75.4, text: 'Do they fill the square\non the hypotenuse?' },
   { start: 75.6, end: 80.5, text: 'Exactly: 169 tiles.\n5\u00B2 + 12\u00B2 = 13\u00B2.' },
   { start: 82.5, end: 83.9, text: 'One more: 8, 15, 17.' },
   { start: 84.0, end: 85.9, text: 'The square on the 8 side:\n64 tiles.' },
@@ -491,7 +517,7 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
   { start: 88.5, end: 91.4, text: 'Do they fit again?' },
   { start: 91.6, end: 96.5, text: 'Exactly: 289 tiles.\n8\u00B2 + 15\u00B2 = 17\u00B2.' },
   { start: 98.0, end: 100.5, text: 'Made with Strata.' },
-]).length   // 23</code></pre>
+]).length   // 24</code></pre>
 	<div class="note"><strong>Writing cues that fit the picture.</strong> Each cue starts with the thing it describes (the leg at 6 and 9&nbsp;s, the unfolding square at 14 and 24&nbsp;s) and ends before the next beat; none is longer than two short lines, and none overlaps another. Keep a cue on screen at least about a second for every fifteen characters. <code>exportSrt()</code> returns the same cues as <code>.srt</code> text.</div>
 
 	<h2><span class="step">12</span> Choose the camera and render it</h2>
@@ -509,8 +535,8 @@ $S('#PerspectiveCamera').at(97).animate({ to: { rotation: [0, 270, 0] } }, 2500)
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="../../../guides/ANIMATION.md">the animation guide</a> and <a href="../../../guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
 
 	<h2 id="open-finished"><span class="step">13</span> Open the finished scene</h2>
-	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels, the camera, the background and the call card, plus the two extra triples (458 more tiles, their landing cells and captions), with the same 22 timeline tracks, the same 100.5-second clock and the same 23 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, at 78&nbsp;s the 5-12-13 sum is on screen, at 94&nbsp;s the 8-15-17 one, and from 100&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same 22 timeline tracks with the same events at the same times, the same 23 subtitle cues word for word, and a frame at each of twelve times from 0 to 98&nbsp;s, chosen away from the flights, that differs from the published one by under 3% of its pixels. The tumbles themselves are not compared pixel for pixel: each tile's flight is a fixed function of its place in the list, and the published file lists its first triple's tiles in a different order, so the same tiles tumble differently there. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so it was not compared pixel for pixel. (An older saved copy of this scene stored the card's material as opaque, and at full opacity that drew the QR as a blank white box; the editor now keeps the card blending on every load and render, whatever the saved scene says.) Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. The latest revision, cube tiles and the label shadow, was checked less thoroughly: the squares, triangle and triples blocks were pasted into an empty scene and build the same 50 and 458 tiles, now all cubes, and the published scene was played through once on a real GPU with no errors, but the frame comparison above predates it and the label-shadow lines were not re-pasted from this page. Rendering (step 12) was not re-run for this revision. The scene file is now about 4.8&nbsp;MB, nearly all of it baked animation, chiefly the flight paths of the 483 tiles that move; the editor rebuilds them from the timeline on load, so they are a cache, not something to edit.</div>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels (and the a, b, c side names), the camera, the background and the call card, plus the two extra triples (458 more tiles, their landing cells and captions), with 25 timeline tracks (the three side names add one each), the same 100.5-second clock and 24 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, at 78&nbsp;s the 5-12-13 sum is on screen, at 94&nbsp;s the 8-15-17 one, and from 100&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same timeline tracks with the same events at the same times (22 of them before the a, b, c side names were added), the same subtitle cues word for word (23 then), and a frame at each of twelve times from 0 to 98&nbsp;s, chosen away from the flights, that differs from the published one by under 3% of its pixels. The tumbles themselves are not compared pixel for pixel: each tile's flight is a fixed function of its place in the list, and the published file lists its first triple's tiles in a different order, so the same tiles tumble differently there. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so it was not compared pixel for pixel. (An older saved copy of this scene stored the card's material as opaque, and at full opacity that drew the QR as a blank white box; the editor now keeps the card blending on every load and render, whatever the saved scene says.) Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. The latest revisions, cube tiles, the label shadow and the a, b, c side names, were checked less thoroughly: the side-name and subtitle blocks were pasted from this page into the published scene, which then matched what was saved (25 tracks, 24 cues); the squares, triangle and triples blocks were pasted into an empty scene and build the same 50 and 458 tiles, now all cubes, and the published scene was played through once on a real GPU with no errors, but the frame comparison above predates it and the label-shadow lines were not re-pasted from this page. Rendering (step 12) was not re-run for this revision. The scene file is now about 4.8&nbsp;MB, nearly all of it baked animation, chiefly the flight paths of the 483 tiles that move; the editor rebuilds them from the timeline on load, so they are a cache, not something to edit.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
