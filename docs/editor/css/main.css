@@ -727,6 +727,39 @@ body.present-mode #subtitle-preview {
 		text-shadow: 0 0 2px #000, 1px 2px 3px #000, 0 2px 6px rgba( 0, 0, 0, 0.9 );
 	}
 
+/* ── Render tab sub-tabs: Snapshot / Video / 360° / Subtitles ────────────────────────────────────────────
+   The tabs are the sidebar's own (.TabbedPanel .Tabs .Tab: an icon with its label below); this only spreads four of them
+   across the width and sizes the Font Awesome glyph like the sidebar's SVG icons. */
+.render-subtabs {
+	display: flex;
+	margin: 0 0 10px;
+	border-bottom: 1px solid rgba( 128, 128, 128, 0.35 );
+}
+
+	.render-subtabs .Tab {
+		flex: 1 1 0;
+		min-width: 0;
+	}
+
+	.render-subtabs .tab-icon {
+		height: 22px;
+		font-size: 17px;
+	}
+
+	.render-subtabs .Tab:focus-visible {
+		outline: 2px solid currentColor;
+		outline-offset: -2px;
+	}
+
+/* an icon before a button's label */
+.Button .btn-icon {
+	margin-right: 6px;
+}
+
+	.Button .btn-icon:only-child {
+		margin-right: 0;
+	}
+
 /* ── Transport icons (play / pause / stop) — Font Awesome glyphs, coloured on their own, no button background.
    Used by the Timeline toolbar and the play bar. The state shows in the glyph: dimmed at rest, bright on hover,
    glowing while it is the active one. */

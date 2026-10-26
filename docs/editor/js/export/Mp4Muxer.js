@@ -94,8 +94,11 @@ export class Mp4Muxer {
 
 	}
 
-	/** The finished file, as parts for a Blob. */
-	finish() {
+	/**
+	 * The finished file, as parts for a Blob. `extraBoxes` (whole boxes, e.g. the 360 metadata `uuid` box) go right after `ftyp`;
+	 * the sample offsets account for them. Splicing a box in afterwards would shift `mdat` and break every offset.
+	 */
+	finish( extraBoxes = [] ) {
 
 		const n = this.samples.length;
 		if ( n === 0 ) throw new Error( 'Mp4Muxer: no frames were added' );
@@ -105,11 +108,14 @@ export class Mp4Muxer {
 		for ( const s of this.samples ) mdatSize += s.length;
 		if ( mdatSize > 0xffffffff ) throw new Error( 'Mp4Muxer: output larger than 4 GB is not supported' );
 
+		let extraSize = 0;
+		for ( const e of extraBoxes ) extraSize += e.length;
+
 		const moovWithOffset = offset => this._moov( offset );
 		const moovSize = moovWithOffset( 0 ).length; // the size does not depend on the offset's value
-		const moov = moovWithOffset( ftyp.length + moovSize + 8 );
+		const moov = moovWithOffset( ftyp.length + extraSize + moovSize + 8 );
 
-		return [ ftyp, moov, concat( [ u32( mdatSize ), ascii( 'mdat' ) ] ), ...this.samples ];
+		return [ ftyp, ...extraBoxes, moov, concat( [ u32( mdatSize ), ascii( 'mdat' ) ] ), ...this.samples ];
 
 	}
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { UIPanel, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea, UIInput } from './libs/ui.js';
+import { UIPanel, UIDiv, UIRow, UIText, UIButton, UISelect, UINumber, UICheckbox, UITextArea, UIInput } from './libs/ui.js';
 import { holdTimelineAt, getImportedClips } from './intelligence/timelineController.js';
 import { findCallcards, refreshCallcard } from './Callcard.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
@@ -100,7 +100,22 @@ const SPHERICAL_XML = '<?xml version="1.0"?>\n<rdf:SphericalVideo\n' +
 
 const SPHERICAL_UUID = [ 0xff, 0xcc, 0x82, 0x63, 0xf8, 0x55, 0x4a, 0x93, 0x88, 0x14, 0x58, 0x7a, 0x02, 0x52, 0x1f, 0xdd ];
 
-/** Returns a new Blob with the spherical-video "uuid" box spliced in after "ftyp" — or the original blob unchanged if it isn't a plain MP4 this can patch. */
+/** The spherical-video metadata as one finished `uuid` box (Mp4Muxer places it itself, so its sample offsets stay right). */
+function sphericalMetadataBox() {
+
+	const xmlBytes = new TextEncoder().encode( SPHERICAL_XML );
+	const boxSize = 8 + SPHERICAL_UUID.length + xmlBytes.length;
+	const box = new Uint8Array( boxSize );
+	new DataView( box.buffer ).setUint32( 0, boxSize, false );
+	box.set( [ 0x75, 0x75, 0x69, 0x64 ], 4 ); // 'uuid'
+	box.set( SPHERICAL_UUID, 8 );
+	box.set( xmlBytes, 8 + SPHERICAL_UUID.length );
+	return box;
+
+}
+
+/** Returns a new Blob with the spherical-video "uuid" box spliced in after "ftyp" — or the original blob unchanged if it isn't a plain MP4 this can patch.
+ * Only for fragmented MP4 (MediaRecorder): the offsets inside a fragment are relative, so the shift is harmless. */
 async function injectSphericalMetadata( blob ) {
 
 	const buf = new Uint8Array( await blob.arrayBuffer() );
@@ -138,6 +153,16 @@ async function injectSphericalMetadata( blob ) {
 //   Preview (realtime)  canvas.captureStream() + MediaRecorder, paced to the wall clock (MediaRecorder timestamps
 //                       frames by real time). May drop frames; not reproducible.
 
+// A button with a Font Awesome icon before its label (no emoji: the app's icons are Font Awesome).
+function iconButton( icon, label ) {
+
+	const b = new UIButton();
+	b.dom.innerHTML = `<i class="fa-solid fa-${ icon } btn-icon" aria-hidden="true"></i>`;
+	if ( label ) b.dom.appendChild( document.createTextNode( label ) );
+	return b;
+
+}
+
 function SidebarRender( editor ) {
 
 	const signals = editor.signals;
@@ -147,21 +172,71 @@ function SidebarRender( editor ) {
 	// rule as the Shell tab: tab id must differ from the panel's own id).
 	container.setId( 'render-panel' );
 
-	// ── Snapshot (still image of the current scene state) ─────────────────────
+	// ── Sub-tabs: one thing at a time ─────────────────────────────────────────
+	// Snapshot (a still), Video (the timeline to a video file), 360° (the same as an equirectangular video) and Subtitles
+	// (the cue list and the .srt). The progress bar, status, Cancel and preview sit below the panes and stay in view from any tab.
 
-	const snapHeader = new UIRow();
-	snapHeader.add( new UIText( 'Snapshot' ).setFontWeight( 'bold' ) );
-	container.add( snapHeader );
+	const SUBTABS = [ [ 'snapshot', 'Snapshot', 'camera' ], [ 'video', 'Video', 'video' ], [ 'pano', '360\u00b0', 'globe' ], [ 'subtitles', 'Subtitles', 'closed-captioning' ] ];
+	const SUBTAB_KEY = 'strata.render.tab';
+
+	// Same markup as the sidebar's own tabs (.Tabs > .Tab > .tab-icon + .tab-label, styled by the .TabbedPanel rules): an icon with its label below.
+	const tabBar = document.createElement( 'div' );
+	tabBar.className = 'Tabs render-subtabs';
+	tabBar.setAttribute( 'role', 'tablist' );
+	container.dom.appendChild( tabBar );
+
+	const panes = {}, tabButtons = {};
+	for ( const [ id, label, icon ] of SUBTABS ) {
+
+		const b = document.createElement( 'span' );
+		b.className = 'Tab';
+		b.innerHTML = `<span class="tab-icon"><i class="fa-solid fa-${ icon }" aria-hidden="true"></i></span><span class="tab-label">${ label }</span>`;
+		b.setAttribute( 'role', 'tab' );
+		b.tabIndex = 0;
+		b.addEventListener( 'click', () => selectRenderTab( id ) );
+		b.addEventListener( 'keydown', event => { if ( event.key === 'Enter' || event.key === ' ' ) { event.preventDefault(); selectRenderTab( id ); } } );
+		tabBar.appendChild( b );
+		tabButtons[ id ] = b;
+
+		const pane = new UIDiv();
+		pane.dom.className = 'render-subpane';
+		pane.dom.setAttribute( 'role', 'tabpanel' );
+		container.add( pane );
+		panes[ id ] = pane;
+
+	}
+
+	const snapshotPane = panes.snapshot, videoPane = panes.video, panoPane = panes.pano, subtitlesPane = panes.subtitles;
+
+	function selectRenderTab( id ) {
+
+		if ( ! panes[ id ] ) id = 'video';
+		currentTab = id;
+		for ( const [ key ] of SUBTABS ) {
+
+			const on = key === id;
+			panes[ key ].dom.style.display = on ? '' : 'none';
+			tabButtons[ key ].classList.toggle( 'selected', on );
+			tabButtons[ key ].setAttribute( 'aria-selected', on ? 'true' : 'false' );
+
+		}
+
+		try { localStorage.setItem( SUBTAB_KEY, id ); } catch ( e ) { /* storage blocked */ }
+		refreshOutputVisibility();
+
+	}
+
+	// ── Snapshot (still image of the current scene state) ─────────────────────
 
 	const snapHelp = new UIText( 'Saves a still image of the scene as it is right now (no timeline playback), rendered offscreen without the editor grid or gizmos.' );
 	snapHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
-	container.add( snapHelp );
+	snapshotPane.add( snapHelp );
 
 	const snapCameraRow = new UIRow();
 	snapCameraRow.add( new UIText( 'Camera' ).setClass( 'Label' ) );
 	const snapCameraSelect = new UISelect().setWidth( '160px' );
 	snapCameraRow.add( snapCameraSelect );
-	container.add( snapCameraRow );
+	snapshotPane.add( snapCameraRow );
 
 	const snapSizeRow = new UIRow();
 	snapSizeRow.add( new UIText( 'Size' ).setClass( 'Label' ) );
@@ -176,7 +251,7 @@ function SidebarRender( editor ) {
 	} );
 	snapSizeSelect.setValue( 'viewport2x' );
 	snapSizeRow.add( snapSizeSelect );
-	container.add( snapSizeRow );
+	snapshotPane.add( snapSizeRow );
 
 	const snapFormatRow = new UIRow();
 	snapFormatRow.add( new UIText( 'Format' ).setClass( 'Label' ) );
@@ -184,21 +259,21 @@ function SidebarRender( editor ) {
 	snapFormatSelect.setOptions( { 'png': 'PNG', 'jpeg': 'JPEG', 'webp': 'WebP' } );
 	snapFormatSelect.setValue( 'png' );
 	snapFormatRow.add( snapFormatSelect );
-	container.add( snapFormatRow );
+	snapshotPane.add( snapFormatRow );
 
 	const snapTransparentRow = new UIRow();
 	snapTransparentRow.add( new UIText( 'Transparent' ).setClass( 'Label' ) );
 	const snapTransparentCheckbox = new UICheckbox( false );
 	snapTransparentRow.add( snapTransparentCheckbox );
 	snapTransparentRow.add( new UIText( 'background (PNG / WebP)' ).setMarginLeft( '6px' ) );
-	container.add( snapTransparentRow );
+	snapshotPane.add( snapTransparentRow );
 
 	const snapButtonRow = new UIRow();
-	const snapshotButton = new UIButton( '\ud83d\udcf7 Take Snapshot' );
+	const snapshotButton = iconButton( 'camera', 'Take Snapshot' );
 	snapshotButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;';
 	snapshotButton.onClick( function () { takeSnapshot(); } );
 	snapButtonRow.add( snapshotButton );
-	container.add( snapButtonRow );
+	snapshotPane.add( snapButtonRow );
 
 	function refreshSnapshotCameras() {
 
@@ -220,19 +295,11 @@ function SidebarRender( editor ) {
 	signals.sceneGraphChanged.add( refreshSnapshotCameras );
 	signals.viewportCameraChanged.add( refreshSnapshotCameras );
 
-	const snapSeparator = document.createElement( 'hr' );
-	snapSeparator.style.cssText = 'margin:12px 0;border:0;border-top:1px solid rgba(128,128,128,0.35);';
-	container.dom.appendChild( snapSeparator );
-
 	// ── Header ────────────────────────────────────────────────────────────────
-
-	const header = new UIRow();
-	header.add( new UIText( 'Video Render' ).setFontWeight( 'bold' ) );
-	container.add( header );
 
 	const help = new UIText( 'Renders the Universal Timeline to a video. Use the camera sequence below to cut/fade between cameras over time; with no shots, Edit Camera (the viewport nav camera) is used throughout.' );
 	help.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
-	container.add( help );
+	videoPane.add( help );
 
 	// ── Resolution ────────────────────────────────────────────────────────────
 
@@ -248,7 +315,7 @@ function SidebarRender( editor ) {
 	} );
 	resolutionSelect.setValue( '1280x720' );
 	resolutionRow.add( resolutionSelect );
-	container.add( resolutionRow );
+	videoPane.add( resolutionRow );
 
 	// The viewport's "Match render" frame guide (ViewLook.js) reads the flat render size from here.
 	editor.renderOutput = {
@@ -269,7 +336,7 @@ function SidebarRender( editor ) {
 	fpsSelect.setOptions( { '24': '24', '30': '30', '60': '60' } );
 	fpsSelect.setValue( '30' );
 	fpsRow.add( fpsSelect );
-	container.add( fpsRow );
+	videoPane.add( fpsRow );
 
 	// ── Mode: name the guarantee, not a quality level ────────────────────────
 
@@ -279,11 +346,11 @@ function SidebarRender( editor ) {
 	modeSelect.setOptions( { offline: 'Render (offline)', preview: 'Preview (realtime)' } );
 	modeSelect.setValue( 'offline' );
 	modeRow.add( modeSelect );
-	container.add( modeRow );
+	videoPane.add( modeRow );
 
 	const modeHelp = new UIText( '' );
 	modeHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px;line-height:1.4;';
-	container.add( modeHelp );
+	videoPane.add( modeHelp );
 
 	const encoderRow = new UIRow();
 	encoderRow.add( new UIText( 'Encoder' ).setClass( 'Label' ) );
@@ -292,28 +359,28 @@ function SidebarRender( editor ) {
 	encoderSelect.setValue( 'hardware' );
 	encoderSelect.dom.title = 'The frames are identical either way. A hardware H.264 encoder may write different bytes for the same frames on a repeat render; the software encoder writes the same bytes every time, and is slower.';
 	encoderRow.add( encoderSelect );
-	container.add( encoderRow );
+	videoPane.add( encoderRow );
 
 	// Frame range (offline only): inclusive, 0-based. Blank = the first / the last frame. A range render is
 	// splice-safe: frame n is the same picture whether it is rendered alone or inside a full render.
 	const rangeRow = new UIRow();
 	rangeRow.add( new UIText( 'Frames' ).setClass( 'Label' ) );
-	const rangeStart = new UIInput().setWidth( '70px' );
+	const rangeStart = new UIInput( '' ).setWidth( '70px' ); // UIInput( undefined ) would show the text "undefined"
 	rangeStart.dom.placeholder = 'first';
-	const rangeEnd = new UIInput().setWidth( '70px' );
+	const rangeEnd = new UIInput( '' ).setWidth( '70px' );
 	rangeEnd.dom.placeholder = 'last';
 	rangeEnd.dom.style.marginLeft = '6px';
 	rangeRow.add( rangeStart );
 	rangeRow.add( rangeEnd );
-	container.add( rangeRow );
+	videoPane.add( rangeRow );
 
 	const contractText = new UIText( '' );
 	contractText.dom.style.cssText = 'display:block;font-size:11px;opacity:0.85;margin:-4px 0 8px 90px;';
-	container.add( contractText );
+	videoPane.add( contractText );
 
 	const determinismHelp = new UIText( [ DETERMINISM_COPY.temporal, DETERMINISM_COPY.sameDevice, DETERMINISM_COPY.crossDevice ].join( ' ' ) );
 	determinismHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.6;margin:0 0 10px;line-height:1.4;';
-	container.add( determinismHelp );
+	videoPane.add( determinismHelp );
 
 	// What the last offline render cost per frame on this machine, so the next estimate can say so
 	const MS_PER_FRAME_KEY = 'strata.render.msPerFrame';
@@ -355,11 +422,11 @@ function SidebarRender( editor ) {
 	nameInput.dom.title = 'Tokens: {project} {duration} {res} {fps} {date} {time} {camera} {360}. Leave blank for the default.';
 	try { nameInput.setValue( localStorage.getItem( 'strata.render.fileName' ) || '' ); } catch ( e ) { /* storage blocked */ }
 	nameRow.add( nameInput );
-	container.add( nameRow );
+	videoPane.add( nameRow );
 
 	const namePreview = new UIText( '' );
 	namePreview.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px 90px;word-break:break-all;';
-	container.add( namePreview );
+	videoPane.add( namePreview );
 
 	// What the downloaded file is called: the loaded scene's file name, then a readable summary of the render.
 	function projectForNames() {
@@ -407,7 +474,7 @@ function SidebarRender( editor ) {
 	skipSelect.setValue( '0' );
 	skipSelect.onChange( updateDuration );
 	skipRow.add( skipSelect );
-	container.add( skipRow );
+	videoPane.add( skipRow );
 
 	// ── Duration (from the universal timeline — read-only) ───────────────────
 
@@ -420,7 +487,7 @@ function SidebarRender( editor ) {
 	durationRow.add( new UIText( 'Duration' ).setClass( 'Label' ) );
 	const durationText = new UIText( '0.00 s' );
 	durationRow.add( durationText );
-	container.add( durationRow );
+	videoPane.add( durationRow );
 
 	function timelineDuration() {
 
@@ -452,6 +519,7 @@ function SidebarRender( editor ) {
 		renderButton.dom.disabled = ( d <= 0 ) || rendering;
 		equirectButton.dom.disabled = ( d <= 0 ) || rendering;
 		refreshNamePreview();
+		refreshContract();
 
 	}
 
@@ -467,15 +535,15 @@ function SidebarRender( editor ) {
 
 	const seqHeader = new UIRow();
 	seqHeader.add( new UIText( 'Camera Sequence' ).setFontWeight( 'bold' ) );
-	container.add( seqHeader );
+	videoPane.add( seqHeader );
 
 	const seqLane = document.createElement( 'div' );
 	seqLane.style.cssText = 'position:relative;height:34px;border:1px solid rgba(128,128,128,0.4);border-radius:4px;background:rgba(128,128,128,0.12);margin:4px 0 6px;overflow:hidden;';
-	container.dom.appendChild( seqLane );
+	videoPane.dom.appendChild( seqLane );
 
 	const seqControls = document.createElement( 'div' );
 	seqControls.style.cssText = 'margin-bottom:8px;';
-	container.dom.appendChild( seqControls );
+	videoPane.dom.appendChild( seqControls );
 
 	const addShotButton = new UIButton( '+ Add Shot' );
 	addShotButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
@@ -808,17 +876,13 @@ function SidebarRender( editor ) {
 	// exported file's first frame) — that's what an .srt's timestamps mean to
 	// any player, so no skip/tail conversion is needed at render time.
 
-	const subsHeader = new UIRow();
-	subsHeader.add( new UIText( 'Subtitles' ).setFontWeight( 'bold' ) );
-	container.add( subsHeader );
-
-	const subsHelp = new UIText( 'Cue times are OUTPUT video seconds. Hard-burn bakes them into the picture; the .srt sidecar is for embedding downstream (e.g. via ffmpeg).' );
+	const subsHelp = new UIText( 'Cue times are OUTPUT video seconds. Hard-burn and the .srt sidecar are switched on in the Video tab; the .srt is for embedding downstream (e.g. via ffmpeg).' );
 	subsHelp.dom.style.cssText = 'display:block;font-size:10px;opacity:0.65;margin:0 0 6px;line-height:1.35;';
-	container.add( subsHelp );
+	subtitlesPane.add( subsHelp );
 
 	const subsList = document.createElement( 'div' );
 	subsList.style.cssText = 'display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;margin-bottom:6px;';
-	container.dom.appendChild( subsList );
+	subtitlesPane.dom.appendChild( subsList );
 
 	// The scene JSON is the single source of truth: this list only ever READS
 	// the cues from scene.userData.renderSubtitles and WRITES through
@@ -889,7 +953,8 @@ function SidebarRender( editor ) {
 			textArea.onChange( function () { edit( 'text', textArea.getValue(), 'Edit subtitle text' ); } );
 			row.appendChild( textArea.dom );
 
-			const delBtn = new UIButton( '\u2715' );
+			const delBtn = iconButton( 'xmark' );
+			delBtn.dom.title = 'Delete this cue';
 			delBtn.dom.style.cssText = 'height:20px;width:20px;padding:0;border-radius:4px;font-size:10px;flex-shrink:0;';
 			delBtn.onClick( function () { commitCues( shown.filter( ( c, k ) => k !== i ), 'Delete subtitle cue' ); } );
 			row.appendChild( delBtn.dom );
@@ -912,8 +977,8 @@ function SidebarRender( editor ) {
 
 	const subsControls = document.createElement( 'div' );
 	subsControls.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;';
-	container.dom.appendChild( subsControls );
-	container.dom.appendChild( subsStatus );
+	subtitlesPane.dom.appendChild( subsControls );
+	subtitlesPane.dom.appendChild( subsStatus );
 
 	const addCueButton = new UIButton( '+ Add Cue' );
 	addCueButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
@@ -930,7 +995,7 @@ function SidebarRender( editor ) {
 	importSrtInput.type = 'file';
 	importSrtInput.accept = '.srt';
 	importSrtInput.style.display = 'none';
-	container.dom.appendChild( importSrtInput );
+	subtitlesPane.dom.appendChild( importSrtInput );
 	importSrtInput.addEventListener( 'change', function () {
 
 		const file = importSrtInput.files[ 0 ];
@@ -969,13 +1034,21 @@ function SidebarRender( editor ) {
 	const burnCheckbox = new UICheckbox( false );
 	burnRow.add( burnCheckbox );
 	burnRow.add( new UIText( ' Hard-burn subtitles into video' ).setFontSize( '11px' ) );
-	container.add( burnRow );
+	videoPane.add( burnRow );
 
 	const sidecarRow = new UIRow();
 	const sidecarCheckbox = new UICheckbox( true );
 	sidecarRow.add( sidecarCheckbox );
 	sidecarRow.add( new UIText( ' Also export a matching .srt file' ).setFontSize( '11px' ) );
-	container.add( sidecarRow );
+	videoPane.add( sidecarRow );
+
+	// the Render button closes the Video tab's options
+	const buttonRow = new UIRow();
+	const renderButton = new UIButton( 'Render & Export' );
+	renderButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;';
+	renderButton.onClick( function () { startRender( 'flat' ); } );
+	buttonRow.add( renderButton );
+	videoPane.add( buttonRow );
 
 	refreshSubsList();
 
@@ -997,32 +1070,57 @@ function SidebarRender( editor ) {
 	} );
 	equirectResolutionSelect.setValue( '1920x960' );
 	equirectRow.add( equirectResolutionSelect );
-	container.add( equirectRow );
+	panoPane.add( equirectRow );
 
-	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the camera(s) above\u2019s POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time. Records MP4 (360\u00b0 metadata embedded, for YouTube/VR players) and WebM in parallel when the browser supports both — MP4 downloads automatically, WebM is offered as an extra download below. Render (offline) writes the MP4 only.' );
+	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the Camera Sequence\u2019s cameras\u2019 POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time. Records MP4 (360\u00b0 metadata embedded, for YouTube/VR players) and WebM in parallel when the browser supports both — MP4 downloads automatically, WebM is offered as an extra download below. Render (offline) writes the MP4 only.' );
 	equirectHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
-	container.add( equirectHelp );
+	panoPane.add( equirectHelp );
+
+	const panoShared = new UIText( 'Uses the FPS, mode, encoder, frame range, Skip First, file name, subtitle options and Camera Sequence set in the Video tab.' );
+	panoShared.dom.style.cssText = 'display:block;font-size:11px;opacity:0.85;margin:0 0 6px;line-height:1.4;';
+	panoPane.add( panoShared );
+
+	const panoLink = new UIButton( 'Open Video settings' );
+	panoLink.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;margin-bottom:10px;';
+	panoLink.onClick( function () { selectRenderTab( 'video' ); } );
+	panoPane.add( panoLink );
+
+	const panoButtonRow = new UIRow();
+	const equirectButton = new UIButton( 'Render 360 Video' );
+	equirectButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;';
+	equirectButton.onClick( function () { startRender( '360' ); } );
+	panoButtonRow.add( equirectButton );
+	panoPane.add( panoButtonRow );
 
 	// ── Render / Cancel buttons ───────────────────────────────────────────────
 
-	const buttonRow = new UIRow();
+	// The output area (Cancel, progress, status, result, preview) sits below the tabs. It belongs to the tab that produced it, and shows
+	// there; a running render shows on every tab, so it can be watched and cancelled from wherever you are.
+	const outputArea = document.createElement( 'div' );
+	container.dom.appendChild( outputArea );
+	let outputOwner = null; // 'snapshot' | 'video' | 'pano'
+	let currentTab = 'video';
 
-	const renderButton = new UIButton( 'Render & Export' );
-	renderButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;';
-	renderButton.onClick( function () { startRender( 'flat' ); } );
-	buttonRow.add( renderButton );
+	function refreshOutputVisibility() {
 
-	const equirectButton = new UIButton( 'Render 360 Video' );
-	equirectButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;margin-left:6px;';
-	equirectButton.onClick( function () { startRender( '360' ); } );
-	buttonRow.add( equirectButton );
+		outputArea.style.display = ( rendering || ( outputOwner !== null && outputOwner === currentTab ) ) ? '' : 'none';
 
+	}
+
+	function ownOutput( id ) {
+
+		outputOwner = id;
+		refreshOutputVisibility();
+
+	}
+
+	// Cancel belongs to whichever render is running, so it lives with the progress, not in one tab.
+	const cancelRow = new UIRow();
 	const cancelButton = new UIButton( 'Cancel' );
-	cancelButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;margin-left:6px;display:none;';
+	cancelButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;display:none;';
 	cancelButton.onClick( function () { cancelRequested = true; } );
-	buttonRow.add( cancelButton );
-
-	container.add( buttonRow );
+	cancelRow.add( cancelButton );
+	outputArea.appendChild( cancelRow.dom );
 
 	// ── Progress bar + status ─────────────────────────────────────────────────
 
@@ -1031,17 +1129,17 @@ function SidebarRender( editor ) {
 	const progressInner = document.createElement( 'div' );
 	progressInner.style.cssText = 'height:100%;width:0%;background:#08f;transition:width 0.1s linear;';
 	progressOuter.appendChild( progressInner );
-	container.dom.appendChild( progressOuter );
+	outputArea.appendChild( progressOuter );
 
 	const statusText = document.createElement( 'div' );
 	statusText.style.cssText = 'font-size:11px;opacity:0.75;min-height:16px;margin-bottom:8px;';
-	container.dom.appendChild( statusText );
+	outputArea.appendChild( statusText );
 
 	// Separate from statusText (setProgress() overwrites that via textContent
 	// every call, which would wipe out any buttons appended into it).
 	const postRenderActions = document.createElement( 'div' );
 	postRenderActions.style.cssText = 'margin-bottom:8px;';
-	container.dom.appendChild( postRenderActions );
+	outputArea.appendChild( postRenderActions );
 
 	function setProgress( fraction, message ) {
 
@@ -1095,7 +1193,7 @@ function SidebarRender( editor ) {
 
 	const previewWrap = document.createElement( 'div' );
 	previewWrap.style.cssText = 'margin-top:6px;border:1px solid rgba(128,128,128,0.35);border-radius:4px;overflow:hidden;display:none;line-height:0;';
-	container.dom.appendChild( previewWrap );
+	outputArea.appendChild( previewWrap );
 
 	// ── Render pipeline ───────────────────────────────────────────────────────
 
@@ -1341,6 +1439,7 @@ function SidebarRender( editor ) {
 		const transparent = snapTransparentCheckbox.getValue() && format !== 'jpeg';
 
 		rendering = true;
+		ownOutput( 'snapshot' );
 		snapshotButton.dom.disabled = true;
 		snapshotMessage( 'Taking snapshot\u2026' );
 		await sleep( 30 ); // let the status paint before the synchronous render
@@ -1385,7 +1484,7 @@ function SidebarRender( editor ) {
 
 			postRenderActions.innerHTML = '';
 
-			const saveAgain = new UIButton( '\u2b07 Download again' );
+			const saveAgain = iconButton( 'download', 'Download again' );
 			saveAgain.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;margin-right:6px;';
 			saveAgain.onClick( function () { downloadBlob( blob, filename ); } );
 			postRenderActions.appendChild( saveAgain.dom );
@@ -1424,6 +1523,7 @@ function SidebarRender( editor ) {
 		} finally {
 
 			rendering = false;
+			refreshOutputVisibility();
 			snapshotButton.dom.disabled = false;
 
 		}
@@ -1506,6 +1606,7 @@ function SidebarRender( editor ) {
 		}
 
 		rendering = true;
+		ownOutput( is360 ? 'pano' : 'video' );
 		cancelRequested = false;
 		renderButton.dom.disabled = true;
 		equirectButton.dom.disabled = true;
@@ -2065,6 +2166,7 @@ function SidebarRender( editor ) {
 			renderer.dispose();
 
 			rendering = false;
+			refreshOutputVisibility();
 			cancelButton.dom.style.display = 'none';
 			hideRenderOverlay();
 			signals.resumeViewportRendering.dispatch();
@@ -2099,13 +2201,8 @@ function SidebarRender( editor ) {
 		const outputs = [];
 		if ( offline ) {
 
-			let blob = new Blob( muxer.finish(), { type: 'video/mp4' } );
-			if ( is360 ) {
-
-				setProgress( 1, 'Embedding 360\u00b0 metadata\u2026' );
-				blob = await injectSphericalMetadata( blob );
-
-			}
+			// 360: the metadata box goes into the muxer, which writes the sample offsets knowing it is there
+			const blob = new Blob( muxer.finish( is360 ? [ sphericalMetadataBox() ] : [] ), { type: 'video/mp4' } );
 
 			outputs.push( { blob, ext: 'mp4', isMp4: true } );
 
@@ -2139,7 +2236,7 @@ function SidebarRender( editor ) {
 		// disk. Surface a real button instead: a genuine click always passes.
 		for ( const extra of extraOutputs ) {
 
-			const extraButton = new UIButton( `\u2b07 Download .${ extra.ext } version` );
+			const extraButton = iconButton( 'download', `Download .${ extra.ext } version` );
 			extraButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;margin-right:6px;';
 			extraButton.onClick( function () { downloadBlob( extra.blob, `${ baseName }.${ extra.ext }` ); } );
 			postRenderActions.appendChild( extraButton.dom );
@@ -2148,7 +2245,7 @@ function SidebarRender( editor ) {
 
 		if ( sidecarCheckbox.getValue() && getCues().length > 0 ) {
 
-			const srtLink = new UIButton( '\u2b07 Download matching .srt' );
+			const srtLink = iconButton( 'download', 'Download matching .srt' );
 			srtLink.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
 			srtLink.onClick( function () {
 
@@ -2186,6 +2283,10 @@ function SidebarRender( editor ) {
 	updateDuration();
 	refreshMode();
 	refreshSequencer();
+
+	let startTab = 'video';
+	try { startTab = localStorage.getItem( SUBTAB_KEY ) || 'video'; } catch ( e ) { /* storage blocked */ }
+	selectRenderTab( startTab );
 
 	return container;
 

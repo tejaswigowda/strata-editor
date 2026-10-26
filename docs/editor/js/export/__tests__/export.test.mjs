@@ -205,6 +205,24 @@ test( 'every sample offset points at that sample\u2019s bytes', () => {
 
 } );
 
+test( 'an extra box after ftyp (360 metadata) leaves every sample offset right', () => {
+
+	const m = new Mp4Muxer( { width: 64, height: 48, fps: 30 } );
+	for ( let k = 0; k < 20; k ++ ) m.addChunk( new Uint8Array( [ 9, 8, 7, k ] ), { key: k === 0, timestampUs: Math.round( k * 1e6 / 30 ), description: k === 0 ? new Uint8Array( 4 ) : undefined } );
+	const extra = new Uint8Array( [ 0, 0, 0, 12, 0x75, 0x75, 0x69, 0x64, 1, 2, 3, 4 ] ); // a 12-byte 'uuid' box
+	const parts = m.finish( [ extra ] );
+	let size = 0;
+	for ( const p of parts ) size += p.length;
+	const bytes = new Uint8Array( size );
+	let at = 0;
+	for ( const p of parts ) { bytes.set( p, at ); at += p.length; }
+	assert.deepStrictEqual( boxesIn( bytes ).map( b => b.type ), [ 'ftyp', 'uuid', 'moov', 'mdat' ] );
+	const stco = find( bytes, [ 'moov', 'trak', 'mdia', 'minf', 'stbl', 'stco' ] );
+	const first = u32at( bytes, stco.body + 8 );
+	assert.deepStrictEqual( [ ...bytes.subarray( first, first + 4 ) ], [ 9, 8, 7, 0 ] );
+
+} );
+
 test( 'keyframes are listed in stss, 1-based', () => {
 
 	const bytes = build( 70, { keyEvery: 30 } );
