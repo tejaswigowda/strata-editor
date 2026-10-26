@@ -328,166 +328,18 @@ function SidebarRender( editor ) {
 	};
 	resolutionSelect.dom.addEventListener( 'change', function () { window.dispatchEvent( new CustomEvent( 'strata:render-output-changed' ) ); } );
 
-	// ── FPS ───────────────────────────────────────────────────────────────────
-
-	const fpsRow = new UIRow();
-	fpsRow.add( new UIText( 'FPS' ).setClass( 'Label' ) );
-	const fpsSelect = new UISelect().setWidth( '160px' );
-	fpsSelect.setOptions( { '24': '24', '30': '30', '60': '60' } );
-	fpsSelect.setValue( '30' );
-	fpsRow.add( fpsSelect );
-	videoPane.add( fpsRow );
-
-	// ── Mode: name the guarantee, not a quality level ────────────────────────
-
-	const modeRow = new UIRow();
-	modeRow.add( new UIText( 'Mode' ).setClass( 'Label' ) );
-	const modeSelect = new UISelect().setWidth( '160px' );
-	modeSelect.setOptions( { offline: 'Render (offline)', preview: 'Preview (realtime)' } );
-	modeSelect.setValue( 'offline' );
-	modeRow.add( modeSelect );
-	videoPane.add( modeRow );
-
-	const modeHelp = new UIText( '' );
-	modeHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px;line-height:1.4;';
-	videoPane.add( modeHelp );
-
-	const encoderRow = new UIRow();
-	encoderRow.add( new UIText( 'Encoder' ).setClass( 'Label' ) );
-	const encoderSelect = new UISelect().setWidth( '160px' );
-	encoderSelect.setOptions( { hardware: 'Hardware if available (fast)', software: 'Software (byte-identical files)' } );
-	encoderSelect.setValue( 'hardware' );
-	encoderSelect.dom.title = 'The frames are identical either way. A hardware H.264 encoder may write different bytes for the same frames on a repeat render; the software encoder writes the same bytes every time, and is slower.';
-	encoderRow.add( encoderSelect );
-	videoPane.add( encoderRow );
-
-	// Frame range (offline only): inclusive, 0-based. Blank = the first / the last frame. A range render is
-	// splice-safe: frame n is the same picture whether it is rendered alone or inside a full render.
-	const rangeRow = new UIRow();
-	rangeRow.add( new UIText( 'Frames' ).setClass( 'Label' ) );
-	const rangeStart = new UIInput( '' ).setWidth( '70px' ); // UIInput( undefined ) would show the text "undefined"
-	rangeStart.dom.placeholder = 'first';
-	const rangeEnd = new UIInput( '' ).setWidth( '70px' );
-	rangeEnd.dom.placeholder = 'last';
-	rangeEnd.dom.style.marginLeft = '6px';
-	rangeRow.add( rangeStart );
-	rangeRow.add( rangeEnd );
-	videoPane.add( rangeRow );
-
-	const contractText = new UIText( '' );
-	contractText.dom.style.cssText = 'display:block;font-size:11px;opacity:0.85;margin:-4px 0 8px 90px;';
-	videoPane.add( contractText );
-
-	const determinismHelp = new UIText( [ DETERMINISM_COPY.temporal, DETERMINISM_COPY.sameDevice, DETERMINISM_COPY.crossDevice ].join( ' ' ) );
-	determinismHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.6;margin:0 0 10px;line-height:1.4;';
-	videoPane.add( determinismHelp );
-
-	// What the last offline render cost per frame on this machine, so the next estimate can say so
-	const MS_PER_FRAME_KEY = 'strata.render.msPerFrame';
-	const readMsPerFrame = () => { try { return parseFloat( localStorage.getItem( MS_PER_FRAME_KEY ) ) || 0; } catch ( e ) { return 0; } };
-
-	function refreshMode() {
-
-		const offline = modeSelect.getValue() === 'offline';
-		modeHelp.setValue( offline ? DETERMINISM_COPY.offline : DETERMINISM_COPY.preview );
-		rangeRow.dom.style.display = offline ? '' : 'none';
-		encoderRow.dom.style.display = offline ? '' : 'none';
-		determinismHelp.dom.style.display = offline ? '' : 'none';
-		refreshContract();
-
-	}
-
-	function refreshContract() {
-
-		const d = timelineDuration();
-		if ( modeSelect.getValue() !== 'offline' || ! ( d > 0 ) ) { contractText.setValue( '' ); return; }
-		const fps = parseInt( fpsSelect.getValue(), 10 );
-		const total = frameCount( outputDuration( d ), fps );
-		const range = resolveRange( rangeStart.getValue().trim(), rangeEnd.getValue().trim(), total );
-		contractText.setValue( range.error ? range.error : contractLine( range.count, fps, readMsPerFrame() ) );
-
-	}
-
-	modeSelect.dom.addEventListener( 'change', refreshMode );
-	fpsSelect.dom.addEventListener( 'change', refreshContract );
-	rangeStart.dom.addEventListener( 'input', refreshContract );
-	rangeEnd.dom.addEventListener( 'input', refreshContract );
-
-	// ── File name (a template; blank = the default) ──────────────────────────
-
-	const nameRow = new UIRow();
-	nameRow.add( new UIText( 'File name' ).setClass( 'Label' ) );
-	const nameInput = new UIInput().setWidth( '160px' );
-	nameInput.dom.placeholder = DEFAULT_VIDEO_TEMPLATE;
-	nameInput.dom.title = 'Tokens: {project} {duration} {res} {fps} {date} {time} {camera} {360}. Leave blank for the default.';
-	try { nameInput.setValue( localStorage.getItem( 'strata.render.fileName' ) || '' ); } catch ( e ) { /* storage blocked */ }
-	nameRow.add( nameInput );
-	videoPane.add( nameRow );
-
-	const namePreview = new UIText( '' );
-	namePreview.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px 90px;word-break:break-all;';
-	videoPane.add( namePreview );
-
-	// What the downloaded file is called: the loaded scene's file name, then a readable summary of the render.
-	function projectForNames() {
-
-		const status = editor.work && editor.work.status ? editor.work.status() : null;
-		const file = status ? sourceFile( status.key ) : '';
-		if ( file ) return file;
-		const sceneName = editor.scene.name;
-		return sceneName && sceneName !== 'Scene' ? sceneName : '';
-
-	}
-
-	function videoBaseName( { width, height, fps, duration, is360 } ) {
-
-		return renderBaseName( { template: nameInput.getValue().trim() || DEFAULT_VIDEO_TEMPLATE, project: projectForNames(), width, height, fps, duration, is360 } );
-
-	}
-
-	function refreshNamePreview() {
-
-		const [ width, height ] = resolutionSelect.getValue().split( 'x' ).map( Number );
-		const d = timelineDuration();
-		namePreview.setValue( '\u2192 ' + videoBaseName( { width, height, fps: parseInt( fpsSelect.getValue(), 10 ), duration: d > 0 ? outputDuration( d ) : 0, is360: false } ) + '.mp4' );
-
-	}
-
-	nameInput.dom.addEventListener( 'input', function () {
-
-		try { localStorage.setItem( 'strata.render.fileName', nameInput.getValue() ); } catch ( e ) { /* storage blocked */ }
-		refreshNamePreview();
-
-	} );
-	resolutionSelect.dom.addEventListener( 'change', refreshNamePreview );
-	fpsSelect.dom.addEventListener( 'change', refreshNamePreview );
-	// The scene's file name is only known once a load finishes, so also refresh when the scene changes or the panel is used.
-	signals.sceneGraphChanged.add( refreshNamePreview );
-	container.dom.addEventListener( 'pointerenter', refreshNamePreview );
-
-	// ── Skip First (trims the render's in-point, e.g. to cut a static lead-in) ─
-
-	const skipRow = new UIRow();
-	skipRow.add( new UIText( 'Skip First' ).setClass( 'Label' ) );
-	const skipSelect = new UISelect().setWidth( '160px' );
-	skipSelect.setOptions( { '0': 'None', '1': '1 s', '2': '2 s', '3': '3 s', '4': '4 s', '5': '5 s' } );
-	skipSelect.setValue( '0' );
-	skipSelect.onChange( updateDuration );
-	skipRow.add( skipSelect );
-	videoPane.add( skipRow );
-
-	// ── Duration (from the universal timeline — read-only) ───────────────────
+	// ── The settings of one kind of render ────────────────────────────────────
+	// Video and 360° each get a full, independent set (FPS, mode, encoder, frame range, file name, Skip First, duration, subtitle options),
+	// built by createSettings() into their own tab. What is shared is scene data, not a setting: the Camera Sequence and the subtitle cues.
 
 	// Extra time recorded after the timeline's last frame, holding it frozen —
 	// gives viewers a beat to register the final state instead of the video
 	// cutting off the instant the last animation ends.
 	const RENDER_TAIL_SECONDS = 2;
 
-	const durationRow = new UIRow();
-	durationRow.add( new UIText( 'Duration' ).setClass( 'Label' ) );
-	const durationText = new UIText( '0.00 s' );
-	durationRow.add( durationText );
-	videoPane.add( durationRow );
+	// What the last offline render cost per frame on this machine, so the next estimate can say so
+	const MS_PER_FRAME_KEY = 'strata.render.msPerFrame';
+	const readMsPerFrame = () => { try { return parseFloat( localStorage.getItem( MS_PER_FRAME_KEY ) ) || 0; } catch ( e ) { return 0; } };
 
 	function timelineDuration() {
 
@@ -500,26 +352,199 @@ function SidebarRender( editor ) {
 
 	}
 
-	function skipSeconds( duration ) {
+	// What the downloaded file is called: the loaded scene's file name, then a readable summary of the render.
+	function projectForNames() {
 
-		return Math.min( parseFloat( skipSelect.getValue() ) || 0, duration );
+		const status = editor.work && editor.work.status ? editor.work.status() : null;
+		const file = status ? sourceFile( status.key ) : '';
+		if ( file ) return file;
+		const sceneName = editor.scene.name;
+		return sceneName && sceneName !== 'Scene' ? sceneName : '';
 
 	}
 
-	function outputDuration( duration ) {
+	const allSettings = [];
 
-		return Math.max( 0, duration - skipSeconds( duration ) ) + RENDER_TAIL_SECONDS;
+	function createSettings( pane, kind, resolutionSelect ) {
+
+		const is360 = kind === '360';
+		const S = { kind, is360, resolutionSelect };
+		allSettings.push( S );
+
+		// FPS
+		const fpsRow = new UIRow();
+		fpsRow.add( new UIText( 'FPS' ).setClass( 'Label' ) );
+		S.fpsSelect = new UISelect().setWidth( '160px' );
+		S.fpsSelect.setOptions( { '24': '24', '30': '30', '60': '60' } );
+		S.fpsSelect.setValue( '30' );
+		fpsRow.add( S.fpsSelect );
+		pane.add( fpsRow );
+
+		// Mode: name the guarantee, not a quality level
+		const modeRow = new UIRow();
+		modeRow.add( new UIText( 'Mode' ).setClass( 'Label' ) );
+		S.modeSelect = new UISelect().setWidth( '160px' );
+		S.modeSelect.setOptions( { offline: 'Render (offline)', preview: 'Preview (realtime)' } );
+		S.modeSelect.setValue( 'offline' );
+		modeRow.add( S.modeSelect );
+		pane.add( modeRow );
+
+		const modeHelp = new UIText( '' );
+		modeHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px;line-height:1.4;';
+		pane.add( modeHelp );
+
+		const encoderRow = new UIRow();
+		encoderRow.add( new UIText( 'Encoder' ).setClass( 'Label' ) );
+		S.encoderSelect = new UISelect().setWidth( '160px' );
+		S.encoderSelect.setOptions( { hardware: 'Hardware if available (fast)', software: 'Software (byte-identical files)' } );
+		S.encoderSelect.setValue( 'hardware' );
+		S.encoderSelect.dom.title = 'The frames are identical either way. A hardware H.264 encoder may write different bytes for the same frames on a repeat render; the software encoder writes the same bytes every time, and is slower.';
+		encoderRow.add( S.encoderSelect );
+		pane.add( encoderRow );
+
+		// Frame range (offline only): inclusive, 0-based. Blank = the first / the last frame. A range render is
+		// splice-safe: frame n is the same picture whether it is rendered alone or inside a full render.
+		const rangeRow = new UIRow();
+		rangeRow.add( new UIText( 'Frames' ).setClass( 'Label' ) );
+		S.rangeStart = new UIInput( '' ).setWidth( '70px' ); // UIInput( undefined ) would show the text "undefined"
+		S.rangeStart.dom.placeholder = 'first';
+		S.rangeEnd = new UIInput( '' ).setWidth( '70px' );
+		S.rangeEnd.dom.placeholder = 'last';
+		S.rangeEnd.dom.style.marginLeft = '6px';
+		rangeRow.add( S.rangeStart );
+		rangeRow.add( S.rangeEnd );
+		pane.add( rangeRow );
+
+		const contractText = new UIText( '' );
+		contractText.dom.style.cssText = 'display:block;font-size:11px;opacity:0.85;margin:-4px 0 8px 90px;';
+		pane.add( contractText );
+
+		const determinismHelp = new UIText( [ DETERMINISM_COPY.temporal, DETERMINISM_COPY.sameDevice, DETERMINISM_COPY.crossDevice ].join( ' ' ) );
+		determinismHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.6;margin:0 0 10px;line-height:1.4;';
+		pane.add( determinismHelp );
+
+		// File name (a template; blank = the default)
+		const nameRow = new UIRow();
+		nameRow.add( new UIText( 'File name' ).setClass( 'Label' ) );
+		S.nameInput = new UIInput().setWidth( '160px' );
+		S.nameInput.dom.placeholder = DEFAULT_VIDEO_TEMPLATE;
+		S.nameInput.dom.title = 'Tokens: {project} {duration} {res} {fps} {date} {time} {camera} {360}. Leave blank for the default.';
+		const nameKey = is360 ? 'strata.render.fileName360' : 'strata.render.fileName';
+		try { S.nameInput.setValue( localStorage.getItem( nameKey ) || '' ); } catch ( e ) { /* storage blocked */ }
+		nameRow.add( S.nameInput );
+		pane.add( nameRow );
+
+		const namePreview = new UIText( '' );
+		namePreview.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px 90px;word-break:break-all;';
+		pane.add( namePreview );
+
+		// Skip First (trims the render's in-point, e.g. to cut a static lead-in)
+		const skipRow = new UIRow();
+		skipRow.add( new UIText( 'Skip First' ).setClass( 'Label' ) );
+		S.skipSelect = new UISelect().setWidth( '160px' );
+		S.skipSelect.setOptions( { '0': 'None', '1': '1 s', '2': '2 s', '3': '3 s', '4': '4 s', '5': '5 s' } );
+		S.skipSelect.setValue( '0' );
+		skipRow.add( S.skipSelect );
+		pane.add( skipRow );
+
+		// Duration (from the universal timeline: read-only)
+		const durationRow = new UIRow();
+		durationRow.add( new UIText( 'Duration' ).setClass( 'Label' ) );
+		const durationText = new UIText( '0.00 s' );
+		durationRow.add( durationText );
+		pane.add( durationRow );
+
+		// Subtitle options: the controls exist now, and the tab adds them where they belong in its layout
+		S.burnCheckbox = new UICheckbox( false );
+		S.sidecarCheckbox = new UICheckbox( true );
+		S.addSubtitleOptions = function () {
+
+			const burnRow = new UIRow();
+			burnRow.add( S.burnCheckbox );
+			burnRow.add( new UIText( ' Hard-burn subtitles into video' ).setFontSize( '11px' ) );
+			pane.add( burnRow );
+
+			const sidecarRow = new UIRow();
+			sidecarRow.add( S.sidecarCheckbox );
+			sidecarRow.add( new UIText( ' Also export a matching .srt file' ).setFontSize( '11px' ) );
+			pane.add( sidecarRow );
+
+		};
+
+		S.skipSeconds = duration => Math.min( parseFloat( S.skipSelect.getValue() ) || 0, duration );
+		S.outputDuration = duration => Math.max( 0, duration - S.skipSeconds( duration ) ) + RENDER_TAIL_SECONDS;
+
+		S.videoBaseName = ( { width, height, fps, duration } ) =>
+			renderBaseName( { template: S.nameInput.getValue().trim() || DEFAULT_VIDEO_TEMPLATE, project: projectForNames(), width, height, fps, duration, is360 } );
+
+		S.refreshContract = function () {
+
+			const d = timelineDuration();
+			if ( S.modeSelect.getValue() !== 'offline' || ! ( d > 0 ) ) { contractText.setValue( '' ); return; }
+			const fps = parseInt( S.fpsSelect.getValue(), 10 );
+			const total = frameCount( S.outputDuration( d ), fps );
+			const range = resolveRange( S.rangeStart.getValue().trim(), S.rangeEnd.getValue().trim(), total );
+			contractText.setValue( range.error ? range.error : contractLine( range.count, fps, readMsPerFrame() ) );
+
+		};
+
+		S.refreshMode = function () {
+
+			const offline = S.modeSelect.getValue() === 'offline';
+			modeHelp.setValue( offline ? DETERMINISM_COPY.offline : DETERMINISM_COPY.preview );
+			rangeRow.dom.style.display = offline ? '' : 'none';
+			encoderRow.dom.style.display = offline ? '' : 'none';
+			determinismHelp.dom.style.display = offline ? '' : 'none';
+			S.refreshContract();
+
+		};
+
+		S.refreshNamePreview = function () {
+
+			const [ width, height ] = S.resolutionSelect.getValue().split( 'x' ).map( Number );
+			const d = timelineDuration();
+			namePreview.setValue( '\u2192 ' + S.videoBaseName( { width, height, fps: parseInt( S.fpsSelect.getValue(), 10 ), duration: d > 0 ? S.outputDuration( d ) : 0 } ) + '.mp4' );
+
+		};
+
+		S.refreshDuration = function () {
+
+			const d = timelineDuration();
+			durationText.setValue( d > 0 ? `${ d.toFixed( 2 ) } s (renders ${ S.outputDuration( d ).toFixed( 2 ) } s)` : 'Timeline is empty' );
+			S.refreshNamePreview();
+			S.refreshContract();
+
+		};
+
+		S.modeSelect.dom.addEventListener( 'change', S.refreshMode );
+		S.fpsSelect.dom.addEventListener( 'change', S.refreshContract );
+		S.fpsSelect.dom.addEventListener( 'change', S.refreshNamePreview );
+		S.rangeStart.dom.addEventListener( 'input', S.refreshContract );
+		S.rangeEnd.dom.addEventListener( 'input', S.refreshContract );
+		S.skipSelect.onChange( S.refreshDuration );
+		resolutionSelect.dom.addEventListener( 'change', S.refreshNamePreview );
+		S.nameInput.dom.addEventListener( 'input', function () {
+
+			try { localStorage.setItem( nameKey, S.nameInput.getValue() ); } catch ( e ) { /* storage blocked */ }
+			S.refreshNamePreview();
+
+		} );
+		// The scene's file name is only known once a load finishes, so also refresh when the scene changes or the panel is used.
+		signals.sceneGraphChanged.add( S.refreshNamePreview );
+		container.dom.addEventListener( 'pointerenter', S.refreshNamePreview );
+
+		return S;
 
 	}
+
+	const flat = createSettings( videoPane, 'flat', resolutionSelect );
 
 	function updateDuration() {
 
 		const d = timelineDuration();
-		durationText.setValue( d > 0 ? `${ d.toFixed( 2 ) } s (renders ${ outputDuration( d ).toFixed( 2 ) } s)` : 'Timeline is empty' );
 		renderButton.dom.disabled = ( d <= 0 ) || rendering;
 		equirectButton.dom.disabled = ( d <= 0 ) || rendering;
-		refreshNamePreview();
-		refreshContract();
+		for ( const S of allSettings ) S.refreshDuration();
 
 	}
 
@@ -1030,17 +1055,7 @@ function SidebarRender( editor ) {
 	} );
 	subsControls.appendChild( exportSrtButton.dom );
 
-	const burnRow = new UIRow();
-	const burnCheckbox = new UICheckbox( false );
-	burnRow.add( burnCheckbox );
-	burnRow.add( new UIText( ' Hard-burn subtitles into video' ).setFontSize( '11px' ) );
-	videoPane.add( burnRow );
-
-	const sidecarRow = new UIRow();
-	const sidecarCheckbox = new UICheckbox( true );
-	sidecarRow.add( sidecarCheckbox );
-	sidecarRow.add( new UIText( ' Also export a matching .srt file' ).setFontSize( '11px' ) );
-	videoPane.add( sidecarRow );
+	flat.addSubtitleOptions();
 
 	// the Render button closes the Video tab's options
 	const buttonRow = new UIRow();
@@ -1053,14 +1068,16 @@ function SidebarRender( editor ) {
 	refreshSubsList();
 
 	// ── 360 (equirectangular) video ────────────────────────────────────────────
-	// Reuses the Camera/FPS/Skip/shot-sequence/subtitle settings above — only
-	// the output resolution differs (must be 2:1 for a standard equirect video).
-	// The shot sequence's cameras contribute POSITION only; orientation and FOV
-	// are meaningless for a 360 video (the viewer looks in every direction), so
-	// no camera-aspect pinning happens for this mode.
+	// Its own settings, all in this tab: the 360 resolution (must be 2:1 for a standard equirect video) and a full set of the others.
+	// Only scene data is shared with the Video tab: the Camera Sequence, whose cameras contribute POSITION only (orientation and FOV are
+	// meaningless for a 360 video, the viewer looks in every direction, so no camera-aspect pinning happens), and the subtitle cues.
+
+	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the Camera Sequence\u2019s cameras\u2019 POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time. Records MP4 (360\u00b0 metadata embedded, for YouTube/VR players) and WebM in parallel when the browser supports both — MP4 downloads automatically, WebM is offered as an extra download below. Render (offline) writes the MP4 only.' );
+	equirectHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
+	panoPane.add( equirectHelp );
 
 	const equirectRow = new UIRow();
-	equirectRow.add( new UIText( '360 Resolution' ).setClass( 'Label' ) );
+	equirectRow.add( new UIText( 'Resolution' ).setClass( 'Label' ) );
 	const equirectResolutionSelect = new UISelect().setWidth( '160px' );
 	equirectResolutionSelect.setOptions( {
 		'3840x1920': '3840 × 1920 (2:1)',
@@ -1072,18 +1089,13 @@ function SidebarRender( editor ) {
 	equirectRow.add( equirectResolutionSelect );
 	panoPane.add( equirectRow );
 
-	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the Camera Sequence\u2019s cameras\u2019 POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time. Records MP4 (360\u00b0 metadata embedded, for YouTube/VR players) and WebM in parallel when the browser supports both — MP4 downloads automatically, WebM is offered as an extra download below. Render (offline) writes the MP4 only.' );
-	equirectHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
-	panoPane.add( equirectHelp );
+	const pano = createSettings( panoPane, '360', equirectResolutionSelect );
 
-	const panoShared = new UIText( 'Uses the FPS, mode, encoder, frame range, Skip First, file name, subtitle options and Camera Sequence set in the Video tab.' );
-	panoShared.dom.style.cssText = 'display:block;font-size:11px;opacity:0.85;margin:0 0 6px;line-height:1.4;';
+	const panoShared = new UIText( 'The cameras come from the Camera Sequence, and the cues from Subtitles; both are scene data you edit in their own tabs.' );
+	panoShared.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:4px 0 6px;line-height:1.4;';
 	panoPane.add( panoShared );
 
-	const panoLink = new UIButton( 'Open Video settings' );
-	panoLink.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;margin-bottom:10px;';
-	panoLink.onClick( function () { selectRenderTab( 'video' ); } );
-	panoPane.add( panoLink );
+	pano.addSubtitleOptions();
 
 	const panoButtonRow = new UIRow();
 	const equirectButton = new UIButton( 'Render 360 Video' );
@@ -1535,6 +1547,7 @@ function SidebarRender( editor ) {
 		if ( rendering ) return;
 
 		const is360 = kind === '360';
+		const S = is360 ? pano : flat; // this render's own settings: the 360° tab's, or the Video tab's
 
 		const duration = timelineDuration();
 		if ( ! ( duration > 0 ) ) {
@@ -1544,7 +1557,7 @@ function SidebarRender( editor ) {
 
 		}
 
-		const offline = modeSelect.getValue() === 'offline';
+		const offline = S.modeSelect.getValue() === 'offline';
 		const mimes = offline ? [] : pickExportMimes( kind );
 		if ( ! offline && mimes.length === 0 ) {
 
@@ -1556,9 +1569,9 @@ function SidebarRender( editor ) {
 		const shots = getShots().slice();
 		const fallbackCamera = editor.camera; // no shots -> render through Edit Camera throughout
 		const [ width, height ] = ( is360 ? equirectResolutionSelect : resolutionSelect ).getValue().split( 'x' ).map( Number );
-		const fps = parseInt( fpsSelect.getValue(), 10 );
-		const skip = skipSeconds( duration );
-		const renderLength = outputDuration( duration );
+		const fps = parseInt( S.fpsSelect.getValue(), 10 );
+		const skip = S.skipSeconds( duration );
+		const renderLength = S.outputDuration( duration );
 		const totalFrames = frameCount( renderLength, fps );
 
 		// Offline: pick an H.264 level this browser's encoder accepts, and the frame range, before anything is touched.
@@ -1579,7 +1592,7 @@ function SidebarRender( editor ) {
 
 			}
 
-			range = resolveRange( rangeStart.getValue().trim(), rangeEnd.getValue().trim(), totalFrames );
+			range = resolveRange( S.rangeStart.getValue().trim(), S.rangeEnd.getValue().trim(), totalFrames );
 			if ( range.error ) {
 
 				setProgress( 0, range.error );
@@ -1589,7 +1602,7 @@ function SidebarRender( editor ) {
 
 			for ( const codec of avcCodecCandidates( width, height, fps ) ) {
 
-				const config = { codec, width, height, bitrate: targetBitrate( width, height, fps ), framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality', hardwareAcceleration: encoderSelect.getValue() === 'software' ? 'prefer-software' : 'no-preference' };
+				const config = { codec, width, height, bitrate: targetBitrate( width, height, fps ), framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality', hardwareAcceleration: S.encoderSelect.getValue() === 'software' ? 'prefer-software' : 'no-preference' };
 				let support = null;
 				try { support = await VideoEncoder.isConfigSupported( config ); } catch ( e ) { /* try the next level */ }
 				if ( support && support.supported ) { avc = support.config; break; }
@@ -1974,7 +1987,7 @@ function SidebarRender( editor ) {
 
 			}
 
-			if ( burnCheckbox.getValue() ) {
+			if ( S.burnCheckbox.getValue() ) {
 
 				const cue = activeCueAt( getCues(), outT );
 				if ( cue && cue.text ) drawBurnedCaption( ctx, width, height, cue.text );
@@ -2193,7 +2206,7 @@ function SidebarRender( editor ) {
 
 		// a partial range is named for its frames, so it cannot be mistaken for the whole film when it is spliced in
 		const partial = offline && ( range.start !== 0 || range.end !== totalFrames - 1 );
-		const baseName = videoBaseName( { width, height, fps, duration: outputDuration( duration ), is360 } ) + ( partial ? `_frames-${ range.start }-${ range.end }` : '' );
+		const baseName = S.videoBaseName( { width, height, fps, duration: S.outputDuration( duration ) } ) + ( partial ? `_frames-${ range.start }-${ range.end }` : '' );
 
 		// One output per recorder (360 mode may have recorded MP4 + WebM in
 		// parallel off the same stream) — MP4 first so it's always the
@@ -2243,7 +2256,7 @@ function SidebarRender( editor ) {
 
 		}
 
-		if ( sidecarCheckbox.getValue() && getCues().length > 0 ) {
+		if ( S.sidecarCheckbox.getValue() && getCues().length > 0 ) {
 
 			const srtLink = iconButton( 'download', 'Download matching .srt' );
 			srtLink.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
@@ -2281,7 +2294,7 @@ function SidebarRender( editor ) {
 	}
 
 	updateDuration();
-	refreshMode();
+	for ( const S of allSettings ) S.refreshMode();
 	refreshSequencer();
 
 	let startTab = 'video';
