@@ -212,8 +212,8 @@ editor.execute(new AddObjectCommand(editor, tri));</code></pre>
 	</ol>
 	<p>You never set their text in the panel. Every word they show comes from <code>.change()</code> events on the timeline, so the placeholder "THREE.JS" is overwritten at 0&nbsp;s. Position them and give them a class like anything else:</p>
 	<pre><code>$S('#three').moveTo(-1, 3.1, 1.24);     // beside the top of the vertical leg
-$S('#four').moveTo(2.5, -4.8, 1.24);    // under the 4x4
-$S('#eqn').moveTo(-1.3, -2.4, 1.24);    // where the sum will be assembled
+$S('#four').moveTo(5.6, -0.8, 1.24);    // beside the end of the horizontal leg, clear of the subtitles
+$S('#eqn').moveTo(-1.3, -3.1, 1.24);    // where the sum will be assembled, above the subtitle band
 $S('#three, #four, #eqn').addClass('label');</code></pre>
 
 	<h2><span class="step">4</span> Background and a glow for the text</h2>
@@ -238,6 +238,7 @@ $S('.label').nodes.forEach(o => {
 // white text over a bright tile needs an edge: a black drop shadow, offset down and to the right
 $S('.label').nodes.forEach(o => { o.userData.textShadow = true; });</code></pre>
 	<p>The shadow is a black copy of the label that the editor draws behind it and keeps in step with it: it follows every <code>change()</code>, every fade and every move, so it needs no keyframes of its own. It is not saved in the scene; only the <code>textShadow</code> flag is. Give <code>userData.textShadow</code> an object, such as <code>{ size: 0.1 }</code>, for a longer shadow. Cues on the video use the same idea: the subtitles have a black outline and shadow too.</p>
+	<div class="note"><strong>Keep the text out of the subtitle band.</strong> Subtitles are drawn over the bottom sixth of the frame, and a two-line cue is taller than a one-line one. Anything the film writes in the world has to stay above that band, or a caption and a cue sit on top of each other and neither can be read. That is why the <code>4</code> label sits beside the 4×4 rather than under it, why the sum row is at y = −3.1 (low enough that <code>b</code> has room above the theorem, high enough to clear the cues), and why the two extra triples, with their captions, are raised 2.2 units in step 9. Check any placement by scrubbing to a time when a two-line cue is on screen.</div>
 
 	<h2><span class="step">5</span> The camera and the end card</h2>
 	<p class="lede">The film is shot by a camera that lives in the scene, so it can be animated and chosen as a render shot. It looks straight down −Z at the middle of the figure. The rest of the film is the camera turning on the spot, a quarter turn at a time: left to a second triple, round to a third, and finally to the end card, which sits 15 units off to the camera's right.</p>
@@ -275,7 +276,7 @@ $S('#four').at(0).change('');
 $S('#four').at(9).change('4', { transition: 'fade', dur: 400 });
 $S('#4x4-square #4row1 .cube').at(9).animate({ to: { positionY: -0.6, scaleY: 0.2, scaleX: 0.9 } }, 100);
 $S('#4x4-square #4row1 .cube').at(9).fadeIn(0.8);
-$S('#four').at(23).animate({ to: { positionX: 2.5, positionY: -4.8 } }, 800);
+$S('#four').at(23).animate({ to: { positionX: 5.8, positionY: -2.5 } }, 800);   // settles beside the middle of the 4x4
 $S('#4x4-square #4row1 .cube').at(24).animate({ to: { positionY: -1, scaleY: 1, scaleX: 1 } }, 400);
 $S('#4x4-square #4row2 .cube, #4x4-square #4row3 .cube, #4x4-square #4row4 .cube').at(24).fadeIn(1);
 $S('#four').at(26).change('4\u00B2', { transition: 'fade', dur: 400 });</code></pre>
@@ -302,15 +303,15 @@ $S('#3x3-square .cube, #4x4-square .cube').at(40).moveToEach('#5x5-square .cube'
 	<p class="lede">While the tiles are still settling, the labels slide to the bottom into the shape of the sum: <code>3² + 4²</code>, which turns into <code>9 + 16</code>, closes up into <code>25</code>, and is then restated as <code>5²</code> and as the theorem itself. All of it is <code>.change()</code> on the three labels. Each phrase is held for three to five seconds, because a viewer needs that long to read it and connect it to what just happened on screen.</p>
 	<pre><code>// 44-60 s: the sum, read off the screen. Each phrase stays up 3-5 s: long enough to read.
 $S('#eqn').at(0).change('');
-$S('#three').at(44).animate({ to: { positionX: -2.9, positionY: -2.4 } }, 800);
-$S('#four').at(44).animate({ to: { positionX: -0.2, positionY: -2.4 } }, 800);
+$S('#three').at(44).animate({ to: { positionX: -2.9, positionY: -3.1 } }, 800);
+$S('#four').at(44).animate({ to: { positionX: -0.2, positionY: -3.1 } }, 800);
 $S('#eqn').at(44).change('+', { transition: 'fade', dur: 400 });
 
 $S('#three').at(47).change('9', { transition: 'fade', dur: 400 });
 $S('#four').at(47).change('16', { transition: 'fade', dur: 400 });
 
-$S('#three').at(52).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
-$S('#four').at(52).animate({ to: { positionX: -1.3, positionY: -2.4 } }, 1000);
+$S('#three').at(52).animate({ to: { positionX: -1.3, positionY: -3.1 } }, 1000);
+$S('#four').at(52).animate({ to: { positionX: -1.3, positionY: -3.1 } }, 1000);
 $S('#three').at(53).fadeOut(0.3);
 $S('#four').at(53).fadeOut(0.3);
 $S('#eqn').at(53).change('25', { transition: 'fade', dur: 400 });
@@ -412,14 +413,15 @@ function makeTriple(id, p, q, c, target, yaw) {
   editor.execute(new AddObjectCommand(editor, outer));
 }
 
-makeTriple('t2', 5, 12, 13, [-17, 0.68, 20], 90);    // a quarter turn to the camera's left
-makeTriple('t3', 8, 15, 17, [3, 0.68, 40], 180);     // behind the camera's start
+makeTriple('t2', 5, 12, 13, [-17, 2.88, 20], 90);    // a quarter turn to the camera's left
+makeTriple('t3', 8, 15, 17, [3, 2.88, 40], 180);     // behind the camera's start
 
 $S('#t2-p &gt; *, #t2-q &gt; *, #t3-p &gt; *, #t3-q &gt; *').addClass('tile');
 $S('#t2-pad &gt; *, #t3-pad &gt; *').addClass('cell');
 [$S('.tile').nodes.length, $S('.cell').nodes.length]   // [458, 458]</code></pre>
 	<div class="note"><strong>Why these tiles have no black borders.</strong> The 3-4-5 tiles draw a border by carrying a child line object, and a class on a node also matches everything inside it, so <code>.cube</code> matches both the tiles and their borders. That is harmless when every target is a tile too, but here the targets are empty groups with no borders, so a selector that matched borders would pair the wrong things. These tiles are therefore plain meshes (a little under 1 wide, so a gap shows) in two shades laid out like a checkerboard. They share one geometry and two materials per square; the editor logs a warning that a shared material is animated on several nodes, which is exactly what the fade-in wants.</div>
-	<div class="note"><strong>Why the yaw is the group's own rotation.</strong> A camera that has turned <var>yaw</var>° about Y looks along a direction that turns with it, and an object with the same <code>rotation.y</code> has its front toward that camera. So the triple at <code>[-17, 0.68, 20]</code> (20 units to the left of the camera) is turned 90°, the one at <code>[3, 0.68, 40]</code> (20 units behind it) 180°, and the end card on the right 270° (−90°). Because the figure is built inside a scaled, turned group, every position inside it is written in the figure's own flat frame, exactly like the 3-4-5.</div>
+	<div class="note"><strong>Why the yaw is the group's own rotation.</strong> A camera that has turned <var>yaw</var>° about Y looks along a direction that turns with it, and an object with the same <code>rotation.y</code> has its front toward that camera. So the triple at <code>[-17, 2.88, 20]</code> (20 units to the left of the camera) is turned 90°, the one at <code>[3, 2.88, 40]</code> (20 units behind it) 180°, and the end card on the right 270° (−90°). Because the figure is built inside a scaled, turned group, every position inside it is written in the figure's own flat frame, exactly like the 3-4-5.</div>
+	<div class="note"><strong>Why the targets are at y = 2.88, not 0.68.</strong> The camera is at y = 0.68, and <code>makeTriple</code> centres the figure with its hypotenuse square included, but that square stays invisible until the tiles land on it. Before the flight the legs' squares therefore sit low in the frame, and a caption below them falls inside the subtitle band. Raising each figure and its caption by 2.2 units lifts both clear of it; the finished figure, with its hypotenuse square, still fits at the top of the frame.</div>
 	<p>Each triple gets one caption, copied from the <code>eqn</code> label so it keeps the font, the glow and the size (and gets the shadow flag too), then placed below its figure in the figure's own frame:</p>
 	<pre><code>// One caption per triple, copied from the first label so it keeps the font, the glow and the size.
 const src = $S('#eqn').nodes[0];
@@ -434,8 +436,8 @@ function makeCaption(name, target, yaw) {
   label.position.set(target[0] + dx * Math.cos(a) + dz * Math.sin(a), target[1] + dy, target[2] - dx * Math.sin(a) + dz * Math.cos(a));
   editor.execute(new AddObjectCommand(editor, label));
 }
-makeCaption('eqn2', [-17, 0.68, 20], 90);
-makeCaption('eqn3', [3, 0.68, 40], 180);
+makeCaption('eqn2', [-17, 2.88, 20], 90);
+makeCaption('eqn3', [3, 2.88, 40], 180);
 $S('#eqn2, #eqn3').addClass('label');</code></pre>
 	<p>Now the clock. The existing film is untouched up to 56.5&nbsp;s. After that the beats are spaced for a voice reading the subtitles aloud (see step 11): the theorem stays on screen for nine seconds while its letters are explained, and each triple then gets 22&nbsp;seconds, and they follow the same beat as the 3-4-5: a 2.5-second quarter turn, the triangle, the two squares of tiles fading in one at a time with their areas as captions, then all the tiles tumbling onto the hypotenuse square (3 seconds, in selector-list order, so the first leg's tiles take the first cells), ending on the sum. The lift is measured in the figure's own units, and these figures are scaled down (by about 0.35 and 0.26), so <code>arc: 8</code> and <code>arc: 10</code> lift the tiles about as far in the world as <code>arc: 3</code> does on the full-size 3-4-5:</p>
 	<pre><code>// 71.8-93.8 s: a quarter turn to the left, the 5-12-13 triple
