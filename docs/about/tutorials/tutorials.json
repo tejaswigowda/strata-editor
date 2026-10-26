@@ -21,10 +21,10 @@
 		"title": "Hardy–Weinberg as a square",
 		"href": "hardy-weinberg.html",
 		"group": "Animation and rendering",
-		"blurb": "The Hardy–Weinberg law p² + 2pq + q² = 1 as a visual proof: a square cut at p and q, four pieces as four kinds of child, and the heterozygotes as two rectangles. Built with the JS Shell.",
+		"blurb": "The Hardy–Weinberg law as a square: p² + 2pq + q² for one round of random mating, then a count of the alleles that shows p and q are unchanged, with the assumptions listed. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/hw.jpg",
-		"desc": "Allele frequencies as areas: cut a square of tiles at p and q, name each piece as a kind of child (AA, Aa, Aa, aa), let it fall apart, sort the pieces under their terms of p² + 2pq + q², with the two Aa pieces stacked under 2pq, and put it back together as (p + q)² = 1 — all with the JS Shell, the Universal Timeline and the camera sequence.",
-		"embed": "#repo=tejaswigowda/test1&file=hw.json&present=true"
+		"desc": "Cut a square of tiles at p and q, name each piece as a kind of child (AA, Aa, Aa, aa), sort the pieces under their terms of (p + q)² = p² + 2pq + q², with the two Aa pieces stacked under 2pq; then give up every child's two alleles into two bins and measure the bins with the same p and q rulers that measured the parents, to show the allele frequencies are unchanged — all with the JS Shell, the Universal Timeline and the camera sequence, in nine materials.",
+		"embed": "#repo=tejaswigowda/test1@dbe91d4e829316cf229ceb4642b108115068f4b0&file=hw.json&present=true"
 	},
 	{
 		"title": "Why cells are small: surface area to volume",
