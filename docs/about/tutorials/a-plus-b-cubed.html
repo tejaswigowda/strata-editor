@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build the (a + b)³ proof in 3D — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: build a 3D visual proof of (a + b)³ = a³ + 3a²b + 3ab² + b³ in Strata with the JS Shell: a whole cube that is cut and falls apart into eight coloured blocks, five cameras, an x-ray, an equation that grows, and subtitles.">
+<!--
+	/about/tutorials/a-plus-b-cubed.html — a from-scratch, by-hand tutorial.
+	Every snippet is real Strata surface (JS Shell globals + the public
+	$S().at()/.fadeIn()/.fade()/.animate()/.change()/.setKeys() grammar
+	documented in guides/ANIMATION.md and guides/CAMERA_PATHS.md). Paste each
+	block into the Shell tab in order and the proof builds up incrementally.
+	Static page, no build step, no third-party calls. The finished scene it
+	reproduces is a+b-cubed.json in tejaswigowda/test1.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure {
+		margin: 1.2em 0;
+	}
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+	iframe{
+		width: 100%;
+		height: 500px;
+		border: none;
+	}
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Build the (a + b)³ proof in 3D</h1>
+	<iframe src="../../#repo=tejaswigowda/test1&amp;file=a%2Bb-cubed.json&amp;present=true"></iframe>
+
+	<p class="tagline">A 49-second visual proof that <em>(a + b)³ = a³ + 3a²b + 3ab² + b³</em>, with no numbers in it. It starts with the cube whole: a cube whose side is cut into a long part <em>a</em> and a short part <em>b</em>. The cube falls apart into eight blocks of four kinds, the blocks sort themselves by kind, and each kind lands under its own term of the expanded equation, each term in the colour of its blocks. Unlike the flat Pythagorean short, this one needs depth: solid blocks, shadows on a floor and a wall, a glass cube, five cameras that cut between each other, cutting planes, an x-ray that turns the other blocks to glass, and an equation that grows as the blocks arrive. It is built by hand with the JS Shell. Open the <a href="../../">editor</a>, load an empty scene, open the <strong>Shell</strong> tab and paste each block in order, or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=a%2Bb-cubed.json&amp;branch=main">a+b-cubed.json</a> (<a href="#open-finished">the last step</a>).</p>
+
+	<h2><span class="step">1</span> The plan: four kinds of block, four colours</h2>
+	<p class="lede">Cut each edge of a big cube into two parts, a long one (<em>a</em>) and a short one (<em>b</em>). The three cuts through the cube make 2 × 2 × 2 = 8 blocks. Count them by how many of their three sides are long:</p>
+	<table class="cuts">
+		<tr><th>Colour</th><th>Blocks</th><th>Shape</th><th>Term</th></tr>
+		<tr><td style="color:#ff4d6a">coral</td><td>1</td><td>a × a × a</td><td>a³</td></tr>
+		<tr><td style="color:#ffb703">gold</td><td>3 slabs</td><td>a × a × b</td><td>3a²b</td></tr>
+		<tr><td style="color:#a78bfa">violet</td><td>3 bars</td><td>a × b × b</td><td>3ab²</td></tr>
+		<tr><td style="color:#14e0c8">aqua</td><td>1</td><td>b × b × b</td><td>b³</td></tr>
+	</table>
+	<p>The volume of the big cube is (a + b)³, and it is the sum of its eight blocks. That is the whole proof; the film only has to let you see it, so it starts with the whole cube, cuts it, and takes it apart. The film never states a length: <em>a</em> is drawn 3 units long and <em>b</em> 2 units long in the code below, only so that the two parts look different.</p>
+	<p>Each block is a single box, not a pile of unit cubes, so the whole scene is a few dozen objects. The plan for the clock (all times in seconds):</p>
+	<table class="cuts">
+		<tr><th>Time</th><th>What happens</th></tr>
+		<tr><td>0.8</td><td>The title <em>(a + b)³</em> appears over the whole cube</td></tr>
+		<tr><td>5.8 – 7.6</td><td>A ruler under the cube shows its side split into <em>a</em> (coral) and <em>b</em> (aqua)</td></tr>
+		<tr><td>8.3 – 11.4</td><td>Three pale planes slide in, one per axis: the cuts</td></tr>
+		<tr><td>10.4 – 12.6</td><td>The cube falls apart: each block steps away from the middle, towards the side where it was cut. The glass cube stays behind, faint</td></tr>
+		<tr><td>19.4 – 22.2</td><td><em>= a³</em> appears, and the coral cube flies to its place under it, smaller</td></tr>
+		<tr><td>24.6 – 27.4</td><td><em>+ 3a²b</em>, and the three gold slabs fly under it and close up into the shape they made in the cube</td></tr>
+		<tr><td>29.6 – 32.4</td><td>The same for the three violet bars; <em>+ 3ab²</em></td></tr>
+		<tr><td>34.7 – 37.5</td><td>The aqua cube; <em>+ b³</em>. Every kind is under its term</td></tr>
+		<tr><td>40 – 45.8</td><td>The x-ray: each kind of block in turn, the rest turned to glass, while the equation is read out</td></tr>
+		<tr><td>46.5</td><td>Cut to the end card</td></tr>
+	</table>
+	<p>The cameras cut at 10, 18.2, 34.3 and 46.5 s. Everything below is a paste into the Shell, in order, into a scene that is empty.</p>
+
+	<h2><span class="step">2</span> A room, a floor and two lights</h2>
+	<p class="lede">The same trick as in the Pythagorean short: a box seen from the inside is a room with four walls, so every camera has a wall behind the blocks. This time there is also a floor, just under the cube, for the shadows to land on, and the key light sits up and to the right, so the blocks throw their shadows to the left and back. The fill light is a <code>HemisphereLight</code>; the Shell does not have that class as a bare name, so it is written <code>THREE.HemisphereLight</code>.</p>
+	<pre><code>// a room around the scene: walls, ceiling and floor in one box seen from the inside
+const room = new Mesh(new BoxGeometry(80, 40, 80),
+  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(0, 2, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+// a floor just under the cube, so the shadows have somewhere to land
+const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -3;
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// one key light up and to the right, one soft fill
+const key = new PointLight(0xfff1dd, 5.5, 0, 0);
+key.name = 'KeyLight';
+key.position.set(7, 11, 9);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 90;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));</code></pre>
+
+	<h2><span class="step">3</span> The eight blocks</h2>
+	<p class="lede">One loop builds all eight, and they are built where they belong, so the cube is whole from the start. The blocks of one kind live in one group (<code>g-a3</code>, <code>g-a2b</code>, <code>g-ab2</code>, <code>g-b3</code>, each at the middle of its blocks and with the blocks placed relative to it), so that later the whole kind can fly, shrink and turn as one body; each block remembers where it sits in the cube (<code>userData.home</code>), for the way back. A block's name says what it is: <code>a3</code>, <code>b3</code>, <code>a2b-x</code> (the slab whose short side, <em>b</em>, runs along x), <code>ab2-x</code> (the bar whose long side runs along x). The trick is <code>span(len)</code>: along each axis the long part sits at the low end of the big cube and the short part at the high end, so a block's position follows from its three lengths. Every block gets its own material, so that it can fade on its own, and a black border (<code>hasEdgeOutline</code>), which is what keeps neighbouring blocks of the same colour apart.</p>
+	<pre><code>// (a + b)^3 = a^3 + 3a^2b + 3ab^2 + b^3: a big cube whose side is cut into a long part (a) and a short part (b)
+// is cut by those cuts into 8 blocks of 4 kinds. a is drawn 3 long and b 2 long; the film never says so.
+const A = 3, B = 2, H = (A + B) / 2, GAP = 0.05;
+const COLOR = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };
+const span = len =&gt; (len === A ? [-H, -H + A] : [-H + A, H]);       // an a-length sits at the low end of its axis, a b-length at the high end
+
+// name, kind, then the length of the block along x, y and z
+const PIECES = [
+  ['a3', 'a3', A, A, A],
+  ['a2b-x', 'a2b', B, A, A], ['a2b-y', 'a2b', A, B, A], ['a2b-z', 'a2b', A, A, B],      // three slabs: a x a x b
+  ['ab2-x', 'ab2', A, B, B], ['ab2-y', 'ab2', B, A, B], ['ab2-z', 'ab2', B, B, A],      // three bars: a x b x b
+  ['b3', 'b3', B, B, B]
+];
+// each kind lives in its own group, so that later the whole kind can move, shrink and turn as one piece.
+// A group sits at the middle of its blocks, and the blocks inside it are placed relative to that middle.
+const boxes = PIECES.map(([name, kind, lx, ly, lz]) =&gt; ({ name, kind, lx, ly, lz, x: span(lx), y: span(ly), z: span(lz) }));
+const KINDS = ['a3', 'a2b', 'ab2', 'b3'];
+for (const kind of KINDS) {
+  const mine = boxes.filter(b =&gt; b.kind === kind);
+  const lo = [0, 1, 2].map(i =&gt; Math.min(...mine.map(b =&gt; [b.x, b.y, b.z][i][0])));
+  const hi = [0, 1, 2].map(i =&gt; Math.max(...mine.map(b =&gt; [b.x, b.y, b.z][i][1])));
+  const centre = lo.map((v, i) =&gt; (v + hi[i]) / 2);
+  const group = new Group();
+  group.name = 'g-' + kind;
+  group.position.set(...centre);
+  const color = COLOR[kind];
+  for (const b of mine) {
+    const block = new Mesh(new BoxGeometry(b.lx - GAP, b.ly - GAP, b.lz - GAP),
+      new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, roughness: 0.5, metalness: 0.1 }));
+    block.name = b.name;
+    block.position.set((b.x[0] + b.x[1]) / 2 - centre[0], (b.y[0] + b.y[1]) / 2 - centre[1], (b.z[0] + b.z[1]) / 2 - centre[2]);
+    block.userData.home = block.position.toArray();       // where it sits in the whole cube, for the way back
+    block.castShadow = block.receiveShadow = true;
+    block.userData.hasEdgeOutline = true;                  // a black border, drawn by the viewport
+    group.add(block);
+  }
+  editor.execute(new AddObjectCommand(editor, group));
+}
+$S('#a3').addClass('a3');
+$S('#b3').addClass('b3');
+$S('#a2b-x, #a2b-y, #a2b-z').addClass('a2b');
+$S('#ab2-x, #ab2-y, #ab2-z').addClass('ab2');
+$S('.a3, .a2b, .ab2, .b3').addClass('piece').nodes.length      // 8</code></pre>
+	<figure>
+		<img src="screenshots/ab3-whole.png" alt="The whole cube seen from the front left: gold slabs, violet bars, an aqua corner on the top, with white edges and the title (a + b) cubed above it." loading="lazy">
+		<figcaption>2 seconds in: the cube is whole. Four colours, one for each kind of block.</figcaption>
+	</figure>
+	<p>Each kind also gets a class, so that later one line can address all three slabs (<code>.a2b</code>) or all three bars (<code>.ab2</code>).</p>
+
+	<h2><span class="step">4</span> The glass cube and the ruler</h2>
+	<p class="lede">A frame of twelve thin white boxes marks the edges of the big cube. It is what the explosion leaves behind, a faint reminder of the whole. Under the front edge a ruler shows the split of one side: <em>a</em> in coral, the colour of the <em>a</em>-cube, and <em>b</em> in aqua, the colour of the <em>b</em>-cube, so the two lengths carry their colours into the cubes made of them.</p>
+	<pre><code>// the target: a glass cube with bright edges, and a ruler under it that shows how its side splits into a and b
+const edge = (w, h, d, x, y, z) =&gt; {
+  const m = new Mesh(new BoxGeometry(w, h, d), new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.9 }));
+  m.name = 'FrameEdge';
+  m.position.set(x, y, z);
+  return m;
+};
+const frame = new Group();
+frame.name = 'Frame';
+const t = 0.06, h = 2.5;
+for (const y of [-h, h]) for (const z of [-h, h]) frame.add(edge(5 + t, t, t, 0, y, z));   // 4 edges along x
+for (const x of [-h, h]) for (const z of [-h, h]) frame.add(edge(t, 5 + t, t, x, 0, z));   // 4 along y
+for (const x of [-h, h]) for (const y of [-h, h]) frame.add(edge(t, t, 5 + t, x, y, 0));   // 4 along z
+editor.execute(new AddObjectCommand(editor, frame));
+$S('#Frame &gt; *').addClass('frameedge');
+
+// the ruler: a in coral (the colour of the a-cube), b in aqua (the b-cube), end to end along the front bottom edge
+const bar = (len, x, color, name) =&gt; {
+  const m = new Mesh(new BoxGeometry(len - 0.06, 0.2, 0.2), new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 }));
+  m.name = name;
+  m.position.set(x, -2.85, 2.5);
+  return m;
+};
+editor.execute(new AddObjectCommand(editor, bar(3, -1, 0xff4d6a, 'RulerA')));
+editor.execute(new AddObjectCommand(editor, bar(2, 1.5, 0x14e0c8, 'RulerB')));
+$S('#RulerA, #RulerB').addClass('ruler');</code></pre>
+	<figure>
+		<img src="screenshots/ab3-ruler.png" alt="The whole cube with a coral and an aqua ruler along its front bottom edge, and the title above." loading="lazy">
+		<figcaption>7.4 seconds in: the ruler splits the side into a (coral) and b (aqua).</figcaption>
+	</figure>
+
+	<h2><span class="step">5</span> Five cameras</h2>
+	<p class="lede">A shot camera is an ordinary camera with a track of keys: <code>$S('#camHero').setKeys([{ t, pos, lookAt }, …], { smooth: true })</code> plays one smooth curve through them (see <a href="../../../guides/CAMERA_PATHS.md">Editing camera moves</a>). Writing keys by hand is tedious, so <code>orbit</code> writes them: azimuth, radius and height from the start to the end of a move, aimed at a point, one key every few seconds. There are four working cameras and the end-card camera: a slow <em>hero</em> view of the whole cube, a <em>low</em> view for the explosion (it has to be further back, since the blocks fly out), and two <em>front</em> views for the row, aimed at the row and its equation. They all stay in the front half-circle (azimuth −30° to 40°), because the equation is a row of text that faces the front, and it would shrink to a sliver from the side.</p>
+	<pre><code>// five cameras: a slow hero view of the whole cube, a low view for the explosion, two front views for the rows, and one for the end card
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+
+// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds
+function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 3) {
+  const n = Math.max(1, Math.round((t1 - t0) / step));
+  const keys = [];
+  for (let i = 0; i &lt;= n; i++) {
+    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);
+    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });
+  }
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+}
+
+const hero = addCamera('camHero', 40), low = addCamera('camLow', 40), front = addCamera('camFront', 40);
+const last = addCamera('camFinal', 40), end = addCamera('camCard', 50);
+orbit(hero, 0.001, 10, 15, 40, 15.5, 6.5, 5.5, [0, 1.4, 0]);      // round the front corner of the whole cube
+orbit(low, 10, 18.2, -30, -12, 20, 0.5, 2, [0, 1, 0]);            // from the left and low, while the blocks fly apart
+orbit(front, 18.2, 34.3, 12, -6, 16, 4, 3, [1.5, 2.6, 0], 4);      // from the front, aimed at the row of blocks and its equation
+orbit(last, 34.3, 46.5, -6, 0, 14.5, 3, 3, [1.5, 2.6, 0], 4);
+end.position.set(14.6, 0.5, 0);                                   // faces the end card, which hangs on the right-hand wall
+end.lookAt(30, 0.5, 0);</code></pre>
+	<p>Before its first key a camera waits where its <code>position</code> and <code>lookAt</code> say, so each one is also placed at the start of its move.</p>
+
+	<h2><span class="step">6</span> The equation, in colour</h2>
+	<p class="lede">The equation is nine labels in a row: the title, <em>=</em>, four terms and three plus signs. Each term has the colour of its blocks. They are ordinary objects hung above the cube, which is why the cameras stay in the front half-circle. Open <strong>Stencils → Mesh → Text</strong> and click it <em>once</em>; the block copies that label eight times, so every copy has the same font.</p>
+	<p>A label's text begins at the label's own origin, so each label's <code>x</code> is where its text starts. The widths come from the font (the sum of the glyph advances, in units of the font size, times the label's scale): <em>(a + b)³</em> is 4.72 wide, <em>=</em> and <em>+</em> 0.83, <em>a³</em> 1.35, <em>3a²b</em> and <em>3ab²</em> 3.00, <em>b³</em> 1.39. At a scale of 0.6 and a gap of 0.45 between labels the row is 13.7 wide, which fits in the frame of every camera, and the first label starts at −6.83.</p>
+	<pre><code>// the equation, as nine labels in a row above the cube: each term in the colour of its pieces.
+// Text starts at a label's own origin, so each label's x is where its text begins: the widths come from the font.
+const tpl = $S('#Text').nodes[0];
+tpl.material.emissiveIntensity = 0.7;
+const WHITE = 0xffffff, C = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };
+const ROW = [                              // name, colour, x where the text begins
+  ['lead', WHITE, -6.83], ['eq', WHITE, -3.55], ['tA', C.a3, -2.6], ['p1', WHITE, -1.34], ['tB', C.a2b, -0.39],
+  ['p2', WHITE, 1.86], ['tC', C.ab2, 2.8], ['p3', WHITE, 5.05], ['tD', C.b3, 6.0]
+];
+for (const [name, color, x] of ROW) {
+  const label = name === 'lead' ? tpl : new Mesh(tpl.geometry.clone(), tpl.material.clone());
+  label.name = name;
+  label.material.color = new Color(color);
+  label.material.emissive = new Color(color);
+  label.material.emissiveIntensity = 0.7;
+  label.scale.setScalar(0.6);
+  label.position.set(x, 4.4, 0);
+  label.userData.textShadow = true;
+  label.castShadow = false;
+  if (name !== 'lead') editor.execute(new AddObjectCommand(editor, label));
+}
+$S('#lead, #eq, #tA, #p1, #tB, #p2, #tC, #p3, #tD').addClass('term').nodes.length      // 9</code></pre>
+
+	<h2><span class="step">7</span> The end card</h2>
+	<p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it. It is a plane that embeds the current <a href="../callcard/">/about/callcard</a> live. This block makes it landscape, hangs it on the right-hand wall (x = 30), turns it to face the end camera (a mesh's front is its local +Z, so a quarter turn about Y does it) and makes it invisible until its fade-in.</p>
+	<pre><code>// the end card: the Call card stencil, landscape, hung on the right-hand wall and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(30, 0.5, 0).scaleTo(8);
+card.rotation.set(0, -Math.PI / 2, 0);
+card.material.opacity = 0;</code></pre>
+
+	<h2><span class="step">8</span> The camera sequence</h2>
+	<p class="lede">The cameras exist, but nothing says which one is filming when. That is the Render tab's <strong>Camera Sequence</strong>, which the scene keeps in <code>scene.userData.renderShots</code>: a list of shots, each a camera and the time it takes over, entered with a <code>'cut'</code> or a <code>'fade'</code> of <code>transitionDur</code> seconds. In the Render tab it is <strong>+ Add Shot</strong> five times; from the Shell it is one assignment. <code>editor.work.touch()</code> tells the unsaved-work guard that the scene changed.</p>
+	<pre><code>// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)
+const cams = Object.fromEntries(['camHero', 'camLow', 'camFront', 'camFinal', 'camCard'].map(n =&gt; [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camHero'], [10, 'camLow'], [18.2, 'camFront'], [34.3, 'camFinal'], [46.5, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 5</code></pre>
+
+	<h2><span class="step">9</span> The cuts, and the cube falls apart</h2>
+	<p class="lede">Three thin, pale-blue planes, one per axis, slide into the cube one after the other at 8.3, 8.9 and 9.5 s, at the place where each side splits into <em>a</em> and <em>b</em>. They are the cuts the equation talks about, made visible. A plane starts invisible (<code>opacity: 0</code> with <code>transparent: true</code>; otherwise it would be there from the first frame, and after a reload) and <code>.fade(0, 0.3, 0.5)</code> brings it to 30%. The ruler goes at 8 s, before the cuts.</p>
+	<p>At 10.4 s the cube comes apart. Because the blocks rest where they belong, the timeline only has to move them away: each block <code>animate</code>s to a point 1.6 units further out along each axis, towards the low side where its length on that axis is <em>a</em> and towards the high side where it is <em>b</em> (<code>SIGN</code>): the coral cube goes towards the low corner, the aqua cube towards the high one, and each slab and bar towards the side on which it was cut. The easing is <code>'ease-out'</code>, so they burst out and settle.</p>
+	<pre><code>// a and b: the ruler under the cube, and gone again before the cuts
+$S('#RulerA').at(5.8).fadeIn(0.8);
+$S('#RulerB').at(6.8).fadeIn(0.8);
+$S('.ruler').at(8).fadeOut(0.6);
+
+// three cutting planes, one per axis, at the place where each side splits into a and b (0.5 from the middle).
+// They fade in one after the other, a little bigger than the cube so that they show around it, and go as the cube comes apart.
+const plane = (name, rx, ry) =&gt; {
+  const m = new Mesh(new PlaneGeometry(6.6, 6.6), new MeshStandardMaterial({ color: 0xbfe9ff, emissive: 0x7fd4ff, emissiveIntensity: 0.6, side: THREE.DoubleSide, transparent: true, opacity: 0 }));   // invisible until its fade-in
+  m.name = name;
+  m.rotation.set(rx, ry, 0);
+  m.castShadow = false;
+  editor.execute(new AddObjectCommand(editor, m));
+  return m;
+};
+const CUT = 0.5;
+plane('cutX', 0, Math.PI / 2).position.set(CUT, 0, 0);
+plane('cutY', Math.PI / 2, 0).position.set(0, CUT, 0);
+plane('cutZ', 0, 0).position.set(0, 0, CUT);
+$S('#cutX, #cutY, #cutZ').addClass('cut');
+['#cutX', '#cutY', '#cutZ'].forEach((s, i) =&gt; { $S(s).at(8.3 + 0.6 * i).fade(0, 0.3, 0.5); $S(s).at(11.4).fade(0.3, 0, 0.6); });
+
+// the explosion: each block steps away from where it was, towards the side where it was cut
+// (+ where its length is b, - where it is a). Positions are local to the block's group, and every
+// group sits at the middle of its blocks, so every block moves by the same amount in the world.
+const NAMES = ['a3', 'a2b-x', 'a2b-y', 'a2b-z', 'ab2-x', 'ab2-y', 'ab2-z', 'b3'];
+const HOME = Object.fromEntries(NAMES.map(n =&gt; [n, $S('#' + n).nodes[0].position.toArray()]));
+const SIGN = { a3: [-1, -1, -1], 'a2b-x': [1, -1, -1], 'a2b-y': [-1, 1, -1], 'a2b-z': [-1, -1, 1],
+  'ab2-x': [-1, 1, 1], 'ab2-y': [1, -1, 1], 'ab2-z': [1, 1, -1], b3: [1, 1, 1] };
+const STEP = 1.6;
+for (const n of NAMES) {
+  const [x, y, z] = HOME[n].map((v, i) =&gt; v + SIGN[n][i] * STEP);
+  $S('#' + n).at(10.4).animate({ to: { positionX: x, positionY: y, positionZ: z } }, 2200, 'ease-out');
+}</code></pre>
+	<figure>
+		<img src="screenshots/ab3-cuts.png" alt="The whole cube with three pale-blue planes through it, one along each axis, and the title above." loading="lazy">
+		<figcaption>9.4 seconds in: the three cutting planes, where each side splits into a and b.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/ab3-explode.png" alt="The eight blocks floating apart with white lines between them, seen from low on the left; the title (a + b) cubed above." loading="lazy">
+		<figcaption>12.5 seconds in, through the low camera: the eight blocks have stepped apart; the faint lines are the edges of the glass cube.</figcaption>
+	</figure>
+
+	<h2><span class="step">10</span> Like goes with like</h2>
+	<p class="lede">Now each kind, as one group, flies to its place under its own term of the equation, a second after the term appears: first the coral cube under <em>a³</em>, then the three slabs under <em>3a²b</em>, the three bars under <em>3ab²</em> and the aqua cube under <em>b³</em>. One <code>animate</code> on the group moves it and shrinks it to 40% (<code>scaleX/Y/Z</code> are absolute); at the same time each block inside the group <code>animate</code>s back to where it sat in the cube (<code>userData.home</code>, in the group's own frame), so the three slabs close up into the L they made inside the cube, and the three bars into the shape they made. The group is what the viewer reads as one term: <em>three</em> slabs, one shape.</p>
+	<p>A faint ghost of each kind appears at its landing place a second before the blocks arrive (a copy of the group, with its own materials, fading to 18% and gone as the real blocks land), so the eye is there first. The glass cube's edges fade out as the first kind leaves.</p>
+	<pre><code>// then like goes with like: each kind, as one group, flies to its place under its own term of the equation, smaller,
+// while its blocks close up again into the shape they had in the cube (three slabs meet along their edges, so do the bars).
+// A faint ghost of the kind shows where it will land, so the eye is there before the blocks are.
+const S = 0.4, Y = 2.3;
+const TARGET = { a3: [-2.2, Y], a2b: [0.5, Y], ab2: [3.7, Y], b3: [6.4, Y] };     // the middle of each term of the equation
+const AT = { a3: 20.4, a2b: 25.6, ab2: 30.6, b3: 35.7 };                           // a second after the term appears
+const COLOR = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };
+const home = {};
+for (const kind of Object.keys(TARGET)) {
+  const group = $S('#g-' + kind).nodes[0];
+  const ghost = group.clone();                                  // a copy of the whole kind, with its own materials
+  ghost.name = 'ghost-' + kind;
+  ghost.position.set(TARGET[kind][0], TARGET[kind][1], 0);
+  ghost.scale.setScalar(S);
+  ghost.traverse(o =&gt; {
+    if (!o.isMesh) return;
+    o.name = 'ghost-' + o.name;
+    o.material = new MeshStandardMaterial({ color: COLOR[kind], emissive: COLOR[kind], emissiveIntensity: 0.25, transparent: true, opacity: 0 });
+    o.castShadow = false;
+  });
+  editor.execute(new AddObjectCommand(editor, ghost));
+  $S('#ghost-' + kind + ' &gt; *').addClass('ghost');
+
+  const t = AT[kind];
+  $S('#ghost-' + kind + ' &gt; *').at(t - 1).fade(0, 0.18, 0.6);
+  $S('#g-' + kind).at(t).animate({ to: { positionX: TARGET[kind][0], positionY: TARGET[kind][1], positionZ: 0, scaleX: S, scaleY: S, scaleZ: S } }, 1800, 'ease-in-out');
+  for (const block of group.children) {                         // close up again, in the group's own frame
+    const [x, y, z] = block.userData.home;
+    $S('#' + block.name).at(t).animate({ to: { positionX: x, positionY: y, positionZ: z } }, 1800, 'ease-in-out');
+  }
+  $S('#ghost-' + kind + ' &gt; *').at(t + 1.8).fade(0.18, 0, 0.5);
+}
+
+// the glass cube stays faint after the cut, and is gone once the blocks are on their way
+$S('.frameedge').at(10.4).fade(1, 0.3, 0.6);
+$S('.frameedge').at(19).fade(0.3, 0, 1);</code></pre>
+	<figure>
+		<img src="screenshots/ab3-flight.png" alt="The equation beginning under the title; the large violet bars wait at the left, the aqua cube at the right, and the coral cube and a gold slab are in front." loading="lazy">
+		<figcaption>22 seconds in, through the front camera: the first kind has landed under its term and the others are waiting.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/ab3-rows.png" alt="Under the equation a small coral cube, and three gold slabs closed up into an L-shape, each below its term; the aqua cube is still arriving at the right." loading="lazy">
+		<figcaption>28 seconds in: the slabs have closed up into the shape they made inside the cube, under 3a²b.</figcaption>
+	</figure>
+
+	<h2><span class="step">11</span> The x-ray</h2>
+	<p class="lede">Transparency lets the viewer match blocks to terms. While the equation is read out, one kind of block at a time stays solid and the rest turn to glass (<code>.fade(from, to, seconds)</code>, to 15% opacity). A kind turns to glass when it stops being the topic and solid again when it is the topic, so each kind has one or two glass windows. The windows are timed to the cue: <em>a³</em> first (40 to 41 s), then <em>3a²b</em>, then <em>3ab²</em>, then <em>b³</em>, and everything is solid again at 45.8 s. The four groups also turn slowly through 40° about the vertical axis from 37.8 s, so the glass is seen from more than one side.</p>
+	<pre><code>// x-ray, while the equation is read out: everything but the term being read turns to glass
+const ghost = (sel, from, to) =&gt; { $S(sel).at(from).fade(1, 0.15, 0.5); $S(sel).at(to).fade(0.15, 1, 0.5); };
+ghost('.a2b', 40, 41);   ghost('.a2b', 42.7, 45.8);     // 3a^2b is the topic from 41 to 42.7
+ghost('.ab2', 40, 42.7); ghost('.ab2', 44.4, 45.8);     // 3ab^2 from 42.7 to 44.4
+ghost('.b3', 40, 44.4);                                  // b^3 from 44.4 to the end
+ghost('.a3', 41, 45.8);                                  // a^3 first, from 40 to 41
+// and the groups turn a little, so the glass can be seen through from more than one side
+['#g-a3', '#g-a2b', '#g-ab2', '#g-b3'].forEach(g =&gt; $S(g).at(37.8).animate({ to: { rotation: [0, 40, 0] } }, 8000, 'ease-in-out'));</code></pre>
+	<figure>
+		<img src="screenshots/ab3-xray.png" alt="The row of blocks with the coral cube solid and all the others turned to see-through glass, under the complete equation." loading="lazy">
+		<figcaption>44 seconds in: only the aqua cube is solid, and the other kinds are glass.</figcaption>
+	</figure>
+	<div class="note"><strong>Glass and shadows.</strong> Two details are the editor's, not yours. A block at 15% opacity would still throw a full, solid shadow (the shadow pass ignores opacity), so a mesh stops casting its shadow when it is less than half there and casts again when it is more than half there; the same rule keeps a block that has not faded in yet from leaving a ghost shadow on the wall. And a block's black border fades with the block, so that a glass block is not a solid black wire cube. Neither is saved in the scene: the file keeps <code>castShadow</code> as you set it.</div>
+
+	<h2><span class="step">12</span> The equation grows</h2>
+	<p class="lede">Every label starts empty (<code>change('')</code> at 0 s) and a term appears at the moment its blocks start to fly, with the usual cross-fade: the title at 0.8 s, then <em>= a³</em>, <em>+ 3a²b</em>, <em>+ 3ab²</em> and <em>+ b³</em>. The end card fades in as the last camera arrives.</p>
+	<pre><code>// the equation grows with the rows: each term appears as its blocks start to fly
+const show = (sel, at, text) =&gt; $S(sel).at(at).change(text, { transition: 'fade', dur: 300 });
+$S('.term').at(0).change('');
+show('#lead', 0.8, '(a + b)³');
+show('#eq', 19.4, '=');      show('#tA', 19.4, 'a³');
+show('#p1', 24.6, '+');      show('#tB', 24.6, '3a²b');
+show('#p2', 29.6, '+');      show('#tC', 29.6, '3ab²');
+show('#p3', 34.7, '+');      show('#tD', 34.7, 'b³');
+// the end card fades in as the last camera arrives
+$S('#callcard').at(46.7).fadeIn(2.5);</code></pre>
+
+	<h2><span class="step">13</span> Subtitles</h2>
+	<p class="lede">Ten cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the Pythagorean short's. They are written to be read aloud: no digits, and every symbol spelled the way it is said. The long cue is the equation, and the x-ray windows above sit on its words.</p>
+	<pre><code>setSubtitles([
+  { start: 0.8, end: 5.1, text: 'What is the volume of a cube\nwhose side is a plus b?' },
+  { start: 5.4, end: 9.7, text: 'Cut every side into two parts:\na, and b.' },
+  { start: 10.0, end: 14.7, text: 'Cut along those parts,\nand the cube falls into eight blocks.' },
+  { start: 15.0, end: 18.0, text: 'The blocks come in four kinds.' },
+  { start: 18.2, end: 24.0, text: 'Put like with like. First, one cube\nwith side a: a cubed.' },
+  { start: 24.2, end: 29.0, text: 'Next, three slabs, each a by a by b:\nthree a squared b.' },
+  { start: 29.2, end: 34.1, text: 'Then three bars, each a by b by b:\nthree a b squared.' },
+  { start: 34.3, end: 38.2, text: 'And one small cube with side b:\nb cubed.' },
+  { start: 38.4, end: 45.6, text: 'So a plus b, cubed, equals a cubed, plus three a squared b,\nplus three a b squared, plus b cubed.' },
+  { start: 47.1, end: 49.5, text: 'Made with Strata.' },
+]).length   // 10</code></pre>
+	<div class="note"><strong>Check the voice.</strong> Export the cues (<code>exportSrt()</code>, or <strong>Export .srt</strong> in the Render tab) and run them through a text-to-speech tool before you commit to the times. With the slower <em>af_sarah</em> voice of Kokoro every cue fits with at least 0.2 seconds to spare (the longest, the equation, is 6.95 s long in a 7.2 s window); a faster voice fits too. A cue that does not fit is a timing problem, so move the beat it describes, as the Pythagorean short does, rather than shortening the words.</div>
+
+	<h2><span class="step">14</span> Render it</h2>
+	<ol class="steps">
+		<li>Open the <strong>Render</strong> tab. The Camera Sequence already holds the five shots from step 8.</li>
+		<li>Pick 1280 × 720 and 30 fps, and click <strong>Render &amp; Export</strong>. It runs in real time, so about 50 seconds. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>
+		<li>For captions a viewer can switch off, render without the burn and add the .srt as a soft track afterwards: <code>ffmpeg -i film.mp4 -i film.srt -c copy -c:s mov_text -metadata:s:s:0 language=eng film-subs.mp4</code>.</li>
+	</ol>
+	<figure>
+		<img src="screenshots/ab3-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code." loading="lazy">
+		<figcaption>48 seconds in: the last cut, to the end card.</figcaption>
+	</figure>
+	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
+
+	<h2 id="open-finished"><span class="step">15</span> Open the finished scene</h2>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=a%2Bb-cubed.json&amp;branch=main">a+b-cubed.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 4 groups of 8 blocks, the glass cube's 12 edges, the ruler, 3 cutting planes, 4 ghosts, 9 labels, 5 cameras and the end card, with 42 timeline tracks, 5 shots and 10 subtitle cues. Open it, then scrub the Animations tab: at 3&nbsp;s the cube is whole, at 13&nbsp;s it has fallen apart, at 38&nbsp;s every kind is under its term of the full equation, at 44&nbsp;s the x-ray is on the aqua cube, and from 47&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into the empty <code>a+b-cubed.json</code>, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed, loaded again from the commit, and played through at four times from 9 to 44&nbsp;s. The screenshots on this page are frames of the pasted scene at 2, 7.4, 9.4, 12.5, 22, 28, 44 and 48&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit. Rendering to a video file (step 14) was not run for this page.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

@@ -9,6 +9,24 @@
 		"embed": "#repo=tejaswigowda/test1&file=pyth.json&present=true"
 	},
 	{
+		"title": "Build the (a + b)³ proof in 3D",
+		"href": "a-plus-b-cubed.html",
+		"group": "Animation and rendering",
+		"blurb": "A 3D visual proof of (a + b)³ = a³ + 3a²b + 3ab² + b³ with no numbers: a whole cube falls apart into eight coloured blocks that line up under the expanded equation, with five cameras, an x-ray and subtitles, all from the JS Shell.",
+		"thumb": "screenshots/thumbs/a-plus-b-cubed.jpg",
+		"desc": "Start with a whole cube whose side is cut into a and b, build its eight blocks of four kinds, colour each kind like its term in the equation, light a room with soft shadows, cut between five cameras, explode the cube and sort the blocks into a row under the equation, turn the other blocks to glass one kind at a time — all with the JS Shell, the Universal Timeline and the camera sequence.",
+		"embed": "#repo=tejaswigowda/test1&file=a%2Bb-cubed.json&present=true"
+	},
+	{
+		"title": "Hardy–Weinberg as a square",
+		"href": "hardy-weinberg.html",
+		"group": "Animation and rendering",
+		"blurb": "The Hardy–Weinberg law p² + 2pq + q² = 1 as a visual proof: a square cut at p and q, four pieces as four kinds of child, and the heterozygotes as two rectangles. Built with the JS Shell.",
+		"thumb": "screenshots/thumbs/hw.jpg",
+		"desc": "Allele frequencies as areas: cut a square of tiles at p and q, name each piece as a kind of child (AA, Aa, Aa, aa), let it fall apart, sort the pieces under their terms of p² + 2pq + q², with the two Aa pieces stacked under 2pq, and put it back together as (p + q)² = 1 — all with the JS Shell, the Universal Timeline and the camera sequence.",
+		"embed": "#repo=tejaswigowda/test1&file=hw.json&present=true"
+	},
+	{
 		"title": "Build a night scene from scratch",
 		"href": "build-a-scene.html",
 		"group": "Scenes and games",

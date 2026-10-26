@@ -362,6 +362,9 @@ export function holdTimelineAt( editor, t ) {
  * z-fighting with whatever it's hidden behind/inside), still mid-fade ->
  * normal alpha blending.
  */
+// below this opacity a mesh stops casting its shadow (see syncMaterialTransparency)
+const SHADOW_MIN_OPACITY = 0.5;
+
 export function syncMaterialTransparency( editor ) {
 
 	syncTextShadows( editor.scene );
@@ -391,12 +394,13 @@ export function syncMaterialTransparency( editor ) {
 			const keepsAlpha = !! mat.userData.__fadeManagedOrigTransparent || !! ( node.userData && node.userData.isCallcard );
 			mat.transparent = opaque ? keepsAlpha : true;
 			mat.depthWrite = ! invisible;
-			if ( invisible ) hidden = true; else shown = true;
+			if ( mat.opacity < SHADOW_MIN_OPACITY ) hidden = true; else shown = true;
 
 		}
 
-		// The shadow pass ignores opacity: a mesh that has not faded in yet (or has faded out) must not
-		// leave its shadow on the wall. castShadow is put back as soon as any of its materials shows again.
+		// The shadow pass ignores opacity: a mesh that has not faded in yet (or has faded out, or is only a ghost)
+		// must not leave a full shadow on the wall. castShadow is put back as soon as any of its materials
+		// is more than half there again.
 		if ( hidden && ! shown ) {
 
 			if ( node.castShadow ) {
@@ -425,6 +429,15 @@ export function syncMaterialTransparency( editor ) {
 			const parentMat = Array.isArray( node.material ) ? node.material[ 0 ] : node.material;
 			const parentOpacity = parentMat && parentMat.opacity !== undefined ? parentMat.opacity : 1;
 			outline.visible = node.visible && parentOpacity > 0.001;
+
+			// the border fades with its cube: a ghost with a solid black outline is not a ghost
+			if ( outline.material ) {
+
+				const o = Math.min( 1, Math.max( 0, parentOpacity ) );
+				outline.material.transparent = o < 0.999;
+				outline.material.opacity = o;
+
+			}
 
 		}
 

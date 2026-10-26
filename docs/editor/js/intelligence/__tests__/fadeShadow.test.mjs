@@ -47,13 +47,31 @@ test( 'a faded-out tile stops casting its shadow', () => {
 
 } );
 
-test( 'it casts again as soon as it shows, and not before', () => {
+test( 'it casts again once it is more than half there, and not before', () => {
 
 	const t = tile( 0 );
 	sync( t );
-	t.material.opacity = 0.4;
+	t.material.opacity = 0.3;
+	sync( t );
+	assert.strictEqual( t.castShadow, false );
+	t.material.opacity = 0.6;
 	sync( t );
 	assert.strictEqual( t.castShadow, true );
+
+} );
+
+test( 'a ghost (opacity 0.12) throws no shadow, and its border fades with it', () => {
+
+	const t = tile( 0.12 );
+	t.children = [ { userData: { isEdgeOutline: true }, visible: true, material: { opacity: 1, transparent: false } } ];
+	sync( t );
+	assert.strictEqual( t.castShadow, false );
+	assert.strictEqual( t.children[ 0 ].material.opacity, 0.12 );
+	assert.strictEqual( t.children[ 0 ].material.transparent, true );
+	t.material.opacity = 1;
+	sync( t );
+	assert.strictEqual( t.children[ 0 ].material.opacity, 1 );
+	assert.strictEqual( t.children[ 0 ].material.transparent, false );
 
 } );
 

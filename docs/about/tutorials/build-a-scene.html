@@ -181,7 +181,7 @@ box(3.4, 0.15, 2.6, mat(0x815840), 0, 2.5, 0, shelter);</code></pre>
 
 	<h2><span class="step">4</span> Light it for night</h2>
 	<p class="lede">A dim <code>HemisphereLight</code> for ambient sky/ground fill, a low-intensity <code>DirectionalLight</code> standing in for moonlight, and one warm <code>PointLight</code> as the actual subject of the shot — the thing a viewer's eye goes to:</p>
-	<pre><code>const hemi = new HemisphereLight(0x0a1428, 0x161208, 0.1);
+	<pre><code>const hemi = new THREE.HemisphereLight(0x0a1428, 0x161208, 0.1);
 hemi.name = 'Hemisphere';
 editor.execute(new AddObjectCommand(editor, hemi));
 

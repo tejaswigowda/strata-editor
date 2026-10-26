@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hardy–Weinberg as a square — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: the Hardy–Weinberg law p² + 2pq + q² = 1 as a visual proof in Strata with the JS Shell: a square of tiles cut into four pieces, allele frequencies as areas, and the heterozygotes as two rectangles.">
+<!--
+	/about/tutorials/hardy-weinberg.html — a from-scratch, by-hand tutorial.
+	Every snippet is real Strata surface (JS Shell globals + the public
+	$S().at()/.fadeIn()/.fade()/.animate()/.change()/.setKeys() grammar
+	documented in guides/ANIMATION.md and guides/CAMERA_PATHS.md). Paste each
+	block into the Shell tab in order. Static page, no build step, no
+	third-party calls. The finished scene is hw.json in tejaswigowda/test1.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure {
+		margin: 1.2em 0;
+	}
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+	iframe{
+		width: 100%;
+		height: 500px;
+		border: none;
+	}
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Hardy–Weinberg as a square</h1>
+	<iframe src="../../#repo=tejaswigowda/test1&amp;file=hw.json&amp;present=true"></iframe>
+
+	<p class="tagline">A 75-second visual proof of the Hardy–Weinberg law, <em>p² + 2pq + q² = 1</em>, which is nothing but <em>(p + q)² = 1</em> with the square labelled. A gene has two alleles, <em>A</em> with frequency <em>p</em> and <em>a</em> with frequency <em>q</em>, and every child gets one from each parent at random: draw a square, cut each side into a part <em>p</em> and a part <em>q</em>, and each of the four pieces is one kind of child, with an area equal to how common that kind is. The two off-diagonal pieces are the same kind (<em>Aa</em>), which is why the middle term is <em>2pq</em> and not <em>pq</em>. It is the same visual logic as the three slabs of <em>3a²b</em> in the <a href="a-plus-b-cubed.html">(a + b)³ tutorial</a>, one dimension down, and it reuses that tutorial's recipe (a room, unit tiles, shadows, a row of coloured labels, a camera sequence) rather than starting from nothing. Open the <a href="../../">editor</a>, load an empty scene, open the <strong>Shell</strong> tab and paste each block in order, or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=hw.json&amp;branch=main">hw.json</a> (<a href="#open-finished">the last step</a>).</p>
+
+	<h2><span class="step">1</span> The idea: a square of children</h2>
+	<p class="lede">Take one gene with two alleles. A fraction <em>p</em> of the gene copies in the population are <em>A</em> (the dominant one) and a fraction <em>q</em> are <em>a</em>, and since there are no others, <em>p + q = 1</em>. With random mating each parent hands on one of its two copies at random, independently, so the chance that a child gets <em>A</em> from the first parent and <em>a</em> from the second is <em>p × q</em>, a product of two frequencies, which is exactly what an area is. A unit square, with its top edge cut into <em>p</em> and <em>q</em> (the first parent) and its left edge cut into <em>p</em> and <em>q</em> (the second), is therefore a table of every possible child:</p>
+	<table class="cuts">
+		<tr><th>Colour</th><th>Piece</th><th>Child</th><th>Sides</th><th>Area</th></tr>
+		<tr><td style="color:#ff4d6a">coral</td><td>top left</td><td>AA</td><td>p × p</td><td>p²</td></tr>
+		<tr><td style="color:#ffb703">gold</td><td>top right</td><td>Aa</td><td>q × p</td><td>pq</td></tr>
+		<tr><td style="color:#ffb703">gold</td><td>bottom left</td><td>aA</td><td>p × q</td><td>pq</td></tr>
+		<tr><td style="color:#14e0c8">aqua</td><td>bottom right</td><td>aa</td><td>q × q</td><td>q²</td></tr>
+	</table>
+	<p>Both gold pieces are heterozygotes: <em>Aa</em> and <em>aA</em> are the same child, whichever parent gave which allele. That is why they share a colour, and why the film puts them <em>side by side</em> under the middle term of the equation, as <strong>two</strong> rectangles. The total is the whole square: <em>p² + pq + pq + q² = (p + q)² = 1</em>. The law itself is the observation that this is also the next generation's table: with random mating the proportions of <em>AA</em>, <em>Aa</em> and <em>aa</em> stay <em>p²</em>, <em>2pq</em> and <em>q²</em>, generation after generation, unless something (selection, drift, migration, non-random mating) changes them.</p>
+	<p>The drawing uses <em>p</em> = 3 tiles and <em>q</em> = 2 tiles so the two parts look different; the film never says a number. The plan for the clock (all times in seconds):</p>
+	<table class="cuts">
+		<tr><th>Time</th><th>What happens</th></tr>
+		<tr><td>0.8</td><td>The title <em>(p + q)²</em> over the whole square, already cut into four colours</td></tr>
+		<tr><td>8.2 – 9.6</td><td>The <em>p</em> and <em>q</em> ruler along the top</td></tr>
+		<tr><td>17.8 – 19.2</td><td>The same ruler down the side</td></tr>
+		<tr><td>25.9 – 27.1</td><td>Two bright cuts slide in, where each side splits</td></tr>
+		<tr><td>29.6 – 32</td><td>The square falls apart into its four pieces, and each is labelled with its child: <em>AA</em>, <em>Aa</em>, <em>Aa</em>, <em>aa</em></td></tr>
+		<tr><td>35.9</td><td><em>= p²</em>, and the coral piece flies under it</td></tr>
+		<tr><td>40.8 – 41.4</td><td><em>+ 2pq</em>, and the two gold pieces fly under it, <strong>one on top of the other</strong></td></tr>
+		<tr><td>47.3</td><td><em>+ q²</em>, and the aqua piece</td></tr>
+		<tr><td>51.9 – 56.2</td><td>The pieces fly back and the square is whole again; <em>= 1</em></td></tr>
+		<tr><td>64.2</td><td>The law: these proportions stay the same, generation after generation</td></tr>
+		<tr><td>72.8</td><td>Cut to the end card</td></tr>
+	</table>
+	<p>The cameras cut at 29.5, 51.5 and 72.8 s. Everything below is a paste into the Shell, in order, into a scene that is empty.</p>
+
+	<h2><span class="step">2</span> A room, a wall and a floor</h2>
+	<p class="lede">The same room as in the cube tutorial, with one addition: a <em>wall</em> just behind the square, so that the square has something close to throw its shadow on. A flat figure in a big empty room throws its shadow far away and soft; a wall 1.1 units behind it gives a tight, readable shadow. The wall is only 26 wide: the end camera sits at x = 14.6 and looks along +x, and a wider wall would be seen edge-on in its frame.</p>
+	<pre><code>// a room around the scene, a wall just behind the square for the shadows to land on, and a floor
+const room = new Mesh(new BoxGeometry(80, 40, 80),
+  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(0, 2, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+const wall = new Mesh(new PlaneGeometry(26, 30), new MeshStandardMaterial({ color: 0x303b92, roughness: 0.95, metalness: 0 }));
+wall.name = 'Wall';
+wall.position.set(0, 4, -1.6);                        // 1.1 behind the back of the tiles; only 26 wide: it ends before the end camera (x = 14.6), which would otherwise see it edge-on
+wall.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, wall));
+
+const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -3.4;
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// one key light up and to the right, in front, so every shadow falls down and to the left on the wall; one soft fill
+const key = new PointLight(0xfff1dd, 4.2, 0, 0);
+key.name = 'KeyLight';
+key.position.set(7, 9, 11);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 90;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));</code></pre>
+
+	<h2><span class="step">3</span> The square: 25 tiles in four groups</h2>
+	<p class="lede">The square is built from unit tiles, as in the Pythagorean short, one shared geometry and one shared material per colour, and each piece is a <em>group</em> of its tiles placed relative to the middle of the piece. A group is what lets a piece fly, shrink and turn as a body, and it is how the editor sees "the pink piece" as one thing. The table in <code>PIECES</code> says, for each piece, its width and height in tiles and the middle of the piece in the whole square. The top-left piece is <em>p</em> wide and <em>p</em> tall (<code>g-pp</code>), the bottom-right <em>q</em> by <em>q</em> (<code>g-qq</code>), and the two off-diagonal ones are <em>q</em> wide and <em>p</em> tall (<code>g-pq1</code>) and <em>p</em> wide and <em>q</em> tall (<code>g-pq2</code>): the same rectangle, once upright and once lying down.</p>
+	<pre><code>// the square: p = 3 tiles and q = 2 tiles on a side (the drawing is 3 and 2 so the two parts look different; the film says p and q).
+// It is the Pythagorean short's squares of unit tiles, cut into four pieces: rows and columns split at p.
+const P = 3, Q = 2, H = (P + Q) / 2;
+const COLOR = { pp: 0xff4d6a, pq: 0xffb703, qq: 0x14e0c8 };           // AA coral, Aa gold, aa aqua
+const unit = new BoxGeometry(0.94, 0.94, 0.94);                         // one shared cube, a small gap between tiles
+const mat = Object.fromEntries(Object.entries(COLOR).map(([k, c]) =&gt;
+  [k, new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.25, roughness: 0.5, metalness: 0.1 })]));
+
+// name, kind, width and height in tiles, and the middle of the piece in the whole square
+const PIECES = [
+  ['g-pp',  'pp', P, P, -H + P / 2,     H - P / 2],       // top left: p wide, p tall          AA   p^2
+  ['g-pq1', 'pq', Q, P,  H - Q / 2,     H - P / 2],       // top right: q wide, p tall           Aa   pq
+  ['g-pq2', 'pq', P, Q, -H + P / 2,    -H + Q / 2],       // bottom left: p wide, q tall         aA   pq
+  ['g-qq',  'qq', Q, Q,  H - Q / 2,    -H + Q / 2]        // bottom right: q wide, q tall        aa   q^2
+];
+for (const [name, kind, w, h, cx, cy] of PIECES) {
+  const group = new Group();
+  group.name = name;
+  group.position.set(cx, cy, 0);
+  for (let i = 0; i &lt; w; i++) for (let j = 0; j &lt; h; j++) {
+    const tile = new Mesh(unit, mat[kind]);
+    tile.name = `${name}.${i}.${j}`;
+    tile.position.set(i + 0.5 - w / 2, j + 0.5 - h / 2, 0);              // relative to the middle of the piece
+    tile.castShadow = tile.receiveShadow = true;
+    tile.userData.hasEdgeOutline = true;                                  // a black border, drawn by the viewport
+    group.add(tile);
+  }
+  group.userData.home = [cx, cy];
+  editor.execute(new AddObjectCommand(editor, group));
+}
+$S('#g-pp').addClass('pp');
+$S('#g-qq').addClass('qq');
+$S('#g-pq1, #g-pq2').addClass('pq');
+$S('.pp, .pq, .qq').addClass('piece');
+// a class on a group also matches everything inside it (each tile's border too), so count the tiles by name
+$S('.piece').nodes.filter(n =&gt; n.isMesh &amp;&amp; n.name.startsWith('g-')).length      // 25 tiles: 9 + 6 + 6 + 4</code></pre>
+	<figure>
+		<img src="screenshots/hw-whole.png" alt="A square of 25 tiles in four colours on a blue wall: a 3 by 3 coral block at top left, a 2 by 3 gold block at top right, a 3 by 2 gold block at bottom left and a 2 by 2 aqua block at bottom right, with the title (p + q) squared above it." loading="lazy">
+		<figcaption>2 seconds in: the whole square, already cut into four pieces; the white line is its outline.</figcaption>
+	</figure>
+	<div class="note"><strong>A class on a group matches the group's contents too.</strong> <code>$S('.piece')</code> returns the four groups <em>and</em> their tiles, and each tile's black border besides, so the count at the end of the block filters by name. This is the same thing the Pythagorean short's note about <code>.cube</code> says; here it matters whenever a verb is applied to a class: <code>.fade</code> on <code>.piece</code> would fade the tiles one by one, which is what you want for a glass effect but not for a move.</div>
+
+	<h2><span class="step">4</span> The outline, the rulers and the cuts</h2>
+	<p class="lede">Four thin white bars mark the outline of the whole square; it is what the pieces come from and go back to, and it stays behind, faint, while they are apart. Along the top and down the left side, two rulers show how each side splits: <em>p</em> in coral, the colour of <em>A</em>, and <em>q</em> in aqua, the colour of <em>a</em>. The two cuts are thin bright bars that are a little proud of the tiles, so they read as lines drawn across the square.</p>
+	<pre><code>// the outline of the whole square (what the pieces come from and go back to), and the rulers along its top and left side:
+// p in coral (the colour of A), q in aqua (the colour of a)
+const bar = (w, h, d, x, y, z, color, strength, name) =&gt; {
+  const m = new Mesh(new BoxGeometry(w, h, d), new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: strength }));
+  m.name = name;
+  m.position.set(x, y, z);
+  return m;
+};
+const frame = new Group();
+frame.name = 'Frame';
+const t = 0.07, h = 2.5;
+for (const y of [-h, h]) frame.add(bar(5 + t, t, 0.3, 0, y, 0, 0xffffff, 0.9, 'FrameEdge'));
+for (const x of [-h, h]) frame.add(bar(t, 5 + t, 0.3, x, 0, 0, 0xffffff, 0.9, 'FrameEdge'));
+editor.execute(new AddObjectCommand(editor, frame));
+$S('#Frame &gt; *').addClass('frameedge');
+
+const ruler = (w, h, x, y, color, name) =&gt; editor.execute(new AddObjectCommand(editor, bar(w, h, 0.22, x, y, 0.3, color, 0.5, name)));
+ruler(3 - 0.08, 0.2, -1, 3.05, 0xff4d6a, 'RulerTopP');      // along the top: p, then q
+ruler(2 - 0.08, 0.2, 1.5, 3.05, 0x14e0c8, 'RulerTopQ');
+ruler(0.2, 3 - 0.08, -3.05, 1, 0xff4d6a, 'RulerSideP');     // down the left side: p, then q
+ruler(0.2, 2 - 0.08, -3.05, -1.5, 0x14e0c8, 'RulerSideQ');
+$S('#RulerTopP, #RulerTopQ').addClass('rulertop');
+$S('#RulerSideP, #RulerSideQ').addClass('rulerside');
+
+// the two cuts, where each side splits into p and q: thin, bright, a little proud of the tiles
+editor.execute(new AddObjectCommand(editor, bar(0.09, 5.6, 0.6, 0.5, 0, 0.6, 0xbfe9ff, 0.9, 'CutV')));
+editor.execute(new AddObjectCommand(editor, bar(5.6, 0.09, 0.6, 0, -0.5, 0.6, 0xbfe9ff, 0.9, 'CutH')));
+$S('#CutV, #CutH').addClass('cut');</code></pre>
+
+	<h2><span class="step">5</span> Four cameras</h2>
+	<p class="lede">A shot camera is an ordinary camera with a track of keys: <code>setKeys([{ t, pos, lookAt }, …], { smooth: true })</code> plays one smooth curve through them (see <a href="../../../guides/CAMERA_PATHS.md">Editing camera moves</a>). <code>orbit</code> writes the keys from an azimuth, a radius and a height. Because this scene is flat, the cameras stay nearly head-on (azimuth within ±8°): a square seen from the side is a sliver, and the equation above it, a row of text that faces the front, would shrink. Each is aimed a little above the middle of what it films. The second one is further back and aimed lower, because during the sort the pieces fly up towards the equation, and the third pulls back for the finished square.</p>
+	<pre><code>// four cameras: a slow push-in on the whole square, a closer one for the sorting, a wide one for the reassembly, and one for the end card
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+
+// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds
+function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 4) {
+  const n = Math.max(1, Math.round((t1 - t0) / step));
+  const keys = [];
+  for (let i = 0; i &lt;= n; i++) {
+    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);
+    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });
+  }
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+}
+
+const camA = addCamera('camA', 40), camB = addCamera('camB', 40), camC = addCamera('camC', 40), end = addCamera('camCard', 50);
+orbit(camA, 0.001, 29.5, -5, 6, 16.5, 3.5, 3, [0, 1.6, 0]);        // a little push round, nearly head-on
+orbit(camB, 29.5, 51.5, 6, -6, 18, 2.5, 2, [0.3, 0.9, 0]);          // further back and aimed lower: the pieces fly apart, then up to the row
+orbit(camC, 51.5, 72.8, -6, 6, 16.5, 3, 4, [0, 1.6, 0]);            // pulls back for the whole square
+end.position.set(14.6, 0.5, 0);                                      // faces the end card, which hangs on the right-hand wall
+end.lookAt(30, 0.5, 0);</code></pre>
+
+	<h2><span class="step">6</span> The labels</h2>
+	<p class="lede">Open <strong>Stencils → Mesh → Text</strong> and click it <em>once</em>; the next block copies that one label for every other, so they all share its font. A label's text starts at the label's own origin, so to centre a label you subtract half its width. The widths come from the font: the sum of its glyphs' advances, in units of the font size, times the label's scale.</p>
+	<table class="cuts">
+		<tr><th>Text</th><th>Width</th><th>Text</th><th>Width</th></tr>
+		<tr><td>(p + q)²</td><td>4.77</td><td>2pq</td><td>2.49</td></tr>
+		<tr><td>= &nbsp; + &nbsp; 1</td><td>0.83 each</td><td>q²</td><td>1.39</td></tr>
+		<tr><td>p²</td><td>1.38</td><td>AA · Aa · aa</td><td>2.14 · 1.86 · 1.57</td></tr>
+	</table>
+	<p>At a scale of 0.6 and a gap of 0.45 between nine labels the equation is 12.1 wide, so its first label starts at −6.05, and each next one at the sum of the widths and gaps before it. The letters on the pieces are <em>children</em> of their piece (<code>parent.add(label)</code>), so they travel, shrink and turn with it.</p>
+	<pre><code>// every label is a copy of the one Text stencil, so they share its font. A label's text begins at its own origin, so to
+// centre one you subtract half its width: the widths come from the font, in units of the font size (see the table below).
+const tpl = $S('#Text').nodes[0];
+const WHITE = 0xffffff, CORAL = 0xff4d6a, GOLD = 0xffb703, AQUA = 0x14e0c8;
+let first = true;
+function label(name, color, x, y, z, scale, parent) {
+  const m = first ? tpl : new Mesh(tpl.geometry.clone(), tpl.material.clone());
+  m.name = name;
+  m.material.color = new Color(color);
+  m.material.emissive = new Color(color);
+  m.material.emissiveIntensity = 0.7;
+  m.scale.setScalar(scale);
+  m.position.set(x, y, z);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  if (!first) editor.execute(new AddObjectCommand(editor, m));
+  first = false;
+  if (parent) parent.add(m);                         // hang it on a piece, so it travels with it
+  return m;
+}
+
+// the equation, nine labels in a row, at scale 0.6 with 0.45 between them: (p + q)^2 = p^2 + 2pq + q^2 = 1
+const EQ = [['lead', WHITE, -6.05], ['eq1', WHITE, -2.74], ['tP', CORAL, -1.79], ['pl1', WHITE, -0.51], ['tPQ', GOLD, 0.43],
+            ['pl2', WHITE, 2.37], ['tQ', AQUA, 3.32], ['eq2', WHITE, 4.61], ['one', WHITE, 5.55]];
+for (const [name, color, x] of EQ) label(name, color, x, 4.9, 0, 0.6);
+
+// the letters on the rulers: p and q, centred over and beside their bars
+label('rp1', CORAL, -1.29, 3.4, 0.3, 0.7);   label('rq1', AQUA, 1.21, 3.4, 0.3, 0.7);       // over the top ruler
+label('rp2', CORAL, -3.85, 0.75, 0.3, 0.7);  label('rq2', AQUA, -3.85, -1.75, 0.3, 0.7);    // beside the left one
+$S('#rp1, #rq1, #rp2, #rq2').addClass('ruler');
+
+// the kind of child, on each piece: AA, Aa, Aa and aa, centred on the piece (half the width back, a third of the cap height down)
+// (ids are matched without regard to case, so '#kAA' and '#kaa' would be the same label: the names say where, not what)
+const kids = [['kidPP', 'g-pp', -0.96], ['kidPQ1', 'g-pq1', -0.83], ['kidPQ2', 'g-pq2', -0.83], ['kidQQ', 'g-qq', -0.71]];
+for (const [name, group, x] of kids) label(name, WHITE, x, -0.32, 0.6, 0.9, $S('#' + group).nodes[0]);
+$S('#kidPP, #kidPQ1, #kidPQ2, #kidQQ').addClass('kid');
+$S('#lead, #eq1, #tP, #pl1, #tPQ, #pl2, #tQ, #eq2, #one').addClass('term').nodes.length      // 9</code></pre>
+	<div class="note"><strong>Ids are matched without regard to case.</strong> A label called <code>kAA</code> and another called <code>kaa</code> are the same id to the selector engine, so one of them is silently left out of any set that names both. The first version of this scene did exactly that, and it showed <em>aa</em> on the coral piece. Name labels for <em>where</em> they are (<code>kidPP</code>, <code>kidQQ</code>), never for what they say.</div>
+
+	<h2><span class="step">7</span> The end card</h2>
+	<p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it. This block makes it landscape, hangs it on the right-hand wall (x = 30), turns it to face the end camera and makes it invisible until its fade-in.</p>
+	<pre><code>// the end card: the Call card stencil, landscape, hung on the right-hand wall and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(30, 0.5, 0).scaleTo(8);
+card.rotation.set(0, -Math.PI / 2, 0);
+card.material.opacity = 0;</code></pre>
+
+	<h2><span class="step">8</span> The camera sequence</h2>
+	<p class="lede">The Render tab's <strong>Camera Sequence</strong> lives in <code>scene.userData.renderShots</code>: a camera and the time it takes over, entered with a <code>'cut'</code> or a <code>'fade'</code>. In the Render tab it is <strong>+ Add Shot</strong> four times; from the Shell it is one assignment, and <code>editor.work.touch()</code> tells the unsaved-work guard that the scene changed.</p>
+	<pre><code>// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)
+const cams = Object.fromEntries(['camA', 'camB', 'camC', 'camCard'].map(n =&gt; [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camA'], [29.5, 'camB'], [51.5, 'camC'], [72.8, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 4</code></pre>
+
+	<h2><span class="step">9</span> The rulers and the cuts</h2>
+	<p class="lede">The voice introduces <em>p</em> and <em>q</em> twice, once for each parent, so the ruler appears twice: along the top at 8.2 s (<em>p</em>, then <em>q</em>, as the voice says "p plus q is one") and down the side at 17.8 s (when "one parent's alleles" becomes "the other's"). The two cuts slide in at 25.9 and 26.6 s, a second after "cut where each side splits", and rulers and cuts go as the square comes apart at 29.4 s. Every ruler letter is its own track (<code>#rp1</code>, <code>#rq1</code>, …): two <code>change</code> events from two different selectors on one label would fight.</p>
+	<pre><code>// the rulers: p and q along the top as the voice says they make one; down the side when the other parent comes in
+$S('.rulertop').at(8.2).fadeIn(0.8);
+['#rp1', '#rq1', '#rp2', '#rq2'].forEach(s =&gt; $S(s).at(0).change(''));       // one track per label: two tracks on one label fight
+$S('#rp1').at(8.6).change('p', { transition: 'fade', dur: 300 });
+$S('#rq1').at(9.1).change('q', { transition: 'fade', dur: 300 });
+$S('.rulerside').at(17.8).fadeIn(0.8);
+$S('#rp2').at(18.2).change('p', { transition: 'fade', dur: 300 });
+$S('#rq2').at(18.7).change('q', { transition: 'fade', dur: 300 });
+
+// the two cuts slide in where each side splits, one after the other, and the rulers go
+$S('.cut').at(0).fade(1, 0, 0.01);                                  // hidden until their moment
+$S('#CutV').at(25.9).fade(0, 1, 0.5);
+$S('#CutH').at(26.6).fade(0, 1, 0.5);
+$S('.cut').at(29.4).fade(1, 0, 0.5);
+$S('.rulertop, .rulerside').at(29.4).fadeOut(0.6);
+['#rp1', '#rq1', '#rp2', '#rq2'].forEach(s =&gt; $S(s).at(29.4).change('', { transition: 'fade', dur: 300 }));
+
+// the whole square stays behind as a faint outline while the pieces are apart
+$S('.frameedge').at(29.6).fade(1, 0.25, 0.6);</code></pre>
+	<figure>
+		<img src="screenshots/hw-rulers.png" alt="The square with a coral and an aqua ruler along its top and left side, each marked p and q." loading="lazy">
+		<figcaption>20 seconds in: the two parents, drawn as the two rulers.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/hw-cuts.png" alt="The square with a bright vertical and horizontal line across it where the rulers change colour." loading="lazy">
+		<figcaption>27 seconds in: the cuts, where each side splits into p and q.</figcaption>
+	</figure>
+
+	<h2><span class="step">10</span> The square falls apart, and the pieces sort themselves</h2>
+	<p class="lede">At 29.8 s each piece steps a little away from the middle (<code>APART</code>), so that the four are separate and can be named. The voice then names each one and the labels come in: <em>AA</em>, <em>Aa</em>, <em>Aa</em>, <em>aa</em>. Then, as each term of the equation appears, its piece flies to a spot under it and shrinks to 42% (<code>scaleX/Y/Z</code> are absolute). The two gold pieces are the interesting part: they fly under <em>2pq</em> <em>together</em>, one above the other, so that the middle term looks like what it is, <strong>two</strong> pieces. The tall one turns a quarter turn (<code>rotateZ: 90</code>) to lie like the other, and its label turns the other way (<code>-90</code>) so that the letters stay upright. At 51.9 s everything flies back, the turned piece turns back, and the square is whole.</p>
+	<pre><code>// the pieces step apart, then each kind flies to its place under its own term of the equation, smaller (scale 0.42),
+// and the two Aa rectangles are stacked: the one that is q wide and p tall turns a quarter turn to lie like the other.
+// Positions are in the world, the pieces' groups sit at their middles.
+const S = 0.42;
+const APART = { 'g-pp': [-1.2, 1.2], 'g-pq1': [1.2, 1.2], 'g-pq2': [-1.2, -1.2], 'g-qq': [1.2, -1.2] };     // a step away from the middle
+const HOME = { 'g-pp': [-1, 1], 'g-pq1': [1.5, 1], 'g-pq2': [-1, -1.5], 'g-qq': [1.5, -1.5] };
+const ROW = { 'g-pp': [-1.37, 2.2], 'g-pq1': [1.18, 2.65], 'g-pq2': [1.18, 1.75], 'g-qq': [3.74, 2.2] };      // under p^2, 2pq (two, stacked) and q^2
+for (const [name, [dx, dy]] of Object.entries(APART)) {
+  const [x, y] = HOME[name];
+  $S('#' + name).at(29.8).animate({ to: { positionX: x + dx, positionY: y + dy } }, 2200, 'ease-out');
+}
+const fly = (name, at, spin) =&gt; {
+  const [x, y] = ROW[name];
+  $S('#' + name).at(at).animate({ to: { positionX: x, positionY: y, scaleX: S, scaleY: S, scaleZ: S } }, 1800, 'ease-in-out');
+  if (spin) {                                         // a quarter turn, and the letters on it turn back so they stay upright
+    $S('#' + name).at(at).animate({ to: { rotateZ: 90 } }, 1800, 'ease-in-out');
+    $S('#' + name + ' &gt; .kid').at(at).animate({ to: { rotateZ: -90 } }, 1800, 'ease-in-out');
+  }
+};
+fly('g-pp', 35.9);
+fly('g-pq1', 40.8, true);   fly('g-pq2', 41.4);
+fly('g-qq', 47.3);
+
+// and back: the whole square again, pieces full size, the turned one turned back
+const back = (name, at, spin) =&gt; {
+  const [x, y] = HOME[name];
+  $S('#' + name).at(at).animate({ to: { positionX: x, positionY: y, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 2400, 'ease-in-out');
+  if (spin) {
+    $S('#' + name).at(at).animate({ to: { rotateZ: -90 } }, 2400, 'ease-in-out');
+    $S('#' + name + ' &gt; .kid').at(at).animate({ to: { rotateZ: 90 } }, 2400, 'ease-in-out');
+  }
+};
+Object.keys(HOME).forEach(n =&gt; back(n, 51.9, n === 'g-pq1'));
+$S('.frameedge').at(51.9).fade(0.25, 1, 0.8);</code></pre>
+	<figure>
+		<img src="screenshots/hw-apart.png" alt="Four separate pieces floating where the square was, joined by the faint white outline of the whole square: coral top left, gold top right, gold bottom left, aqua bottom right." loading="lazy">
+		<figcaption>31 seconds in: the four pieces, apart.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/hw-sort.png" alt="The equation reads (p + q) squared equals p squared; a small coral piece labelled AA sits under it, and the other three pieces are still large inside the faint outline of the square." loading="lazy">
+		<figcaption>38 seconds in: the coral piece has flown under p²; the others wait.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/hw-row.png" alt="Under the full equation p squared plus 2 p q plus q squared: a small coral piece, two gold pieces stacked on each other, and a small aqua piece." loading="lazy">
+		<figcaption>50 seconds in: each kind under its own term; the gold pair, stacked, under 2pq.</figcaption>
+	</figure>
+
+	<h2><span class="step">11</span> The equation grows</h2>
+	<p class="lede">The nine labels start empty and each gets its text at the moment its piece flies, with the usual cross-fade; the letters on the pieces come in as the voice names each kind of child. The last two labels, <em>=</em> and <em>1</em>, come at 56.2 s, once the square is whole again, and that is the only place in the film where the number appears. The end card fades in as the last camera arrives.</p>
+	<pre><code>// the equation grows with the pieces; the letters on the pieces appear when the voice says each is a kind of child
+const show = (sel, at, text) =&gt; $S(sel).at(at).change(text, { transition: 'fade', dur: 300 });
+$S('.term').at(0).change('');
+$S('.kid').at(0).change('');
+show('#lead', 0.8, '(p + q)²');
+['#kidPP', '#kidPQ1', '#kidPQ2', '#kidQQ'].forEach((s, i) =&gt; show(s, 31.6 + 0.25 * i, ['AA', 'Aa', 'Aa', 'aa'][i]));
+show('#eq1', 35.9, '=');      show('#tP', 35.9, 'p²');
+show('#pl1', 40.8, '+');      show('#tPQ', 40.8, '2pq');
+show('#pl2', 47.3, '+');      show('#tQ', 47.3, 'q²');
+show('#eq2', 56.2, '=');      show('#one', 56.2, '1');
+// the end card fades in as the last camera arrives
+$S('#callcard').at(73).fadeIn(2.5);</code></pre>
+	<figure>
+		<img src="screenshots/hw-back.png" alt="The whole square again, with AA, Aa, Aa and aa written on its four pieces, under the equation p squared plus 2 p q plus q squared equals 1." loading="lazy">
+		<figcaption>57 seconds in: the square is whole again; the equation ends with = 1.</figcaption>
+	</figure>
+
+	<h2><span class="step">12</span> Subtitles</h2>
+	<p class="lede">Thirteen cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the other shorts. They are written to be read aloud: no digits, no symbols (<em>p squared</em>, <em>two p q</em>). The long final cue is the law itself.</p>
+	<pre><code>setSubtitles([
+  { start: 0.8, end: 8.02, text: 'A gene comes in two forms. Big A has frequency p.\nLittle a has frequency q.' },
+  { start: 8.17, end: 12.69, text: 'Between them they make up everything:\np plus q is one.' },
+  { start: 12.84, end: 17.56, text: 'Every child gets one allele from each parent,\nat random.' },
+  { start: 17.71, end: 25.66, text: 'So draw a square. Along the top, one parent\'s alleles.\nDown the side, the other\'s.' },
+  { start: 25.81, end: 29.44, text: 'Cut where each side splits\ninto p and q.' },
+  { start: 29.59, end: 35.44, text: 'Each piece is one kind of child, and its area\nis how common that kind is.' },
+  { start: 35.59, end: 40.34, text: 'Both parents give A: p times p.\nThat is p squared.' },
+  { start: 40.49, end: 46.79, text: 'One gives A and the other gives a. There are two ways,\nso two rectangles: two p q.' },
+  { start: 46.94, end: 51.44, text: 'Both give little a: q times q.\nThat is q squared.' },
+  { start: 51.59, end: 58.69, text: 'Put the pieces back together: the whole square,\nthe whole population. Area one.' },
+  { start: 58.84, end: 64.06, text: 'So p squared, plus two p q, plus q squared,\nequals one.' },
+  { start: 64.21, end: 72.79, text: 'This is the Hardy-Weinberg law: with random mating,\nthese proportions stay the same, generation after generation.' },
+  { start: 72.94, end: 75.44, text: 'Made with Strata.' },
+]).length   // 13</code></pre>
+	<div class="note"><strong>Check the voice.</strong> Export the cues and run them through a text-to-speech tool before you commit to the times. With the slower <em>af_sarah</em> voice of Kokoro every cue fits with at least 0.2 seconds to spare (the longest, the law, is 8.28 s in an 8.58 s window). The beats above were placed after the cues were timed, not before.</div>
+
+	<h2><span class="step">13</span> Render it</h2>
+	<ol class="steps">
+		<li>Open the <strong>Render</strong> tab. The Camera Sequence already holds the four shots from step 8.</li>
+		<li>Pick 1280 × 720 and 30 fps, and click <strong>Render &amp; Export</strong>. It runs in real time, so a little over a minute. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>
+		<li>For captions a viewer can switch off, render without the burn and add the .srt as a soft track afterwards: <code>ffmpeg -i film.mp4 -i film.srt -c copy -c:s mov_text -metadata:s:s:0 language=eng film-subs.mp4</code>.</li>
+	</ol>
+	<figure>
+		<img src="screenshots/hw-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code." loading="lazy">
+		<figcaption>76 seconds in: the last cut, to the end card.</figcaption>
+	</figure>
+	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
+
+	<h2 id="open-finished"><span class="step">14</span> Open the finished scene</h2>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=hw.json&amp;branch=main">hw.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 4 groups of 25 tiles, the outline, 4 rulers and 4 ruler letters, 2 cuts, 9 equation labels, 4 piece labels, 4 cameras and the end card, with 35 timeline tracks, 4 shots and 13 subtitle cues. Open it, then scrub the Animations tab: at 3&nbsp;s the square is whole, at 31&nbsp;s it is in four pieces, at 50&nbsp;s each kind is under its term, at 57&nbsp;s it is whole again, and from 73&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed, loaded again from the commit, and played at three times (3, 33 and 57&nbsp;s). The screenshots on this page are frames of the pasted scene at 2, 20, 27, 31, 38, 50, 57 and 76&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit. Rendering to a video file (step 13) was not run for this page. This is not the Pythagorean short's <code>pyth.json</code> relabelled: it is a new scene with the same ingredients (a square of unit tiles, the room, the labels, the camera sequence), because the pieces here are cut at <em>p</em> and <em>q</em>, not at 3-4-5.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
