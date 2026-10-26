@@ -727,6 +727,52 @@ body.present-mode #subtitle-preview {
 		text-shadow: 0 0 2px #000, 1px 2px 3px #000, 0 2px 6px rgba( 0, 0, 0, 0.9 );
 	}
 
+/* ── Transport icons (play / pause / stop) — Font Awesome glyphs, coloured on their own, no button background.
+   Used by the Timeline toolbar and the play bar. The state shows in the glyph: dimmed at rest, bright on hover,
+   glowing while it is the active one. */
+.transport-icon {
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border: none;
+	background: none;
+	box-shadow: none;
+	border-radius: 0;
+	font-size: 17px;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	cursor: pointer;
+	opacity: 0.85;
+	transition: transform 0.12s, opacity 0.12s, filter 0.12s;
+}
+
+	.transport-icon:hover {
+		opacity: 1;
+		transform: scale( 1.15 );
+	}
+
+	.transport-icon:active {
+		transform: scale( 0.95 );
+	}
+
+	.transport-icon:focus-visible {
+		outline: 2px solid currentColor;
+		outline-offset: 1px;
+		border-radius: 4px;
+	}
+
+	.transport-icon.active {
+		opacity: 1;
+		filter: drop-shadow( 0 0 5px currentColor );
+	}
+
+	.transport-icon.play { color: #2ea44f; }
+	.transport-icon.pause { color: #e0a000; }
+	.transport-icon.stop { color: #e5484d; }
+
 /* ── Play bar — QuickTime-style transport that replaces the menubar ──────────
    Opened by PlayBar.js when the timeline starts playing; its cancel button
    removes body.play-bar-open and the regular menubar returns. */
@@ -765,6 +811,11 @@ body.present-mode #play-bar {
 
 	#play-bar .play-bar-button {
 		flex-shrink: 0;
+		cursor: pointer;
+	}
+
+	/* the close button is the one round button left on the bar */
+	#play-bar .play-bar-button.cancel {
 		width: 26px;
 		height: 26px;
 		padding: 0;
@@ -774,28 +825,18 @@ body.present-mode #play-bar {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		cursor: pointer;
-		box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.5 );
+		background: rgba( 255, 255, 255, 0.14 );
+		margin-left: 4px;
 		opacity: 0.85;
 	}
 
-		#play-bar .play-bar-button:hover,
-		#play-bar .play-bar-button.active {
+		#play-bar .play-bar-button.cancel:hover {
 			opacity: 1;
 		}
 
-		#play-bar .play-bar-button.active {
-			box-shadow: 0 0 0 2px rgba( 255, 255, 255, 0.55 );
-		}
-
-	#play-bar .play-bar-button.play { background: #2ea44f; }
-	#play-bar .play-bar-button.pause { background: #e0a000; }
-	#play-bar .play-bar-button.stop { background: #e5484d; }
-
-	#play-bar .play-bar-button.cancel {
-		background: rgba( 255, 255, 255, 0.14 );
-		box-shadow: none;
-		margin-left: 4px;
+	#play-bar .transport-icon {
+		width: 28px;
+		height: 28px;
 	}
 
 	#play-bar input[type="range"] {

@@ -24,15 +24,16 @@ function PlayBar( editor ) {
 	const container = new UIPanel();
 	container.setId( 'play-bar' );
 
-	const playIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M3 1.5v9l7-4.5z" fill="currentColor"/></svg>';
-	const pauseIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M2 1h3v10H2zM7 1h3v10H7z" fill="currentColor"/></svg>';
-	const stopIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" fill="currentColor"/></svg>';
+	// Font Awesome glyphs, coloured on their own with no button background (.transport-icon in main.css)
+	const playIcon = '<i class="fa-solid fa-play" aria-hidden="true"></i>';
+	const pauseIcon = '<i class="fa-solid fa-pause" aria-hidden="true"></i>';
+	const stopIcon = '<i class="fa-solid fa-stop" aria-hidden="true"></i>';
 	const closeIcon = '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 
 	function button( cls, html, title, onClick ) {
 
 		const b = document.createElement( 'button' );
-		b.className = 'play-bar-button ' + cls;
+		b.className = 'play-bar-button ' + cls + ( cls === 'cancel' ? '' : ' transport-icon' );
 		b.innerHTML = html;
 		b.title = title;
 		b.addEventListener( 'click', onClick );

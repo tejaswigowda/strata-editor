@@ -1431,23 +1431,26 @@ export function hideLoadOverlay() {
 // Timeline (autoplay-on-load is blocked by browsers for audio/video anyway, and
 // an explicit click is clearer than a scene that silently starts moving).
 // Dispatches timelinePlayRequested (Timeline.js owns the actual play() call)
-// then removes itself — one-shot, not a persistent playback control.
+// then removes itself — one-shot, not a persistent playback control. Only the
+// round button plays; a click on the dim area around it, the Cancel button or
+// Esc closes the overlay without playing.
 export function showPlayOverlay( editor ) {
 
 	const overlay = document.createElement( 'div' );
 	overlay.style.cssText = [
 		'position:fixed', 'inset:0', 'display:flex', 'flex-direction:column', 'gap:22px', 'align-items:center', 'justify-content:center',
-		'background:rgba(0,0,0,0.25)', 'z-index:99998', 'cursor:pointer',
+		'background:rgba(0,0,0,0.25)', 'z-index:99998', 'cursor:default',
 	].join( ';' );
-	overlay.title = 'Play';
+	overlay.title = 'Click outside the button to close';
 
 	const button = document.createElement( 'div' );
 	button.style.cssText = [
 		'width:96px', 'height:96px', 'border-radius:50%',
 		'background:rgba(20,20,20,0.85)', 'border:3px solid #fff',
 		'display:flex', 'align-items:center', 'justify-content:center',
-		'box-shadow:0 4px 24px rgba(0,0,0,0.5)', 'transition:transform 0.15s',
+		'box-shadow:0 4px 24px rgba(0,0,0,0.5)', 'transition:transform 0.15s', 'cursor:pointer',
 	].join( ';' );
+	button.title = 'Play';
 	button.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg>';
 	overlay.appendChild( button );
 
@@ -1476,22 +1479,26 @@ export function showPlayOverlay( editor ) {
 
 	cancel.addEventListener( 'click', event => {
 
-		event.stopPropagation(); // the overlay itself plays on click
+		event.stopPropagation(); // the overlay itself dismisses on click; this is the explicit button for it
 		dismiss();
 
 	} );
 	overlay.appendChild( cancel );
 	document.addEventListener( 'keydown', onKey, true );
 
-	overlay.addEventListener( 'mouseenter', () => { button.style.transform = 'scale(1.08)'; } );
-	overlay.addEventListener( 'mouseleave', () => { button.style.transform = 'scale(1)'; } );
+	button.addEventListener( 'mouseenter', () => { button.style.transform = 'scale(1.08)'; } );
+	button.addEventListener( 'mouseleave', () => { button.style.transform = 'scale(1)'; } );
 
-	overlay.addEventListener( 'click', () => {
+	// Only the round button plays; a click anywhere else on the overlay dismisses it, same as Cancel.
+	button.addEventListener( 'click', event => {
 
+		event.stopPropagation();
 		editor.signals.timelinePlayRequested.dispatch();
 		dismiss();
 
-	}, { once: true } );
+	} );
+
+	overlay.addEventListener( 'click', dismiss );
 
 	document.body.appendChild( overlay );
 	return overlay;

@@ -90,25 +90,24 @@ function Timeline( editor ) {
 	editRow.classList.add( 'timeline-hide-compact' ); // hidden while the toolbar is collapsed to its one row
 	viewRow.classList.add( 'timeline-hide-compact' );
 
-	const playIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M3 1.5v9l7-4.5z" fill="currentColor"/></svg>';
-	const pauseIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M2 1h3v10H2zM7 1h3v10H7z" fill="currentColor"/></svg>';
-	const stopIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" fill="currentColor"/></svg>';
+	// Transport: Font Awesome glyphs coloured on their own, no button background (.transport-icon in main.css).
+	function iconButton( icon, title, onClick, kind ) {
 
-	function iconButton( html, title, onClick, color ) {
-
-		const b = new UIButton();
-		b.dom.innerHTML = html;
-		b.dom.title = title;
-		b.dom.style.cssText = `width:30px;height:30px;padding:0;border:none;border-radius:50%;background:${ color };color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.35);cursor:pointer;display:flex;align-items:center;justify-content:center;`;
-		b.onClick( onClick );
-		transportRow.appendChild( b.dom );
+		const b = document.createElement( 'button' );
+		b.type = 'button';
+		b.className = 'transport-icon ' + kind;
+		b.innerHTML = `<i class="fa-solid fa-${ icon }" aria-hidden="true"></i>`;
+		b.title = title;
+		b.setAttribute( 'aria-label', title );
+		b.addEventListener( 'click', onClick );
+		transportRow.appendChild( b );
 		return b;
 
 	}
 
-	iconButton( playIcon, 'Play the timeline', play, '#2ea44f' );
-	iconButton( pauseIcon, 'Pause', pause, '#e0a000' );
-	iconButton( stopIcon, 'Stop (rewind to 0)', stop, '#e5484d' );
+	iconButton( 'play', 'Play the timeline', play, 'play' );
+	iconButton( 'pause', 'Pause', pause, 'pause' );
+	iconButton( 'stop', 'Stop (rewind to 0)', stop, 'stop' );
 
 	// Previous / next key: the playhead jumps to the nearest block edge on the selected track (all tracks when none is selected)
 	const prevKeyIcon = '<svg width="14" height="14" viewBox="0 0 12 12"><path d="M2 1.5v9" stroke="currentColor" stroke-width="1.5"/><path d="M10 1.5v9L4 6z" fill="currentColor"/></svg>';
