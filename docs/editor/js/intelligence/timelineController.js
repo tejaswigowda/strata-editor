@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import * as recipes from './animationRecipes.js';
 import * as selectorEngine from './selectorEngine.js';
-import { TimelineModel, compileTimeline, TIMELINE_CLIP_NAME } from './timeline.js';
+import { TimelineModel, compileTimeline, TIMELINE_CLIP_NAME, shadowSuppressed } from './timeline.js';
 import { applyContentAt, syncTextShadows } from './textChange.js';
 import { importedClipsOf, directivesByClip, sampleClipState, clipDirectiveProblems } from './clipDirectives.js';
 import { editedPlayback } from './motionEditRuntime.js';
@@ -371,6 +371,7 @@ export function syncMaterialTransparency( editor ) {
 		if ( ! node.isMesh || ! node.material ) return;
 
 		const materials = Array.isArray( node.material ) ? node.material : [ node.material ];
+		let hidden = false, shown = false;
 		for ( const mat of materials ) {
 
 			if ( ! mat || mat.opacity === undefined ) continue;
@@ -390,6 +391,25 @@ export function syncMaterialTransparency( editor ) {
 			const keepsAlpha = !! mat.userData.__fadeManagedOrigTransparent || !! ( node.userData && node.userData.isCallcard );
 			mat.transparent = opaque ? keepsAlpha : true;
 			mat.depthWrite = ! invisible;
+			if ( invisible ) hidden = true; else shown = true;
+
+		}
+
+		// The shadow pass ignores opacity: a mesh that has not faded in yet (or has faded out) must not
+		// leave its shadow on the wall. castShadow is put back as soon as any of its materials shows again.
+		if ( hidden && ! shown ) {
+
+			if ( node.castShadow ) {
+
+				node.castShadow = false;
+				shadowSuppressed.add( node );
+
+			}
+
+		} else if ( shadowSuppressed.has( node ) ) {
+
+			node.castShadow = true;
+			shadowSuppressed.delete( node );
 
 		}
 

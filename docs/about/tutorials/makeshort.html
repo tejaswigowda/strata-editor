@@ -153,7 +153,8 @@ function makeSquare(n, name, color, kind, place) {
     for (let m = 1; m &lt;= n; m++) {
       const tile = new Mesh(
         new BoxGeometry(1, 1, 1),
-        new MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 })
+        // emissive = the tile's own colour at 30%: bright even in the shade of another tile
+        new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.2 })
       );
       tile.name = `cube_${n}.${k}.${m}`;
       tile.position.set(...place(k, m), 0);
@@ -168,11 +169,11 @@ function makeSquare(n, name, color, kind, place) {
 }
 
 // 3x3 on the vertical leg: columns, column 1 touches the triangle.
-makeSquare(3, '3x3-square', 0xff6b6b, 'col', (k, m) => [1 - k, 3 - m]);
+makeSquare(3, '3x3-square', 0xff4d6a, 'col', (k, m) => [1 - k, 3 - m]);
 // 4x4 under the horizontal leg: rows, row 1 touches the triangle.
-makeSquare(4, '4x4-square', 0x4ecdc4, 'row', (k, m) => [m, -k]);
+makeSquare(4, '4x4-square', 0x14e0c8, 'row', (k, m) => [m, -k]);
 // 5x5 on the hypotenuse: built upright, then turned onto the slope.
-const big = makeSquare(5, '5x5-square', 0x333300, 'row', (k, m) => [m - 0.5, 5.5 - k]);
+const big = makeSquare(5, '5x5-square', 0xffc93c, 'row', (k, m) => [m - 0.5, 5.5 - k]);
 big.position.set(4.5, -0.5, 0);
 big.rotation.z = Math.atan2(4, 3);   // 53.13 degrees, the angle of the 3-4-5 triangle</code></pre>
 	<p>Give everything an addressable class — squares, lines and tiles — so selectors like <code>#3x3-square #3col1 .cube</code> and <code>.cube</code> work. Class names are stored lowercase, so use lowercase everywhere:</p>
@@ -191,7 +192,7 @@ $S('.cube').nodes.filter(n =&gt; n.name.startsWith('cube_')).length   // 50 tile
     new Shape([new Vector2(0, 0), new Vector2(4, 0), new Vector2(0, 3)]),   // legs 4 and 3
     { depth: 1, bevelEnabled: false }
   ),
-  new MeshStandardMaterial({ color: 0xd99b30, roughness: 0.9, metalness: 1 })
+  new MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: 0.22, roughness: 0.45, metalness: 0.1 })
 );
 tri.geometry.translate(0, 0, -0.5);        // centre the 1-unit thickness on z = 0
 tri.name = 'RightTriangle';
@@ -200,7 +201,7 @@ tri.castShadow = tri.receiveShadow = true;
 tri.userData.hasEdgeOutline = true;
 editor.execute(new AddObjectCommand(editor, tri));</code></pre>
 	<figure>
-		<img src="screenshots/pythagorean-build.png" alt="The triangle with the full 3x3 square on its vertical leg and the first row of the 4x4 square along its horizontal leg, seen through the scene camera at 24 seconds, with the labels 3 squared and 4." loading="lazy">
+		<img src="screenshots/pythagorean-build.png" alt="The triangle with the full 3x3 square on its vertical leg and the first row of the 4x4 square along its horizontal leg, seen through the scene camera at 24 seconds: coral-red and aqua tiles and a gold triangle on a blue wall, each throwing a soft shadow, with the labels 3 squared and, beside the horizontal leg, 4." loading="lazy">
 		<figcaption>Twenty-four seconds in, seen through the scene camera: the 3×3 has unfolded, the 4×4 is about to. (This frame comes from the finished timeline in steps 6–9.)</figcaption>
 	</figure>
 
@@ -216,7 +217,7 @@ $S('#four').moveTo(5.6, -0.8, 1.24);    // beside the end of the horizontal leg,
 $S('#eqn').moveTo(-1.3, -3.1, 1.24);    // where the sum will be assembled, above the subtitle band
 $S('#three, #four, #eqn').addClass('label');</code></pre>
 
-	<h2><span class="step">4</span> Background and a glow for the text</h2>
+	<h2><span class="step">4</span> Background, a lit room, and a glow for the text</h2>
 	<p class="lede"><code>makeTexture</code> is a Shell helper — hand it a function that paints a 2D canvas, and it returns a ready-to-use texture. The default environment lights the scene from the background, so ask for it to be rebuilt once the background changes, otherwise the tiles keep the old, brighter lighting. Text lit only by scene lights goes faint on a dark ground, so give the labels some light of their own:</p>
 	<pre><code>scene.background = makeTexture((ctx, size) => {
   const g = ctx.createLinearGradient(0, 0, 0, size);
@@ -236,8 +237,33 @@ $S('.label').nodes.forEach(o => {
 });
 
 // white text over a bright tile needs an edge: a black drop shadow, offset down and to the right
-$S('.label').nodes.forEach(o => { o.userData.textShadow = true; });</code></pre>
+$S('.label').nodes.forEach(o => { o.userData.textShadow = true; o.castShadow = false; });   // (no second shadow on the wall)</code></pre>
 	<p>The shadow is a black copy of the label that the editor draws behind it and keeps in step with it: it follows every <code>change()</code>, every fade and every move, so it needs no keyframes of its own. It is not saved in the scene; only the <code>textShadow</code> flag is. Give <code>userData.textShadow</code> an object, such as <code>{ size: 0.1 }</code>, for a longer shadow. Cues on the video use the same idea: the subtitles have a black outline and shadow too.</p>
+	<p>A flat gradient behind a flat figure looks like a slide. The cheapest way to make it a place is a room around the camera, one light, and shadows. The camera never moves, it only turns, and every figure (the 3-4-5, the two extra triples, the end card) is 15 to 20 units from it, so a box seen from the inside, centred on the camera, puts a wall behind each of them. One point light above the camera lights all four walls and throws every figure's shadow onto the wall behind it:</p>
+	<pre><code>// a room: four walls, floor and ceiling in one box, drawn from the inside (BackSide), centred on the camera
+const room = new Mesh(new BoxGeometry(52, 30, 52),
+  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(3, 2, 20);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+// one light above the camera: it lights the walls (bright in the middle, darker towards the corners) and the tiles
+const key = new PointLight(0xfff1dd, 4.5, 0, 0);   // no distance limit, no fall-off
+key.name = 'KeyLight';
+key.position.set(0, 7, 20);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;    // shadows lighter than black, so they stay blue
+key.shadow.radius = 4;         // a soft edge
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 70;
+editor.execute(new AddObjectCommand(editor, key));
+
+// a little sky and ground light so the side of a tumbling cube is never black
+editor.execute(new AddObjectCommand(editor, Object.assign(new HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));</code></pre>
+	<div class="note"><strong>Shadows of things that are not there yet.</strong> The shadow pass ignores opacity, so a tile that has not faded in would still throw its shadow on the wall. The editor handles it: whenever the timeline is sampled, a mesh that its fades have left fully invisible stops casting, and starts again the moment it shows. That switch is never saved: the scene file keeps <code>castShadow</code> as you set it. The tiles, the triangles and the 5×5 pad cast and receive shadows (step 1 and step 9 set it); the labels do not, since they already have their own drop shadow. The background gradient above is still in the scene, but the room now hides it.</div>
 	<div class="note"><strong>Keep the text out of the subtitle band.</strong> Subtitles are drawn over the bottom sixth of the frame, and a two-line cue is taller than a one-line one. Anything the film writes in the world has to stay above that band, or a caption and a cue sit on top of each other and neither can be read. That is why the <code>4</code> label sits beside the 4×4 rather than under it, why the sum row is at y = −3.1 (low enough that <code>b</code> has room above the theorem, high enough to clear the cues), and why the two extra triples, with their captions, are raised 2.2 units in step 9. Check any placement by scrubbing to a time when a two-line cue is on screen.</div>
 
 	<h2><span class="step">5</span> The camera and the end card</h2>
@@ -293,7 +319,7 @@ $S('#3x3-square .cube, #4x4-square .cube').at(40).moveToEach('#5x5-square .cube'
   spin: [1, 1, 0], arc: 3, stagger: 0.4, easing: 'ease-in-out'
 });</code></pre>
 	<figure>
-		<img src="screenshots/pythagorean-proof.png" alt="Mid-flight at 42 seconds: red and teal tiles tumbling from the two small squares towards the hypotenuse of the triangle, with the labels 3 squared and 4 squared still showing." loading="lazy">
+		<img src="screenshots/pythagorean-proof.png" alt="Mid-flight at 41.5 seconds: bright coral and aqua cubes tumbling from the two small squares towards the hypotenuse of the triangle, their shadows tumbling on the wall behind, with the label 4 squared still showing." loading="lazy">
 		<figcaption>41.5 seconds in: the tiles are mid-tumble, flipping about two axes and lifted towards the camera, each on its own arc. They also turn as they travel, because the pad cells they are heading for are rotated 53.13°.</figcaption>
 	</figure>
 	<div class="note"><strong>Why 3 seconds, and why a pad.</strong> Twenty-five tiles at once blur under about a second; three seconds lets a viewer follow "those nine went there, those sixteen went there". Because the destinations are the pad's <em>actual</em> cell positions and rotations, resolved when the timeline is compiled, the reveal is deterministic and reversible when you scrub, and it re-targets itself if you move the pad. The pad is hidden by <em>starting</em> transparent — a bare <code>fadeOut</code> at 0&nbsp;s would show it for the first second.</div>
@@ -343,8 +369,8 @@ $S('#sideA').at(71.6).change('', { transition: 'fade', dur: 300 });
 $S('#sideB').at(71.6).change('', { transition: 'fade', dur: 300 });
 $S('#sideC').at(71.6).change('', { transition: 'fade', dur: 300 });</code></pre>
 	<figure>
-		<img src="screenshots/pythagorean-sides.png" alt="The 3-4-5 triangle at 70.5 seconds with the letters a on the vertical leg, b under the horizontal leg and c beside the hypotenuse, over the tiles that fill the square on it, and the line a squared plus b squared equals c squared below. Every letter has a black drop shadow." loading="lazy">
-		<figcaption>70.5 seconds in: <em>a</em> and <em>b</em> name the legs, <em>c</em> the hypotenuse, above the theorem. The tiles are cubes now, and every white letter has a black drop shadow.</figcaption>
+		<img src="screenshots/pythagorean-sides.png" alt="The 3-4-5 triangle at 71 seconds with the letters a on the vertical leg, b under the horizontal leg and c beside the hypotenuse, over the tiles that fill the square on it, and the line a squared plus b squared equals c squared below. Every letter has a black drop shadow." loading="lazy">
+		<figcaption>71 seconds in: <em>a</em> and <em>b</em> name the legs, <em>c</em> the hypotenuse, above the theorem. The tiles are cubes now, and every white letter has a black drop shadow.</figcaption>
 	</figure>
 	<div class="note"><strong>A label per track.</strong> The two merging labels are faded out with one <code>$S</code> call each (not <code>$S('#three, #four')</code>), so each label keeps its own timeline track and the code panel reads label by label. Content is a step function: the text <em>is</em> whatever was keyed last; <code>transition: 'fade'</code> only cross-fades the swap (see <a href="../../../guides/ANIMATION.md">the animation guide</a>).</div>
 
@@ -375,10 +401,11 @@ function makeTriple(id, p, q, c, target, yaw) {
 
   const triangle = new Mesh(
     new ExtrudeGeometry(new Shape([new Vector2(0, 0), new Vector2(q, 0), new Vector2(0, p)]), { depth: 1 / k, bevelEnabled: false }),
-    new MeshStandardMaterial({ color: 0xd99b30, roughness: 0.9, metalness: 1 })
+    new MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: 0.22, roughness: 0.45, metalness: 0.1 })
   );
   triangle.geometry.translate(0, 0, -0.5 / k);
   triangle.name = `${id}-tri`;
+  triangle.castShadow = triangle.receiveShadow = true;
   figure.add(triangle);
 
   // n x n tiles; tile (i, j) is centred at place(i, j). One shared geometry, and two shades in a
@@ -386,18 +413,19 @@ function makeTriple(id, p, q, c, target, yaw) {
   const square = (name, n, color, place) =&gt; {
     const g = group(name, 0, 0, 0);
     const geometry = new BoxGeometry(0.9, 0.9, 0.9);   // a cube, with a gap between neighbours
-    const shade = [color, new Color(color).offsetHSL(0, 0, 0.09)].map(c =&gt; new MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.2 }));
+    const shade = [color, new Color(color).offsetHSL(0, 0, 0.06)].map(c =&gt; new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.2 }));
     for (let i = 1; i &lt;= n; i++) {
       for (let j = 1; j &lt;= n; j++) {
         const tile = new Mesh(geometry, shade[(i + j) % 2]);
         tile.name = `${id}-${name}.${i}.${j}`;
         tile.position.set(...place(i, j), 0);
+        tile.castShadow = tile.receiveShadow = true;
         g.add(tile);
       }
     }
   };
-  square('p', p, 0xff6b6b, (i, j) =&gt; [j - 0.5 - p, i - 0.5]);     // on the vertical leg
-  square('q', q, 0x4ecdc4, (i, j) =&gt; [j - 0.5, 0.5 - i]);         // under the horizontal leg
+  square('p', p, 0xff4d6a, (i, j) =&gt; [j - 0.5 - p, i - 0.5]);     // on the vertical leg
+  square('q', q, 0x14e0c8, (i, j) =&gt; [j - 0.5, 0.5 - i]);         // under the horizontal leg
 
   // the hypotenuse square: c x c empty groups, turned onto the slope, no geometry at all
   const pad = group('pad', q, 0, Math.atan2(q, p));
@@ -506,18 +534,18 @@ $S('#PerspectiveCamera').at(117).animate({ to: { rotation: [0, 270, 0] } }, 2500
   { start: 24.0, end: 30.0, text: 'Let\'s make another square on the long leg:\n4 \u00D7 4 = 16 tiles.' },
   { start: 31.5, end: 38.5, text: 'Do 9 and 16 tiles fill a square\non the hypotenuse, the slanted side?' },
   { start: 40.2, end: 43.8, text: 'Watch them move.' },
-  { start: 44.0, end: 46.8, text: '3 squred plus 4 squared \u2026' },
+  { start: 44.0, end: 46.8, text: '3 squared plus 4 squared \u2026' },
   { start: 47.0, end: 51.8, text: '\u2026 is 9 + 16 tiles.' },
   { start: 53.0, end: 56.3, text: '25 tiles fill it exactly.' },
   { start: 56.6, end: 62.25, text: 'And 25 is 5 squared:\nthe 5-by-5 square on the hypotenuse.' },
   { start: 62.3, end: 67.32, text: 'In every right triangle:\na squared, plus b squared equals c\u00B2' },
   { start: 67.4, end: 71.6, text: 'a and b are the 2 legs;\nand c is the hypotenuse.' },
-  { start: 72.0, end: 75.75, text: 'Does it hold for other so called pythogorean triples?' },
+  { start: 72.0, end: 75.75, text: 'Does it hold for other so called Pythagorean triples?' },
   { start: 75.8, end: 79.45, text: 'The square on the 5 side:\n25 tiles.' },
   { start: 79.5, end: 83.2, text: 'On the 12 side: 144 tiles.' },
   { start: 83.25, end: 86.33, text: 'Do they fill the square\non the hypotenuse?' },
   { start: 86.6, end: 93.77, text: 'Exactly: 169 tiles.\n5-squared, plus 12-squared equals 13-squared.' },
-  { start: 94.3, end: 98.7, text: 'One more pythogorean triple: 8, 15, 17.' },
+  { start: 94.3, end: 98.7, text: 'One more Pythagorean triple: 8, 15, 17.' },
   { start: 98.75, end: 102.35, text: 'The square on the 8 side:\n64 tiles.' },
   { start: 102.4, end: 106.3, text: 'On the 15 side: 225 tiles.' },
   { start: 106.35, end: 108.27, text: 'Do they fit again?' },
@@ -535,7 +563,7 @@ $S('#PerspectiveCamera').at(117).animate({ to: { rotation: [0, 270, 0] } }, 2500
 		<li>The call card is re-fetched and re-baked <em>fresh</em> at render time at its true aspect — edit <code>/about/callcard</code> later and every future render picks up the change with no edits to this scene.</li>
 	</ol>
 	<figure>
-		<img src="screenshots/pythagorean-endcard.png" alt="The end card filling the frame at the end of the film: the line 'The idea outlasts the engine', 'Made with Strata', and a QR code, over the dark blue gradient." loading="lazy">
+		<img src="screenshots/pythagorean-endcard.png" alt="The end card filling the frame at the end of the film: the line 'The idea outlasts the engine', 'Made with Strata', and a QR code, over the blue wall of the room." loading="lazy">
 		<figcaption>The end of the film: the camera has made its last quarter turn and the card fills the frame.</figcaption>
 	</figure>
 
@@ -543,7 +571,7 @@ $S('#PerspectiveCamera').at(117).animate({ to: { rotation: [0, 270, 0] } }, 2500
 
 	<h2 id="open-finished"><span class="step">13</span> Open the finished scene</h2>
 	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels (and the a, b, c side names), the camera, the background and the call card, plus the two extra triples (458 more tiles, their landing cells and captions), with 25 timeline tracks (the three side names add one each), the same 120.5-second clock and 24 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, at 88&nbsp;s the 5-12-13 sum is on screen, at 112&nbsp;s the 8-15-17 one, and from 120&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same timeline tracks with the same events at the same times (22 of them before the a, b, c side names were added), the same subtitle cues word for word (23 then), and a frame at each of twelve times from 0 to 98&nbsp;s, chosen away from the flights, that differs from the published one by under 3% of its pixels. The tumbles themselves are not compared pixel for pixel: each tile's flight is a fixed function of its place in the list, and the published file lists its first triple's tiles in a different order, so the same tiles tumble differently there. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so it was not compared pixel for pixel. (An older saved copy of this scene stored the card's material as opaque, and at full opacity that drew the QR as a blank white box; the editor now keeps the card blending on every load and render, whatever the saved scene says.) Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. The latest revisions, cube tiles, the label shadow and the a, b, c side names, were checked less thoroughly: the side-name and subtitle blocks were pasted from this page into the published scene, which then matched what was saved (25 tracks, 24 cues); the squares, triangle and triples blocks were pasted into an empty scene and build the same 50 and 458 tiles, now all cubes, and the published scene was played through once on a real GPU, and scrubbed back and forth across every label change, with no rendering errors (the editor used to free a label's old text geometry a frame after swapping it, which made the next draw of that label fail while scrubbing; it now frees it first), but the frame comparison above predates it and the label-shadow lines were not re-pasted from this page. Rendering (step 12) was not re-run for this revision. The film was later stretched from 100.5 to 120.5 seconds so a voice can read every cue without overlap (the beats after 56.5&nbsp;s moved later, the cues were re-timed to match, and a dub of the .srt reports no overlaps); that revision was loaded and checked for its clock, tracks and cues, but its blocks were not re-pasted and the frames above were not re-compared. The scene file is now about 4.8&nbsp;MB, nearly all of it baked animation, chiefly the flight paths of the 483 tiles that move; the editor rebuilds them from the timeline on load, so they are a cache, not something to edit.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same timeline tracks with the same events at the same times (22 of them before the a, b, c side names were added), the same subtitle cues word for word (23 then), and a frame at each of twelve times from 0 to 98&nbsp;s, chosen away from the flights, that differs from the published one by under 3% of its pixels. The tumbles themselves are not compared pixel for pixel: each tile's flight is a fixed function of its place in the list, and the published file lists its first triple's tiles in a different order, so the same tiles tumble differently there. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so it was not compared pixel for pixel. (An older saved copy of this scene stored the card's material as opaque, and at full opacity that drew the QR as a blank white box; the editor now keeps the card blending on every load and render, whatever the saved scene says.) Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. The latest revisions, cube tiles, the label shadow and the a, b, c side names, were checked less thoroughly: the side-name and subtitle blocks were pasted from this page into the published scene, which then matched what was saved (25 tracks, 24 cues); the squares, triangle and triples blocks were pasted into an empty scene and build the same 50 and 458 tiles, now all cubes, and the published scene was played through once on a real GPU, and scrubbed back and forth across every label change, with no rendering errors (the editor used to free a label's old text geometry a frame after swapping it, which made the next draw of that label fail while scrubbing; it now frees it first), but the frame comparison above predates it and the label-shadow lines were not re-pasted from this page. Rendering (step 12) was not re-run for this revision. The film was later stretched from 100.5 to 120.5 seconds so a voice can read every cue without overlap (the beats after 56.5&nbsp;s moved later, the cues were re-timed to match, and a dub of the .srt reports no overlaps); that revision was loaded and checked for its clock, tracks and cues. The label placement (steps 3, 4 and 9) and the look pass (bright emissive tiles, a gold triangle, the lit room with its soft shadows, the spelling fixes in the cues) were each checked by rendering frames from the committed scene at a dozen times, a one-line and a two-line subtitle on screen; the screenshots on this page were retaken from that scene with the editor's controls and the subtitles hidden. The blocks themselves were not re-pasted into an empty scene for any of these revisions. The scene file is now about 5.9&nbsp;MB, nearly all of it baked animation, chiefly the flight paths of the 483 tiles that move; the editor rebuilds them from the timeline on load, so they are a cache, not something to edit.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

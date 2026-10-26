@@ -103,6 +103,13 @@ export function clearRestStateCache() {
 }
 
 /**
+ * Meshes whose castShadow is switched off only because they are faded out right now (the shadow pass
+ * ignores opacity, so a tile that has not faded in yet would still throw its shadow). Kept here, not on
+ * the node, so it is never saved; syncMaterialTransparency fills and empties it.
+ */
+export const shadowSuppressed = new WeakSet();
+
+/**
  * Run `fn()` (e.g. `scene.toJSON()`) with every cached-rest-state node
  * TEMPORARILY snapped to its canonical rest pose, then restore whatever the
  * live scene was actually showing (mid-scrub/mid-play or otherwise)
@@ -117,6 +124,17 @@ export function clearRestStateCache() {
 export function withCanonicalRestState( scene, fn ) {
 
 	const live = new Map(); // uuid -> live pose, restored in `finally`
+
+	// A mesh that is faded out right now has castShadow switched off (see shadowSuppressed): the saved
+	// scene must keep the author's flag, not whatever the playhead happened to be showing.
+	const unsuppressed = [];
+	scene.traverse( function ( node ) {
+
+		if ( ! shadowSuppressed.has( node ) ) return;
+		node.castShadow = true;
+		unsuppressed.push( node );
+
+	} );
 
 	scene.traverse( function ( node ) {
 
@@ -175,6 +193,8 @@ export function withCanonicalRestState( scene, fn ) {
 			node.updateMatrix();
 
 		} );
+
+		for ( const node of unsuppressed ) node.castShadow = false;
 
 	}
 
