@@ -598,6 +598,19 @@ export function scaleRecipe( node, params = {} ) {
  * Shake recipe: quick jittery motion.
  * Params: {intensity:0.1, duration:1}
  */
+// The shake's jitter is a function of (object, key index), not of Math.random(): the timeline recompiles its clips on every load, so an
+// unseeded value would give every load, and every render, a different shake. The same object and step always give the same number.
+function shakeNoise( uuid, step ) {
+
+	let h = 2166136261 >>> 0; // FNV-1a over the uuid, then the step
+	for ( let i = 0; i < uuid.length; i ++ ) h = Math.imul( h ^ uuid.charCodeAt( i ), 16777619 ) >>> 0;
+	h = Math.imul( h ^ step, 16777619 ) >>> 0;
+	h = Math.imul( h ^ ( h >>> 15 ), 2246822507 ) >>> 0;
+	h = Math.imul( h ^ ( h >>> 13 ), 3266489909 ) >>> 0;
+	return ( ( h ^ ( h >>> 16 ) ) >>> 0 ) / 4294967296;
+
+}
+
 export function shakeRecipe( node, params = {} ) {
 
 	const THREE = window.THREE;
@@ -612,7 +625,7 @@ export function shakeRecipe( node, params = {} ) {
 	for ( let i = 0; i <= steps; i ++ ) {
 
 		const t = i / steps;
-		const jitter = Math.random() - 0.5;
+		const jitter = shakeNoise( node.uuid, i ) - 0.5;
 		times.push( t * duration );
 		values.push(
 			startPos.x + jitter * intensity,

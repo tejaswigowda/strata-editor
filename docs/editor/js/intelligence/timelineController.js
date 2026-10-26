@@ -12,6 +12,7 @@ import { applyContentAt, syncTextShadows } from './textChange.js';
 import { importedClipsOf, directivesByClip, sampleClipState, clipDirectiveProblems } from './clipDirectives.js';
 import { editedPlayback } from './motionEditRuntime.js';
 import { applyFaceAt } from './faceRuntime.js';
+import { setTransparent } from './materialFlags.js';
 
 /** Remove any previously compiled Timeline clip from scene.animations. */
 function stripTimelineClip( editor ) {
@@ -392,7 +393,7 @@ export function syncMaterialTransparency( editor ) {
 			// A call card's baked texture carries alpha (see Callcard.js keepCallcardAlpha), so it
 			// keeps blending at full opacity whatever the saved flag says.
 			const keepsAlpha = !! mat.userData.__fadeManagedOrigTransparent || !! ( node.userData && node.userData.isCallcard );
-			mat.transparent = opaque ? keepsAlpha : true;
+			setTransparent( mat, opaque ? keepsAlpha : true );
 			mat.depthWrite = ! invisible;
 			if ( mat.opacity < SHADOW_MIN_OPACITY ) hidden = true; else shown = true;
 
@@ -434,7 +435,7 @@ export function syncMaterialTransparency( editor ) {
 			if ( outline.material ) {
 
 				const o = Math.min( 1, Math.max( 0, parentOpacity ) );
-				outline.material.transparent = o < 0.999;
+				setTransparent( outline.material, o < 0.999 );
 				outline.material.opacity = o;
 
 			}

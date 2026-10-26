@@ -17,6 +17,7 @@
 
 import { BufferGeometry, Mesh, MeshBasicMaterial } from 'three';
 import * as selectorEngine from './selectorEngine.js';
+import { setTransparent } from './materialFlags.js';
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
@@ -261,7 +262,7 @@ export function syncTextShadows( scene ) {
 
 		const mat = shadow.material;
 		mat.opacity = source.material.opacity;
-		mat.transparent = mat.opacity < 0.999 || !! source.material.transparent;
+		setTransparent( mat, mat.opacity < 0.999 || !! source.material.transparent );
 		mat.depthWrite = source.material.depthWrite;
 
 	} );
@@ -351,13 +352,13 @@ export function applyContentAt( editor, model, t ) {
 				// punching a silhouette-shaped hole out of the other mesh's text
 				// wherever their glyphs overlap on screen.
 				removeGhost( node );
-				node.material.transparent = true;
+				setTransparent( node.material, true );
 				node.material.depthWrite = false;
 				if ( ! mixerOpacity.has( node ) ) mixerOpacity.set( node, node.material.opacity );
 
 				const nextSlot = getOrCreateNextSlot( node );
 				regenerateText( nextSlot, active.args.text );
-				nextSlot.material.transparent = true;
+				setTransparent( nextSlot.material, true );
 				nextSlot.material.depthWrite = false;
 
 				if ( fadeRatio < 0.5 ) {

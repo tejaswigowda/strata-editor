@@ -12,6 +12,11 @@ import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { renderBaseName, DEFAULT_VIDEO_TEMPLATE, DEFAULT_SNAPSHOT_TEMPLATE } from './intelligence/renderFileName.js';
 import { sourceFile } from './workState.js';
 import { applyCameraMove, clearCameraMove, MOVE_PRESETS } from './intelligence/cameraMoveEdit.js';
+import { Mp4Muxer } from './export/Mp4Muxer.js';
+import {
+	DETERMINISM_COPY, totalFrames as frameCount, frameTimestampUs, frameDurationUs, resolveRange, frameTimes,
+	avcCodecCandidates, targetBitrate, contractLine,
+} from './export/frames.js';
 
 // ── hard-burn caption drawing (parse / format / sync helpers live in intelligence/subtitles.js) ──
 
@@ -126,9 +131,12 @@ async function injectSphericalMetadata( blob ) {
 // The "Render" tab: renders the Universal Timeline to a video file through a
 // chosen camera. Uses a dedicated offscreen WebGLRenderer (so the viewport is
 // untouched), steps the ONE shared clock frame-by-frame via holdTimelineAt(),
-// and captures frames with canvas.captureStream() + MediaRecorder. The loop is
-// paced to wall-clock (MediaRecorder timestamps frames by real time), so the
-// output video duration matches the timeline duration exactly.
+// and has two modes that name their guarantee (export/frames.js DETERMINISM_COPY):
+//   Render (offline)    every frame n is drawn at timeline time n / fps, fenced, and handed to a WebCodecs
+//                       VideoEncoder with PTS n * 1e6 / fps; export/Mp4Muxer.js writes it as exact constant-frame-rate
+//                       MP4. No wall clock decides anything. Frame ranges are supported.
+//   Preview (realtime)  canvas.captureStream() + MediaRecorder, paced to the wall clock (MediaRecorder timestamps
+//                       frames by real time). May drop frames; not reproducible.
 
 function SidebarRender( editor ) {
 
@@ -262,6 +270,81 @@ function SidebarRender( editor ) {
 	fpsSelect.setValue( '30' );
 	fpsRow.add( fpsSelect );
 	container.add( fpsRow );
+
+	// ── Mode: name the guarantee, not a quality level ────────────────────────
+
+	const modeRow = new UIRow();
+	modeRow.add( new UIText( 'Mode' ).setClass( 'Label' ) );
+	const modeSelect = new UISelect().setWidth( '160px' );
+	modeSelect.setOptions( { offline: 'Render (offline)', preview: 'Preview (realtime)' } );
+	modeSelect.setValue( 'offline' );
+	modeRow.add( modeSelect );
+	container.add( modeRow );
+
+	const modeHelp = new UIText( '' );
+	modeHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:-4px 0 8px;line-height:1.4;';
+	container.add( modeHelp );
+
+	const encoderRow = new UIRow();
+	encoderRow.add( new UIText( 'Encoder' ).setClass( 'Label' ) );
+	const encoderSelect = new UISelect().setWidth( '160px' );
+	encoderSelect.setOptions( { hardware: 'Hardware if available (fast)', software: 'Software (byte-identical files)' } );
+	encoderSelect.setValue( 'hardware' );
+	encoderSelect.dom.title = 'The frames are identical either way. A hardware H.264 encoder may write different bytes for the same frames on a repeat render; the software encoder writes the same bytes every time, and is slower.';
+	encoderRow.add( encoderSelect );
+	container.add( encoderRow );
+
+	// Frame range (offline only): inclusive, 0-based. Blank = the first / the last frame. A range render is
+	// splice-safe: frame n is the same picture whether it is rendered alone or inside a full render.
+	const rangeRow = new UIRow();
+	rangeRow.add( new UIText( 'Frames' ).setClass( 'Label' ) );
+	const rangeStart = new UIInput().setWidth( '70px' );
+	rangeStart.dom.placeholder = 'first';
+	const rangeEnd = new UIInput().setWidth( '70px' );
+	rangeEnd.dom.placeholder = 'last';
+	rangeEnd.dom.style.marginLeft = '6px';
+	rangeRow.add( rangeStart );
+	rangeRow.add( rangeEnd );
+	container.add( rangeRow );
+
+	const contractText = new UIText( '' );
+	contractText.dom.style.cssText = 'display:block;font-size:11px;opacity:0.85;margin:-4px 0 8px 90px;';
+	container.add( contractText );
+
+	const determinismHelp = new UIText( [ DETERMINISM_COPY.temporal, DETERMINISM_COPY.sameDevice, DETERMINISM_COPY.crossDevice ].join( ' ' ) );
+	determinismHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.6;margin:0 0 10px;line-height:1.4;';
+	container.add( determinismHelp );
+
+	// What the last offline render cost per frame on this machine, so the next estimate can say so
+	const MS_PER_FRAME_KEY = 'strata.render.msPerFrame';
+	const readMsPerFrame = () => { try { return parseFloat( localStorage.getItem( MS_PER_FRAME_KEY ) ) || 0; } catch ( e ) { return 0; } };
+
+	function refreshMode() {
+
+		const offline = modeSelect.getValue() === 'offline';
+		modeHelp.setValue( offline ? DETERMINISM_COPY.offline : DETERMINISM_COPY.preview );
+		rangeRow.dom.style.display = offline ? '' : 'none';
+		encoderRow.dom.style.display = offline ? '' : 'none';
+		determinismHelp.dom.style.display = offline ? '' : 'none';
+		refreshContract();
+
+	}
+
+	function refreshContract() {
+
+		const d = timelineDuration();
+		if ( modeSelect.getValue() !== 'offline' || ! ( d > 0 ) ) { contractText.setValue( '' ); return; }
+		const fps = parseInt( fpsSelect.getValue(), 10 );
+		const total = frameCount( outputDuration( d ), fps );
+		const range = resolveRange( rangeStart.getValue().trim(), rangeEnd.getValue().trim(), total );
+		contractText.setValue( range.error ? range.error : contractLine( range.count, fps, readMsPerFrame() ) );
+
+	}
+
+	modeSelect.dom.addEventListener( 'change', refreshMode );
+	fpsSelect.dom.addEventListener( 'change', refreshContract );
+	rangeStart.dom.addEventListener( 'input', refreshContract );
+	rangeEnd.dom.addEventListener( 'input', refreshContract );
 
 	// ── File name (a template; blank = the default) ──────────────────────────
 
@@ -916,7 +999,7 @@ function SidebarRender( editor ) {
 	equirectRow.add( equirectResolutionSelect );
 	container.add( equirectRow );
 
-	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the camera(s) above\u2019s POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time. Records MP4 (360\u00b0 metadata embedded, for YouTube/VR players) and WebM in parallel when the browser supports both — MP4 downloads automatically, WebM is offered as an extra download below.' );
+	const equirectHelp = new UIText( 'Renders a 360\u00b0 equirectangular video from the camera(s) above\u2019s POSITION at each moment — pan the camera through the scene (or cut/fade between shot positions) to move the 360 viewpoint over time. Records MP4 (360\u00b0 metadata embedded, for YouTube/VR players) and WebM in parallel when the browser supports both — MP4 downloads automatically, WebM is offered as an extra download below. Render (offline) writes the MP4 only.' );
 	equirectHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.7;margin:0 0 10px;line-height:1.4;';
 	container.add( equirectHelp );
 
@@ -1063,6 +1146,15 @@ function SidebarRender( editor ) {
 	function extensionFor( mime ) {
 
 		return mime.indexOf( 'mp4' ) !== - 1 ? 'mp4' : 'webm';
+
+	}
+
+	// Hands the thread back to the browser between offline frames (progress paints, Cancel is heard) without a timer,
+	// so a background tab's timer throttling cannot slow it: a message to ourselves is delivered at once.
+	const yieldChannel = new MessageChannel();
+	function yieldToEventLoop() {
+
+		return new Promise( resolve => { yieldChannel.port1.onmessage = () => resolve(); yieldChannel.port2.postMessage( 0 ); } );
 
 	}
 
@@ -1352,8 +1444,9 @@ function SidebarRender( editor ) {
 
 		}
 
-		const mimes = pickExportMimes( kind );
-		if ( mimes.length === 0 ) {
+		const offline = modeSelect.getValue() === 'offline';
+		const mimes = offline ? [] : pickExportMimes( kind );
+		if ( ! offline && mimes.length === 0 ) {
 
 			setProgress( 0, 'MediaRecorder video capture is not supported in this browser.' );
 			return;
@@ -1366,6 +1459,51 @@ function SidebarRender( editor ) {
 		const fps = parseInt( fpsSelect.getValue(), 10 );
 		const skip = skipSeconds( duration );
 		const renderLength = outputDuration( duration );
+		const totalFrames = frameCount( renderLength, fps );
+
+		// Offline: pick an H.264 level this browser's encoder accepts, and the frame range, before anything is touched.
+		let avc = null, range = { start: 0, end: totalFrames - 1, count: totalFrames };
+		if ( offline ) {
+
+			if ( ! window.VideoEncoder || ! window.VideoFrame ) {
+
+				setProgress( 0, 'This browser has no WebCodecs video encoder. Switch Mode to Preview (realtime), or use a current Chrome, Edge or Safari.' );
+				return;
+
+			}
+
+			if ( width % 2 || height % 2 ) {
+
+				setProgress( 0, `H.264 needs even dimensions, got ${ width } \u00d7 ${ height }.` );
+				return;
+
+			}
+
+			range = resolveRange( rangeStart.getValue().trim(), rangeEnd.getValue().trim(), totalFrames );
+			if ( range.error ) {
+
+				setProgress( 0, range.error );
+				return;
+
+			}
+
+			for ( const codec of avcCodecCandidates( width, height, fps ) ) {
+
+				const config = { codec, width, height, bitrate: targetBitrate( width, height, fps ), framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality', hardwareAcceleration: encoderSelect.getValue() === 'software' ? 'prefer-software' : 'no-preference' };
+				let support = null;
+				try { support = await VideoEncoder.isConfigSupported( config ); } catch ( e ) { /* try the next level */ }
+				if ( support && support.supported ) { avc = support.config; break; }
+
+			}
+
+			if ( ! avc ) {
+
+				setProgress( 0, `This browser's encoder cannot do H.264 at ${ width } \u00d7 ${ height } and ${ fps } fps. Pick a smaller size or rate, or switch Mode to Preview (realtime).` );
+				return;
+
+			}
+
+		}
 
 		rendering = true;
 		cancelRequested = false;
@@ -1373,6 +1511,12 @@ function SidebarRender( editor ) {
 		equirectButton.dom.disabled = true;
 		cancelButton.dom.style.display = '';
 		showRenderOverlay();
+
+		// Timeline playback samples the scene at a wall-clock playhead; left running it would fight the frame loop below
+		// (offline especially: frame n must show n / fps and nothing else). Pause it, holding its pose; the render takes over.
+		// Known residual: a render started while playback was running can differ by a few hundred scattered pixels per frame from
+		// one started when idle (seeking does not do this; cause not found; see guides/TIME_SOURCES.md). Stop playback first.
+		signals.timelinePauseRequested.dispatch();
 
 		// Stop the live viewport's own renderer entirely while this offscreen one
 		// runs — two renderer backends (e.g. the live WebGPURenderer + this
@@ -1591,8 +1735,9 @@ function SidebarRender( editor ) {
 
 		// captureStream(fps) auto-samples on canvas repaint; requestFrame() (where
 		// supported) forces an exact capture per composited frame.
-		const stream = outCanvas.captureStream( fps );
-		const videoTrack = stream.getVideoTracks()[ 0 ];
+		// (Preview only. The offline render never touches a stream: its frames go straight to the encoder.)
+		const stream = offline ? null : outCanvas.captureStream( fps );
+		const videoTrack = offline ? null : stream.getVideoTracks()[ 0 ];
 
 		// Downstream tools (ffmpeg -map 0:a, etc.) assume every exported video has
 		// an audio channel — MediaRecorder's captureStream() has none by default,
@@ -1600,15 +1745,20 @@ function SidebarRender( editor ) {
 		// map matches no streams". Add a real (silent) audio track: a zero-gain
 		// constant source feeding a MediaStreamDestination, so the recorded file
 		// always has one — just carrying silence.
-		const AudioCtx = window.AudioContext || window.webkitAudioContext;
-		const audioCtx = new AudioCtx();
-		const audioDest = audioCtx.createMediaStreamDestination();
-		const silenceGain = audioCtx.createGain();
-		silenceGain.gain.value = 0;
-		const silenceSource = audioCtx.createConstantSource();
-		silenceSource.connect( silenceGain ).connect( audioDest );
-		silenceSource.start();
-		for ( const track of audioDest.stream.getAudioTracks() ) stream.addTrack( track );
+		let audioCtx = null, silenceSource = null;
+		if ( ! offline ) {
+
+			const AudioCtx = window.AudioContext || window.webkitAudioContext;
+			audioCtx = new AudioCtx();
+			const audioDest = audioCtx.createMediaStreamDestination();
+			const silenceGain = audioCtx.createGain();
+			silenceGain.gain.value = 0;
+			silenceSource = audioCtx.createConstantSource();
+			silenceSource.connect( silenceGain ).connect( audioDest );
+			silenceSource.start();
+			for ( const track of audioDest.stream.getAudioTracks() ) stream.addTrack( track );
+
+		}
 
 		// Re-bake any call-card object(s) with a FRESH live fetch of
 		// /about/callcard right before recording starts — this is what makes the
@@ -1688,14 +1838,73 @@ function SidebarRender( editor ) {
 		// frames all cost about the same.
 		setProgress( 0, 'Preparing GPU resources\u2026' );
 		await sleep( 30 ); // let the status paint
-		const totalFrames = Math.max( 1, Math.round( renderLength * fps ) );
 		const frameMs = 1000 / fps;
 
+		// One output frame: through the current shot's camera (and the previous one's, blended, inside a fade), then the burned caption.
+		// The GL fence comes first: nothing is read from the GL canvas until the GPU has finished drawing into it.
+		const gl = renderer.getContext();
+		function renderThrough( cam ) {
+
+			if ( is360 ) renderEquirectFace( cam ); else output.render( scene, cam );
+			gl.finish();
+
+		}
+
+		function drawFrame( outT, t, shotT ) {
+
+			holdTimelineAt( editor, t );
+			const state = shotStateAt( shotT );
+
+			if ( state.from ) {
+
+				// crossfade: previous shot full, current shot on top with alpha
+				renderThrough( state.from );
+				ctx.globalAlpha = 1;
+				ctx.drawImage( glCanvas, 0, 0 );
+				renderThrough( state.camera );
+				ctx.globalAlpha = state.blend;
+				ctx.drawImage( glCanvas, 0, 0 );
+				ctx.globalAlpha = 1;
+
+			} else {
+
+				renderThrough( state.camera );
+				ctx.drawImage( glCanvas, 0, 0 );
+
+			}
+
+			if ( burnCheckbox.getValue() ) {
+
+				const cue = activeCueAt( getCues(), outT );
+				if ( cue && cue.text ) drawBurnedCaption( ctx, width, height, cue.text );
+
+			}
+
+		}
+
+		let muxer = null, encoder = null, encodeError = null;
 		let renderError = null;
 
 		try {
 
 			// Inside the guarded block so a GPU failure here still restores the scene and the UI.
+			if ( offline ) {
+
+				// Settle the timeline: the sampler keeps some state between samples (what each text label last showed, its shadow and
+				// fade slots), so the first pass over a freshly loaded scene left it slightly different from every later pass: frame n
+				// could differ between the first render after a load and the next. Visit every frame once, in order, with no drawing,
+				// so every render starts from the same state, whatever came before it and whatever range it covers.
+				setProgress( 0, 'Settling the timeline\u2026' );
+				for ( let n = 0; n < totalFrames; n ++ ) {
+
+					if ( cancelRequested ) break;
+					holdTimelineAt( editor, frameTimes( n, fps, skip, duration ).t );
+					if ( n % 300 === 299 ) { setProgress( 0, `Settling the timeline\u2026 ${ n + 1 } / ${ totalFrames }` ); await yieldToEventLoop(); }
+
+				}
+
+			}
+
 			holdTimelineAt( editor, Math.min( duration, skip ) );
 			const warmCameras = new Set( [ fallbackCamera ] );
 			for ( const s of shots ) warmCameras.add( cameraOf( s ) );
@@ -1708,74 +1917,112 @@ function SidebarRender( editor ) {
 			ctx.drawImage( glCanvas, 0, 0 );
 			await sleep( 0 );
 
-			startRecorders();
+			if ( offline ) {
 
-			// Wall-clock driven: MediaRecorder timestamps frames by real time, so
-			// sampling the timeline at the true elapsed time keeps the output video
-			// duration equal to the render length even when the browser throttles
-			// timers (background tab) — throttling just drops frames. `elapsed` is
-			// OUTPUT video time; content time is offset by `skip` and clamped to
-			// `duration` so the tail seconds hold the last frame frozen.
-			const startWall = performance.now();
-			let frameIndex = 0;
+				// The offline clock: frame n shows timeline time n / fps, and nothing else decides it. No requestAnimationFrame, no
+				// wall clock, no sleeping to a schedule: a slow machine takes longer and writes the identical frames. (performance.now
+				// below only measures speed for the estimate; it never feeds a frame time.)
+				muxer = new Mp4Muxer( { width, height, fps } );
+				encoder = new VideoEncoder( {
+					output( chunk, meta ) {
 
-			while ( true ) {
+						try {
 
-				if ( cancelRequested ) break;
+							const data = new Uint8Array( chunk.byteLength );
+							chunk.copyTo( data );
+							const d = meta && meta.decoderConfig && meta.decoderConfig.description;
+							const description = d ? ( ArrayBuffer.isView( d ) ? new Uint8Array( d.buffer.slice( d.byteOffset, d.byteOffset + d.byteLength ) ) : new Uint8Array( d.slice( 0 ) ) ) : undefined;
+							muxer.addChunk( data, { key: chunk.type === 'key', timestampUs: chunk.timestamp, description } );
 
-				const elapsed = ( performance.now() - startWall ) / 1000;
-				const outT = Math.min( renderLength, elapsed );
-				const t = Math.min( duration, skip + outT );
+						} catch ( e ) {
 
-				holdTimelineAt( editor, t );
+							encodeError = encodeError || e;
 
-				// Shot/camera-cut blend time is intentionally NOT clamped to `duration`
-				// like `t` above — a shot cut placed right at the timeline's end (e.g.
-				// a fade into a trailing call card) would otherwise freeze stuck at the
-				// START of its transition (blend 0) for the whole tail, instead of
-				// finishing the fade and holding on the fully-resolved final shot.
-				const shotT = skip + outT;
+						}
 
-				const state = shotStateAt( shotT );
+					},
+					error( e ) { encodeError = encodeError || e; },
+				} );
+				encoder.configure( avc );
 
-				if ( state.from ) {
+				const keyEvery = fps * 2; // a keyframe every two seconds of timeline, on absolute frame numbers, plus the first frame of a range
+				const started = performance.now();
+				let done = 0;
 
-					// crossfade: previous shot full, current shot on top with alpha
-					if ( is360 ) renderEquirectFace( state.from ); else output.render( scene, state.from );
-					ctx.globalAlpha = 1;
-					ctx.drawImage( glCanvas, 0, 0 );
-					if ( is360 ) renderEquirectFace( state.camera ); else output.render( scene, state.camera );
-					ctx.globalAlpha = state.blend;
-					ctx.drawImage( glCanvas, 0, 0 );
-					ctx.globalAlpha = 1;
+				for ( let n = range.start; n <= range.end; n ++ ) {
 
-				} else {
+					if ( cancelRequested ) break;
+					if ( encodeError ) throw encodeError;
 
-					if ( is360 ) renderEquirectFace( state.camera ); else output.render( scene, state.camera );
-					ctx.drawImage( glCanvas, 0, 0 );
+					const { outT, t, shotT } = frameTimes( n, fps, skip, duration );
+					drawFrame( outT, t, shotT );
+
+					const frame = new VideoFrame( outCanvas, { timestamp: frameTimestampUs( n, fps ), duration: frameDurationUs( fps ) } );
+					container.dom.dispatchEvent( new CustomEvent( 'render-frame', { detail: { frame: n, time: t, canvas: outCanvas } } ) );
+					encoder.encode( frame, { keyFrame: n === range.start || n % keyEvery === 0 } );
+					frame.close();
+					done ++;
+
+					// bounded queue: wait for the encoder to drain by its own event, not for a timer
+					while ( encoder.encodeQueueSize > 6 ) await new Promise( resolve => encoder.addEventListener( 'dequeue', resolve, { once: true } ) );
+
+					const perFrame = ( performance.now() - started ) / done;
+					const left = ( range.end - n ) * perFrame / 1000;
+					setProgress( done / range.count, `Frame ${ n } of ${ range.end } (${ done } / ${ range.count }) \u00b7 timeline ${ t.toFixed( 2 ) } s \u00b7 ${ ( 1000 / perFrame ).toFixed( 1 ) } frames/s \u00b7 about ${ left < 90 ? Math.round( left ) + ' s' : Math.round( left / 60 ) + ' min' } left` );
+					await yieldToEventLoop();
 
 				}
 
-				if ( burnCheckbox.getValue() ) {
+				if ( ! cancelRequested ) {
 
-					const cue = activeCueAt( getCues(), outT );
-					if ( cue && cue.text ) drawBurnedCaption( ctx, width, height, cue.text );
+					await encoder.flush();
+					if ( encodeError ) throw encodeError;
+					if ( muxer.frameCount !== range.count ) throw new Error( `Encoder returned ${ muxer.frameCount } frames for ${ range.count } requested.` );
+					try { localStorage.setItem( MS_PER_FRAME_KEY, String( ( performance.now() - started ) / range.count ) ); } catch ( e ) { /* storage blocked */ }
 
 				}
 
-				if ( videoTrack.requestFrame ) videoTrack.requestFrame();
+			} else {
 
-				const tail = t >= duration && outT < renderLength ? ' (holding final frame)' : '';
-				setProgress( outT / renderLength, `Rendering ${ outT.toFixed( 2 ) }s / ${ renderLength.toFixed( 2 ) }s (${ Math.round( outT * fps ) } / ${ totalFrames } frames)${ tail }` );
+				startRecorders();
 
-				if ( outT >= renderLength ) break;
+				// Preview: wall-clock driven. MediaRecorder timestamps frames by real time, so sampling the timeline at the true
+				// elapsed time keeps the video the right length even when the browser throttles timers (a background tab);
+				// throttling just drops frames. NOT reproducible, and says so. `elapsed` is OUTPUT video time; content time is
+				// offset by `skip` and clamped to `duration` so the tail seconds hold the last frame frozen.
+				const startWall = performance.now();
+				let frameIndex = 0, drawn = 0;
 
-				// Pace against the absolute frame schedule, not "render time + frameMs":
-				// sleeping a full frame after the work made every frame cost
-				// render + frameMs, so the real rate fell below `fps` and the
-				// recording stuttered.
-				frameIndex = Math.max( frameIndex + 1, Math.ceil( ( performance.now() - startWall ) / frameMs ) ); // skip, don't burst, if we fell behind
-				await sleep( Math.max( 0, startWall + frameIndex * frameMs - performance.now() ) );
+				while ( true ) {
+
+					if ( cancelRequested ) break;
+
+					const elapsed = ( performance.now() - startWall ) / 1000;
+					const outT = Math.min( renderLength, elapsed );
+					const t = Math.min( duration, skip + outT );
+
+					// Shot/camera-cut blend time is intentionally NOT clamped to `duration` like `t` — a shot cut placed
+					// right at the timeline's end (e.g. a fade into a trailing call card) would otherwise freeze stuck at
+					// the START of its transition for the whole tail, instead of finishing the fade.
+					drawFrame( outT, t, skip + outT );
+					drawn ++;
+
+					if ( videoTrack.requestFrame ) videoTrack.requestFrame();
+
+					const tail = t >= duration && outT < renderLength ? ' (holding final frame)' : '';
+					// Name the degradation while it happens, so nobody tunes against a degraded preview and blames the render
+					const achieved = elapsed > 1 ? drawn / elapsed : fps;
+					const degraded = achieved < fps * 0.92 ? ` \u00b7 preview: ${ Math.round( achieved ) } fps, dropping frames` : '';
+					setProgress( outT / renderLength, `Previewing ${ outT.toFixed( 2 ) }s / ${ renderLength.toFixed( 2 ) }s${ tail }${ degraded }` );
+
+					if ( outT >= renderLength ) break;
+
+					// Pace against the absolute frame schedule, not "render time + frameMs": sleeping a full frame after the
+					// work made every frame cost render + frameMs, so the real rate fell below `fps` and the recording stuttered.
+					frameIndex = Math.max( frameIndex + 1, Math.ceil( ( performance.now() - startWall ) / frameMs ) ); // skip, don't burst, if we fell behind
+					await sleep( Math.max( 0, startWall + frameIndex * frameMs - performance.now() ) );
+
+				}
 
 			}
 
@@ -1785,12 +2032,14 @@ function SidebarRender( editor ) {
 
 		} finally {
 
+			if ( encoder && encoder.state !== 'closed' ) { try { encoder.close(); } catch ( e ) { /* already closed */ } }
+
 			const live = recorders.filter( r => r.recorder.state !== 'inactive' );
 			for ( const r of live ) r.recorder.stop();
 			await Promise.all( live.map( r => r.stopped ) );
 
-			silenceSource.stop();
-			audioCtx.close();
+			if ( silenceSource ) silenceSource.stop();
+			if ( audioCtx ) audioCtx.close();
 
 			for ( const restore of cameraRestores ) restore();
 			for ( const restore of skinFixes ) restore();
@@ -1840,12 +2089,28 @@ function SidebarRender( editor ) {
 
 		}
 
-		const baseName = videoBaseName( { width, height, fps, duration: outputDuration( duration ), is360 } );
+		// a partial range is named for its frames, so it cannot be mistaken for the whole film when it is spliced in
+		const partial = offline && ( range.start !== 0 || range.end !== totalFrames - 1 );
+		const baseName = videoBaseName( { width, height, fps, duration: outputDuration( duration ), is360 } ) + ( partial ? `_frames-${ range.start }-${ range.end }` : '' );
 
 		// One output per recorder (360 mode may have recorded MP4 + WebM in
 		// parallel off the same stream) — MP4 first so it's always the
 		// auto-downloaded "primary" file when both are available.
 		const outputs = [];
+		if ( offline ) {
+
+			let blob = new Blob( muxer.finish(), { type: 'video/mp4' } );
+			if ( is360 ) {
+
+				setProgress( 1, 'Embedding 360\u00b0 metadata\u2026' );
+				blob = await injectSphericalMetadata( blob );
+
+			}
+
+			outputs.push( { blob, ext: 'mp4', isMp4: true } );
+
+		}
+
 		for ( const r of recorders ) {
 
 			const ext = extensionFor( r.mime );
@@ -1894,7 +2159,11 @@ function SidebarRender( editor ) {
 
 		}
 
-		if ( ! is360 ) {
+		if ( offline ) {
+
+			setProgress( 1, `Done \u2014 ${ range.count.toLocaleString( 'en-US' ) } frames at exactly ${ fps }.000 fps, video downloaded${ partial ? ` (frames ${ range.start }\u2013${ range.end }: splice it in at frame ${ range.start })` : '' }.${ is360 ? ' 360\u00b0 metadata embedded.' : '' }` );
+
+		} else if ( ! is360 ) {
 
 			setProgress( 1, 'Done \u2014 video downloaded.' );
 
@@ -1915,6 +2184,7 @@ function SidebarRender( editor ) {
 	}
 
 	updateDuration();
+	refreshMode();
 	refreshSequencer();
 
 	return container;
