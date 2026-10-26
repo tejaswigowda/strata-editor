@@ -30,10 +30,10 @@
 		"title": "Why cells are small: surface area to volume",
 		"href": "area-volume.html",
 		"group": "Animation and rendering",
-		"blurb": "Cubes of side 1, 2 and 3 have surface-to-volume ratios of 6, 3 and 2: why cells stay small and divide, and why mitochondria and lungs fold their membranes. Built with the JS Shell.",
+		"blurb": "Cubes of side 1, 2 and 3 have surface-to-volume ratios of 6, 3 and 2 per unit-cube width, falling as 1 / side in any units: why cells stay small and divide, and why mitochondria and lungs fold their membranes. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/area-volume.jpg",
 		"desc": "Build one cube at three sizes out of unit cubes, show its skin, glass the outside to find the starving middle, cut the big cube into slabs, bars and 27 cubes so the ratio returns to 6, and fold a flat membrane into a zigzag — all with the JS Shell, the Universal Timeline and the camera sequence.",
-		"embed": "#repo=tejaswigowda/test1&file=area-volume.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@d742211b6a3cb36a3c59ead6569f4068a7ca3b03&file=area-volume.json&present=true"
 	},
 	{
 		"title": "Build a night scene from scratch",

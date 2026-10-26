@@ -7,14 +7,14 @@
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: why cells are small. Cubes of side 1, 2 and 3 have surface-to-volume ratios of 6, 3 and 2; cutting the big cube into 27 small ones brings the ratio back to 6; a folded membrane packs surface into a small space. Built in Strata with the JS Shell.">
+<meta name="description" content="Step-by-step tutorial: why cells are small. Cubes of side 1, 2 and 3 have surface-to-volume ratios of 6, 3 and 2 per unit-cube width, falling as 1 / side in any units; cutting the big cube into 27 small ones brings the ratio back to 6; a folded membrane packs surface into a small space. Built in Strata with the JS Shell.">
 <!--
 	/about/tutorials/area-volume.html — a from-scratch, by-hand tutorial.
 	Every snippet is real Strata surface (JS Shell globals + the public
 	$S().at()/.fadeIn()/.fade()/.animate()/.change()/.setKeys() grammar
 	documented in guides/ANIMATION.md and guides/CAMERA_PATHS.md). Paste each
 	block into the Shell tab in order. Static page, no build step, no
-	third-party calls. The finished scene is area-volume.json in tejaswigowda/test1.
+	third-party calls. The scene file is area-volume.json in tejaswigowda/test1.
 -->
 <style>
 	:root { color-scheme: dark; }
@@ -132,19 +132,20 @@
 <body>
 <main>
 	<h1>Why cells are small: surface area to volume</h1>
-	<iframe src="../../#repo=tejaswigowda/test1&amp;file=area-volume.json&amp;present=true"></iframe>
+	<iframe src="../../#repo=tejaswigowda/test1@d742211b6a3cb36a3c59ead6569f4068a7ca3b03&amp;file=area-volume.json&amp;present=true"></iframe>
 
-	<p class="tagline">A 98-second visual argument that a bigger thing has less surface for its size. A cube of side 1 has surface area 6 and volume 1, so a surface-to-volume ratio of 6; a cube of side 2 has 24 and 8, a ratio of 3; a cube of side 3 has 54 and 27, a ratio of 2. The surface grows with the <em>square</em> of the side and the volume with the <em>cube</em>, so the ratio falls as 6 / side. That is why cells stay small and divide: a cell lives through its skin. Cut the big cube into 27 small ones and the volume is still 27 but the surface is 162, a ratio of 6 again. Life uses the other trick too: fold the surface (the cristae of a mitochondrion, the alveoli of a lung). It is the <a href="a-plus-b-cubed.html">(a + b)³ tutorial</a>'s machinery (unit cubes with black borders, a room, shadows, an x-ray, a camera sequence) pointed at a different idea. Open the <a href="../../">editor</a>, load an empty scene, open the <strong>Shell</strong> tab and paste each block in order, or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=area-volume.json&amp;branch=main">area-volume.json</a> (<a href="#open-finished">the last step</a>).</p>
+	<p class="tagline">A 98-second visual argument that a bigger thing has less surface for its size. Measuring every length in unit-cube widths, a cube of side 1 has surface area 6 and volume 1, so a surface-to-volume ratio of 6 <em>per unit-cube width</em>; a cube of side 2 has 24 and 8, a ratio of 3; a cube of side 3 has 54 and 27, a ratio of 2. The surface grows with the <em>square</em> of the side and the volume with the <em>cube</em>, so the ratio is proportional to 1 / side, in any units: double the side and it halves. That is why cells stay small and divide: a cell lives through its skin. Cut the big cube into 27 small ones and the volume is still 27 but the surface is 162, a ratio of 6 again. Life uses the other trick too: fold the surface (the cristae of a mitochondrion, the alveoli of a lung). It is the <a href="a-plus-b-cubed.html">(a + b)³ tutorial</a>'s machinery (unit cubes with black borders, a room, shadows, an x-ray, a camera sequence) pointed at a different idea. Open the <a href="../../">editor</a>, load an empty scene, open the <strong>Shell</strong> tab and paste each block in order, or open the scene file, <a href="../../#repo=tejaswigowda/test1&amp;file=area-volume.json&amp;branch=main">area-volume.json</a> (<a href="#open-finished">the last step</a>).</p>
 
 	<h2><span class="step">1</span> The idea</h2>
 	<p class="lede">Count unit squares on the outside (<em>SA</em>) and unit cubes on the inside (<em>V</em>) of a cube of side <em>s</em>. Six faces of <em>s × s</em> squares give <em>SA = 6s²</em>; <em>V = s³</em>; so <em>SA / V = 6 / s</em>.</p>
+	<p><strong>The units.</strong> <em>SA / V</em> is an area over a volume, so it has the dimensions of <em>1 / length</em>, and the numbers 6, 3 and 2 below belong to the cube <em>and the ruler</em>: here the ruler is one unit cube, so they are ratios <em>per unit-cube width</em>. Measure the same cubes in millimetres and every ratio is a thousand times smaller. What does not depend on the units is the shape of the relation, <em>SA / V ∝ 1 / s</em>: <strong>double the side and the ratio halves</strong>, whatever the unit. Do not carry the bare 6, 3 and 2 over to a real cell; carry the trend.</p>
 	<table class="cuts">
 		<tr><th>Side</th><th>Face</th><th>SA</th><th>V</th><th>SA / V</th></tr>
 		<tr><td>1</td><td>1 square</td><td>6</td><td>1</td><td>6</td></tr>
 		<tr><td>2</td><td>4 squares</td><td>24</td><td>8</td><td>3</td></tr>
 		<tr><td>3</td><td>9 squares</td><td>54</td><td>27</td><td>2</td></tr>
 	</table>
-	<p>A cell takes in food and oxygen and gets rid of waste through its surface, but it needs them in proportion to its volume. When the ratio falls, the middle of the cell is farther and farther from the skin. Dividing is the cheap way out. Cut the side-3 cube into 27 unit cubes (three slabs, nine bars, 27 cubes) and the volume is unchanged, but the surface is now 27 × 6 = 162, a ratio of 6. The same volume, three times the skin. The other way out is to keep the volume and fold the surface: a flat membrane folded like a concertina takes a fraction of the room.</p>
+	<p>A cell takes in food and oxygen and gets rid of waste through its surface, but it needs them in proportion to its volume. When the ratio falls, the middle of the cell is farther and farther from the skin. Dividing is the cheap way out. Cut the side-3 cube into 27 unit cubes (three slabs, nine bars, 27 cubes) and the volume is unchanged, but the surface is now 27 × 6 = 162, a ratio of 6. The same volume, three times the skin. <strong>This sequence is the film's dimensionally cleanest argument.</strong> The volume stays at 27 throughout, so what is compared is a surface of 54 against a surface of 162 for the <em>same</em> amount of stuff: a ratio of 3 to 1 that has no unit attached and needs no ruler. The growing sequence (sides 1, 2, 3) shows the trend; the division sequence shows the same thing without reference to any unit. The other way out is to keep the volume and fold the surface: a flat membrane folded like a concertina takes a fraction of the room.</p>
 	<p>The numbers are the film's, not a model of a real cell (a real cell is about 10⁻⁵ metres across, and the cubes are in tiles). The plan for the clock, with the times the voice sets (the cues were timed first, and every beat sits on its cue), in seconds:</p>
 	<table class="cuts">
 		<tr><th>Time</th><th>What happens</th></tr>
@@ -197,22 +198,35 @@ editor.execute(new AddObjectCommand(editor, key));
 editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));</code></pre>
 
 	<h2><span class="step">3</span> One cube, three sizes</h2>
-	<p class="lede">A cube of side <em>s</em> is a group of <em>s³</em> unit cubes, so the faces are visibly a grid of <em>s²</em> squares each, and counting the squares <em>is</em> counting the surface area. Every unit cube has a black border (<code>hasEdgeOutline</code>), which draws the grid, and every one has its own material, so that it can fade on its own. The three cubes stand in a row (<code>SIDES</code> says where), and share one geometry. The one cube in the middle of the side-3 cube is gold: it is the cell's middle, the cube that is a long way from the skin. The unit cubes are named <code>t3_1_1_1</code>, not <code>t3.1.1.1</code>: a dot in an id means a class to the selector engine.</p>
-	<p>Each cube also gets a <em>skin</em>: a slightly larger, see-through coral box around it. It starts at opacity 0 (<code>transparent: true, opacity: 0</code>) and is faded in when the voice says <em>surface</em>, so the surface is something you can see, not just a number. The block ends by classing the unit cubes of each cube (<code>u1</code>, <code>u2</code>, <code>u3</code>), the 26 outer ones of the big cube (<code>outer3</code>) and the skins (<code>skin</code>), and returns their counts: 3, 17 and 55 are the numbers of <em>nodes</em> (a group's class also matches what is inside it, and each unit cube's black border is a child), not of cubes: 1 + 1 skin + 1 border, 8 + 8 borders + 1, 27 + 27 + 1.</p>
+	<p class="lede">A cube of side <em>s</em> is a group of <em>s³</em> unit cubes, so the faces are visibly a grid of <em>s²</em> squares each, and counting the squares <em>is</em> counting the surface area. Every unit cube has a black border (<code>hasEdgeOutline</code>), which draws the grid, and the cubes share their materials: the film has <strong>ten materials</strong> in all, made once at the top of the block (<code>PAL</code>) and handed to every mesh that uses them, never one per mesh (a new material per mesh defeats the serializer and the glTF exporter, which share by object identity; this scene's first version had 54). A material belongs to every mesh that holds it, so what has to change on its own gets its own: the 26 outer cubes of the big cube fade to glass (step 10), so they have a material (<code>aquaBig</code>) that the small cubes (<code>aquaSmall</code>) do not share; the middle cube shares the gold of the gold labels, which is possible only because neither ever fades. The three cubes stand in a row (<code>SIDES</code> says where), and share one geometry. The one cube in the middle of the side-3 cube is gold: it is the cell's middle, the cube that is a long way from the skin. The unit cubes are named <code>t3_1_1_1</code>, not <code>t3.1.1.1</code>: a dot in an id means a class to the selector engine.</p>
+	<p>Each cube also gets a <em>skin</em>: a slightly larger, see-through coral box around it. The three skins share one material (opacity 0.22), and each starts collapsed (scale 0.001) and <em>inflates</em> when the voice says <em>surface</em>, so the surface is something you can see, not just a number. Cubes, skins and the membrane appear by <em>growing</em> (the cubes out of the floor) and go by shrinking, because a shared material cannot fade one mesh without fading every mesh that holds it. The block ends by classing the unit cubes of each cube (<code>u1</code>, <code>u2</code>, <code>u3</code>), the 26 outer ones of the big cube (<code>outer3</code>) and the skins (<code>skin</code>), and returns their counts: 3, 17 and 55 are the numbers of <em>nodes</em> (a group's class also matches what is inside it, and each unit cube's black border is a child), not of cubes: 1 + 1 skin + 1 border, 8 + 8 borders + 1, 27 + 27 + 1.</p>
 	<pre><code>// one cube, three sizes: sides 1, 2 and 3 are built from 1, 8 and 27 unit cubes, side by side on the floor.
 // Every unit cube has a black border, so the faces of a big cube are visibly a grid of unit squares: that grid is the surface area.
 const GAPT = 0.06, AQUA = 0x14e0c8, GOLD = 0xffb703, CORAL = 0xff4d6a;
 const unit = new BoxGeometry(1 - GAPT, 1 - GAPT, 1 - GAPT);          // one shared geometry
 const SIDES = [[1, -3.75], [2, -0.75], [3, 2.75]];                    // side, and the x of the middle of the cube
 
+// The palette: every material of the film, made once. A mesh is given one of these, never a new one, so the whole scene has ten
+// (these seven, the room, the wall, the floor and the end card): the serializer and the glTF exporter share by object identity.
+// A material belongs to every mesh that holds it, so what fades has its own: the 26 outer cubes of the big cube fade to glass
+// (aquaBig), the small cubes do not (aquaSmall). Everything else grows and shrinks, or cuts, instead of fading.
+const make = (color, intensity, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: 0.5, metalness: 0.1, ...extra });
+globalThis.PAL = {
+  aquaSmall: make(AQUA, 0.25), aquaBig: make(AQUA, 0.25),
+  gold: make(GOLD, 0.5),                                              // the middle cube and the gold labels
+  skin: make(CORAL, 0.25, { transparent: true, opacity: 0.22, depthWrite: false }),
+  panel: make(0xa78bfa, 0.3),
+  white: make(0xffffff, 0.7)
+};
+
 for (const [s, cx] of SIDES) {
   const cube = new Group();
   cube.name = 'c' + s;
   cube.position.set(cx, 0, 0);
+  cube.scale.setScalar(0.001);                                        // each cube grows out of the floor at its moment
   for (let i = 0; i &lt; s; i++) for (let j = 0; j &lt; s; j++) for (let k = 0; k &lt; s; k++) {
     const core = s === 3 &amp;&amp; i === 1 &amp;&amp; j === 1 &amp;&amp; k === 1;           // the one tile in the middle of the 3-cube
-    const color = core ? GOLD : AQUA;
-    const tile = new Mesh(unit, new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, roughness: 0.5, metalness: 0.1 }));
+    const tile = new Mesh(unit, core ? PAL.gold : s === 3 ? PAL.aquaBig : PAL.aquaSmall);
     tile.name = `t${s}_${i}_${j}_${k}`;
     tile.position.set(i + 0.5 - s / 2, j + 0.5, k + 0.5 - s / 2);    // relative to the cube's group, standing on y = 0
     tile.castShadow = tile.receiveShadow = true;
@@ -220,10 +234,10 @@ for (const [s, cx] of SIDES) {
     tile.userData.home = tile.position.toArray();                     // where it sits in the whole cube
     cube.add(tile);
   }
-  // the skin: a thin coral shell around the cube, see-through, invisible until its moment (it starts at opacity 0)
-  const skin = new Mesh(new BoxGeometry(s + 0.1, s + 0.1, s + 0.1),
-    new MeshStandardMaterial({ color: CORAL, emissive: CORAL, emissiveIntensity: 0.25, transparent: true, opacity: 0, depthWrite: false }));
+  // the skin: a thin coral shell around the cube, see-through, shared by the three; collapsed (scale 0.001) until its moment
+  const skin = new Mesh(new BoxGeometry(s + 0.1, s + 0.1, s + 0.1), PAL.skin);
   skin.name = 'skin' + s;
+  skin.scale.setScalar(0.001);
   skin.position.set(0, s / 2, 0);
   skin.castShadow = false;
   cube.add(skin);
@@ -236,14 +250,14 @@ $S('#skin1, #skin2, #skin3').addClass('skin');
 [$S('.u1').nodes.length, $S('.u2').nodes.length, $S('.u3').nodes.length]</code></pre>
 
 	<h2><span class="step">4</span> A membrane</h2>
-	<p class="lede">The folded surface is six flat panels, side by side along <em>x</em>, each 1.5 long and 4 deep, floating at <em>y</em> = 2.4. When they fold, panels alternate up and down, so six panels become a zigzag, like the cristae of a mitochondrion or a folded alveolar wall. They are hidden at first (the <code>fadeIn</code> in step 11 starts them at opacity 0).</p>
+	<p class="lede">The folded surface is six flat panels, side by side along <em>x</em>, each 1.5 long and 4 deep, floating at <em>y</em> = 2.4. When they fold, panels alternate up and down, so six panels become a zigzag, like the cristae of a mitochondrion or a folded alveolar wall. They share one material, and are collapsed (scale 0.001) at first: they grow in step 11.</p>
 	<pre><code>// a membrane: a flat sheet of 6 thin panels, side by side, that will fold like a concertina (a crista, an alveolar wall).
 const L = 1.5, N = 6, Y0 = 2.4;
 for (let i = 0; i &lt; N; i++) {
-  const panel = new Mesh(new BoxGeometry(L - 0.04, 0.12, 4),
-    new MeshStandardMaterial({ color: 0xa78bfa, emissive: 0xa78bfa, emissiveIntensity: 0.3, roughness: 0.5, metalness: 0.1 }));
+  const panel = new Mesh(new BoxGeometry(L - 0.04, 0.12, 4), PAL.panel);       // the six share one material
   panel.name = 'panel' + i;
   panel.position.set(-N * L / 2 + L * (i + 0.5), Y0, 0);             // flat: end to end, along x
+  panel.scale.setScalar(0.001);                                       // collapsed until the sheet appears
   panel.castShadow = panel.receiveShadow = true;
   panel.userData.hasEdgeOutline = true;
   editor.execute(new AddObjectCommand(editor, panel));
@@ -285,14 +299,12 @@ end.lookAt(30, 4, 0);</code></pre>
 	<pre><code>// every label is a copy of the one Text stencil, so they share its font. A label's text begins at its own origin: the readout is
 // left-aligned, so its text can change without moving; the single big digits are centred by moving them left by half their width.
 const tpl = $S('#Text').nodes[0];
-const WHITE = 0xffffff, GOLD = 0xffb703;
+const WHITE = PAL.white, GOLD = PAL.gold;                       // shared materials: a label never gets a copy of its own
 let first = true;
-function label(name, color, x, y, z, scale) {
-  const m = first ? tpl : new Mesh(tpl.geometry.clone(), tpl.material.clone());
+function label(name, material, x, y, z, scale) {
+  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);
   m.name = name;
-  m.material.color = new Color(color);
-  m.material.emissive = new Color(color);
-  m.material.emissiveIntensity = 0.7;
+  m.material = material;
   m.scale.setScalar(scale);
   m.position.set(x, y, z);
   m.userData.textShadow = true;
@@ -332,17 +344,19 @@ editor.work.touch();
 editor.scene.userData.renderShots.length      // 4</code></pre>
 
 	<h2><span class="step">9</span> The cubes grow, and the skin shows</h2>
-	<p class="lede">The cubes come in one at a time (<code>fadeIn</code>) on the cues <em>start with a cube</em>, <em>double the side</em> and <em>triple it</em>. Two seconds into each cue, as the voice says <em>surface</em>, the skin fades to 22% over 0.6 s. The coral shell is the point of the film: look at how much of a small cube is skin, and how much less of a big one.</p>
+	<p class="lede">The cubes come in one at a time (each grows from the floor, <code>size('#c1', t, 1, 800, 'ease-out')</code>) on the cues <em>start with a cube</em>, <em>double the side</em> and <em>triple it</em>. Two seconds into each cue, as the voice says <em>surface</em>, the skin inflates around the cube over 0.6 s. The coral shell is the point of the film: look at how much of a small cube is skin, and how much less of a big one.</p>
 	<pre><code>// one cube at three sizes, each at its moment: the cube, its skin (a coral shell: the surface), and the ratio over it
-$S('#c1').at(6.0).fadeIn(0.8);
-$S('#skin1').at(9.95).fade(0, 0.22, 0.6);
-$S('#c2').at(19.0).fadeIn(0.8);
-$S('#skin2').at(21.3).fade(0, 0.22, 0.6);
-$S('#c3').at(29.27).fadeIn(0.8);
-$S('#skin3').at(31.57).fade(0, 0.22, 0.6);</code></pre>
+// (a cube grows out of the floor and its skin inflates around it: the cubes and skins share materials, so they cannot fade one at a time)
+globalThis.size = (sel, at, to, ms, ease) =&gt; $S(sel).at(at).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, ms, ease);
+size('#c1', 6.0, 1, 800, 'ease-out');
+size('#skin1', 9.95, 1, 600, 'ease-out');
+size('#c2', 19.0, 1, 800, 'ease-out');
+size('#skin2', 21.3, 1, 600, 'ease-out');
+size('#c3', 29.27, 1, 800, 'ease-out');
+size('#skin3', 31.57, 1, 600, 'ease-out');</code></pre>
 	<figure>
 		<img src="screenshots/av-one.png" alt="A single small cube on the floor of the room, wrapped in a thin coral shell, with the title Surface area over volume above it." loading="lazy">
-		<figcaption>8 seconds in: the unit cube, and its skin.</figcaption>
+		<figcaption>12 seconds in: the unit cube, and its skin.</figcaption>
 	</figure>
 	<figure>
 		<img src="screenshots/av-three.png" alt="Three cubes in a row of increasing size, each with a coral skin: a single cube, a 2 by 2 by 2 block and a 3 by 3 by 3 block, with the digits 6 and 3 over the first two, and the readout side 3, SA 54, V 27." loading="lazy">
@@ -350,16 +364,16 @@ $S('#skin3').at(31.57).fade(0, 0.22, 0.6);</code></pre>
 	</figure>
 
 	<h2><span class="step">10</span> The middle starves, and the cell divides</h2>
-	<p class="lede">The voice says <em>too big, and the middle starves</em> at 49 s, and at 53.2 s the 26 outer cubes of the big cube turn to glass (<code>.fade(1, 0.15, 0.6)</code>, on the class <code>outer3</code>), so the one gold cube in the middle is all you see: far from the skin, and starving. At 57.9 s the cell divides. The two small cubes and their skins go, the big cube slides to the middle, and then it is cut <em>in three steps</em>, one more axis each time: first the three <em>slabs</em> (a gap in <em>y</em>), then the nine <em>bars</em> (a gap in <em>y</em> and <em>z</em>), then the 27 <em>cubes</em> (gaps in all three). <code>stage(n, at)</code> moves every unit cube to its place in the whole cube <em>plus</em> a gap that grows with its index along the axes of that step (<code>G * (i - 1)</code>), so the middle row stays and the outer rows step away. The readout counts as it goes: <em>3 slabs, SA 90, SA/V = 3.3</em>; <em>9 bars, SA 126, SA/V = 4.7</em>; <em>27 cubes, SA 162, SA/V = 6</em>.</p>
+	<p class="lede">The voice says <em>too big, and the middle starves</em> at 49 s, and at 53.2 s the 26 outer cubes of the big cube turn to glass (<code>.fade(1, 0.15, 0.6)</code>, on the class <code>outer3</code>), so the one gold cube in the middle is all you see: far from the skin, and starving. At 57.9 s the cell divides. The two small cubes shrink away and the big cube's skin with them, the big cube slides to the middle, and then it is cut <em>in three steps</em>, one more axis each time: first the three <em>slabs</em> (a gap in <em>y</em>), then the nine <em>bars</em> (a gap in <em>y</em> and <em>z</em>), then the 27 <em>cubes</em> (gaps in all three). <code>stage(n, at)</code> moves every unit cube to its place in the whole cube <em>plus</em> a gap that grows with its index along the axes of that step (<code>G * (i - 1)</code>), so the middle row stays and the outer rows step away. The readout counts as it goes: <em>3 slabs, SA 90, SA/V = 3.3</em>; <em>9 bars, SA 126, SA/V = 4.7</em>; <em>27 cubes, SA 162, SA/V = 6</em>.</p>
 	<div class="note"><strong>Where do 90 and 126 come from?</strong> A slab is 3 × 3 × 1: 2 × 9 + 4 × 3 = 30. Three slabs: 90. A bar is 3 × 1 × 1: 2 × 1 + 4 × 3 = 14. Nine bars: 126. Each cut adds two faces per piece, and the surface only goes up.</div>
 	<pre><code>// "the middle starves": the 26 outer cubes of the big cube turn to glass, and the one gold cube in the middle is all that is left
 $S('.outer3').at(53.17).fade(1, 0.15, 0.6);
 $S('.outer3').at(57.92).fade(0.15, 1, 0.5);
-$S('#skin3').at(57.92).fade(0.22, 0, 0.6);
+size('#skin3', 57.92, 0.001, 600, 'ease-in');
 
 // the cell divides: the small cubes and their skins go, the big cube slides to the middle, then it is cut
-$S('#c1, #c2').at(57.92).fadeOut(0.8);
-$S('#skin1, #skin2').at(57.92).fade(0.22, 0, 0.6);
+size('#c1', 57.92, 0.001, 800, 'ease-in');
+size('#c2', 57.92, 0.001, 800, 'ease-in');
 $S('#c3').at(57.92).animate({ to: { positionX: 0 } }, 1500, 'ease-in-out');
 $S('#r3').at(57.92).animate({ to: { positionX: -0.41 } }, 1500, 'ease-in-out');
 
@@ -389,7 +403,7 @@ stage(3, 63.42);</code></pre>
 	</figure>
 
 	<h2><span class="step">11</span> The fold</h2>
-	<p class="lede">The cubes are gone and a flat membrane appears (<code>fadeIn</code>), as the voice says <em>life uses this trick everywhere</em>. It folds twice, at 79.8 s and 85.6 s, to 60° and to 78°. <code>pose(deg)</code> works out where each of the six panels sits when the zigzag is folded at that angle: panel <em>i</em> is tilted by ±<em>deg</em> (alternately up and down) and moved so that it hangs from the end of the one before it. At 78° the six panels cover about a fifth of the floor they covered when flat (the horizontal extent of a panel is cos <em>deg</em> of its length), and none of the membrane has been lost.</p>
+	<p class="lede">The cubes are gone and a flat membrane appears (its six panels grow, <code>size</code> again), as the voice says <em>life uses this trick everywhere</em>. It folds twice, at 79.8 s and 85.6 s, to 60° and to 78°. <code>pose(deg)</code> works out where each of the six panels sits when the zigzag is folded at that angle: panel <em>i</em> is tilted by ±<em>deg</em> (alternately up and down) and moved so that it hangs from the end of the one before it. At 78° the six panels cover about a fifth of the floor they covered when flat (the horizontal extent of a panel is cos <em>deg</em> of its length), and none of the membrane has been lost.</p>
 	<pre><code>// the membrane: a flat sheet appears, then folds like a concertina: the same sheet, a smaller footprint
 const L = 1.5, N = 6, Y0 = 2.4;
 const pose = deg =&gt; {                                  // where every panel sits when the sheet is folded at +/- deg
@@ -400,14 +414,13 @@ const pose = deg =&gt; {                                  // where every panel s
     return { x: x0 + c / 2, y: Y0 - s / 2 + y0 + up * s / 2, rot: up * deg };
   });
 };
-$S('.sheet').at(76.2).fadeIn(0.8);
+for (let i = 0; i &lt; 6; i++) size('#panel' + i, 76.2, 1, 800, 'ease-out');     // the panels share one material, so they grow instead of fading in
 const fold = (deg, at, ms) =&gt; pose(deg).forEach((p, i) =&gt;
   $S('#panel' + i).at(at).animate({ to: { positionX: p.x, positionY: p.y, rotation: [0, 0, p.rot] } }, ms, 'ease-in-out'));
 fold(60, 79.8, 2000);
 fold(78, 85.57, 2000);
 // the cubes are gone, the sheet takes over
-$S('.u3').at(75.6).fadeOut(0.8);
-$S('#r3').at(75.6).fadeOut(0.5);</code></pre>
+size('#c3', 75.6, 0.001, 800, 'ease-in');</code></pre>
 	<figure>
 		<img src="screenshots/av-sheet.png" alt="A flat strip of six violet panels floating above the floor of the room, under the caption one membrane, flat." loading="lazy">
 		<figcaption>78 seconds in: the membrane, flat.</figcaption>
@@ -418,9 +431,10 @@ $S('#r3').at(75.6).fadeOut(0.5);</code></pre>
 	</figure>
 
 	<h2><span class="step">12</span> The readout, and the biology</h2>
-	<p class="lede">The readout and the gold note change with the voice. Each <code>say</code> is one <code>change</code> with the usual cross-fade; the ratios <em>6</em>, <em>3</em> and <em>2</em> over the cubes come in on the cues that say them (<em>surface to volume</em>) and go when the cell divides; the <em>6</em> comes back over the 27 cubes at 73 s. The end card fades in as the last camera arrives.</p>
+	<p class="lede">The readout and the gold note change with the voice. Each <code>say</code> is one <code>change</code>: the readout, the only white label, cross-fades; the gold ones (the note and the three digits) share a material with the middle cube, so they cut; the ratios <em>6</em>, <em>3</em> and <em>2</em> over the cubes come in on the cues that say them (<em>surface to volume</em>) and go when the cell divides; the <em>6</em> comes back over the 27 cubes at 73 s. The end card fades in as the last camera arrives.</p>
 	<pre><code>// the readout and the biology note change with the voice
-const say = (sel, at, text) =&gt; $S(sel).at(at).change(text, { transition: 'fade', dur: 300 });
+// the readout is the only white label, so it can cross-fade; the gold ones share a material with the middle cube, so they cut
+const say = (sel, at, text) =&gt; $S(sel).at(at).change(text, sel === '#readout' ? { transition: 'fade', dur: 300 } : {});
 $S('#readout, #note, .ratio').at(0).change('');
 say('#readout', 0.8, 'Surface area / volume');
 say('#readout', 9.95, 'side 1   SA 6   V 1');    say('#r1', 16.25, '6');   say('#readout', 16.25, 'side 1   SA 6   V 1   SA/V = 6');
@@ -471,9 +485,10 @@ $S('#callcard').at(95.82 + 0.2).fadeIn(2.5);</code></pre>
 	</figure>
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
 
-	<h2 id="open-finished"><span class="step">15</span> Open the finished scene</h2>
-	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=area-volume.json&amp;branch=main">area-volume.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: three cubes of 1, 8 and 27 unit cubes, three skins, six membrane panels, five labels, four cameras and the end card, with 54 timeline tracks, 4 shots and 12 subtitle cues. Open it, then scrub the Animations tab: at 8&nbsp;s one cube, at 34&nbsp;s three, at 54&nbsp;s the glass cube with its gold middle, at 70&nbsp;s the 27 cubes, at 87&nbsp;s the folded membrane, and from 96&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed, loaded again from the commit, and played at four times (8, 34, 61.5 and 87&nbsp;s). The screenshots on this page are frames of the pasted scene at 8, 34, 54, 61.5, 70, 78, 87 and 100&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit. Rendering to a video file (step 14) was not run for this page. The film shows geometry, not a model of a cell: the claim that the ratio falls as 6 / side is exact for cubes, and the biology (cristae, alveoli) is an illustration of the same idea, not a measurement.</div>
+	<h2 id="open-finished"><span class="step">15</span> Open the scene file</h2>
+	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=area-volume.json&amp;branch=main">area-volume.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: three cubes of 1, 8 and 27 unit cubes, three skins, six membrane panels, five labels, four cameras and the end card, with 19 geometries, <strong>10 materials</strong>, 50 timeline tracks, 4 shots and 12 subtitle cues. It is the scene <em>file</em>, not a still: the timeline, the camera sequence and the subtitles are saved inside it, so opening it plays the film without any script, and the blocks on this page are how it was authored. Open it, then scrub the Animations tab: at 12&nbsp;s one cube, at 34&nbsp;s three, at 54&nbsp;s the glass cube with its gold middle, at 70&nbsp;s the 27 cubes, at 87&nbsp;s the folded membrane, and from 96&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@d742211</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and read back: 19 geometries, 10 materials, 50 timeline tracks, 4 shots, 12 cues. The screenshots are frames of the pasted scene at 12, 34, 54, 61.5, 70, 78, 87 and 100&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit. Rendering to a video file (step 14) was not run for this page. Compared with the first version of this scene (54 materials), the film differs in three ways, all forced by sharing: the cubes, skins and membrane <em>grow</em> where they used to fade in, the gold labels cut where they used to cross-fade, and the middle cube and the gold labels are one brighter gold. The film shows geometry, not a model of a cell: the claim that the ratio is proportional to 1 / side is exact for cubes, and the biology (cristae, alveoli) is an illustration of the same idea, not a measurement.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
