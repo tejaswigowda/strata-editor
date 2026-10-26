@@ -536,8 +536,9 @@ async function openGitCompare( editor, strings ) {
 		const scenePath = cfg.scenePath || 'scene.json';
 		const branch    = cfg.branch || null; // null -> resolveSceneJSON tries main then master
 		const commitCfg = ( cfg.commit || '' ).trim() || null; // pinned SHA/tag override; empty = "latest" (use branch)
+		const pin       = commitCfg ? null : await pinBranchHead( parsed, branch, cfg.pat );
 		const resolved  = await resolveSceneJSON( {
-			owner: parsed.owner, repo: parsed.repo, ref: commitCfg || branch, path: scenePath, mode: 'authoring',
+			owner: parsed.owner, repo: parsed.repo, ref: commitCfg || ( pin ? pin.sha : branch ), path: scenePath, mode: 'authoring',
 			apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ apiRef }`, cfg.pat ),
 		} );
 		const remote = resolved.json;
@@ -691,6 +692,30 @@ class GitSettingsDialog {
 // instead of each caller re-implementing the same fetch/internalize/apply
 // (or externalize/upload) sequence behind its own popup.
 
+// The CDNs behind a read by branch name (raw.githubusercontent.com ~5 min, jsDelivr hours) can serve
+// the scene from BEFORE the latest commit, so a reload right after a commit would silently show the
+// old scene — edits that were committed look "not saved". Looking up the branch head first and
+// reading by that commit SHA is exact: a SHA URL never goes stale.
+// `ref` is the branch to read (null: main, then master). Returns { sha, branch }, or null when the
+// lookup fails (offline, rate-limited, a tag instead of a branch): callers then read by branch name.
+export async function pinBranchHead( parsed, ref, token ) {
+
+	for ( const branch of ref ? [ ref ] : [ 'main', 'master' ] ) {
+
+		try {
+
+			const head = await ghGet( `/repos/${ parsed.owner }/${ parsed.repo }/git/ref/heads/${ branch.split( '/' ).map( encodeURIComponent ).join( '/' ) }`, token );
+			const sha = head && head.object && head.object.sha;
+			if ( sha ) return { sha, branch };
+
+		} catch { /* try the next candidate, or fall back to the branch name */ }
+
+	}
+
+	return null;
+
+}
+
 // Fetches scene.json + assets from the configured repo and swaps it into the
 // editor. Throws (with `.status` set for a 404) on failure — callers decide
 // how to surface that.
@@ -705,15 +730,16 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 	const commitCfg = ( cfg.commit || '' ).trim() || null; // pinned SHA/tag override; empty = "latest" (use branchCfg)
 
 	onStatus( 0.15, `Fetching ${ scenePath }…` );
+	const pin = commitCfg ? null : await cancellable( pinBranchHead( parsed, branchCfg, cfg.pat ) );
 	const resolved = await cancellable( resolveSceneJSON( {
-		owner: parsed.owner, repo: parsed.repo, ref: commitCfg || branchCfg, path: scenePath, mode: 'authoring',
+		owner: parsed.owner, repo: parsed.repo, ref: commitCfg || ( pin ? pin.sha : branchCfg ), path: scenePath, mode: 'authoring',
 		apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ scenePath }?ref=${ apiRef }`, cfg.pat ),
 	} ) );
 	const json   = resolved.json;
-	const branch = resolved.ref; // the ref that actually resolved (commitCfg/branchCfg, or main/master if both were null)
+	const branch = pin ? pin.branch : resolved.ref; // the branch that actually resolved (commitCfg/branchCfg, or main/master if both were null)
 
 	onStatus( 0.5, 'Fetching assets…' );
-	await cancellable( internalizeFromGit( json, parsed, branch, cfg.pat, 'authoring' ) );
+	await cancellable( internalizeFromGit( json, parsed, resolved.ref, cfg.pat, 'authoring' ) );
 
 	setLoadCancellable( false ); // from here the scene is being replaced: too late to back out
 	onStatus( 0.85, 'Applying scene…' );
@@ -748,7 +774,11 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 	// a failure here doesn't affect the load that already succeeded. Skipped
 	// when pinned to a specific commit/tag: there is no "heads/<sha>" ref to
 	// look up, and the whole point of a pin is to ignore the branch's HEAD.
-	if ( ! commitCfg ) {
+	if ( pin ) {
+
+		setSyncedCommit( parsed, scenePath, branch, pin.sha ); // the commit that was actually read
+
+	} else if ( ! commitCfg ) {
 
 		try {
 
@@ -1154,16 +1184,20 @@ export async function loadSceneFromHash( editor ) {
 	try {
 
 		setLoadProgress( 0.15, `Fetching ${ file }…` );
+		// An author (a saved token) reloading after a commit must see that commit, not a CDN's older copy,
+		// so the branch head is looked up and read by SHA. Anonymous readers and present/embed links stay
+		// CDN-only on purpose: no GitHub API call, no 60/hour cap.
+		const pin = existingPat && mode === 'authoring' && ! commitParam ? await cancellable( pinBranchHead( parsed, ref, existingPat ) ) : null;
 		const resolved = await cancellable( resolveSceneJSON( {
-			owner: parsed.owner, repo: parsed.repo, ref, path: file, mode,
+			owner: parsed.owner, repo: parsed.repo, ref: pin ? pin.sha : ref, path: file, mode,
 			apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ file }?ref=${ apiRef }`, existingPat ),
 		} ) );
 		const json   = resolved.json;
-		const branch = resolved.ref; // the ref that actually resolved (ref, or main/master if it was null)
+		const branch = pin ? pin.branch : resolved.ref; // the branch that actually resolved (ref, or main/master if it was null)
 
 		stage = 'fetching assets';
 		setLoadProgress( 0.5, 'Fetching assets…' );
-		await cancellable( internalizeFromGit( json, parsed, branch, existingPat, mode ) );
+		await cancellable( internalizeFromGit( json, parsed, resolved.ref, existingPat, mode ) );
 
 		stage = 'applying the scene';
 		setLoadCancellable( false ); // from here the scene is being replaced: too late to back out
@@ -1191,7 +1225,7 @@ export async function loadSceneFromHash( editor ) {
 		const priorSettings = loadSettings();
 		// Branch: explicit &branch= / @ref, else the ref that actually resolved (main or master) — so the Git tab
 		// and the hash agree. A &commit= pin leaves the branch field as it was.
-		const shownBranch = branchParam || repoRef || ( commitParam ? ( priorSettings.branch || 'main' ) : ( resolved.ref || priorSettings.branch || 'main' ) );
+		const shownBranch = branchParam || repoRef || ( commitParam ? ( priorSettings.branch || 'main' ) : ( branch || priorSettings.branch || 'main' ) );
 		saveSettings( { ...priorSettings, repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch: shownBranch, commit: commitParam || '', scenePath: file } );
 		editor.signals.gitSettingsChanged.dispatch();
 		appliedHash = window.location.hash; // this hash is what was just loaded

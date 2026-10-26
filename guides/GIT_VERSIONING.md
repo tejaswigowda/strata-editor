@@ -31,6 +31,8 @@ Nothing structural is quantized (uuids, indices, matrices, geometry, scale/rotat
 
 Minifying does not change how a scene is *loaded*: the chunked reader still reassembles every part before parsing. When a load fails, the banner names the stage that failed (fetching the scene, fetching assets, applying the scene) and the console carries the stack.
 
+**Reload after a commit shows the commit.** A read by branch name can come from a CDN's cache for minutes (raw.githubusercontent.com) or hours (jsDelivr), i.e. from before your last commit. So **Load Scene**, **Compare with Remote**, and a `#repo=` link opened with a saved token first look up the branch head and read that commit by SHA, which never goes stale. Anonymous readers and present/embed links skip the lookup and stay CDN-only (no API call, no 60/hour cap).
+
 ## Unsaved work is never silently lost
 
 Edits (made in the UI, the JS shell, the timeline, or by importing) are autosaved to the browser (IndexedDB, database `strata-work`) about a second after you stop, **keyed by where the scene came from**: repo + file + branch (+ commit pin), or one default key when no repo is set. The autosave holds everything `editor.toJSON()` round-trips, including the universal timeline and clips. Derived data is never persisted: call-card baked textures are stripped (`withoutBakedTextures` in `scene/serialize.js`, used by autosave, Save and Commit alike), and lazily derived object descriptors are ignored when deciding what changed.
