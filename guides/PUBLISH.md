@@ -22,6 +22,10 @@ renders/<scene>/1080p60/init.mp4  seg00001.m4s …  index.m3u8      (and 720p60,
 6. **render.json** (`export/renderJson.js`), validated against `docs/schemas/render.schema.json`.
 7. **Review**, then **commit**: file tree with sizes, size warnings, staleness. Nothing is uploaded before the Commit button. The commit is one tree, one commit and one ref move: blobs are uploaded first, so a failure part-way leaves nothing on the branch.
 
+## Playing a published render
+
+`docs/player/` is a small static player: open `/player/#<address>`, where the address is the jsDelivr URL of the render's folder (or of any file in it, or its GitHub page), e.g. `/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/`. It reads `render.json` for the title, poster, captions and facts and plays `master.m3u8`: natively in Safari, through the vendored hls.js (Apache-2.0, `docs/player/hls.min.js`) elsewhere, with a quality choice. A branch address (`@main`) shows a warning, because jsDelivr may serve an older render for hours; use `@<sha>` to pin one. Test: `node docs/player/__tests__/resolve.test.mjs`.
+
 ## Why the segmenter is in Strata, not ffmpeg.webcli.app
 
 The work order named a hand-off of the encoded master to `ffmpeg.webcli.app`. Neither repository has a protocol for it, and re-encoding three rungs of 1080p60 in ffmpeg.wasm would be very slow. Strata already holds a WebCodecs encoder and a tested MP4 writer, so it writes the segments itself. No FFmpeg code is bundled or called, so the licence line is unaffected. Raw frames never leave the page either way.

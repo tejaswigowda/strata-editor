@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Strata render player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<style>
+	:root { color-scheme: dark; }
+	* { box-sizing: border-box; }
+	body { margin: 0; min-height: 100vh; background: #0f1226; color: #e8eaf6; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; }
+	main { width: 100%; max-width: 1100px; padding: 16px; }
+	form { display: flex; gap: 8px; margin: 0 0 12px; }
+	input[type=text] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 6px; border: 1px solid #3a4180; background: #181c3a; color: inherit; font: inherit; }
+	button { padding: 8px 14px; border-radius: 6px; border: 1px solid #3a4180; background: #2b3680; color: inherit; font: inherit; cursor: pointer; }
+	button:hover { background: #3a47a8; }
+	.stage { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; }
+	video { width: 100%; height: 100%; display: block; background: #000; }
+	.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 4px; }
+	h1 { font-size: 18px; margin: 0; font-weight: 600; flex: 1; min-width: 160px; }
+	label { font-size: 12px; opacity: .85; display: flex; align-items: center; gap: 6px; }
+	select { background: #181c3a; color: inherit; border: 1px solid #3a4180; border-radius: 6px; padding: 4px 6px; font: inherit; }
+	.meta { font-size: 12px; opacity: .8; margin: 2px 0; }
+	.meta b { font-weight: 600; }
+	.warn { font-size: 12px; color: #ffb703; margin: 6px 0; }
+	.error { color: #ff6b81; margin: 10px 0; white-space: pre-wrap; }
+	footer { margin-top: 18px; font-size: 11px; opacity: .55; }
+	footer a { color: inherit; }
+	[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+	<form id="form">
+		<input type="text" id="address" placeholder="https://cdn.jsdelivr.net/gh/owner/repo@ref/renders/name/" aria-label="jsDelivr address of a published render" spellcheck="false" autocomplete="off">
+		<button type="submit">Play</button>
+	</form>
+	<div class="stage"><video id="video" controls playsinline crossorigin="anonymous" preload="metadata"></video></div>
+	<div class="bar">
+		<h1 id="title">Paste the address of a published render</h1>
+		<label id="qualityLabel" hidden>Quality <select id="quality"></select></label>
+	</div>
+	<div class="meta" id="meta"></div>
+	<div class="warn" id="warn" hidden></div>
+	<div class="error" id="error" role="alert"></div>
+	<footer>Plays the HLS set that Strata's Render tab publishes (<code>master.m3u8</code>, fragmented MP4 segments, <code>render.json</code>). Safari plays it natively; elsewhere <a href="https://github.com/video-dev/hls.js">hls.js</a> (Apache-2.0) does. The address is the page's hash: <code>/player/#https://cdn.jsdelivr.net/gh/…</code>.</footer>
+</main>
+<script src="hls.min.js"></script>
+<script type="module" src="player.js"></script>
+</body>
+</html>
