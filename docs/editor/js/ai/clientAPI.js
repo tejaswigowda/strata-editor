@@ -37,8 +37,9 @@ export const PROVIDER_PRESETS = {
 		wire: 'anthropic',
 		baseUrl: 'https://api.anthropic.com/v1',
 		needsKey: true,
-		modelHint: 'claude-3-5-sonnet-latest',
-		models: [ 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-7-sonnet-latest', 'claude-sonnet-4-0', 'claude-opus-4-0', 'claude-3-opus-latest', 'claude-3-haiku-20240307' ],
+		modelHint: 'claude-sonnet-5-5',
+		// the ids Anthropic's models overview lists; the ⟳ button asks the API for the live list
+		models: [ 'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5', 'claude-fable-5-1' ],
 	},
 	ollama: {
 		label: 'Ollama (local)',
@@ -176,8 +177,9 @@ export function ollamaOriginHelp( origin ) {
 	const o = origin && /^https?:\/\//.test( origin ) ? origin : 'https://strataeditor.dev';
 	return `Ollama refused this page (${ o }): it only accepts web pages listed in OLLAMA_ORIGINS, and by default that is localhost only. `
 		+ `Allow this site, then restart Ollama:\n`
-		+ `  macOS app:  launchctl setenv OLLAMA_ORIGINS "${ o }"   (then quit and reopen Ollama)\n`
-		+ `  terminal:   OLLAMA_ORIGINS="${ o }" ollama serve\n`
+		+ `  Linux (systemd):  sudo systemctl edit ollama   then add  [Service]  Environment="OLLAMA_ORIGINS=${ o }"   and run  sudo systemctl restart ollama\n`
+		+ `  macOS app:        launchctl setenv OLLAMA_ORIGINS "${ o }"   (then quit and reopen Ollama)\n`
+		+ `  any terminal:     OLLAMA_ORIGINS="${ o }" ollama serve\n`
 		+ `If the browser asks to allow access to local devices, allow it.`;
 
 }
@@ -199,11 +201,21 @@ export async function fetchProviderModels( config ) {
 
 		let url;
 		try { url = new URL( config.baseUrl ).origin + '/v1/models'; } catch ( e ) { url = joinUrl( config.baseUrl, '/models' ); }
-		const res = await fetch( url, { headers: {
-			'x-api-key': config.apiKey || '',
-			'anthropic-version': '2023-06-01',
-			'anthropic-dangerous-direct-browser-access': 'true',
-		} } );
+		let res;
+		try {
+
+			res = await fetch( url, { headers: {
+				'x-api-key': ( config.apiKey || '' ).trim(),
+				'anthropic-version': '2023-06-01',
+				'anthropic-dangerous-direct-browser-access': 'true',
+			} } );
+
+		} catch ( e ) {
+
+			// measured: GET /v1/models answers a rejected key with a 401 that has no Access-Control-Allow-Origin, which a browser reports only as "Failed to fetch"
+			throw new Error( 'Anthropic gave no answer the browser may read. For the model list that is what a rejected key looks like (its error responses carry no CORS headers), so check the key for a typo, a space or the wrong kind of key. You can also type a model id such as claude-sonnet-5-5.' );
+
+		}
 		if ( ! res.ok ) throw new Error( await errorText( res ) );
 		const data = await res.json();
 		return ( data.data || [] ).map( m => m.id ).filter( Boolean );
@@ -221,6 +233,7 @@ export async function fetchProviderModels( config ) {
 
 		const f = requestFailure( config, e );
 		if ( /OLLAMA_ORIGINS/.test( f.message ) ) throw f;
+		if ( isLocalOllama( config.baseUrl ) ) throw new Error( 'nothing answered at ' + config.baseUrl + '. Is Ollama running, and if it runs on another machine, is the SSH tunnel to port 11434 still up? (A restart of either gives this error for a few seconds.)' );
 		throw e;
 
 	}
@@ -352,6 +365,44 @@ async function openaiChat( config, messages, opts, signal ) {
 
 // ── Anthropic Messages API ──────────────────────────────────────────────────────
 
+/**
+ * Claude 5 and later (claude-sonnet-5-5, claude-opus-5-5, ...) reject, with a 400, sampling parameters (temperature, top_p, top_k) and a forced
+ * tool_choice (type "tool" or "any"); their thinking runs by default and its tokens count against max_tokens. Earlier models accept all of that.
+ */
+export function isModernClaude( model ) {
+
+	const m = /^claude-[a-z]+-(\d+)(?:-|$)/.exec( String( model || '' ) );
+	return !! m && Number( m[ 1 ] ) >= 5;
+
+}
+
+/** The Messages API request body for this model. Pure, so it can be tested without a network. */
+export function anthropicBody( model, { system, chat, opts = {}, wantStream = false } ) {
+
+	const modern = isModernClaude( model );
+	const body = { model, max_tokens: Math.max( opts.maxTokens ?? 0, modern ? 16000 : 4096 ), stream: wantStream, messages: chat };
+	if ( ! modern ) body.temperature = opts.temperature ?? 0.7;
+	let sys = system;
+
+	// Constrained decoding (host-resolved / constrained conditions): the ops schema as a tool's input_schema, so the model's output is
+	// schema-valid JSON. Older models are forced to call it; Claude 5 refuses a forced call, so it gets tool_choice auto with a strict tool,
+	// and the system prompt says to call it. Non-streaming only (streaming would need input_json_delta assembly).
+	if ( opts.schema && ! wantStream ) {
+
+		body.tools = [ { name: 'emit_ops', description: 'Emit the edit operation(s) as structured JSON.', input_schema: opts.schema, ...( modern ? { strict: true } : {} ) } ];
+		if ( modern ) {
+
+			body.tool_choice = { type: 'auto' };
+			sys = ( sys ? sys + '\n\n' : '' ) + 'Answer by calling the emit_ops tool with the edit operation(s). Do not reply in prose.';
+
+		} else body.tool_choice = { type: 'tool', name: 'emit_ops' };
+
+	}
+	if ( sys ) body.system = sys;
+	return body;
+
+}
+
 async function anthropicChat( config, messages, opts, signal ) {
 
 	const wantStream = typeof opts.onToken === 'function';
@@ -364,20 +415,13 @@ async function anthropicChat( config, messages, opts, signal ) {
 
 	const headers = {
 		'Content-Type': 'application/json',
-		'x-api-key': config.apiKey || '',
+		'x-api-key': ( config.apiKey || '' ).trim(),
 		'anthropic-version': '2023-06-01',
 		// Required to allow calling the Anthropic API directly from a browser.
 		'anthropic-dangerous-direct-browser-access': 'true',
 	};
 
-	const body = {
-		model: config.model,
-		max_tokens: Math.max( opts.maxTokens ?? 0, 4096 ),
-		temperature: opts.temperature ?? 0.7,
-		stream: wantStream,
-		messages: chat,
-	};
-	if ( system ) body.system = system;
+	const body = anthropicBody( config.model, { system, chat, opts, wantStream } );
 
 	// Constrained decoding (host-resolved / constrained conditions): Claude has no
 	// response_format, so force a single tool call whose input_schema IS the ops
@@ -386,24 +430,28 @@ async function anthropicChat( config, messages, opts, signal ) {
 	// streaming + tools would need input_json_delta assembly, so it's skipped there.
 	// Without this the browser→provider path free-emits and host resolution is lost —
 	// the same constraint the server proxy applies must apply here.
-	if ( opts.schema && ! wantStream ) {
-
-		body.tools = [ { name: 'emit_ops', description: 'Emit the edit operation(s) as structured JSON.', input_schema: opts.schema } ];
-		body.tool_choice = { type: 'tool', name: 'emit_ops' };
-
-	}
-
 	let res;
-	try {
+	for ( let attempt = 0; ; attempt ++ ) {
 
-		res = await fetch( anthropicMessagesUrl( config.baseUrl ), {
-			method: 'POST', headers, body: JSON.stringify( body ), signal,
-		} );
+		try {
 
-	} catch ( e ) {
+			res = await fetch( anthropicMessagesUrl( config.baseUrl ), {
+				method: 'POST', headers, body: JSON.stringify( body ), signal,
+			} );
 
-		if ( e.name === 'AbortError' ) return '';
-		throw requestFailure( config, e );
+		} catch ( e ) {
+
+			if ( e.name === 'AbortError' ) return '';
+			throw requestFailure( config, e );
+
+		}
+		if ( res.ok || res.status !== 400 || attempt >= 2 ) break;
+
+		// A model this code does not know may still refuse a setting: if the 400 names it, drop it once and retry
+		const detail = await res.clone().text().catch( () => '' );
+		if ( 'temperature' in body && /temperature|sampling/i.test( detail ) ) delete body.temperature;
+		else if ( body.tool_choice && body.tool_choice.type !== 'auto' && /tool_choice/i.test( detail ) ) { body.tool_choice = { type: 'auto' }; body.tools.forEach( t => { t.strict = true; } ); }
+		else break;
 
 	}
 
