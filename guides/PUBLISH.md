@@ -9,6 +9,8 @@ renders/<scene>/captions.vtt          (always written when the scene has subtitl
 renders/<scene>/master.m3u8
 renders/<scene>/1080p60/init.mp4  seg00001.m4s …  index.m3u8      (and 720p60, 480p60)
 renders/<scene>/audio/init.mp4    seg00001.m4s …  index.m3u8      (once, shared by every rung)
+renders/<scene>/narration.wav         (only when dub.webcli.app made the narration)
+renders/<scene>/<scene>.mp4           (only when you add the single-file MP4: video copied, AAC audio, soft captions)
 ```
 
 `<scene>` is the scene file's basename and the path is editable; the branch is the scene's, or a separate `renders` branch (created from the scene's branch if it does not exist), and the repo is the scene's or any other (a media repo).
@@ -21,6 +23,8 @@ renders/<scene>/audio/init.mp4    seg00001.m4s …  index.m3u8      (once, share
 4. **Poster**: the decoded frame at 15% of the film, JPEG.
 5. **Captions**: the scene's subtitle cues as WebVTT. Burning subtitles into the picture is an *additional* option and never skips this file; the panel warns that burned-in text will appear twice.
 5a. **Narration** (`export/audio.js`): the scene names a WAV (`setRenderAudio('audio/x.wav')` in the Shell, stored in `scene.userData.renderAudio`), read from the repo at the synced commit, or chosen by hand in the panel. It is decoded to 48 kHz stereo and encoded once with WebCodecs `AudioEncoder` (AAC-LC, ~128 kbps) into an fMP4 audio rendition, referenced by every video rung through an HLS audio group (`#EXT-X-MEDIA:TYPE=AUDIO`), and `mp4a.40.2` is added to every `CODECS` string. AAC frames are 1024 samples, so a 6 s video segment is 281.25 frames: each audio segment starts at the first whole AAC frame at or after the video segment's start, with no padding, so nothing drifts. The encoder's priming delay (2112 samples in Chrome here) is measured at publish time by encoding a noise burst and cross-correlating, then removed from the front of the input. The publish stops with a clear message if the browser has no AAC encoder.
+
+   The narration need not be made by hand: **Dub the subtitles** opens `dub.webcli.app`, which speaks the scene's cues and returns the WAV. After Prepare, **Add a single-file MP4** has `ffmpeg.webcli.app` copy the master's video, encode the narration to AAC and add the captions as a soft track. Both are optional, run in a popup in the same browser, and are described in [HANDOFF.md](./HANDOFF.md) (protocol, ops, and how to run Strata locally so the popups can answer).
 6. **render.json** (`export/renderJson.js`), validated against `docs/schemas/render.schema.json`.
 7. **Review**, then **commit**: file tree with sizes, size warnings, staleness. Nothing is uploaded before the Commit button. The commit is one tree, one commit and one ref move: blobs are uploaded first, so a failure part-way leaves nothing on the branch.
 
@@ -98,7 +102,8 @@ Player check: with the render served as if from jsDelivr, `/player/` plays the 1
 ## Not covered
 
 - Only full-range, flat (not 360°) offline renders are published. A realtime Preview capture is variable-rate and is not segmented.
-- A scene with no `renderAudio` publishes a silent set (no audio group), and the panel says so.
+- A scene with no narration (no `renderAudio`, nothing dubbed, no WAV chosen) publishes a silent set (no audio group), and the panel says so.
+- The dub and ffmpeg hand-offs need the updated tools deployed and a Strata page that is not cross-origin isolated; see [HANDOFF.md](./HANDOFF.md). They were tested against both tools served locally, not the deployed sites.
 - **Safari's native HLS has not been tested**, nor has an audio group in it. Test on a Mac and an iPhone before launch.
 - **Audio/video sync was measured, not listened to**: the decoded HLS audio was cross-correlated against the source WAV at the start, middle and end (+0.0 ms each). Listen to the last cue too.
 - `lyceum.json`'s schema was not available; `render.json` is validated against the work order, not the consumer.

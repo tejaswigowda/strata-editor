@@ -421,6 +421,40 @@ await test( 'the set holds every file in one list, render.json first, and the ch
 
 } );
 
+await test( 'a single-file MP4 and a dub-made narration are written, described in render.json, and sized', () => {
+
+	const samples = fakeSamples( 400, 30 ).map( s => s.data );
+	const packaged = packageRendition( { width: 320, height: 180, fps: 30, avcC, samples, keyframes: Array.from( { length: 14 }, ( _, i ) => i * 30 ) } );
+	const rung = { name: '180p30', width: 320, height: 180, kbps: 300 };
+	const aac = { init: Uint8Array.of( 1 ), segments: [ { name: 'seg00001.m4s', data: Uint8Array.of( 2, 3 ), first: 0 } ], playlist: '#EXTM3U\n', maxSegmentBytes: 2, durationSeconds: 400 / 30, bandwidth: 128000, averageBandwidth: 128000 };
+	const sha = 'sha256:' + 'a'.repeat( 64 );
+	const mk = ( download, wavBytes ) => assemblePublishSet( {
+		path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ], width: 320, height: 180 }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1 ), captions: 'WEBVTT\n',
+		audio: { packaged: aac, name: 'English', language: 'en', delaySamples: 2112, source: { path: 'narration.wav', sha256: sha, tool: 'dub.webcli.app', voice: 'af_heart', model: 'm@1 q8/wasm' }, wavBytes }, download,
+		determinism: { mode: 'offline', encoder: 'software' },
+	} );
+	const plain = mk( null, null );
+	assert.ok( ! plain.files.some( f => f.path.endsWith( '.mp4' ) && ! f.path.includes( '/' + '180p30/' ) && ! f.path.includes( 'audio/' ) ), 'no single-file mp4 unless one was made' );
+	assert.strictEqual( plain.renderJson.outputs.file, undefined );
+	const full = mk( { name: 'x.mp4', bytes: new Uint8Array( 5000 ), command: 'ffmpeg -i video.mp4', audio: true, captions: true, videoFrom: '720p30' }, Uint8Array.of( 9, 9, 9 ) );
+	assert.ok( full.files.some( f => f.path === 'renders/x/x.mp4' && f.bytes.length === 5000 ) );
+	assert.ok( full.files.some( f => f.path === 'renders/x/narration.wav' ), 'the WAV dub made is part of the set, so the audio can be traced to its source' );
+	assert.deepStrictEqual( [ full.renderJson.outputs.file.path, full.renderJson.outputs.file.made_by, full.renderJson.outputs.file.bytes ], [ 'x.mp4', 'ffmpeg.webcli.app', 5000 ] );
+	assert.strictEqual( full.renderJson.outputs.file.video, 'copied from the 720p30 rung, not re-encoded' );
+	assert.strictEqual( mk( { name: 'x.mp4', bytes: new Uint8Array( 5000 ), command: '', audio: true, captions: true, videoFrom: 'master' }, null ).renderJson.outputs.file.video, 'copied from the master, not re-encoded' );
+	assert.strictEqual( full.renderJson.outputs.audio.source.tool, 'dub.webcli.app' );
+	assert.deepStrictEqual( validateRenderJson( JSON.parse( new TextDecoder().decode( full.files[ 0 ].bytes ) ) ), [] );
+	assert.strictEqual( new Set( full.files.map( f => f.path ) ).size, full.files.length );
+	const big = mk( { name: 'x.mp4', bytes: new Uint8Array( 21 * 1024 * 1024 ), command: '', audio: true, captions: true }, null );
+	assert.ok( big.warnings.some( w => /x\.mp4 is 21 MB/.test( w ) && /jsDelivr/.test( w ) ), 'an MP4 over 20 MB warns that jsDelivr will not serve it' );
+	assert.strictEqual( big.errors.length, 0, 'but it is not an error: GitHub takes it' );
+	const huge = mk( { name: 'x.mp4', bytes: new Uint8Array( 100 * 1024 * 1024 ), command: '', audio: false, captions: false }, null );
+	assert.ok( huge.errors.some( e => /x\.mp4/.test( e ) ), 'at 100 MB it blocks' );
+	const bad = JSON.parse( JSON.stringify( full.renderJson ) ); bad.outputs.file.container = 'mkv';
+	assert.ok( validateRenderJson( bad ).some( m => /outputs\.file/.test( m ) ) );
+
+} );
+
 await test( 'size gates: a segment at 20 MB or a file at 100 MB blocks; the warning carries real numbers; over 100 MB it says so', () => {
 
 	const MB = 1024 * 1024;

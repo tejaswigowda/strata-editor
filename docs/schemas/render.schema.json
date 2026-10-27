@@ -295,8 +295,62 @@
                 "sha256": {
                   "type": "string",
                   "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "tool": {
+                  "type": "string",
+                  "description": "Present when the narration was made by a tool (dub.webcli.app) rather than committed by hand."
+                },
+                "voice": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string",
+                  "description": "The synthesis model and device the tool reported."
                 }
               }
+            }
+          }
+        },
+        "file": {
+          "type": "object",
+          "description": "One MP4 with the video copied from the master, AAC audio and a soft caption track, made by ffmpeg.webcli.app. Optional.",
+          "required": [
+            "path",
+            "bytes",
+            "container",
+            "made_by"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "container": {
+              "const": "mp4"
+            },
+            "video": {
+              "type": "string"
+            },
+            "audio": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "captions": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "made_by": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string"
             }
           }
         }

@@ -2259,6 +2259,7 @@ function SidebarRender( editor ) {
 				publishPanel.setRender( {
 					width, height, fps, frames: range.count,
 					samples: muxer.samples, keyframes: muxer.keyframes.map( k => k - 1 ), avcC: muxer.avcC,
+					masterBlob: blob,   // for the single-file MP4 that ffmpeg.webcli.app can make
 					encoder: S.encoderSelect.getValue() === 'software' ? 'software' : 'hardware', playbackWasRunning, hasEndCard, hasCrossfades, audioRef, uncommitted: sceneUncommitted,
 					sceneHash: renderSceneHash, source: renderSource, renderer: ( rendererInfo && rendererInfo.renderer ) || 'WebGLRenderer', device: ( rendererInfo && rendererInfo.device ) || 'webgl2',
 					renderedAt: new Date().toISOString(), // metadata only: no frame time ever comes from a wall clock

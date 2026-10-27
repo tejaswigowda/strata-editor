@@ -74,11 +74,13 @@ const bytesOf = v => typeof v === 'string' ? enc.encode( v ) : v;
  *   rungs:       [{ rung: { name, width, height, kbps }, packaged: packageRendition() output }]
  *   poster:      Uint8Array
  *   captions:    string | null     (WebVTT; written whenever the scene has cues, burned in or not)
- *   audio:       null | { packaged: packageAudio(), name, language, source: { path, sha256 }, delaySamples }
+ *   audio:       null | { packaged: packageAudio(), name, language, source: { path, sha256, tool?, voice?, model? }, delaySamples, wavBytes? }
+ *                (wavBytes: the narration WAV, written as narration.wav when dub.webcli.app made it, so the set holds what the audio came from)
+ *   download:    null | { name, bytes, command, audio: boolean, captions: boolean, videoFrom: 'master' | rung name }   the single-file MP4 made by ffmpeg.webcli.app
  *   determinism: { mode, encoder, hasEndCard, playbackWasRunning }   (assessDeterminism's input)
  * @returns {{ files: { path, bytes: Uint8Array }[], renderJson, total: number, errors: string[], warnings: string[], tree: { path, bytes }[] }}
  */
-export function assemblePublishSet( { path, scene, render, rungs, poster, captions, audio = null, determinism } ) {
+export function assemblePublishSet( { path, scene, render, rungs, poster, captions, audio = null, download = null, determinism } ) {
 
 	const files = [];
 	const rel = ( ...p ) => path + '/' + p.join( '/' );
@@ -107,6 +109,7 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 		add( 'audio/init.mp4', a.init );
 		for ( const s of a.segments ) add( `audio/${ s.name }`, s.data );
 		add( 'audio/index.m3u8', a.playlist );
+		if ( audio.wavBytes ) add( audio.source.path, audio.wavBytes );
 		audioMeta = {
 			name: audio.name, language: audio.language, bitrateKbps: 128, sampleRate: 48000, channels: 2, playlist: 'audio/index.m3u8', segments: a.segments.length,
 			maxSegmentBytes: a.maxSegmentBytes, durationS: a.durationSeconds, source: audio.source, delaySamples: audio.delaySamples,
@@ -114,20 +117,21 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 
 	}
 
+	if ( download ) add( download.name, download.bytes );
 	add( 'master.m3u8', masterPlaylist( rungs.map( ( { rung, packaged } ) => ( {
 		name: rung.name, width: rung.width, height: rung.height, playlist: `${ rung.name }/index.m3u8`,
 		codec: packaged.codec, bandwidth: packaged.bandwidth, averageBandwidth: packaged.averageBandwidth,
 	} ) ), render.fps, audio ? { groupId: 'aud', name: audio.name, language: audio.language, uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: audio.packaged.bandwidth, averageBandwidth: audio.packaged.averageBandwidth } : null ) );
 
 	const renderJson = buildRenderJson( {
-		scene, render, renditions, captions: captions ? 'captions.vtt' : null, audio: audioMeta,
+		scene, render, renditions, captions: captions ? 'captions.vtt' : null, audio: audioMeta, download,
 		determinism: assessDeterminism( determinism ),
 		files: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ),
 	} );
 	files.unshift( { path: rel( 'render.json' ), bytes: enc.encode( JSON.stringify( renderJson, null, 2 ) + '\n' ) } );
 
 	const total = files.reduce( ( n, f ) => n + f.bytes.length, 0 );
-	const { errors, warnings } = sizeReport( files, total, audioMeta ? [ ...renditions, { name: 'audio', maxSegmentBytes: audioMeta.maxSegmentBytes } ] : renditions, renderJson.render.deterministic );
+	const { errors, warnings } = sizeReport( files, total, audioMeta ? [ ...renditions, { name: 'audio', maxSegmentBytes: audioMeta.maxSegmentBytes } ] : renditions, renderJson.render.deterministic, download );
 	return { files, renderJson, total, errors, warnings, tree: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ) };
 
 }
@@ -137,7 +141,7 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
  *   error:   a segment at or over 20 MB (jsDelivr's cap), any file at or over 100 MB (GitHub's hard limit)
  *   warning: always, the total and what git does with binaries; louder over 100 MB
  */
-export function sizeReport( files, total, renditions, deterministic ) {
+export function sizeReport( files, total, renditions, deterministic, download = null ) {
 
 	const errors = [];
 	const warnings = [];
@@ -151,6 +155,8 @@ export function sizeReport( files, total, renditions, deterministic ) {
 		if ( f.bytes.length >= LIMITS.fileBytes ) errors.push( `${ f.path } is ${ formatBytes( f.bytes.length ) }: GitHub refuses files of 100 MB or more.` );
 
 	}
+
+	if ( download && download.bytes.length >= LIMITS.segmentBytes ) warnings.push( `${ download.name } is ${ formatBytes( download.bytes.length ) }: GitHub stores it, but jsDelivr will not serve a file over 20 MB, so link to it from GitHub, or leave it out.` );
 
 	let warning = `This commit adds ${ formatBytes( total ) } in ${ files.length } files. Git keeps every version of a binary forever: rendering and publishing six times stores six full copies (about ${ formatBytes( total * 6 ) }).`;
 	if ( total > LIMITS.warnTotalBytes ) warning = `This commit is over 100 MB (${ formatBytes( total ) } in ${ files.length } files). ` + warning.replace( /^This commit adds [^.]*\.\s*/, '' );

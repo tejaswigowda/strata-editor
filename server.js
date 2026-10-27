@@ -629,8 +629,11 @@ function serveFile(filePath, stat, res) {
     // navigation timing entry, so a static host, which has no such routes, is never probed and logs no 404s)
     res.setHeader('Server-Timing', 'strata-api');
     // ── Headers required for SharedArrayBuffer / cross-origin isolation ──
-    res.setHeader('Cross-Origin-Opener-Policy',   'same-origin');
-    res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+    // STRATA_NO_ISOLATION=1 leaves them off: a cross-origin-isolated page cannot talk to the dub/ffmpeg popups of the Publish step.
+    if (!process.env.STRATA_NO_ISOLATION) {
+      res.setHeader('Cross-Origin-Opener-Policy',   'same-origin');
+      res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+    }
     // Allow CDN resources (jsDelivr) to load inside the isolated context
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 

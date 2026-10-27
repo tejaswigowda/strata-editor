@@ -69,11 +69,12 @@ export const formatBytes = n => n >= MB ? ( n / MB ).toFixed( n >= 10 * MB ? 0 :
  *   scene:   { repo, file, branch, commit|null, hash }
  *   render:  { mode, renderer, device, fps, frames, frameRange:[a,b], width, height, seed?, renderedAt, durationS? }
  *   renditions: [{ name, width, height, bitrateKbps, playlist, segments, maxSegmentBytes }]
- *   audio:   null, or { name, language, bitrateKbps, sampleRate, channels, playlist, segments, maxSegmentBytes, durationS, source: { path, sha256 }, delaySamples }
+ *   audio:   null, or { name, language, bitrateKbps, sampleRate, channels, playlist, segments, maxSegmentBytes, durationS, source: { path, sha256, tool?, voice?, model? }, delaySamples }
+ *   download: null, or { name, bytes (Uint8Array), command, audio, captions, videoFrom ('master' or a rung name) }: one MP4 with the video copied, AAC audio and a soft caption track
  *   determinism: assessDeterminism() output; render.encoder: 'software' | 'hardware'
  *   files:   [{ path, bytes }]  every file of the set, for the size checks
  */
-export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, audio = null, determinism, audit = TIME_SOURCE_AUDIT } ) {
+export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, audio = null, download = null, determinism, audit = TIME_SOURCE_AUDIT } ) {
 
 	const durationS = render.durationS !== undefined ? render.durationS : render.frames / render.fps;
 	const out = {
@@ -110,6 +111,11 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 				playlist: audio.playlist, segments: audio.segments, max_segment_bytes: audio.maxSegmentBytes, duration_s: Math.round( audio.durationS * 1e6 ) / 1e6,
 				source: audio.source, encoder_delay_samples: audio.delaySamples,
 			} : null,
+			...( download ? { file: {
+				path: download.name, bytes: download.bytes.length, container: 'mp4', video: `copied from the ${ download.videoFrom && download.videoFrom !== 'master' ? download.videoFrom + ' rung' : 'master' }, not re-encoded`,
+				audio: download.audio ? 'aac-lc, 48 kHz stereo, 128 kbps' : null, captions: download.captions ? 'mov_text, a soft track the viewer can switch off' : null,
+				made_by: 'ffmpeg.webcli.app', command: download.command,
+			} } : {} ),
 		},
 		checks: {
 			segments_under_20mb: renditions.every( r => r.maxSegmentBytes < LIMITS.segmentBytes ),
@@ -182,6 +188,7 @@ export function validateRenderJson( j ) {
 
 	const c = j.checks || {};
 	for ( const k of [ 'segments_under_20mb', 'files_under_100mb', 'frame_count_matches_duration' ] ) need( typeof c[ k ] === 'boolean', `checks.${ k } must be a boolean` );
+	if ( o.file !== undefined ) need( o.file && isStr( o.file.path ) && isInt( o.file.bytes ) && o.file.bytes > 0 && o.file.container === 'mp4' && isStr( o.file.made_by ), 'outputs.file needs path, bytes, container mp4 and made_by' );
 	need( ! o.audio || typeof c.audio_duration_matches_video === 'boolean', 'checks.audio_duration_matches_video is required when there is audio' );
 	return e;
 
