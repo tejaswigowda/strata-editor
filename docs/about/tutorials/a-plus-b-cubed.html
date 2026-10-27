@@ -515,6 +515,36 @@ $S('#callcard').at(46.7).fadeIn(2.5);</code></pre>
 	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=a%2Bb-cubed.json&amp;branch=main">a+b-cubed.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 4 groups of 8 blocks, the glass cube's 12 edges, the ruler, 3 cutting planes, 4 ghosts, 9 labels, 5 cameras and the end card, with 42 timeline tracks, 5 shots and 10 subtitle cues. Open it, then scrub the Animations tab: at 3&nbsp;s the cube is whole, at 13&nbsp;s it has fallen apart, at 38&nbsp;s every kind is under its term of the full equation, at 44&nbsp;s the x-ray is on the aqua cube, and from 47&nbsp;s the card fills the frame.</p>
 	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into the empty <code>a+b-cubed.json</code>, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed, loaded again from the commit, and played through at four times from 9 to 44&nbsp;s. The screenshots on this page are frames of the pasted scene at 2, 7.4, 9.4, 12.5, 22, 28, 44 and 48&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit. Rendering to a video file (step 14) was not run for this page.</div>
 
+	<h2><span class="step">16</span> Name and class everything</h2>
+	<p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S('#id')</code>, <code>$S('.class')</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. The twelve frame bars are now <code>FrameEdgeX_ym_zm</code> and so on (the axis a bar runs along, then the side it sits on), and the single box inside <code>ghost-a3</code> and <code>ghost-b3</code>, which shared its group's name, is <code>-m</code>; <code>$S('.frameedge')</code> still selects the bars because the table gives each of them that class.</p>
+	<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.piece'), $S('.ghost'), $S('.frameedge'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+for (const e of scene.getObjectByName('Frame').children) {              // the twelve cube edges, named by the axis they run along and the two sides they sit on
+  const p = e.position.toArray(), axis = p.findIndex(v =&gt; Math.abs(v) &lt; 1e-6);
+  e.name = 'FrameEdge' + 'XYZ'[axis] + [0, 1, 2].filter(i =&gt; i !== axis).map(i =&gt; '_' + 'xyz'[i] + (p[i] &lt; 0 ? 'm' : 'p')).join('');
+}
+for (const name of ['ghost-a3', 'ghost-b3']) {                           // the single box inside these two ghosts had its group's name
+  const group = scene.getObjectByName(name);
+  if (group.children[0].name === name) group.children[0].name = name + '-m';
+}
+const rules = [
+  [/^(Room|Floor)$/, ['environment']], [/Light$/, ['light']], [/^g-/, ['piece']], [/^Frame$/, ['frame']],
+  [/^FrameEdge/, ['frame', 'frameedge']], [/^cam/, ['camera']], [/^callcard$/, ['card']], [/^ghost-/, ['ghost']]
+];
+const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o =&gt; {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> none: the lengths are symbolic. <em>a</em> and <em>b</em> are drawn at one fixed ratio; the identity does not depend on it. <em>Assumptions:</em> <em>a</em> and <em>b</em> are positive lengths, so the cube of side <em>a + b</em> can be cut at <em>a</em> along each edge into eight blocks; this one cutting argument is the proof for lengths of that kind. <em>Render:</em> no video render was run for this page. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
+
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
 	</footer>

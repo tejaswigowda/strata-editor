@@ -132,7 +132,7 @@
 <body>
 <main>
 	<h1>Hardy–Weinberg as a square</h1>
-	<iframe src="../../#repo=tejaswigowda/test1@dbe91d4e829316cf229ceb4642b108115068f4b0&amp;file=hw.json&amp;present=true"></iframe>
+	<iframe src="../../#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&amp;file=hw.json&amp;present=true"></iframe>
 
 	<p class="tagline">A 115-second film about the Hardy–Weinberg law. A square shows the <em>genotype proportions that one round of random mating produces</em>: <em>(p + q)² = p² + 2pq + q²</em>, with <em>p² + 2pq + q² = 1</em> because the whole square has area one. A gene has two alleles, <em>A</em> with frequency <em>p</em> and <em>a</em> with frequency <em>q</em>, and every child gets one from each parent at random: draw a square, cut each side into a part <em>p</em> and a part <em>q</em>, and each of the four pieces is one kind of child, with an area equal to how common that kind is. The two off-diagonal pieces are the same kind (<em>Aa</em>), which is why the middle term is <em>2pq</em> and not <em>pq</em>. That much is the expansion of a square, true with no biology in it. A second beat, a count of the alleles in the children, <em>shows that the allele frequencies are unchanged by that mating</em>, and the film then says under which assumptions the same proportions come back in every generation. The square is the same visual logic as the three slabs of <em>3a²b</em> in the <a href="a-plus-b-cubed.html">(a + b)³ tutorial</a>, one dimension down, and it reuses that tutorial's recipe (a room, unit tiles, shadows, a row of coloured labels, a camera sequence). Open the <a href="../../">editor</a>, load an empty scene, open the <strong>Shell</strong> tab and paste each block in order, or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=hw.json&amp;branch=main">hw.json</a> (<a href="#open-finished">the last step</a>).</p>
 
@@ -670,7 +670,40 @@ flights.length      // 50</code></pre>
 	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=hw.json&amp;branch=main">hw.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 4 groups of 25 tiles, the outline, 4 rulers and 4 ruler letters, 2 cuts, 9 equation labels, 4 piece labels, the allele count (50 tokens, 2 bins, <em>p′</em> and <em>q′</em>), 6 assumption labels, 5 cameras and the end card, with 96 timeline tracks, 5 shots, 19 subtitle cues and 9 materials. Open it, then scrub the Animations tab: at 3&nbsp;s the square is whole, at 31&nbsp;s it is in four pieces, at 50&nbsp;s each kind is under its term, at 65&nbsp;s the two bins are full, at 73&nbsp;s the rulers measure them, at 99&nbsp;s the square is whole again, and from 112&nbsp;s the card fills the frame.</p>
 	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and the following was read back from the loaded scene: 9 materials; 96 timeline tracks, which the editor compiles into one baked clip of 132 tracks; 5 shots; 19 cues; and, with the timeline sought to 72&nbsp;s, 30 <em>A</em> tokens spanning x = −2.66 to 0.26 and 20 <em>a</em> tokens spanning 0.74 to 2.66, which are the extents of <code>RulerTopP</code> and <code>RulerTopQ</code> to the last digit. The screenshots on this page are frames of the loaded scene at 2, 20, 27, 31, 38, 50, 57, 65, 73, 77, 89, 99 and 114&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit, with no collisions. Rendering to a video file (step 14) was not run for this page. The scene was built with the WebGPU renderer; the film this page describes is what that renderer plays, and what a different renderer or an exported glTF would show is not claimed here.</div>
 
-	<div class="note"><strong>Why the player above is pinned to a commit.</strong> The player reads the scene through a CDN (jsDelivr) that keeps a branch such as <code>main</code> for hours, so a link by branch name can keep playing the version <em>before</em> the latest push: a reader would see a scene that does not match this page. The link above names the commit (<code>@dbe91d4</code>) instead, which never goes stale. The "Open it" link at the top of this step reads the branch head fresh. When the scene is republished, move the commit in the player's address.</div>
+	<div class="note"><strong>Why the player above is pinned to a commit.</strong> The player reads the scene through a CDN (jsDelivr) that keeps a branch such as <code>main</code> for hours, so a link by branch name can keep playing the version <em>before</em> the latest push: a reader would see a scene that does not match this page. The link above names the commit (<code>@89f9272</code>) instead, which never goes stale. The "Open it" link at the top of this step reads the branch head fresh. When the scene is republished, move the commit in the player's address.</div>
+
+	<h2><span class="step">16</span> Name and class everything</h2>
+	<p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S('#id')</code>, <code>$S('.class')</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. The four frame bars are now <code>FrameEdgeBottom</code>, <code>FrameEdgeTop</code>, <code>FrameEdgeLeft</code> and <code>FrameEdgeRight</code>, and each bin's three boxes <code>binBigA_floor</code>, <code>_left</code>, <code>_right</code> (and the same for <code>binLittleA</code>); <code>$S('.frameedge')</code> still selects the bars because the table gives each of them that class.</p>
+	<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.tile'), $S('.bin'), $S('.label'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+for (const e of scene.getObjectByName('Frame').children) {              // the four frame bars, named by the side they are on
+  const p = e.position;
+  e.name = 'FrameEdge' + (Math.abs(p.x) &gt; Math.abs(p.y) ? (p.x &lt; 0 ? 'Left' : 'Right') : (p.y &lt; 0 ? 'Bottom' : 'Top'));
+}
+for (const bin of ['binBigA', 'binLittleA']) {                           // each bin's three boxes: a floor and two sides
+  for (const m of scene.getObjectByName(bin).children) {
+    if (m.name) continue;
+    m.name = bin + (m.position.y &lt; -1 ? '_floor' : m.position.x &lt; 0 ? '_left' : '_right');
+  }
+}
+const rules = [
+  [/^(Room|Wall|Floor)$/, ['environment']], [/Light$/, ['light']], [/^g-(pp|pq1|pq2|qq)\.\d+\.\d+$/, ['tile']],
+  [/^Frame/, ['frame']], [/^FrameEdge/, ['frameedge']], [/^cam/, ['camera']], [/^callcard$/, ['card']],
+  [/^Counting$/, ['counting']], [/^bin/, ['bin']], [/^(pPrime|qPrime|assume_\d+)$/, ['label']]
+];
+const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o =&gt; {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> the square is 5 × 5 tiles, <em>p = 3</em> and <em>q = 2</em> tiles, so every frequency is a count of tiles out of 25 (0.36, 0.48, 0.16) and the alleles 30 A and 20 a out of 50. <em>Assumptions:</em> one gene with two alleles, random mating, a large (effectively infinite) population, no mutation, no selection, no migration, no drift; under these the proportions recur every generation. <em>Render:</em> no video render was run for this page. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

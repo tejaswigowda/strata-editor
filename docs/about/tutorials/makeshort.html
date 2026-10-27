@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step tutorial: build a two-minute animated proof that 3² + 4² = 5², extended to the 5-12-13 and 8-15-17 triples, with subtitles, in Strata entirely by hand with the JS Shell and the Universal Timeline.">
+<meta name="description" content="Step-by-step tutorial: build a two-minute animated demonstration that 3² + 4² = 5², extended to the 5-12-13 and 8-15-17 triples, with subtitles, in Strata entirely by hand with the JS Shell and the Universal Timeline.">
 <!--
 	/about/tutorials/makeshort.html — a from-scratch, by-hand tutorial.
 	Every snippet is real Strata surface (JS Shell globals + the public
@@ -138,13 +138,13 @@
 		Your browser does not support the video tag.
 	</video>
 
-	<p class="tagline">A two-minute proof that 3² + 4² = 5², with subtitles. It starts with fifty tiles, one triangle and three labels; then the camera makes quarter turns to show two more triples, 5-12-13 and 8-15-17, and a last one to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 13</a>).</p>
+	<p class="tagline">A two-minute demonstration that 3² + 4² = 5², with subtitles: it checks three right triangles by counting tiles, and does not prove the theorem for every triangle. It starts with fifty tiles, one triangle and three labels; then the camera makes quarter turns to show two more triples, 5-12-13 and 8-15-17, and a last one to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 13</a>).</p>
 
 	<div class="note"><strong>Why the Shell, not clicking.</strong> Every edit below is a real, undoable, git-diffable command (<code>editor.execute(...)</code> under the hood) — the Shell is just the fastest way to author them. You can always inspect or hand-tweak the result afterward in the Outliner/Object panel; nothing here is a special "script mode."</div>
 	<div class="note"><strong>One paste, one scope.</strong> The Shell does not keep variables between pastes, so every block below is self-contained: it defines what it uses, and anything a later block needs is found again by name or class (<code>$S('#three')</code>, <code>$S('.cube')</code>). Start from an empty scene.</div>
 
 	<h2><span class="step">1</span> Build the three squares out of tiles</h2>
-	<p class="lede">The proof needs the squares to come apart and go back together, so each one is made of unit tiles instead of one big box. A tile is a 1×1×1 cube, so it reads as a solid block from any side when it tumbles later. Tiles sit in a row or a column group, and the group sits in a square group: <code>#3x3-square</code> › <code>#3col1</code> › <code>cube_3.1.1</code>. That nesting is what lets the timeline say "the first column of the 3×3" later.</p>
+	<p class="lede">The demonstration needs the squares to come apart and go back together, so each one is made of unit tiles instead of one big box. A tile is a 1×1×1 cube, so it reads as a solid block from any side when it tumbles later. Tiles sit in a row or a column group, and the group sits in a square group: <code>#3x3-square</code> › <code>#3col1</code> › <code>cube_3.1.1</code>. That nesting is what lets the timeline say "the first column of the 3×3" later.</p>
 	<pre><code>// A square of side n is n lines (rows or columns) of n tiles. Each tile is a
 // 1 x 1 x 1 cube; each line is its own group so the timeline can address it.
 function makeSquare(n, name, color, kind, place) {
@@ -311,13 +311,13 @@ $S('#4x4-square #4row2 .cube, #4x4-square #4row3 .cube, #4x4-square #4row4 .cube
 $S('#four').at(26).change('4\u00B2', { transition: 'fade', dur: 400 });</code></pre>
 	<div class="note"><strong>Why a sliver first.</strong> The 3 and the 4 are lengths before they are areas. The first column is squashed to 0.2 of a tile wide and moved 0.4 along so it hugs the leg like a ruler (<code>positionX: 0.4</code>, <code>scaleX: 0.2</code>); at 14&nbsp;s it relaxes to <code>positionX: 0, scaleX: 1</code> and the other two columns fade in beside it. The animated values are <em>absolute</em> (<code>to:</code>), which is why the "relax" event can name the resting values directly. <code>.change('')</code> at 0&nbsp;s blanks a label until its first word.</div>
 
-	<h2><span class="step">7</span> The proof: 9 tiles and 16 tiles onto 25 cells</h2>
+	<h2><span class="step">7</span> The check: 9 tiles and 16 tiles onto 25 cells</h2>
 	<p class="lede">The 5×5 is only a landing pad. Make it invisible from the first frame, then send every tile of the other two squares onto one of its cells. <code>moveToEach</code> pairs sources to targets by <em>order</em>: the sources are listed 3×3 first, so the nine red tiles take the first nine cells (row 1 and the first four of row 2) and the sixteen teal tiles take the rest.</p>
 	<pre><code>// the 5x5 is only a landing pad: start it transparent so it is never seen, not even at 0 s
 $S('#5x5-square .cube').nodes.forEach(t =&gt; { t.material.transparent = true; t.material.opacity = 0; });
 $S('#5x5-square, #5x5-square *, #5x5-square .cube').at(0).fadeOut(1);
 
-// the proof: 9 tiles + 16 tiles tumble onto the 25 pad cells, 3 seconds, in selector-list order
+// the check: 9 tiles + 16 tiles tumble onto the 25 pad cells, 3 seconds, in selector-list order
 $S('#3x3-square .cube, #4x4-square .cube').at(40).moveToEach('#5x5-square .cube', 3000, {
   spin: [1, 1, 0], arc: 3, stagger: 0.4, easing: 'ease-in-out'
 });</code></pre>
@@ -530,7 +530,7 @@ $S('#PerspectiveCamera').at(123.25).animate({ to: { rotation: [0, 270, 0] } }, 2
 	<h2><span class="step">11</span> Subtitles</h2>
 	<p class="lede">Subtitles are cues kept on the scene itself (<code>scene.userData.renderSubtitles</code>), so they are saved, versioned and committed with it. <code>setSubtitles</code> replaces the whole list in one undoable step. Times are output-video seconds, which here equal timeline seconds because the render starts at 0. They show over the viewport while you play or scrub, and the Render tab can burn them into the picture or export an <code>.srt</code>.</p>
 	<pre><code>setSubtitles([
-  { start: 0.5, end: 6.72, text: 'This is right angled triangle.\nOne leg is 3, the other is 4.' },
+  { start: 0.5, end: 6.72, text: 'This is a right angled triangle.\nOne leg is 3, the other is 4.' },
   { start: 6.77, end: 10.09, text: 'The short leg is 3 units long.' },
   { start: 10.15, end: 13.32, text: 'The long leg is 4 units long.' },
   { start: 14.0, end: 19.65, text: 'Let\'s make a square on the short leg:\n3 \u00D7 3 = 9 tiles.' },
@@ -576,6 +576,33 @@ $S('#PerspectiveCamera').at(123.25).animate({ to: { rotation: [0, 270, 0] } }, 2
 	<h2 id="open-finished"><span class="step">13</span> Open the finished scene</h2>
 	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: 50 tiles in 12 lines, the triangle, the three labels (and the a, b, c side names), the camera, the background and the call card, plus the two extra triples (458 more tiles, their landing cells and captions), with 25 timeline tracks (the three side names add one each), the same 126.8-second clock and 24 subtitle cues. Open it, then scrub the Animations tab: at 24&nbsp;s the 3×3 has unfolded, at 43&nbsp;s all 25 tiles sit on the pad, at 92&nbsp;s the 5-12-13 sum is on screen, at 118&nbsp;s the 8-15-17 one, and from 126&nbsp;s the card fills the frame.</p>
 	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, into an empty scene, with the three Text stencils, the Call card stencil and <strong>+ Add Shot</strong> clicked where the text says so. The result was compared with <code>pyth.json</code>: the same timeline tracks with the same events at the same times (22 of them before the a, b, c side names were added), the same subtitle cues word for word (23 then), and a frame at each of twelve times from 0 to 98&nbsp;s, chosen away from the flights, that differs from the published one by under 3% of its pixels. The tumbles themselves are not compared pixel for pixel: each tile's flight is a fixed function of its place in the list, and the published file lists its first triple's tiles in a different order, so the same tiles tumble differently there. The final end-card frame (100&nbsp;s) is the exception: the card is re-baked from the live <a href="../callcard/">/about/callcard</a> page every time a scene loads, so it was not compared pixel for pixel. (An older saved copy of this scene stored the card's material as opaque, and at full opacity that drew the QR as a blank white box; the editor now keeps the card blending on every load and render, whatever the saved scene says.) Three small differences are deliberate: the published file keeps its tiles at an offset inside their groups, so two of its <code>positionX</code>/<code>positionY</code> values read 9.4 and 4.4 where yours read 0.4 and −0.6 (the same place in the world); it nests the three labels in a <code>Labels</code> group, which nothing addresses; and its pad cells are numbered in a different order, with the same nine-and-sixteen split. The latest revisions, cube tiles, the label shadow and the a, b, c side names, were checked less thoroughly: the side-name and subtitle blocks were pasted from this page into the published scene, which then matched what was saved (25 tracks, 24 cues); the squares, triangle and triples blocks were pasted into an empty scene and build the same 50 and 458 tiles, now all cubes, and the published scene was played through once on a real GPU, and scrubbed back and forth across every label change, with no rendering errors (the editor used to free a label's old text geometry a frame after swapping it, which made the next draw of that label fail while scrubbing; it now frees it first), but the frame comparison above predates it and the label-shadow lines were not re-pasted from this page. Rendering (step 12) was not re-run for this revision. The film was later stretched from 100.5 to 120.5 seconds so a voice can read every cue without overlap, and again to 126.8 for a slower voice (af_sarah) (the beats after 56.5&nbsp;s moved later, the cues were re-timed to match, and a dub of the .srt reports no overlaps); that revision was loaded and checked for its clock, tracks and cues. The label placement (steps 3, 4 and 9) and the look pass (bright emissive tiles, a gold triangle, the lit room with its soft shadows, the spelling fixes in the cues) were each checked by rendering frames from the committed scene at a dozen times, a one-line and a two-line subtitle on screen; the screenshots on this page were retaken from that scene with the editor's controls and the subtitles hidden. The blocks themselves were not re-pasted into an empty scene for any of these revisions. The scene file is now about 5.9&nbsp;MB, nearly all of it baked animation, chiefly the flight paths of the 483 tiles that move; the editor rebuilds them from the timeline on load, so they are a cache, not something to edit.</div>
+
+	<h2><span class="step">14</span> Name and class everything</h2>
+	<p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S('#id')</code>, <code>$S('.class')</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. The unnamed group inside each of <code>t2</code> and <code>t3</code> is now <code>t2_parts</code> and <code>t3_parts</code>.</p>
+	<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.square'), $S('.triple'), $S('.label'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+for (const name of ['t2', 't3']) {                                      // the group inside each of the two extra triples had no name
+  const inner = scene.getObjectByName(name).children[0];
+  if (!inner.name) inner.name = name + '_parts';
+}
+const rules = [
+  [/^\d+x\d+-square$/, ['square']], [/^RightTriangle$/, ['triangle']], [/^PerspectiveCamera$/, ['camera']],
+  [/^(Labels|three|four|eqn)$/, ['label']], [/^callcard$/, ['card']], [/^t\d(-|_|$)/, ['triple']],
+  [/^Room$/, ['environment']], [/Light$/, ['light']]
+];
+const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o =&gt; {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> lengths are counted in tiles: a tile is a 1 × 1 × 1 cube, so the squares on the legs have 9 and 16 tiles and the square on the hypotenuse 25. <em>Assumptions:</em> the triangles are exact integer right triangles (3-4-5, 5-12-13, 8-15-17); the film checks these three by counting tiles and does not prove the theorem for every right triangle. <em>Render:</em> the film in <code>demos/pyth.mp4</code> was committed on 25 October, a day before the offline exporter, so it came from the real-time recorder; it has not been re-rendered since. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

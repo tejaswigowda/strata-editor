@@ -132,7 +132,7 @@
 <body>
 <main>
 	<h1>A crank, a rod and a piston: crank-slider kinematics</h1>
-	<iframe src="../../#repo=tejaswigowda/test1@503e3af3455db6414d3d813be641391e31eeb865&amp;file=piston.json&amp;present=true"></iframe>
+	<iframe src="../../#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&amp;file=piston.json&amp;present=true"></iframe>
 
 	<p class="tagline">A 103-second visual argument about the mechanism inside every piston engine: a crankshaft, a connecting rod and a piston, turned through one full revolution. The dead centers are labelled, the stroke is measured, and the changing mechanical advantage is drawn as a gold gap that shrinks to nothing at the dead centers and is largest near the middle of the stroke. Orbit cameras show the parts that a flat view hides. Built with the JS Shell, with exact kinematics.</p>
 
@@ -171,12 +171,12 @@
 	<p class="lede">The ten materials of the film are made once, here, and every mesh that uses a colour is handed the same one: blue is the crankshaft, steel the piston, rod and flywheel, gold the leverage, coral the dead centers, aqua distances and paths, purple the frame, and the glass of the cylinder is one transparent material. A shared material cannot fade one mesh without fading all of them, so this film reveals things by <em>growing</em> them from a scale of 0.001. The block also fixes the two lengths, <code>K.R</code> and <code>K.L</code>, that everything else is computed from.</p>
 	<pre><code>// The palette: every material of the film, made once and handed to every mesh that uses it (ten in all, with the room, the floor and the end card).
 // blue = the crankshaft, steel = the piston, rod and flywheel, gold = the leverage, coral = the dead centers, aqua = distances and paths, purple = the frame.
-const make = (color, k = 0.4, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });
+const mat = (color, k = 0.4, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });
 globalThis.PAL = {
   steel: new MeshStandardMaterial({ color: 0xd6dcf5, emissive: 0x9aa6ff, emissiveIntensity: 0.08, roughness: 0.35, metalness: 0.25 }),
-  blue: make(0x2f8fff, 0.12),
+  blue: mat(0x2f8fff, 0.12),
   glass: new MeshStandardMaterial({ color: 0x9ad0ff, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
-  aqua: make(0x14e0c8), coral: make(0xff4d6a), gold: make(0xffb703, 0.55), purple: make(0xa78bfa, 0.45), white: make(0xffffff, 0.7)
+  aqua: mat(0x14e0c8), coral: mat(0xff4d6a), gold: mat(0xffb703, 0.55), purple: mat(0xa78bfa, 0.45), white: mat(0xffffff, 0.7)
 };
 // the crank radius and the rod length, in scene units (a rod three times the crank, like many engines); the floor is 2.6 below the shaft
 globalThis.K = { R: 1.2, L: 3.6, FLOOR: -2.6, Z: 0.95 };
@@ -227,8 +227,9 @@ tube.position.set(3.7, 0, 0);                         // from x = 1.4 to 6.0
 frame.add(tube);
 
 const cradleGeometry = new BoxGeometry(0.4, 1.65, 1.8);
-for (const x of [2.0, 5.6]) {
+for (const [i, x] of [2.0, 5.6].entries()) {
   const c = new Mesh(cradleGeometry, PAL.purple);
+  c.name = 'cradle' + (i + 1);
   c.position.set(x, -0.95 - 0.825, 0);
   c.castShadow = c.receiveShadow = true;
   frame.add(c);
@@ -236,6 +237,7 @@ for (const x of [2.0, 5.6]) {
 const pillarGeometry = new BoxGeometry(1.0, 2.15, 0.5);
 for (const z of [-1.55]) {                            // one behind the crank, so it never hides it
   const p = new Mesh(pillarGeometry, PAL.purple);
+  p.name = 'pillar';
   p.position.set(0, -0.45 - 1.075, z);
   p.castShadow = p.receiveShadow = true;
   frame.add(p);
@@ -247,7 +249,8 @@ const ringGeometry = new TorusGeometry(1.02, 0.045, 8, 48);
 ringGeometry.rotateY(Math.PI / 2);                    // a ring around the x axis
 globalThis.ringAt = (name, x, mat) =&gt; {
   const g = new Group(); g.name = name; g.position.set(x, 0, 0); g.scale.setScalar(0.001);
-  g.add(new Mesh(ringGeometry, mat));
+  const torus = new Mesh(ringGeometry, mat); torus.name = name + '_torus';
+  g.add(torus);
   editor.execute(new AddObjectCommand(editor, g));
 };
 ringAt('ringTop', 5.6, PAL.coral);
@@ -260,22 +263,25 @@ bracket.name = 'bracket';
 bracket.scale.setScalar(0.001);
 bracket.position.set(4.4, -1.4, K.Z);
 const barG = new BoxGeometry(2.4, 0.07, 0.07), tickG = new BoxGeometry(0.07, 0.5, 0.07);
-bracket.add(new Mesh(barG, PAL.aqua));
-for (const dx of [-1.2, 1.2]) { const t = new Mesh(tickG, PAL.aqua); t.position.x = dx; bracket.add(t); }
+const bar = new Mesh(barG, PAL.aqua); bar.name = 'bracketBar';
+bracket.add(bar);
+for (const [i, dx] of [-1.2, 1.2].entries()) { const t = new Mesh(tickG, PAL.aqua); t.name = 'bracketTick' + (i + 1); t.position.x = dx; bracket.add(t); }
 editor.execute(new AddObjectCommand(editor, bracket));
 
 // the two paths of cue 2: the pin's circle (radius = the crank), and the piston's line; both in front of the parts so they stay visible
 const circle = new Group();
-circle.name = 'circle';
+circle.name = 'pinCircle';
 circle.position.set(0, 0, K.Z);
 circle.scale.setScalar(0.001);
-circle.add(new Mesh(new TorusGeometry(K.R, 0.04, 8, 72), PAL.aqua));
+const circleTorus = new Mesh(new TorusGeometry(K.R, 0.04, 8, 72), PAL.aqua); circleTorus.name = 'pinCircle_torus';
+circle.add(circleTorus);
 editor.execute(new AddObjectCommand(editor, circle));
 const line = new Group();
-line.name = 'line';
+line.name = 'pathLine';
 line.position.set(3.4, 0, K.Z);
 line.scale.setScalar(0.001);
-line.add(new Mesh(new BoxGeometry(6.8, 0.045, 0.045), PAL.aqua));
+const lineBar = new Mesh(new BoxGeometry(6.8, 0.045, 0.045), PAL.aqua); lineBar.name = 'pathLine_bar';
+line.add(lineBar);
 editor.execute(new AddObjectCommand(editor, line));
 
 // the vertical through the shaft, for the leverage construction (cue 9)
@@ -283,9 +289,10 @@ const axis = new Group();
 axis.name = 'axis';
 axis.position.set(0, 0, K.Z);
 axis.scale.setScalar(0.001);
-axis.add(new Mesh(new BoxGeometry(0.04, 4.4, 0.04), PAL.white));
+const axisBar = new Mesh(new BoxGeometry(0.04, 4.4, 0.04), PAL.white); axisBar.name = 'axis_bar';
+axis.add(axisBar);
 editor.execute(new AddObjectCommand(editor, axis));
-$S('#frame, #ringTop, #ringBottom, #ringHalf, #bracket, #circle, #line, #axis').nodes.length      // 8</code></pre>
+$S('#frame, #ringTop, #ringBottom, #ringHalf, #bracket, #pinCircle, #pathLine, #axis').nodes.length      // 8</code></pre>
 
 	<h2><span class="step">4</span> The three moving parts</h2>
 	<p class="lede">All three are drawn at top dead center. The crank has a shaft along z, <em>two webs</em> (each with a boss for the pin and a counterweight on the far side) and a pin between them: this is the out-of-plane geometry the front view hides. The rod is a shank between a small end and a big end, drawn pointing back along −x from the piston, so rotating the rod's group about the piston pin tilts it the right way. The piston carries the purple arrow for the steady push. The gold parts for the leverage (the stretched line on the rod, the gap and its marker) are built here, hidden, and used in cue 9.</p>
@@ -295,26 +302,27 @@ $S('#frame, #ringTop, #ringBottom, #ringHalf, #bracket, #circle, #line, #axis').
 // piston: a body with two rings, and (cue 9) the arrow that stands for a steady push.
 const add = o =&gt; { editor.execute(new AddObjectCommand(editor, o)); return o; };
 const cyl = (r, h, axis = 'z') =&gt; { const g = new CylinderGeometry(r, r, h, 40); if (axis === 'z') g.rotateX(Math.PI / 2); if (axis === 'x') g.rotateZ(Math.PI / 2); return g; };
-const shadows = m =&gt; { m.castShadow = m.receiveShadow = true; return m; };
-const at = (m, x, y, z) =&gt; { m.position.set(x, y, z); return m; };
+// a named mesh at a position that casts and receives shadows
+const part = (name, geometry, material, x = 0, y = 0, z = 0) =&gt; { const m = new Mesh(geometry, material); m.name = name; m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; };
 
 const crank = new Group();
 crank.name = 'crank';
 crank.scale.setScalar(0.001);
-crank.add(shadows(at(new Mesh(cyl(0.35, 4.7), PAL.blue), 0, 0, -0.45)));                // the main shaft
+crank.add(part('crankShaft', cyl(0.35, 4.7), PAL.blue, 0, 0, -0.45));                // the main shaft
 const webBar = new BoxGeometry(2.1, 0.8, 0.26), boss = cyl(0.5, 0.26), weight = cyl(0.85, 0.26);
-for (const z of [-0.62, 0.62]) {
+for (const [side, z] of [['Back', -0.62], ['Front', 0.62]]) {
   const web = new Group();
+  web.name = 'crankWeb' + side;
   web.position.z = z;
-  web.add(shadows(at(new Mesh(webBar, PAL.blue), 0.15, 0, 0)), shadows(at(new Mesh(boss, PAL.blue), K.R, 0, 0)), shadows(at(new Mesh(weight, PAL.blue), -0.8, 0, 0)));
+  web.add(part('crankWeb' + side + 'Bar', webBar, PAL.blue, 0.15), part('crankWeb' + side + 'Boss', boss, PAL.blue, K.R), part('crankWeb' + side + 'Weight', weight, PAL.blue, -0.8));
   crank.add(web);
 }
-crank.add(shadows(at(new Mesh(cyl(0.26, 1.5), PAL.blue), K.R, 0, 0)));                  // the crank pin
+crank.add(part('crankPin', cyl(0.26, 1.5), PAL.blue, K.R));                  // the crank pin
 const fly = new Group();
 fly.name = 'fly';
 fly.position.z = -2.6;
 fly.scale.setScalar(0.001);
-fly.add(shadows(new Mesh(cyl(1.9, 0.3), PAL.steel)), shadows(at(new Mesh(cyl(0.45, 0.4), PAL.white), 0, 0, 0)), shadows(at(new Mesh(new BoxGeometry(0.5, 0.35, 0.34), PAL.white), 1.65, 0, 0)));
+fly.add(part('flyDisc', cyl(1.9, 0.3), PAL.steel), part('flyHub', cyl(0.45, 0.4), PAL.white), part('flyMark', new BoxGeometry(0.5, 0.35, 0.34), PAL.white, 1.65));
 crank.add(fly);
 add(crank);
 
@@ -322,9 +330,7 @@ const rod = new Group();
 rod.name = 'rod';
 rod.position.set(K.R + K.L, 0, 0);
 rod.scale.setScalar(0.001);
-rod.add(shadows(at(new Mesh(new BoxGeometry(3.0, 0.34, 0.3), PAL.steel), -1.7, 0, 0)));
-rod.add(shadows(at(new Mesh(cyl(0.3, 0.5), PAL.steel), 0, 0, 0)));
-rod.add(shadows(at(new Mesh(cyl(0.5, 0.8), PAL.steel), -K.L, 0, 0)));
+rod.add(part('rodShank', new BoxGeometry(3.0, 0.34, 0.3), PAL.steel, -1.7), part('rodSmallEnd', cyl(0.3, 0.5), PAL.steel), part('rodBigEnd', cyl(0.5, 0.8), PAL.steel, -K.L));
 // the rod's line, in gold, drawn in front of everything and stretched to wherever it meets the vertical through the shaft (cue 9)
 const ext = new Group();
 ext.name = 'ext';
@@ -332,7 +338,8 @@ ext.position.z = K.Z + 0.03;
 ext.scale.set(0.001, 1, 1);
 const extGeometry = new BoxGeometry(1, 0.07, 0.07);
 extGeometry.translate(-0.5, 0, 0);
-ext.add(new Mesh(extGeometry, PAL.gold));
+const extLine = new Mesh(extGeometry, PAL.gold); extLine.name = 'extLine';
+ext.add(extLine);
 rod.add(ext);
 add(rod);
 
@@ -340,8 +347,8 @@ const piston = new Group();
 piston.name = 'piston';
 piston.position.set(K.R + K.L, 0, 0);
 piston.scale.setScalar(0.001);
-piston.add(shadows(at(new Mesh(cyl(0.85, 1.2, 'x'), PAL.steel), 0.2, 0, 0)));
-for (const x of [0.6, 0.42]) piston.add(shadows(at(new Mesh(cyl(0.88, 0.07, 'x'), PAL.steel), x, 0, 0)));
+piston.add(part('pistonBody', cyl(0.85, 1.2, 'x'), PAL.steel, 0.2));
+for (const [i, x] of [0.6, 0.42].entries()) piston.add(part('pistonRing' + (i + 1), cyl(0.88, 0.07, 'x'), PAL.steel, x));
 // the steady push: a purple arrow pointing at the crown (it is built pointing up, then turned to point back along -x), its base 2 units beyond it
 const push = new Group();
 push.name = 'push';
@@ -349,8 +356,10 @@ push.position.set(3.0, 0, 0);
 push.rotation.z = Math.PI / 2;
 push.scale.setScalar(0.001);
 const shaft = new Mesh(new CylinderGeometry(0.09, 0.09, 1.6, 16), PAL.purple);
+shaft.name = 'pushShaft';
 shaft.position.y = 0.8;
 const head = new Mesh(new ConeGeometry(0.22, 0.4, 20), PAL.purple);
+head.name = 'pushHead';
 head.position.y = 1.8;
 push.add(shaft, head);
 piston.add(push);
@@ -361,13 +370,15 @@ const gap = new Group();
 gap.name = 'gap';
 gap.position.set(0, K.R / 2, K.Z + 0.03);
 gap.scale.set(1, 0.001, 1);
-gap.add(new Mesh(new BoxGeometry(0.16, 1, 0.16), PAL.gold));
+const gapBar = new Mesh(new BoxGeometry(0.16, 1, 0.16), PAL.gold); gapBar.name = 'gapBar';
+gap.add(gapBar);
 add(gap);
 const imark = new Group();
 imark.name = 'imark';
 imark.position.set(0, K.R, K.Z + 0.03);
 imark.scale.setScalar(0.001);
-imark.add(new Mesh(new SphereGeometry(0.2, 20, 14), PAL.gold));
+const imarkSphere = new Mesh(new SphereGeometry(0.2, 20, 14), PAL.gold); imarkSphere.name = 'imarkSphere';
+imark.add(imarkSphere);
 add(imark);
 $S('#crank, #rod, #piston, #fly, #push, #ext, #gap, #imark').nodes.length      // 8</code></pre>
 
@@ -527,8 +538,8 @@ say('lbPiston', 'piston', 6.1, 18.8);
 say('lbRod', 'rod', 6.9, 18.8);
 say('lbCrank', 'crankshaft', 8.4, 18.8);
 // cue 2: the piston's line, the pin's circle
-grow('#line', 10.9, 1, 700);
-grow('#circle', 14.0, 1, 700);
+grow('#pathLine', 10.9, 1, 700);
+grow('#pinCircle', 14.0, 1, 700);
 // cues 3 and 4: one full turn, slowly
 say('ang', 'crank 0°', 19.0);
 readout(spin(19.3, 33.7, 360));
@@ -664,9 +675,11 @@ flush()</code></pre>
 
 	<h2><span class="step">13</span> Open the scene file</h2>
 	<p class="lede">The scene is <a href="../../#repo=tejaswigowda/test1&amp;file=piston.json">piston.json</a> in <code>tejaswigowda/test1</code>. It is the scene <em>file</em>, not a still: the timeline, the camera sequence and the subtitles are saved inside it, so opening it plays the film without any script, and the blocks on this page are how it was authored. Scrub the Animations tab: at 22&nbsp;s the first turn, at 38&nbsp;s top dead center, at 45&nbsp;s the stroke, at 61&nbsp;s the orbit, at 74&nbsp;s the gold gap, at 90&nbsp;s the flywheel, and from 100.7&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@503e3af</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
+	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@cf7be14</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
 	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and read back: ten materials of its own plus the end card's (each text label also makes a dark shadow material when it is shown), 55 geometries, 88 objects, 33 timeline tracks, 5 shots and 13 cues. The kinematics were read back at 27 moments across all eight turns of the crank and compared with the formulas: the crank pin was where <em>(r cos θ, r sin θ)</em> says (to 0.00001), the rod's big end sat on the pin (within 0.006, which also checks that the rod stays one length), the piston where <em>x</em> says (within 0.005), and the gold marker where <em>x tan φ</em> says (within 0.006), all in scene units. The screenshots are frames of the pasted scene at 8, 22, 38, 40.5, 45, 55.5, 61, 64, 73.8, 80, 83.5, 90, 96 and 102&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit. Rendering to a video file (step 12) was not run for this page.</div>
 	<div class="note"><strong>What the film does not claim.</strong> It is kinematics: positions and speeds from the geometry, with no friction, no inertia, and no gas pressure. The <em>steady push</em> is a device for reading the leverage, not a model of a real cylinder, where the force changes through the stroke. The leverage (the gold gap) is a property of the geometry alone; the second half of each turn, where the rod's line crosses below the shaft, has the same size with the opposite sign, and the readout shows the size. That a flywheel carries a real crank through the dead centers is the usual engineering explanation and the film only shows the flywheel on the shaft, not its inertia at work. The film’s ratio <em>l / r = 3</em> is typical but not universal; the 58.6% and the 1.05 <em>r</em> belong to that ratio, while <em>zero at the dead centers</em> and <em>exactly r at 90°</em> do not depend on it.</div>
+
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> scene units: crank radius <em>r = 1.2</em>, rod length <em>l = 3.6</em>; the leverage is quoted in crank radii. <em>Assumptions:</em> rigid parts, no clearances, the piston line through the shaft; kinematics only: no friction, no inertia, no gas pressure. The 58.6% and the 1.05 <em>r</em> belong to <em>l / r = 3</em>. <em>Render:</em> no video render was run for this page. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

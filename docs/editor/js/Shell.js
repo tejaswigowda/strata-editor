@@ -16,6 +16,7 @@ import { UngroupObjectsCommand } from './commands/UngroupObjectsCommand.js';
 import { SetLabelCommand } from './commands/SetLabelCommand.js';
 import { SetClassCommand } from './commands/SetClassCommand.js';
 import { MultiCmdsCommand } from './commands/MultiCmdsCommand.js';
+import { lintScene, assertLabelled, formatViolations, isDefaultName } from './intelligence/sceneLint.js';
 import { createVerifyPanel } from './import/VerifyPanel.js';
 import { AI_MODELS, SYSTEM_PROMPT, SCENE_QA_PROMPT, buildSystemPrompt } from './AIPrompt.js';
 import { extractCode, buildMessages, buildQAMessages, sceneContextString, addressablePartsBlock } from './AIUtils.js';
@@ -2012,6 +2013,43 @@ function Shell( editor ) {
 				// Example: $S('.wheel').recolor('#111').spin('y', 1)
 				// Aliases: Pick, pick — the same selector-picking function.
 				$S: query,
+				// make(name, geometry|null, material, { classes, parent, position, rotation, scale }) — the
+				// labelled way to create an object: the name is required, not a default (Mesh, Group, Box…)
+				// and unique in the scene, and at least one class is required; it throws otherwise.
+				// geometry === null makes a Group. With `parent` the object is added under it.
+				make: ( name, geometry, material, opts = {} ) => {
+
+					const THREE = window.THREE;
+					const classes = [].concat( opts.classes || opts.class || [] ).map( c => String( c ).trim() ).filter( Boolean );
+					if ( isDefaultName( name ) ) throw new Error( 'make: a name is required, and "' + name + '" is a default, not an author name' );
+					if ( classes.length === 0 ) throw new Error( 'make("' + name + '"): at least one class is required (opts.classes)' );
+					const key = String( name ).trim().toLowerCase();
+					let taken = false;
+					editor.scene.traverse( o => { if ( ( o.name || '' ).trim().toLowerCase() === key ) taken = true; } );
+					if ( taken ) throw new Error( 'make: the name "' + name + '" is already used in this scene' );
+					const object = geometry === null ? new THREE.Group() : new THREE.Mesh( geometry, material );
+					object.name = String( name ).trim();
+					object.userData.customClasses = Array.from( new Set( classes ) );
+					if ( object.isMesh ) object.castShadow = object.receiveShadow = opts.shadows !== false;
+					if ( opts.position ) object.position.set( ...opts.position );
+					if ( opts.rotation ) object.rotation.set( ...opts.rotation );
+					if ( opts.scale !== undefined ) { if ( Array.isArray( opts.scale ) ) object.scale.set( ...opts.scale ); else object.scale.setScalar( opts.scale ); }
+					if ( opts.parent ) opts.parent.add( object ); else editor.execute( new AddObjectCommand( editor, object ) );
+					return object;
+
+				},
+				// lint() → the objects that are not addressable, as text (empty string when all are).
+				lint: () => formatViolations( lintScene( editor.scene ), 40 ),
+				// requireLabels(true) — mark the scene so a commit is refused while any object is unnamed,
+				// duplicated or classless; it throws now if there already are some. requireLabels(false) lifts it.
+				requireLabels: ( on = true ) => {
+
+					if ( on ) assertLabelled( editor.scene );
+					editor.scene.userData.requireLabels = !! on;
+					if ( editor.work ) editor.work.touch();
+					return 'requireLabels ' + ( on ? 'on: every object is named and classed' : 'off' );
+
+				},
 				// $M('group') — non-destructive motion editing: $M.group('sparring', ['#f1','#f2']),
 				// then .splice([[1.6,9],[14.6,22.1]], { blend: 0.25 }) / .play({from,to}) / .speed / .hold /
 				// .collision() / .clear() / .asCommand(). The capture is never modified.

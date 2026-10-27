@@ -132,7 +132,7 @@
 <body>
 <main>
 	<h1>A projectile: two motions, one path</h1>
-	<iframe src="../../#repo=tejaswigowda/test1@17c6d52599bcc3b33a84fc2f82352f0961fa5029&amp;file=projectile.json&amp;present=true"></iframe>
+	<iframe src="../../#repo=tejaswigowda/test1@f3a4a0e5874234ae4b3780626827b552038f928d&amp;file=projectile.json&amp;present=true"></iframe>
 
 	<p class="tagline">A 79-second visual argument that the curve a thrown ball makes is two simple motions at once: sideways at a constant speed, and up and down under gravity. Each motion is shown alone (a shadow on the ground, a shadow on a pole), the camera orbits so you can look at either one by itself, and then they are put back together. The same two motions, with a different angle or speed, give a different curve. Built with the JS Shell, with exact physics.</p>
 
@@ -167,11 +167,11 @@
 	<p class="lede">The ten materials of the film are made once, here, and every mesh that uses a colour is handed the same one: aqua is the sideways motion, coral is the up and down, gold is the path, purple is gravity, silver is the ball. A shared material cannot fade one mesh without fading all of them, so this film reveals things by <em>growing</em> them from a scale of 0.001 and removes them by shrinking. The floor has a grid of lines every unit and a heavier one every five, so the equal steps can be counted.</p>
 	<pre><code>// The palette: every material of the film, made once and handed to every mesh that uses it (ten in all, with the room, the floor and the end card).
 // aqua = the sideways motion, coral = the up and down motion, gold = the path they make, purple = gravity, silver = the ball.
-const make = (color, k = 0.4, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });
+const mat = (color, k = 0.4, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });
 globalThis.PAL = {
   silver: new MeshStandardMaterial({ color: 0xe8ecff, emissive: 0x9aa6ff, emissiveIntensity: 0.3, roughness: 0.3, metalness: 0.25 }),
-  aqua: make(0x14e0c8), coral: make(0xff4d6a), gold: make(0xffb703, 0.55), purple: make(0xa78bfa, 0.45),
-  white: make(0xffffff, 0.7), grid: make(0x6a7cf0, 0.55)
+  aqua: mat(0x14e0c8), coral: mat(0xff4d6a), gold: mat(0xffb703, 0.55), purple: mat(0xa78bfa, 0.45),
+  white: mat(0xffffff, 0.7), grid: mat(0x6a7cf0, 0.55)
 };
 
 // a room around the scene and a floor under it, for the shadows to land on
@@ -195,6 +195,7 @@ const lineX = new BoxGeometry(1, 1, 1);                          // one unit cub
 for (let x = -5; x &lt;= 30; x++) {
   const major = x % 5 === 0;
   const m = new Mesh(lineX, PAL.grid);
+  m.name = 'gridX' + String(x + 5).padStart(2, '0');
   m.scale.set(major ? 0.07 : 0.03, 0.02, 14);
   m.position.set(x, 0.012, 0);
   grid.add(m);
@@ -202,6 +203,7 @@ for (let x = -5; x &lt;= 30; x++) {
 for (let z = -7; z &lt;= 7; z++) {
   const major = z % 5 === 0;
   const m = new Mesh(lineX, PAL.grid);
+  m.name = 'gridZ' + String(z + 7).padStart(2, '0');
   m.scale.set(35, 0.02, major ? 0.07 : 0.03);
   m.position.set(12.5, 0.012, z);
   grid.add(m);
@@ -246,6 +248,7 @@ for (const deg of [30, 45, 60]) {
   barrel.rotation.z = THREE.MathUtils.degToRad(deg);
   const tube = new Mesh(barrelGeometry, PAL.silver);
   tube.castShadow = true;
+  tube.name = 'barrelTube' + deg;
   barrel.add(tube);
   if (deg !== 45) barrel.scale.setScalar(0.001);                  // the 30 and 60 degree barrels come in for the angle comparison
   editor.execute(new AddObjectCommand(editor, barrel));
@@ -256,11 +259,13 @@ const pole = new Group();
 pole.name = 'pole';
 pole.position.set(-3, 0, 0);
 const rod = new Mesh(new BoxGeometry(0.12, 7.6, 0.12), PAL.coral);
+rod.name = 'poleRod';
 rod.position.y = 3.8;
 pole.add(rod);
 const poleTick = new BoxGeometry(0.45, 0.04, 0.04), groundTick = new BoxGeometry(0.04, 0.05, 0.6);
 for (let y = 1; y &lt;= 7; y++) {
   const tick = new Mesh(poleTick, PAL.white);
+  tick.name = 'poleTick' + y;
   tick.position.y = y;
   pole.add(tick);
 }
@@ -271,10 +276,12 @@ editor.execute(new AddObjectCommand(editor, pole));
 const ground = new Group();
 ground.name = 'groundLine';
 const bar = new Mesh(new BoxGeometry(28, 0.06, 0.16), PAL.aqua);
+bar.name = 'groundBar';
 bar.position.set(14, 0.04, 0);
 ground.add(bar);
 for (let x = 5; x &lt;= 25; x += 5) {
   const tick = new Mesh(groundTick, PAL.white);
+  tick.name = 'groundTick' + x;
   tick.position.set(x, 0.05, 0);
   ground.add(tick);
 }
@@ -310,6 +317,7 @@ PH.ball = name =&gt; {
   const outer = new Group(); outer.name = name; outer.scale.setScalar(0.001);
   const inner = new Group(); inner.name = name + 'y'; inner.position.y = PH.RAD;
   const m = new Mesh(new SphereGeometry(PH.RAD, 32, 20), PAL.silver);
+  m.name = name + '_sphere';
   m.castShadow = true;
   inner.add(m); outer.add(inner);
   return [add(outer), inner];
@@ -329,7 +337,6 @@ PH.arrow = (name, material, len, parent, rotZ = 0, x = 0) =&gt; {
   g.add(s, h); parent.add(g);
   return g;
 };
-PH.arrowSide = (name, material, rotZ, x) =&gt; { const g = new Group(); g.name = name; g.scale.setScalar(0.001); g.rotation.z = THREE.MathUtils.degToRad(rotZ); g.position.x = x; return g; };
 
 const f45 = PH.flight(45);
 const LX = PH.K * f45.vx, LY = PH.K * f45.vy, LG = 1.3;          // arrow lengths: sideways speed, up speed, and gravity (which has its own, fixed length)
@@ -349,7 +356,7 @@ PH.LX = LX; PH.LY = LY;
 // the two shadows: an aqua one that slides along the ground (only the sideways motion), a coral one that rides the pole (only the up and down)
 const sh = (name, x, y, mat, r, sx, sy, sz) =&gt; {
   const g = new Group(); g.name = name; g.position.set(x, y, 0); g.scale.setScalar(0.001);
-  const m = new Mesh(new SphereGeometry(r, 24, 16), mat); m.scale.set(sx, sy, sz); m.castShadow = false;
+  const m = new Mesh(new SphereGeometry(r, 24, 16), mat); m.name = name + '_sphere'; m.scale.set(sx, sy, sz); m.castShadow = false;
   g.add(m);
   return add(g);
 };
@@ -568,7 +575,7 @@ const f45 = PH.flight(45), DT = 0.45;
 const ringGeometry = new TorusGeometry(0.6, 0.07, 8, 40);
 const ring = (name, x, at) =&gt; {
   const g = new Group(); g.name = name; g.position.set(x, 0.06, 0); g.scale.setScalar(0.001);
-  const m = new Mesh(ringGeometry, PAL.gold); m.rotation.x = -Math.PI / 2;
+  const m = new Mesh(ringGeometry, PAL.gold); m.name = name + '_torus'; m.rotation.x = -Math.PI / 2;
   g.add(m); add(g);
   grow('#' + name, at, 1, 400);
 };
@@ -590,8 +597,8 @@ for (let k = 1; k &lt;= 7; k++) {
   grow('#ty_' + k, 51.925, 0.001, 500);
 
   const gh = new Group(); gh.name = 'gh_' + k; gh.position.set(x, y, 0); gh.scale.setScalar(0.001);
-  const ball = new Mesh(ghostGeometry, PAL.silver); ball.castShadow = true; gh.add(ball);
-  const drop = new Mesh(dropGeometry, PAL.white); drop.scale.y = y; drop.position.y = -y / 2; gh.add(drop);
+  const ball = new Mesh(ghostGeometry, PAL.silver); ball.name = 'gh_' + k + '_ball'; ball.castShadow = true; gh.add(ball);
+  const drop = new Mesh(dropGeometry, PAL.white); drop.name = 'gh_' + k + '_drop'; drop.scale.y = y; drop.position.y = -y / 2; gh.add(drop);
   const ga = new Group(); ga.name = 'ga_' + k; ga.scale.setScalar(0.001); gh.add(ga);
   PH.arrow('gx_' + k, PAL.aqua, K * f45.vx, ga, -90);
   if (Math.abs(vy) &gt; 0.5) PH.arrow('gy_' + k, PAL.coral, K * Math.abs(vy), ga, vy &gt; 0 ? 0 : 180);
@@ -688,7 +695,33 @@ ev(76.7, () =&gt; $S('#callcard').at(76.7).fadeIn(2.0));</code></pre>
 	<pre><code>// every animation of the film is written now, in time order
 flush()</code></pre>
 
-	<h2><span class="step">13</span> Render it</h2>
+	<h2><span class="step">13</span> Name and class everything</h2>
+	<p class="lede">The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S('#b0')</code>, <code>$S('.trail-dot')</code>, an AI edit or a tutorial step cannot reach it. Every object was named where it was created (a grid line is <code>gridX07</code>, a tick on the pole <code>poleTick3</code>, the ball inside <code>b0</code> is <code>b0_sphere</code>: one template string in the loop that makes them), so this last block only adds the classes, from one table, and then calls <code>requireLabels(true)</code>. That marks the scene: from now on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. Objects the engine makes itself (the dark shadow of each text label, whose names start with <code>__</code>) are exempt.</p>
+	<pre><code>// Every object has a name (set where it is created) and now a class. Classes are what make the scene queryable: $S('.arrow'), $S('.trail-dot'), $S('.sideways').
+// One table, first column the names it covers, second the classes it gives; an object can match several rows. Anything left without a class is listed and the block stops.
+const rules = [
+  [/^(Room|Floor)$/, ['environment']], [/^(Grid|grid[XZ]\d+)$/, ['environment', 'grid']], [/Light$/, ['light']],
+  [/^(CannonBase|barrel\d+|barrelTube\d+)$/, ['cannon']], [/^barrel\d+$/, ['barrel']],
+  [/^(pole|poleRod|poleTick\d+)$/, ['pole']], [/^(groundLine|groundBar|groundTick\d+)$/, ['ground-line']],
+  [/^b[012](y|_sphere)?$/, ['ball']],
+  [/^(arr[XVGUD]|gx_|gy_|gr_)/, ['arrow']], [/^(arrX|gx_)/, ['sideways']], [/^(arrV|arrU|arrD|gy_)/, ['vertical']], [/^arrG/, ['gravity']], [/^gr_/, ['resultant']],
+  [/^sh[XY]/, ['shadow']], [/^shX/, ['sideways']], [/^shY/, ['vertical']],
+  [/^trail\w+$/, ['trail']], [/^trail\w+_\d+$/, ['trail-dot']],
+  [/^ring/, ['landing-ring']], [/^(gh_|ga_)/, ['ghost']], [/^t[xy]_\d+$/, ['bead']],
+  [/^(lnd|acr|ud|eq|grav|zero|a30|a45|a60|same|slow|fast)$/, ['label']],
+  [/^cam/, ['camera']], [/^callcard$/, ['card']]
+];
+const left = [];
+scene.traverse(o =&gt; {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);
+  if (add.length === 0) { left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...(o.userData.customClasses || []), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+
+	<h2><span class="step">14</span> Render it</h2>
 	<ol class="steps">
 		<li>Open the <strong>Render</strong> tab and its <strong>Video</strong> sub-tab. The Camera Sequence already holds the eight shots from step 5.</li>
 		<li>Choose <strong>Render (offline)</strong>, 1920 × 1080 at 60 fps, and click <strong>Render</strong>. Every frame is drawn and captured at its exact timeline time, so the result is the same on a fast or a slow machine. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>
@@ -699,10 +732,12 @@ flush()</code></pre>
 	</figure>
 	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
 
-	<h2><span class="step">14</span> Open the finished scene</h2>
+	<h2><span class="step">15</span> Open the scene file</h2>
 	<p class="lede">The scene is <a href="../../#repo=tejaswigowda/test1&amp;file=projectile.json">projectile.json</a> in <code>tejaswigowda/test1</code>. It is the scene <em>file</em>, not a still: the timeline, the camera sequence and the subtitles are saved inside it, so opening it plays the film without any script, and the blocks on this page are how it was authored. Scrub the Animations tab: at 3&nbsp;s the first launch, at 24&nbsp;s the pole, at 49&nbsp;s the ghosts, at 55&nbsp;s three angles, at 67&nbsp;s three speeds, and from 76.5&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@17c6d52</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and read back: ten materials of its own (each text label also makes a dark shadow material when it is shown), 46 geometries, 434 objects, 251 timeline tracks, 8 shots and 12 cues. The ball's position was read back at 35 moments across five flights (30°, 45° and 60° at speed 1, and 45° at speeds 0.75 and 1.25) and compared with <em>x = v<sub>x</sub> t</em> and <em>y = 0.25 + v<sub>y</sub> t − ½ g t²</em>: the largest difference was 0.002 scene units. The screenshots are frames of the pasted scene at 2.6, 9, 14, 24, 30.5, 38, 49.5, 55, 58.5, 67 and 78&nbsp;s, with the editor's controls hidden. Rendering to a video file (step 13) was not run for this page. The film shows exact physics for an ideal projectile, with no air resistance, in slow motion; the ghost arrows are drawn at a smaller scale than the arrows on the ball, so they do not overlap.</div>
+	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@f3a4a0e</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and read back: ten materials of its own (each text label also makes a dark shadow material when it is shown), 46 geometries, 434 objects (every one named and classed: <code>lint()</code> reports nothing, and the scene is marked with <code>requireLabels</code>), 251 timeline tracks, 8 shots and 12 cues. The ball's position was read back at 35 moments across five flights (30°, 45° and 60° at speed 1, and 45° at speeds 0.75 and 1.25) and compared with <em>x = v<sub>x</sub> t</em> and <em>y = 0.25 + v<sub>y</sub> t − ½ g t²</em>: the largest difference was 0.002 scene units. The screenshots are frames of the pasted scene at 2.6, 9, 14, 24, 30.5, 38, 49.5, 55, 58.5, 67 and 78&nbsp;s, with the editor's controls hidden. Rendering to a video file (step 14) was not run for this page. The film shows exact physics for an ideal projectile, with no air resistance, in slow motion; the ghost arrows are drawn at a smaller scale than the arrows on the ball, so they do not overlap.</div>
+
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> scene units, in slow motion: <em>g = 2.5</em>, a base speed of 6.32, a ball of radius 0.25, launched from and landing on the ground. <em>Assumptions:</em> an ideal projectile: no air resistance, flat ground, launch and landing at one height, <em>g</em> constant; 30° and 60° landing together depends on that. <em>Render:</em> no video render was run for this page. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

@@ -132,7 +132,7 @@
 <body>
 <main>
 	<h1>Why cells are small: surface area to volume</h1>
-	<iframe src="../../#repo=tejaswigowda/test1@d742211b6a3cb36a3c59ead6569f4068a7ca3b03&amp;file=area-volume.json&amp;present=true"></iframe>
+	<iframe src="../../#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&amp;file=area-volume.json&amp;present=true"></iframe>
 
 	<p class="tagline">A 98-second visual argument that a bigger thing has less surface for its size. Measuring every length in unit-cube widths, a cube of side 1 has surface area 6 and volume 1, so a surface-to-volume ratio of 6 <em>per unit-cube width</em>; a cube of side 2 has 24 and 8, a ratio of 3; a cube of side 3 has 54 and 27, a ratio of 2. The surface grows with the <em>square</em> of the side and the volume with the <em>cube</em>, so the ratio is proportional to 1 / side, in any units: double the side and it halves. That is why cells stay small and divide: a cell lives through its skin. Cut the big cube into 27 small ones and the volume is still 27 but the surface is 162, a ratio of 6 again. Life uses the other trick too: fold the surface (the cristae of a mitochondrion, the alveoli of a lung). It is the <a href="a-plus-b-cubed.html">(a + b)³ tutorial</a>'s machinery (unit cubes with black borders, a room, shadows, an x-ray, a camera sequence) pointed at a different idea. Open the <a href="../../">editor</a>, load an empty scene, open the <strong>Shell</strong> tab and paste each block in order, or open the scene file, <a href="../../#repo=tejaswigowda/test1&amp;file=area-volume.json&amp;branch=main">area-volume.json</a> (<a href="#open-finished">the last step</a>).</p>
 
@@ -487,8 +487,30 @@ $S('#callcard').at(95.82 + 0.2).fadeIn(2.5);</code></pre>
 
 	<h2 id="open-finished"><span class="step">15</span> Open the scene file</h2>
 	<p class="lede"><a href="../../#repo=tejaswigowda/test1&amp;file=area-volume.json&amp;branch=main">area-volume.json</a> in <code>tejaswigowda/test1</code> is the scene these blocks build: three cubes of 1, 8 and 27 unit cubes, three skins, six membrane panels, five labels, four cameras and the end card, with 19 geometries, <strong>10 materials</strong>, 50 timeline tracks, 4 shots and 12 subtitle cues. It is the scene <em>file</em>, not a still: the timeline, the camera sequence and the subtitles are saved inside it, so opening it plays the film without any script, and the blocks on this page are how it was authored. Open it, then scrub the Animations tab: at 12&nbsp;s one cube, at 34&nbsp;s three, at 54&nbsp;s the glass cube with its gold middle, at 70&nbsp;s the 27 cubes, at 87&nbsp;s the folded membrane, and from 96&nbsp;s the card fills the frame.</p>
-	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@d742211</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
+	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@89f9272</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
 	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and read back: 19 geometries, 10 materials, 50 timeline tracks, 4 shots, 12 cues. The screenshots are frames of the pasted scene at 12, 34, 54, 61.5, 70, 78, 87 and 100&nbsp;s, with the editor's controls hidden. The cues were run through a speech synthesizer and fit. Rendering to a video file (step 14) was not run for this page. Compared with the first version of this scene (54 materials), the film differs in three ways, all forced by sharing: the cubes, skins and membrane <em>grow</em> where they used to fade in, the gold labels cut where they used to cross-fade, and the middle cube and the gold labels are one brighter gold. The film shows geometry, not a model of a cell: the claim that the ratio is proportional to 1 / side is exact for cubes, and the biology (cristae, alveoli) is an illustration of the same idea, not a measurement.</div>
+
+	<h2><span class="step">16</span> Name and class everything</h2>
+	<p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S('#id')</code>, <code>$S('.class')</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. Nothing needed renaming; the table gives the classes.</p>
+	<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.block'), $S('.label'), $S('.environment'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+const rules = [
+  [/^(Room|Wall|Floor)$/, ['environment']], [/Light$/, ['light']], [/^c\d$/, ['block']],
+  [/^(readout|note)$/, ['label']], [/^cam/, ['camera']], [/^callcard$/, ['card']]
+];
+const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o =&gt; {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> unit-cube widths: the ratios 6, 3 and 2 are <em>per unit-cube width</em>, and <em>SA / V ∝ 1 / s</em> holds in any units. <em>Assumptions:</em> the cells are idealised cubes with an exact grid of unit cubes; cristae and alveoli illustrate the idea and are not measurements of real membranes. <em>Render:</em> no video render was run for this page. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

@@ -3,9 +3,9 @@
 		"title": "Make a Pythagorean-theorem short",
 		"href": "makeshort.html",
 		"group": "Animation and rendering",
-		"blurb": "Build a 100-second animated proof that 3² + 4² = 5², extend it to two more triples with quarter turns of the camera, and add subtitles, using the JS Shell and the Universal Timeline.",
+		"blurb": "Build a 100-second animated demonstration that 3² + 4² = 5², extend it to two more triples with quarter turns of the camera, and add subtitles, using the JS Shell and the Universal Timeline.",
 		"thumb": "screenshots/thumbs/makeshort.jpg",
-		"desc": "Build the tile squares and a right triangle, choreograph the proof on the timeline with tiles that tumble onto the hypotenuse square, repeat it for the 5-12-13 and 8-15-17 triples with quarter turns of the camera, add subtitles, and end on a living call-card — all with the JS Shell and the Universal Timeline.",
+		"desc": "Build the tile squares and a right triangle, choreograph the demonstration on the timeline with tiles that tumble onto the hypotenuse square, repeat it for the 5-12-13 and 8-15-17 triples with quarter turns of the camera, add subtitles, and end on a living call-card — all with the JS Shell and the Universal Timeline.",
 		"embed": "#repo=tejaswigowda/test1&file=pyth.json&present=true"
 	},
 	{
@@ -24,7 +24,7 @@
 		"blurb": "The Hardy–Weinberg law as a square: p² + 2pq + q² for one round of random mating, then a count of the alleles that shows p and q are unchanged, with the assumptions listed. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/hw.jpg",
 		"desc": "Cut a square of tiles at p and q, name each piece as a kind of child (AA, Aa, Aa, aa), sort the pieces under their terms of (p + q)² = p² + 2pq + q², with the two Aa pieces stacked under 2pq; then give up every child's two alleles into two bins and measure the bins with the same p and q rulers that measured the parents, to show the allele frequencies are unchanged — all with the JS Shell, the Universal Timeline and the camera sequence, in nine materials.",
-		"embed": "#repo=tejaswigowda/test1@dbe91d4e829316cf229ceb4642b108115068f4b0&file=hw.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=hw.json&present=true"
 	},
 	{
 		"title": "Why cells are small: surface area to volume",
@@ -33,7 +33,7 @@
 		"blurb": "Cubes of side 1, 2 and 3 have surface-to-volume ratios of 6, 3 and 2 per unit-cube width, falling as 1 / side in any units: why cells stay small and divide, and why mitochondria and lungs fold their membranes. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/area-volume.jpg",
 		"desc": "Build one cube at three sizes out of unit cubes, show its skin, glass the outside to find the starving middle, cut the big cube into slabs, bars and 27 cubes so the ratio returns to 6, and fold a flat membrane into a zigzag — all with the JS Shell, the Universal Timeline and the camera sequence.",
-		"embed": "#repo=tejaswigowda/test1@d742211b6a3cb36a3c59ead6569f4068a7ca3b03&file=area-volume.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=area-volume.json&present=true"
 	},
 	{
 		"title": "A projectile: two motions, one path",
@@ -42,7 +42,7 @@
 		"blurb": "A thrown ball's curve is a sideways motion at constant speed plus an up-and-down motion under gravity. Orbit the path to see each alone, then put them back together. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/projectile.jpg",
 		"desc": "Launch a ball and draw its trail, its constant sideways speed, the gravity that changes its vertical speed, and its landing point; show each motion alone as a shadow on the ground and on a pole, orbit the path, then add the two back together on seven ghost balls and change the angle and the speed — all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
-		"embed": "#repo=tejaswigowda/test1@17c6d52599bcc3b33a84fc2f82352f0961fa5029&file=projectile.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@f3a4a0e5874234ae4b3780626827b552038f928d&file=projectile.json&present=true"
 	},
 	{
 		"title": "A crank, a rod and a piston: crank-slider kinematics",
@@ -51,7 +51,7 @@
 		"blurb": "A crankshaft, connecting rod and piston through one revolution: the dead centers, the stroke, and the mechanical advantage drawn as a gap that vanishes at the dead centers. Orbit the assembly to see what a flat view hides. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/piston.jpg",
 		"desc": "Animate a crank-slider with exact kinematics: label top and bottom dead center, bracket the stroke, show that the piston covers more than half its stroke in the first quarter turn, and draw the leverage as the gap between the shaft and the point where the rod's line crosses the vertical through it \u2014 all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
-		"embed": "#repo=tejaswigowda/test1@503e3af3455db6414d3d813be641391e31eeb865&file=piston.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&file=piston.json&present=true"
 	},
 	{
 		"title": "Build a night scene from scratch",

@@ -15,6 +15,7 @@ import { MergeViewport } from './MergeViewport.js';
 import { externalizeScene, internalizeScene, u8ToBase64, chunkSceneFile, partPath } from './GitAssets.js';
 import { splitRepoRef, resolveSceneJSON, resolveAssetBytes } from './GitResolver.js';
 import { quantizeSceneJSON } from './SceneQuantize.js';
+import { assertLabelled } from './intelligence/sceneLint.js';
 
 // ── Commit-message generation ─────────────────────────────────────────────────
 // Uses the already-loaded local AI engine (editor.aiEngine) to generate a
@@ -807,6 +808,9 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 	const scenePath = cfg.scenePath || 'scene.json';
 	const branch    = cfg.branch || 'main';
 	const msg       = ( message || '' ).trim() || 'Update scene';
+
+	// A scene that opted in with requireLabels() is only committed while every object is named and classed.
+	if ( editor.scene.userData && editor.scene.userData.requireLabels ) assertLabelled( editor.scene );
 
 	onProgress( 0, 'Preparing assets…' );
 
