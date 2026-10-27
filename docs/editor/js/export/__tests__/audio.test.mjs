@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { parseWav, toStereo, planAudioSegments, packageAudio, audioPlaylist, audioMediaSegment, audioInitSegment, AUDIO, lagOf } from '../audio.js';
+import { parseWav, toStereo, planAudioSegments, packageAudio, audioPlaylist, audioMediaSegment, audioInitSegment, AUDIO, lagOf, aacSupport } from '../audio.js';
 import { masterPlaylist, packageRendition } from '../fmp4.js';
 import { assemblePublishSet } from '../publishSet.js';
 import { validateRenderJson } from '../renderJson.js';
@@ -203,6 +203,27 @@ if ( ff.status !== 0 ) { console.log( '  - ffmpeg not installed: the real-decode
 	} );
 
 }
+
+await test( 'a browser that encodes AAC but cannot decode it is refused with the reason, not left to fail mid-publish', async () => {
+
+	// what the VS Code (Electron) browser does: isConfigSupported says yes for both, the decoder then errors at the first packet
+	const g = globalThis;
+	const saved = { AudioEncoder: g.AudioEncoder, AudioData: g.AudioData, AudioDecoder: g.AudioDecoder, EncodedAudioChunk: g.EncodedAudioChunk };
+	class FakeAudioData { constructor( i ) { this.numberOfFrames = i.numberOfFrames; } close() {} }
+	class FakeChunk { constructor( i ) { this.byteLength = 4; } copyTo( d ) { d.fill( 1 ); } }
+	g.AudioData = FakeAudioData;
+	g.EncodedAudioChunk = FakeChunk;
+	g.AudioEncoder = class { static isConfigSupported() { return Promise.resolve( { supported: true } ); } constructor( o ) { this.o = o; this.encodeQueueSize = 0; } configure() {} encode() { this.o.output( new FakeChunk(), { decoderConfig: { description: Uint8Array.of( 18, 16 ) } } ); } flush() { return Promise.resolve(); } close() {} };
+	try {
+
+		g.AudioDecoder = class { static isConfigSupported() { return Promise.resolve( { supported: true } ); } constructor( o ) { this.o = o; } configure() {} decode() { setTimeout( () => this.o.error( new Error( 'Unsupported configuration.' ) ), 0 ); } flush() { return new Promise( r => setTimeout( r, 5 ) ); } close() {} };
+		const refused = await aacSupport();
+		assert.strictEqual( refused.ok, false );
+		assert.match( refused.reason, /can encode AAC but cannot decode it.*will not guess.*Chrome, Edge or Safari/ );
+
+	} finally { Object.assign( g, saved ); for ( const k of Object.keys( saved ) ) if ( saved[ k ] === undefined ) delete g[ k ]; }
+
+} );
 
 console.log( `\n${ pass } passed, ${ fail } failed${ skipped ? `, ${ skipped } skipped` : '' }` );
 process.exit( fail ? 1 : 0 );

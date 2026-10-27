@@ -204,17 +204,52 @@ export const videoStarts = ( segments, fps ) => segments.map( s => s.first / fps
 
 const sleep = ms => new Promise( r => setTimeout( r, ms ) );
 
-/** Is AAC-LC encoding available here? Resolves to { ok, reason }. */
+let decodeProbe = null;
+
+/**
+ * Can this browser DECODE the AAC it encodes? isConfigSupported says yes in Chromium builds without proprietary codecs (the VS Code / Electron
+ * browser) and the decoder then fails at the first packet, so the only honest test is a real round trip. The encoder's start-up delay is measured
+ * by decoding, so without a decoder it cannot be measured and the publish must not guess it.
+ */
+export function canDecodeAac() {
+
+	if ( ! decodeProbe ) {
+
+		decodeProbe = ( async () => {
+
+			try {
+
+				const x = new Float32Array( AUDIO.frameSamples * 6 );
+				for ( let i = 0; i < x.length; i ++ ) x[ i ] = Math.sin( i * 0.05 ) * 0.2;
+				const { frames, asc } = await encodeRaw( x, x );
+				const y = await decodeRaw( frames, asc );
+				return y.length > 0;
+
+			} catch ( e ) { return false; }
+
+		} )();
+
+	}
+	return decodeProbe;
+
+}
+
+/** Is AAC-LC encoding available here, and can the encoder's delay be measured? Resolves to { ok, reason }. */
 export async function aacSupport() {
 
-	if ( typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined' ) return { ok: false, reason: 'This browser has no WebCodecs AudioEncoder.' };
+	if ( typeof AudioEncoder === 'undefined' || typeof AudioData === 'undefined' ) return { ok: false, reason: 'this browser has no WebCodecs AudioEncoder.' };
 	try {
 
 		const s = await AudioEncoder.isConfigSupported( { codec: AUDIO.codec, sampleRate: AUDIO.sampleRate, numberOfChannels: AUDIO.channels, bitrate: AUDIO.bitrate, aac: { format: 'aac' } } );
-		if ( s && s.supported ) return { ok: true, reason: '' };
+		if ( s && s.supported ) {
+
+			if ( await canDecodeAac() ) return { ok: true, reason: '' };
+			return { ok: false, reason: 'this browser can encode AAC but cannot decode it (a Chromium build without proprietary codecs, such as the VS Code or Electron browser). The AAC encoder\u2019s start-up delay can only be measured by decoding, and the publish will not guess it. Publish from desktop Chrome, Edge or Safari.' };
+
+		}
 
 	} catch ( e ) { /* fall through */ }
-	return { ok: false, reason: 'This browser cannot encode AAC-LC (WebCodecs AudioEncoder mp4a.40.2). Publish from desktop Chrome or Edge.' };
+	return { ok: false, reason: 'this browser cannot encode AAC-LC (WebCodecs AudioEncoder mp4a.40.2). Publish from desktop Chrome or Edge.' };
 
 }
 
@@ -326,7 +361,7 @@ export async function calibrateDelay() {
 export async function buildAudioRendition( { bytes, durationSeconds, videoStartsSeconds, onProgress = () => {} } ) {
 
 	const support = await aacSupport();
-	if ( ! support.ok ) throw new Error( support.reason );
+	if ( ! support.ok ) throw new Error( support.reason.charAt( 0 ).toUpperCase() + support.reason.slice( 1 ) );
 	const length = Math.round( durationSeconds * AUDIO.sampleRate );
 	onProgress( 0, 'Decoding the narration\u2026' );
 	const { left, right } = await decodeToStereo48k( bytes, length );

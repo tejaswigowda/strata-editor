@@ -159,6 +159,38 @@ export function isClientModel( value ) {
  * @param {{provider,wire,baseUrl,apiKey}} config
  * @returns {Promise<string[]>}
  */
+/** Is this base URL a local Ollama server (its default port)? */
+export function isLocalOllama( baseUrl ) {
+
+	try { const u = new URL( baseUrl ); return /^(localhost|127\.0\.0\.1|\[::1\])$/.test( u.hostname ) && u.port === '11434'; } catch ( e ) { return false; }
+
+}
+
+/**
+ * What to tell the user when a browser request to a local Ollama fails. Ollama answers 403 (which the browser reports only as "Failed to
+ * fetch") to any web page whose origin is not in its OLLAMA_ORIGINS list, and that list holds only localhost by default, so a hosted
+ * editor cannot reach it until the origin is added.
+ */
+export function ollamaOriginHelp( origin ) {
+
+	const o = origin && /^https?:\/\//.test( origin ) ? origin : 'https://strataeditor.dev';
+	return `Ollama refused this page (${ o }): it only accepts web pages listed in OLLAMA_ORIGINS, and by default that is localhost only. `
+		+ `Allow this site, then restart Ollama:\n`
+		+ `  macOS app:  launchctl setenv OLLAMA_ORIGINS "${ o }"   (then quit and reopen Ollama)\n`
+		+ `  terminal:   OLLAMA_ORIGINS="${ o }" ollama serve\n`
+		+ `If the browser asks to allow access to local devices, allow it.`;
+
+}
+
+/** The error for a failed browser request to a provider: names the real cause when it is a local Ollama refusing a hosted page. */
+export function requestFailure( config, e ) {
+
+	const here = typeof location !== 'undefined' ? location : null;
+	if ( isLocalOllama( config.baseUrl ) && here && ! /^(localhost|127\.0\.0\.1)$/.test( here.hostname ) ) return new Error( ollamaOriginHelp( here.origin ) );
+	return new Error( `client API request failed (CORS or network): ${ e.message }` );
+
+}
+
 export async function fetchProviderModels( config ) {
 
 	const wire = config.wire || PROVIDER_PRESETS[ config.provider ]?.wire || 'openai';
@@ -180,7 +212,19 @@ export async function fetchProviderModels( config ) {
 
 	const headers = {};
 	if ( config.apiKey ) headers[ 'Authorization' ] = 'Bearer ' + config.apiKey;
-	const res = await fetch( joinUrl( config.baseUrl, '/models' ), { headers } );
+	let res;
+	try {
+
+		res = await fetch( joinUrl( config.baseUrl, '/models' ), { headers } );
+
+	} catch ( e ) {
+
+		const f = requestFailure( config, e );
+		if ( /OLLAMA_ORIGINS/.test( f.message ) ) throw f;
+		throw e;
+
+	}
+	if ( res.status === 403 && isLocalOllama( config.baseUrl ) ) throw new Error( ollamaOriginHelp( typeof location !== 'undefined' ? location.origin : '' ) );
 	if ( ! res.ok ) throw new Error( await errorText( res ) );
 	const data = await res.json();
 	return ( data.data || data.models || [] ).map( m => m.id || m.name ).filter( Boolean );
@@ -269,7 +313,7 @@ async function openaiChat( config, messages, opts, signal ) {
 	} catch ( e ) {
 
 		if ( e.name === 'AbortError' ) return '';
-		throw new Error( `client API request failed (CORS or network): ${ e.message }` );
+		throw requestFailure( config, e );
 
 	}
 
@@ -359,7 +403,7 @@ async function anthropicChat( config, messages, opts, signal ) {
 	} catch ( e ) {
 
 		if ( e.name === 'AbortError' ) return '';
-		throw new Error( `client API request failed (CORS or network): ${ e.message }` );
+		throw requestFailure( config, e );
 
 	}
 
@@ -678,15 +722,21 @@ export function openClientAPIDialog( deps = {} ) {
 
 			} else {
 
-				const keep = currentModel();
+				// a preset suggestion the provider does not have was never the user's choice: drop it rather than keep it as a typed id
+				const cur = currentModel();
+				const keep = models.includes( cur ) || ! ( preset.models || [] ).includes( cur ) ? cur : '';
 				setModelOptions( models, keep );
-				modelStatus.textContent = models.length + ' models available for this key.';
+				modelStatus.style.whiteSpace = '';
+				modelStatus.textContent = models.length + ( providerSel.value === 'ollama' ? ' models installed in Ollama.' : ' models available for this key.' );
 
 			}
 
 		} catch ( e ) {
 
-			modelStatus.textContent = 'Fetch failed — ' + e.message + ' (type the id manually below)';
+			modelStatus.style.whiteSpace = 'pre-wrap';
+			modelStatus.textContent = /OLLAMA_ORIGINS/.test( e.message )
+				? e.message + '\n\nUntil then the names above are only suggestions; type the id of a model you have pulled (ollama list).'
+				: 'Fetch failed — ' + e.message + ' (type the id manually below)';
 
 		} finally {
 

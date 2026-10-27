@@ -104,6 +104,7 @@ Player check: with the render served as if from jsDelivr, `/player/` plays the 1
 - Only full-range, flat (not 360°) offline renders are published. A realtime Preview capture is variable-rate and is not segmented.
 - A scene with no narration (no `renderAudio`, nothing dubbed, no WAV chosen) publishes a silent set (no audio group), and the panel says so.
 - The dub and ffmpeg hand-offs need the updated tools deployed and a Strata page that is not cross-origin isolated; see [HANDOFF.md](./HANDOFF.md). They were tested against both tools served locally, not the deployed sites.
+- **A browser that encodes AAC but cannot decode it cannot publish narration.** The VS Code / Electron browser is one: `AudioEncoder` and `AudioDecoder` both report support, and the decoder then fails at the first packet. The encoder's start-up delay is measured by decoding a test burst, so Prepare runs a real encode/decode round trip first (`canDecodeAac`) and stops with that reason instead of guessing the delay. Publish from desktop Chrome, Edge or Safari.
 - **Safari's native HLS has not been tested**, nor has an audio group in it. Test on a Mac and an iPhone before launch.
 - **Audio/video sync was measured, not listened to**: the decoded HLS audio was cross-correlated against the source WAV at the start, middle and end (+0.0 ms each). Listen to the last cue too.
 - `lyceum.json`'s schema was not available; `render.json` is validated against the work order, not the consumer.
