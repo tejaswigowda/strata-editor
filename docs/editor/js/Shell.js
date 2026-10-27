@@ -3444,7 +3444,7 @@ ${ notes.join( '\n' ) }
 			if ( ap.ollama ) ctxInfo.refresh = async () => { ctxInfo.source = 'ollama /api/ps'; return readOllamaEffectiveContext( ap.ollama.baseUrl, ap.ollama.tag ); };
 			rec = createRecorder( { store, run, context: ctxInfo } );
 			await store.append( {
-				kind: 'run', ...run, started: new Date().toISOString(),
+				kind: 'run', ...run, started: new Date().toISOString(), origin: location.origin,   // the store is per origin: say which one holds this run
 				model_digest: prov ? prov.model_digest : null, quantization_level: prov ? prov.quantization_level : null, parameter_size: prov ? prov.parameter_size : null,
 				server: prov ? { ollama_version: prov.ollama_version, trained_context: prov.trained_context } : null,
 				decode: { temperature: 0, temperature_forwarded: temperatureForwarded( path, model ), max_tokens: requestedMax ?? null, max_tokens_effective: effectiveMaxTokens( path, model, requestedMax ), top_p: null, top_k: null, seed: null },
