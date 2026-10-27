@@ -45,6 +45,15 @@
 		"embed": "#repo=tejaswigowda/test1@17c6d52599bcc3b33a84fc2f82352f0961fa5029&file=projectile.json&present=true"
 	},
 	{
+		"title": "A crank, a rod and a piston: crank-slider kinematics",
+		"href": "piston.html",
+		"group": "Animation and rendering",
+		"blurb": "A crankshaft, connecting rod and piston through one revolution: the dead centers, the stroke, and the mechanical advantage drawn as a gap that vanishes at the dead centers. Orbit the assembly to see what a flat view hides. Built with the JS Shell.",
+		"thumb": "screenshots/thumbs/piston.jpg",
+		"desc": "Animate a crank-slider with exact kinematics: label top and bottom dead center, bracket the stroke, show that the piston covers more than half its stroke in the first quarter turn, and draw the leverage as the gap between the shaft and the point where the rod's line crosses the vertical through it \u2014 all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
+		"embed": "#repo=tejaswigowda/test1@503e3af3455db6414d3d813be641391e31eeb865&file=piston.json&present=true"
+	},
+	{
 		"title": "Build a night scene from scratch",
 		"href": "build-a-scene.html",
 		"group": "Scenes and games",
