@@ -36,6 +36,15 @@
 		"embed": "#repo=tejaswigowda/test1@d742211b6a3cb36a3c59ead6569f4068a7ca3b03&file=area-volume.json&present=true"
 	},
 	{
+		"title": "A projectile: two motions, one path",
+		"href": "projectile.html",
+		"group": "Animation and rendering",
+		"blurb": "A thrown ball's curve is a sideways motion at constant speed plus an up-and-down motion under gravity. Orbit the path to see each alone, then put them back together. Built with the JS Shell.",
+		"thumb": "screenshots/thumbs/projectile.jpg",
+		"desc": "Launch a ball and draw its trail, its constant sideways speed, the gravity that changes its vertical speed, and its landing point; show each motion alone as a shadow on the ground and on a pole, orbit the path, then add the two back together on seven ghost balls and change the angle and the speed — all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
+		"embed": "#repo=tejaswigowda/test1@17c6d52599bcc3b33a84fc2f82352f0961fa5029&file=projectile.json&present=true"
+	},
+	{
 		"title": "Build a night scene from scratch",
 		"href": "build-a-scene.html",
 		"group": "Scenes and games",
