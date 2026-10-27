@@ -24,6 +24,17 @@
 import {
 	SETUP_DUMPTRUCK, SETUP_MERGED_BED, SETUP_SHARED_WHEELS,
 } from './editEval.js';
+import { classifyFailure } from './evalCapture.js';
+
+/** The conditions evalEditMatrix accepts. Anything else is refused: a typo must not run as 'scaffolded'. */
+export const EVAL_CONDITIONS = [ 'bare', 'scaffolded', 'constrained', 'reason-constrained', 'host-resolved' ];
+
+export function validateCondition( condition ) {
+
+	if ( ! EVAL_CONDITIONS.includes( condition ) ) throw new Error( `Unknown eval condition ${ JSON.stringify( condition ) }. Use one of: ${ EVAL_CONDITIONS.join( ', ' ) }.` );
+	return condition;
+
+}
 
 // ── TASK CASES (rows) ─────────────────────────────────────────────────────────
 // Each case is one editing request with a per-task gold expectation. `targetNodes`
@@ -899,17 +910,26 @@ export function newMatrix() { return { cells: {}, models: new Set(), tasks: new 
 
 const TASK_ORDER = [ 'op-selection', 'selector-resolution', 'arg-extraction', 'labeling', 'multi-op' ];
 
-export function recordRun( matrix, { model, condition, taskScores } ) {
+// A cell is keyed by repeat, so a second run of the same (task, model, condition) is a new cell, never a replacement.
+export function recordRun( matrix, { model, condition, taskScores, repeat = 1 } ) {
 
 	matrix.models.add( model );
 	for ( const [ task, { passed, total } ] of Object.entries( taskScores ) ) {
 
 		matrix.tasks.add( task );
-		const key = `${ task }|${ model }|${ condition }`;
-		matrix.cells[ key ] = { passed, total, pct: total ? Math.round( 100 * passed / total ) : 0 };
+		const key = `${ task }|${ model }|${ condition }|${ repeat }`;
+		matrix.cells[ key ] = { passed, total, pct: total ? Math.round( 100 * passed / total ) : 0, repeat };
 
 	}
 	return matrix;
+
+}
+
+/** All repeats of one (task, model, condition): [{ passed, total, pct, repeat }], by repeat. */
+export function cellRepeats( matrix, task, model, condition ) {
+
+	const prefix = `${ task }|${ model }|${ condition }|`;
+	return Object.keys( matrix.cells ).filter( k => k.startsWith( prefix ) ).map( k => matrix.cells[ k ] ).sort( ( a, b ) => a.repeat - b.repeat );
 
 }
 
@@ -923,7 +943,15 @@ export function formatMatrix( matrix, opts = {} ) {
 	// ceiling column repeats the ceiling's scaffolded score for comparison.
 	const models = all;
 	const tasks = TASK_ORDER.filter( t => matrix.tasks.has( t ) );
-	const cell = ( t, m, c ) => { const x = matrix.cells[ `${ t }|${ m }|${ c }` ]; return x ? `${ x.pct }%` : ' · '; };
+	// one repeat: its percentage; several: their mean and how many (the per-repeat values stay in the matrix and the eval store)
+	const cell = ( t, m, c ) => {
+
+		const xs = cellRepeats( matrix, t, m, c );
+		if ( ! xs.length ) return ' · ';
+		if ( xs.length === 1 ) return `${ xs[ 0 ].pct }%`;
+		return `${ Math.round( xs.reduce( ( n, x ) => n + x.pct, 0 ) / xs.length ) }%×${ xs.length }`;
+
+	};
 
 	const lines = [];
 	lines.push( 'EVAL MATRIX — 5 tasks × model × {bare, scaffolded, constrained, reason-constrained, host-resolved}   (ceiling: ' + ( ceiling || 'none yet' ) + ')' );
@@ -983,9 +1011,19 @@ export async function runEditMatrix( deps ) {
 		await deps.clearScene();
 		await deps.runSetup( ASSET_SETUPS[ c.asset ] );
 
-		let emitted = [], code = '';
+		let emitted = [], code = '', exception = null;
 		try { const out = await deps.runOnce( c.prompt ); code = out && out.code || ''; emitted = parseEmittedOps( code ); }
-		catch ( e ) { progress( `case ${ c.id }: generation error — ${ e.message }` ); }
+		catch ( e ) {
+
+			if ( e && e.evalFatal ) throw e;   // a run that can no longer be trusted stops; it is not scored as a wrong answer
+			exception = e;
+			progress( `case ${ c.id }: generation error — ${ e.message }` );
+
+		}
+		// which model calls produced this case, what they returned, and whether one threw (read once the case is over, even if it failed)
+		const info = deps.callInfo ? deps.callInfo() : {};
+		const callIds = info.callIds || [], rawTexts = info.rawTexts || [];
+		exception = exception || info.exception || null;
 
 		const resolvedSets = emitted.map( o => o.selector ? deps.resolveSelector( o.selector ) : new Set() );
 		const s = scoreMatrixCase( emitted, resolvedSets, c.expect, deps );
@@ -1014,11 +1052,12 @@ export async function runEditMatrix( deps ) {
 			const resolvedNodeSet = [ ...new Set( resolvedSets.flatMap( s => [ ...( s || [] ) ] ) ) ].sort();
 			const expectedNodeSet = c.expect.mergedFail ? []
 				: [ ...new Set( ( c.expect.ops ? c.expect.ops.flatMap( e => e.targetNodes || [] ) : ( c.expect.targetNodes || [] ) ) ) ].sort();
-			const common = { raw: code, parsed, resolvedNodeSet, expectedNodeSet, scoreNodeSet: s.nodeSet.pass };
-			deps.onRow( { task: 'op-selection', id: c.id, score: s.opType.pass, ...common } );
-			deps.onRow( { task: 'selector-resolution', id: c.id, score: s.selectorResolution.pass, ...common } );
-			deps.onRow( { task: 'arg-extraction', id: c.id, score: s.argExtraction.pass, ...common } );
-			if ( c.expect.multiOp ) deps.onRow( { task: 'multi-op', id: c.id, score: s.multiOp.pass, ...common } );
+			const common = { raw: code, parsed, resolvedNodeSet, expectedNodeSet, scoreNodeSet: s.nodeSet.pass, call_ids: callIds };
+			const emit = ( task, score ) => deps.onRow( { task, id: c.id, score, ...common, failure_kind: classifyFailure( { score, task, exception, rawTexts, emittedCount: emitted.length } ) } );
+			emit( 'op-selection', s.opType.pass );
+			emit( 'selector-resolution', s.selectorResolution.pass );
+			emit( 'arg-extraction', s.argExtraction.pass );
+			if ( c.expect.multiOp ) emit( 'multi-op', s.multiOp.pass );
 
 		}
 
@@ -1037,11 +1076,21 @@ export async function runEditMatrix( deps ) {
 	for ( let i = 0; i < LABELING_CASES.length; i ++ ) {
 
 		const lc = LABELING_CASES[ i ];
-		let predicted = '';
-		try { predicted = await deps.labelOnce( lc ); } catch ( e ) { progress( `label error — ${ e.message }` ); }
+		let predicted = '', labelException = null;
+		try { predicted = await deps.labelOnce( lc ); } catch ( e ) { if ( e && e.evalFatal ) throw e; labelException = e; progress( `label error — ${ e.message }` ); }
 		const labelPass = scoreLabel( predicted, lc.gold ).pass;
 		bump( 'labeling', labelPass );
-		if ( deps.onRow ) deps.onRow( { task: 'labeling', id: `${ lc.kind }-${ i }`, score: labelPass, raw: predicted, parsed: predicted } );
+		if ( deps.onRow ) {
+
+			// labelOnce swallows its own errors, so its call's id, untouched reply and exception come from the same hook
+			const meta = deps.callInfo ? deps.callInfo() : {};
+			const exception = labelException || meta.exception || null;
+			deps.onRow( {
+				task: 'labeling', id: `${ lc.kind }-${ i }`, score: labelPass, raw: predicted, parsed: predicted, call_ids: meta.callIds || [],
+				failure_kind: classifyFailure( { score: labelPass, task: 'labeling', exception, rawTexts: meta.rawTexts || [ predicted ], emittedCount: 0 } ),
+			} );
+
+		}
 		progress( `label ${ i + 1 }/${ LABELING_CASES.length } (${ lc.kind }): "${ predicted }"` );
 
 	}

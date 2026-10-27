@@ -48,9 +48,10 @@ import { holdTimelineAt, syncTimeline } from './intelligence/timelineController.
 import { rankSelectorCandidates, buildCandidateInjection, candidateIds, resolveEmittedSelector, tryHostResolve, ESCAPE_ID, makeDisambiguationMemory, buildSelectorIndex, segmentRequest, dedupeResolvedOps } from './intelligence/selectorIndex.js';
 import { classifyOpVerb } from './intelligence/opResolve.js';
 import { canonicalizeColorOnlySetMaterial } from './intelligence/argNormalize.js';
-import { runEditMatrix, newMatrix, recordRun, formatMatrix } from './ai/editMatrix.js';
+import { runEditMatrix, newMatrix, recordRun, formatMatrix, validateCondition } from './ai/editMatrix.js';
+import { createRecorder, createIdbStore, makeRunId, chooseRepeat, mergeProvenance, toJsonl, sha256Hex, pathFor, effectiveMaxTokens, temperatureForwarded, readOllamaProvenance, readOllamaEffectiveContext } from './ai/evalCapture.js';
 import { colorBase as editColorBase } from './ai/editEval.js';
-import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog } from './ai/clientAPI.js';
+import { listClientModels, getClientConfig, isClientModel, makeClientEngine, openClientAPIDialog, isLocalOllama } from './ai/clientAPI.js';
 import { diagnoseImport, diagnosticMessages } from './import/diagnostics.js';
 import { labelImportedAsset } from './import/labelPass.js';
 import { executeRecipeOp } from './intelligence/animationRecipes.js';
@@ -614,7 +615,7 @@ function Shell( editor ) {
 		{ w: 'fetchAPI', k: 'fn' }, { w: 'askScene', k: 'fn' },
 		{ w: 'toon', k: 'fn' }, { w: 'toonMaterial', k: 'fn' }, { w: 'shader', k: 'fn' }, { w: 'shaders', k: 'fn' }, { w: 'unshader', k: 'fn' }, { w: 'mtoon', k: 'fn' }, { w: 'refineFace', k: 'fn' }, { w: 'driveFace', k: 'fn' }, { w: 'simplifyCameras', k: 'fn' },
 		{ w: 'evalAI', k: 'fn' }, { w: 'evalEditMatrix', k: 'fn' },
-		{ w: 'saveEvalRows', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
+		{ w: 'saveEvalRows', k: 'fn' }, { w: 'exportEvalData', k: 'fn' }, { w: 'listEvalRuns', k: 'fn' }, { w: 'setEvalMeta', k: 'fn' }, { w: 'getAvailableModels', k: 'fn' },
 		{ w: 'askExternal', k: 'fn' }, { w: 'checkApiHealth', k: 'fn' },
 
 		// ── JS built-ins ──
@@ -2819,7 +2820,20 @@ function Shell( editor ) {
 				// 'host-resolved' = host ranks the real parts + injects a numbered
 				// candidate list, the model PICKS an id (pick-don't-compose) and an
 				// unambiguous top candidate is resolved host-side with no model call.
-				evalEditMatrix: function ( condition ) { return evalEditMatrix( condition ); },
+				// The Shell does not await what a command returns, so a refusal (unknown condition, no sut_commit, repeat taken) or an abort would
+				// otherwise reach only the browser console: print it in the Shell, once, and still reject for anyone who does await.
+				evalEditMatrix: function ( condition, opts ) {
+
+					const p = evalEditMatrix( condition, opts );
+					p.catch( e => { if ( ! ( e && e.reported ) ) appendOutput( `✖ ${ ( e && e.message ) || e }`, 'error' ); } );
+					return p;
+
+				},
+				// exportEvalData() — every call, row and run in the eval store (survives reload) as one JSONL + provenance.json.
+				// listEvalRuns() — one line per run.  setEvalMeta({ sut_commit }) — remembered, recorded with every run.
+				exportEvalData: function () { return exportEvalData(); },
+				listEvalRuns: function () { return listEvalRuns(); },
+				setEvalMeta: function ( meta ) { return setEvalMeta( meta ); },
 				// saveEvalRows() — download the accumulated per-case rows as JSONL.
 				saveEvalRows: function () { return saveEvalRows(); },
 
@@ -2980,7 +2994,7 @@ function Shell( editor ) {
 			// Route the full evalEditMatrix(...) call through the JS surface so any args
 			// (condition, { debug:true }) work — it's in scope.
 			if ( /^\s*evalEditMatrix\s*\(/.test( userPrompt ) ) { execute( userPrompt ); return; }
-			if ( /^\s*saveEvalRows\s*\(/.test( userPrompt ) ) { execute( userPrompt ); return; }
+			if ( /^\s*(saveEvalRows|exportEvalData|listEvalRuns|setEvalMeta)\s*\(/.test( userPrompt ) ) { execute( userPrompt ); return; }
 
 		}
 
@@ -3325,6 +3339,14 @@ function Shell( editor ) {
 	// JSONL artifact. saveEvalRows() (JS surface) downloads it.
 	const _matrixRows = [];
 
+	// What the loaded engine is, for the eval record: set when Load AI succeeds, cleared on Unload.
+	// { kind:'client'|'server'|'webllm', wire?, provider?, ollama: { baseUrl, tag } | null }
+	let activeAIPath = null;
+	// The eval store (IndexedDB), opened on first use. Every call and row of every run is appended to it as it happens.
+	let _evalStore = null;
+	const evalStore = () => _evalStore || ( _evalStore = createIdbStore() );
+	const readEvalMeta = () => { try { return JSON.parse( localStorage.getItem( 'strata-eval-meta' ) || '{}' ); } catch { return {}; } };
+
 	// Output contract for the 'constrained' condition. Decoding enforces the schema
 	// (well-formed JSON), this tells the model the SEMANTICS: emit an { ops:[…] }
 	// envelope, one entry per operation, no prose, no code fences.
@@ -3395,11 +3417,48 @@ ${ notes.join( '\n' ) }
 
 	async function evalEditMatrix( condition = 'scaffolded', opts = {} ) {
 
+		validateCondition( condition );   // throws: a typo must not silently run as 'scaffolded'
 		if ( ! aiEngine.ready ) { appendOutput( 'AI not loaded — click "Load AI" first.', 'error' ); return; }
 		if ( _matrixRunning ) { appendOutput( '⏳ eval matrix already running — let it finish (run conditions one at a time, awaited).', 'info' ); return; }
 		_matrixRunning = true;
 		const debug = opts.debug === true;
 		const model = aiEngine.modelId || 'unknown';
+
+		// ── Run identity and capture (guides/HARNESS_AUDIT.md): written down only, nothing here changes what a model is sent ──
+		let rec, run, store, ctxInfo;
+		try {
+
+			const meta = readEvalMeta();
+			const sutCommit = opts.sutCommit || meta.sut_commit || null;
+			if ( ! sutCommit && opts.allowUnknownSut !== true ) throw new Error( 'sut_commit is not set, so this run could not be traced to the code that produced it. Run  setEvalMeta({ sut_commit: "<git sha of this build>" })  once (it is remembered), or pass { sutCommit }.' );
+			const ap = activeAIPath || { kind: 'unknown', ollama: null };
+			const path = pathFor( { kind: ap.kind, wire: ap.wire, modelId: model } );
+			store = evalStore();
+			const prior = await store.all();
+			const prov = ap.ollama ? await readOllamaProvenance( ap.ollama.baseUrl, ap.ollama.tag ) : null;
+			const repeat = chooseRepeat( prior, { model_tag: model, condition, path, model_digest: prov ? prov.model_digest : null }, opts.repeat );
+			const scorerText = await ( await fetch( new URL( './ai/editMatrix.js', import.meta.url ) ) ).text();
+			const requestedMax = aiTokenBudget();
+			run = { run_id: makeRunId(), condition, model_tag: model, path, repeat };
+			ctxInfo = Number.isFinite( opts.contextLength ) ? { value: opts.contextLength, source: 'manual' } : { value: null, source: null };
+			if ( ap.ollama ) ctxInfo.refresh = async () => { ctxInfo.source = 'ollama /api/ps'; return readOllamaEffectiveContext( ap.ollama.baseUrl, ap.ollama.tag ); };
+			rec = createRecorder( { store, run, context: ctxInfo } );
+			await store.append( {
+				kind: 'run', ...run, started: new Date().toISOString(),
+				model_digest: prov ? prov.model_digest : null, quantization_level: prov ? prov.quantization_level : null, parameter_size: prov ? prov.parameter_size : null,
+				server: prov ? { ollama_version: prov.ollama_version, trained_context: prov.trained_context } : null,
+				decode: { temperature: 0, temperature_forwarded: temperatureForwarded( path, model ), max_tokens: requestedMax ?? null, max_tokens_effective: effectiveMaxTokens( path, model, requestedMax ), top_p: null, top_k: null, seed: null },
+				sut_commit: sutCommit, scorer_sha256: await sha256Hex( scorerText ), provenance_errors: prov ? prov.errors : [],
+			} );
+
+		} catch ( e ) {
+
+			_matrixRunning = false;
+			throw e;
+
+		}
+		let _rowCount = 0;
+		let _lastCall = { callIds: [], rawTexts: [], exception: null };
 		// Conditions: 'bare' (no scaffolding), 'scaffolded' (parts injection),
 		// 'constrained' (scaffolded + JSON-schema constrained decoding),
 		// 'reason-constrained' (scaffolded + constrained decode with a free-text
@@ -3436,11 +3495,31 @@ ${ notes.join( '\n' ) }
 
 		};
 
+		// Every model call of this run goes through here: the call is made exactly as before (same messages, same options object),
+		// and what happened is recorded. An exception propagates unchanged; a context overflow aborts the run.
+		async function modelCall( purpose, messages, callOpts, invoke ) {
+
+			try {
+
+				const result = await rec.call( { purpose, messages, opts: callOpts, ids: _lastCall.callIds, invoke: () => invoke( messages, callOpts ) } );
+				_lastCall.rawTexts.push( typeof result === 'string' ? result : ( result && result.text ) || '' );
+				return result;
+
+			} catch ( e ) {
+
+				_lastCall.exception = e;
+				throw e;
+
+			}
+
+		}
+
 		// runOnce — ONE quiet generation (no agentic loop, no retries, NO execution).
 		// We only need the model's first-shot CODE to parse the op it emitted; the
 		// selector resolves deterministically against the setup scene afterward.
 		async function runOnce( prompt ) {
 
+			_lastCall = { callIds: [], rawTexts: [], exception: null };
 			const apiHints = retrieveForPrompt( prompt );
 			
 			// Use cached system prompt for mutable edits
@@ -3493,7 +3572,7 @@ ${ notes.join( '\n' ) }
 						let segSys = partsPreview ? getCachedSystemPrompt( editor ) : SYSTEM_PROMPT;
 						segSys += ( selectorFixed ? '' : '\n\n' + buildCandidateInjection( cands ) ) + buildHostResolvedInstruction( { selectorFixed, opFixed, candidates: cands } );
 						const segMsgs = buildMessages( segSys, editor, s.opPhrase, retrieveForPrompt( s.opPhrase ), { injectParts: false } );
-						const segResp = await aiEngine.stream( segMsgs, { maxTokens: aiTokenBudget(), temperature: 0, schema: segSchema } );
+						const segResp = await modelCall( 'generation', segMsgs, { maxTokens: aiTokenBudget(), temperature: 0, schema: segSchema }, ( m, o ) => aiEngine.stream( m, o ) );
 						const segRaw = typeof segResp === 'string' ? segResp : segResp?.text || '';
 						const segUsage = typeof segResp === 'object' ? segResp?.usage : null;
 						if ( segUsage && ( segUsage.prompt_tokens || segUsage.completion_tokens ) )
@@ -3579,7 +3658,7 @@ ${ notes.join( '\n' ) }
 			}
 
 			const messages = buildMessages( systemPrompt, editor, prompt, apiHints, { injectParts: hostResolve ? false : injectParts } );
-			const response = await aiEngine.stream( messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: perPromptSchema } );
+			const response = await modelCall( 'generation', messages, { maxTokens: aiTokenBudget(), temperature: 0, schema: perPromptSchema }, ( m, o ) => aiEngine.stream( m, o ) );
 
 			// Extract text from response (handle both string and {text, usage} formats)
 			const raw = typeof response === 'string' ? response : response?.text || '';
@@ -3667,15 +3746,17 @@ ${ notes.join( '\n' ) }
 			const system = injectParts
 				? `You label ONE part of an imported ${ asset }, from derived descriptor facts (you cannot see geometry). The first token is the graph role ("leaf"=a mesh) — ignore it. Then come shape, region, size, symmetry pair, and a MATERIAL name which is a STRONG hint ("Rims"→wheel, "Grille"→grille, "Glass"→window). Reply with ONLY a 1-3 word part name.`
 				: 'Name this single 3D part in 1-3 words from its descriptor facts. Reply with ONLY the name.';
+			_lastCall = { callIds: [], rawTexts: [], exception: null };
 			try {
 
-				const reply = await aiEngine.complete( [
+				const labelMsgs = [
 					{ role: 'system', content: system },
 					{ role: 'user', content: descRow },
-				], { maxTokens: 12, temperature: 0 } );
+				];
+				const reply = await modelCall( 'labeling', labelMsgs, { maxTokens: 12, temperature: 0 }, ( m, o ) => aiEngine.complete( m, o ) );
 				return String( reply || '' ).split( /\r?\n/ )[ 0 ].replace( /["'`.]/g, '' ).trim();
 
-			} catch { return ''; }
+			} catch ( e ) { if ( e && e.evalFatal ) throw e; return ''; }
 
 		}
 
@@ -3684,7 +3765,7 @@ ${ notes.join( '\n' ) }
 		// restore + re-persist it after — running an eval must never erase your work.
 		const _sceneSnapshot = editor.toJSON();
 
-		let taskScores;
+		let taskScores, runStatus = 'complete', runError = null;
 		try {
 
 			taskScores = await runEditMatrix( {
@@ -3696,7 +3777,15 @@ ${ notes.join( '\n' ) }
 				normalizeColor: ( c ) => { try { return new window.THREE.Color( c ).getHex(); } catch { return null; } },
 				labelOnce,
 				onProgress: ( msg ) => { aiStatus.textContent = msg; },
-				onRow: ( r ) => { _matrixRows.push( { model, condition, task: r.task, id: r.id, score: r.score, raw: r.raw, parsed: r.parsed, resolvedNodeSet: r.resolvedNodeSet, expectedNodeSet: r.expectedNodeSet, scoreNodeSet: r.scoreNodeSet } ); },
+				callInfo: () => _lastCall,
+				onRow: ( r ) => {
+
+					const row = { model, condition, task: r.task, id: r.id, score: r.score, raw: r.raw, parsed: r.parsed, resolvedNodeSet: r.resolvedNodeSet, expectedNodeSet: r.expectedNodeSet, scoreNodeSet: r.scoreNodeSet, call_ids: r.call_ids || [], failure_kind: r.failure_kind ?? null, run_id: run.run_id, repeat: run.repeat };
+					_matrixRows.push( row );
+					_rowCount ++;
+					rec.row( { task: r.task, id: r.id, score: r.score, raw: r.raw, parsed: r.parsed, resolvedNodeSet: r.resolvedNodeSet, expectedNodeSet: r.expectedNodeSet, scoreNodeSet: r.scoreNodeSet, call_ids: r.call_ids || [], failure_kind: r.failure_kind ?? null } );
+
+				},
 				onCase: debug ? ( d ) => {
 
 					const flags = `op:${ d.pass.op ? '✓' : '✗' } sel:${ d.pass.sel ? '✓' : '✗' } arg:${ d.pass.arg ? '✓' : '✗' } multi:${ d.pass.multi ? '✓' : '✗' }`;
@@ -3705,6 +3794,12 @@ ${ notes.join( '\n' ) }
 
 				} : null,
 			} );
+			await rec.flush();   // every record is in the store, or the run says so
+
+		} catch ( e ) {
+
+			runStatus = e && e.evalFatal ? 'aborted' : 'failed';
+			runError = e;
 
 		} finally {
 
@@ -3720,7 +3815,25 @@ ${ notes.join( '\n' ) }
 
 		}
 
-		recordRun( _editMatrix, { model, condition, taskScores } );
+		// how the run ended, appended to the store (a crash leaves a run with no run_end, which provenance reports as incomplete)
+		const endRecord = {
+			kind: 'run_end', run_id: run.run_id, finished: new Date().toISOString(), status: runStatus,
+			reason: runError ? String( runError.message || runError ) : null,
+			calls: rec.calls, rows: _rowCount, max_prompt_tokens_observed: rec.maxPromptTokens,
+			server_context: { context_length: rec.contextLength, source: rec.contextSource },
+			host_stats: hostResolve ? { selector_host_resolved: _hostSkip, selector_total: _hostTotal, ambiguous_ask: _hostAsk, op_host_resolved: _opHostSkip, op_total: _opTotal } : null,
+		};
+		try { await rec.persist( endRecord ); await rec.flush(); } catch ( e ) { appendOutput( `could not write the run_end record: ${ e.message }`, 'error' ); }
+		if ( runError ) {
+
+			appendOutput( `✖ eval run ${ run.run_id } (${ model } / ${ condition } / repeat ${ run.repeat }) ${ runStatus }: ${ runError.message || runError }`, 'error' );
+			appendOutput( `${ rec.calls } call(s) and ${ _rowCount } row(s) up to the stop are in the eval store, marked ${ runStatus }. Do not use this run.`, 'error' );
+			try { runError.reported = true; } catch { /* frozen error */ }
+			throw runError;
+
+		}
+
+		recordRun( _editMatrix, { model, condition, taskScores, repeat: run.repeat } );
 		const line = Object.entries( taskScores ).map( ( [ t, s ] ) => `${ t } ${ s.passed }/${ s.total }` ).join( '   ' );
 		appendOutput( `${ model } / ${ condition }:   ${ line }`, 'result' );
 		if ( hostResolve && _hostTotal ) {
@@ -3733,6 +3846,7 @@ ${ notes.join( '\n' ) }
 		}
 		appendOutput( formatMatrix( _editMatrix ), 'result' );
 		appendOutput( `${ _matrixRows.length } row(s) logged — saveEvalRows() to download JSONL.`, 'info' );
+		appendOutput( `run ${ run.run_id }: repeat ${ run.repeat }, ${ rec.calls } call(s), ${ _rowCount } row(s) saved to the eval store (${ store.kind }) — exportEvalData() downloads everything.`, 'info' );
 		return taskScores;
 
 	}
@@ -3748,6 +3862,53 @@ ${ notes.join( '\n' ) }
 		a.href = url; a.download = 'eval-matrix-rows.jsonl'; a.click();
 		URL.revokeObjectURL( url );
 		appendOutput( `Saved ${ _matrixRows.length } eval rows → eval-matrix-rows.jsonl`, 'result' );
+
+	}
+
+	// ── The eval store: survives a reload, one flat record stream, every record carries its run_id ──
+
+	function downloadText( name, text, type ) {
+
+		const url = URL.createObjectURL( new Blob( [ text ], { type } ) );
+		const a = document.createElement( 'a' );
+		a.href = url; a.download = name; a.click();
+		URL.revokeObjectURL( url );
+
+	}
+
+	/** Everything in the store: one JSONL of calls, rows and run records, plus provenance.json (one object per run). */
+	async function exportEvalData() {
+
+		const records = await evalStore().all();
+		if ( ! records.length ) { appendOutput( 'The eval store is empty — run evalEditMatrix(...) first.', 'info' ); return { records: 0, runs: 0 }; }
+		const provenance = mergeProvenance( records );
+		const stamp = new Date().toISOString().replace( /[-:]/g, '' ).replace( /\.\d+Z$/, 'Z' );
+		downloadText( `eval-data-${ stamp }.jsonl`, toJsonl( records ), 'application/x-ndjson' );
+		downloadText( `provenance-${ stamp }.json`, JSON.stringify( provenance, null, 2 ) + '\n', 'application/json' );
+		appendOutput( `Saved ${ records.length } record(s) from ${ provenance.length } run(s): eval-data-${ stamp }.jsonl and provenance-${ stamp }.json`, 'result' );
+		return { records: records.length, runs: provenance.length };
+
+	}
+
+	/** The runs in the store, one line each. */
+	async function listEvalRuns() {
+
+		const records = await evalStore().all();
+		const runs = mergeProvenance( records );
+		if ( ! runs.length ) { appendOutput( 'The eval store is empty.', 'info' ); return []; }
+		const count = ( id, kind ) => records.filter( r => r.run_id === id && r.kind === kind ).length;
+		appendOutput( runs.map( r => `${ r.run_id }  ${ String( r.model_tag ).padEnd( 22 ) } ${ String( r.condition ).padEnd( 18 ) } repeat ${ r.repeat }  ${ String( r.path ).padEnd( 22 ) } ${ String( r.status ).padEnd( 10 ) } ${ count( r.run_id, 'call' ) } calls  ${ count( r.run_id, 'row' ) } rows` ).join( '\n' ), 'result' );
+		return runs;
+
+	}
+
+	/** Remembered settings that go into every run's provenance, e.g. setEvalMeta({ sut_commit: 'abc1234' }). */
+	function setEvalMeta( meta = {} ) {
+
+		const next = { ...readEvalMeta(), ...meta };
+		localStorage.setItem( 'strata-eval-meta', JSON.stringify( next ) );
+		appendOutput( 'eval meta: ' + JSON.stringify( next ), 'info' );
+		return next;
 
 	}
 
@@ -3864,6 +4025,7 @@ ${ notes.join( '\n' ) }
 
 				const { stream, interrupt } = makeClientEngine( cfg );
 				aiEngine.setExternalAPI( cfg.model, stream, interrupt );
+				activeAIPath = { kind: 'client', wire: cfg.wire || ( cfg.provider === 'anthropic' ? 'anthropic' : 'openai' ), provider: cfg.provider, ollama: ( cfg.provider === 'ollama' || isLocalOllama( cfg.baseUrl ) ) ? { baseUrl: cfg.baseUrl, tag: cfg.model } : null };
 
 				aiStatus.textContent = 'ready';
 				loadBtn.textContent = '✓ AI';
@@ -4027,6 +4189,7 @@ ${ notes.join( '\n' ) }
 				const interruptFn = () => {}; // No-op for external APIs
 
 				aiEngine.setExternalAPI( selectedModel, streamFn, interruptFn );
+				activeAIPath = { kind: 'server', ollama: selectedModel.startsWith( 'ollama:' ) ? { baseUrl: 'http://127.0.0.1:11434', tag: selectedModel.slice( 7 ) } : null };
 
 				aiStatus.textContent = 'ready';
 				loadBtn.textContent = '✓ AI';
@@ -4062,6 +4225,7 @@ ${ notes.join( '\n' ) }
 				} );
 
 				progressBar.style.width = '100%';
+				activeAIPath = { kind: 'webllm', ollama: null };
 				setTimeout( () => { progressWrap.style.display = 'none'; }, 600 );
 				aiStatus.textContent = 'ready';
 				loadBtn.textContent = '✓ AI';
@@ -4126,6 +4290,7 @@ ${ notes.join( '\n' ) }
 
 		}
 
+		activeAIPath = null;
 		unloadBtn.disabled = false;
 		unloadBtn.style.display = 'none';
 		loadBtn.disabled = false;

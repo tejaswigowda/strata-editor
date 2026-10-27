@@ -5,6 +5,8 @@
 
 **Evidence:** reading `docs/editor/js/Shell.js`, `docs/editor/js/ai/editMatrix.js`, `docs/editor/js/ai/clientAPI.js` and `server.js`, plus one observation run. The loaded engine was pointed at a stub server that records each request body and replies with an empty op list, so no model was involved. That gave 5 runs and 134 captured requests (bare, scaffolded, constrained, host-resolved, then bare again). Prompts were tokenized with the Qwen2.5-Coder tokenizer and cross-checked against Ollama's own `usage.prompt_tokens` (11,486 both ways for the longest prompt).
 
+> **Follow-up:** the capture work order that addressed findings 1, 2, 3 and 5 is described in [EVAL_CAPTURE.md](./EVAL_CAPTURE.md). Finding 4 (the proxy dropping `temperature`) is deliberately not fixed there; run Ollama cells on the `/v1` client provider instead.
+
 ## Blocking findings
 
 1. **No run is keyed and no repeat survives.** A second run of one cell overwrites it in the matrix. Rows are appended with nothing to tell repeats apart.
