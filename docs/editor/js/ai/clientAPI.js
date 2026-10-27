@@ -385,11 +385,11 @@ export function anthropicBody( model, { system, chat, opts = {}, wantStream = fa
 	let sys = system;
 
 	// Constrained decoding (host-resolved / constrained conditions): the ops schema as a tool's input_schema, so the model's output is
-	// schema-valid JSON. Older models are forced to call it; Claude 5 refuses a forced call, so it gets tool_choice auto with a strict tool,
+	// schema-valid JSON. Older models are forced to call it; Claude 5 refuses a forced call, so it gets tool_choice auto (NOT a strict tool: strict needs additionalProperties:false on every object, and the ops `args` is free-form, so the API answers 400),
 	// and the system prompt says to call it. Non-streaming only (streaming would need input_json_delta assembly).
 	if ( opts.schema && ! wantStream ) {
 
-		body.tools = [ { name: 'emit_ops', description: 'Emit the edit operation(s) as structured JSON.', input_schema: opts.schema, ...( modern ? { strict: true } : {} ) } ];
+		body.tools = [ { name: 'emit_ops', description: 'Emit the edit operation(s) as structured JSON.', input_schema: opts.schema } ];
 		if ( modern ) {
 
 			body.tool_choice = { type: 'auto' };
@@ -450,7 +450,7 @@ async function anthropicChat( config, messages, opts, signal ) {
 		// A model this code does not know may still refuse a setting: if the 400 names it, drop it once and retry
 		const detail = await res.clone().text().catch( () => '' );
 		if ( 'temperature' in body && /temperature|sampling/i.test( detail ) ) delete body.temperature;
-		else if ( body.tool_choice && body.tool_choice.type !== 'auto' && /tool_choice/i.test( detail ) ) { body.tool_choice = { type: 'auto' }; body.tools.forEach( t => { t.strict = true; } ); }
+		else if ( body.tool_choice && body.tool_choice.type !== 'auto' && /tool_choice/i.test( detail ) ) { body.tool_choice = { type: 'auto' }; }
 		else break;
 
 	}

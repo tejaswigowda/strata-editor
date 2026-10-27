@@ -19,7 +19,7 @@ assert.strictEqual( old.system, 'S' );
 const modern = anthropicBody( 'claude-sonnet-5-5', { system: 'S', chat, opts: { schema, temperature: 0.2 } } );
 assert.ok( ! ( 'temperature' in modern ), 'no temperature' );
 assert.deepStrictEqual( modern.tool_choice, { type: 'auto' } );
-assert.strictEqual( modern.tools[ 0 ].strict, true );
+assert.ok( ! ( 'strict' in modern.tools[ 0 ] ), 'no strict flag: it needs additionalProperties:false everywhere and the free-form args cannot have it (the API answers 400)' );
 assert.match( modern.system, /^S\n\nAnswer by calling the emit_ops tool/ );
 assert.strictEqual( modern.max_tokens, 16000, 'room for thinking plus the answer' );
 

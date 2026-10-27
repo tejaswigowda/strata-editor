@@ -74,7 +74,7 @@ response_format: { type: 'json_schema', json_schema: { name: 'ops', schema, stri
 - **`format`:** used as a JSON schema for `constrained`, `reason-constrained` and `host-resolved`, on both paths.
 - **`OLLAMA_NUM_PARALLEL`:** not relied on; the harness is strictly sequential. The server's setting is not visible through the API.
 - **Anthropic via the proxy:** `temperature` is sent (the eval passes 0), omitted only for `claude-opus-4-7`/`4-8`. `constrained` forces `tool_choice: tool`.
-- **Anthropic via the client:** a change made in this repo on 2026-10-27 (uncommitted at the time of writing) omits `temperature` for Claude 5+, uses `tool_choice: auto` with a strict tool, and raises `max_tokens` to at least 16000. Before it, Claude 5 models answered 400, so no earlier client-path numbers exist for them.
+- **Anthropic via the client:** a change made in this repo on 2026-10-27 (uncommitted at the time of writing) omits `temperature` for Claude 5+, uses `tool_choice: auto` with a plain (non-strict) tool, and raises `max_tokens` to at least 16000. Before it, Claude 5 models answered 400, so no earlier client-path numbers exist for them.
 
 ## `num_ctx` against the longest prompt
 
