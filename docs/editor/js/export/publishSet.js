@@ -6,7 +6,7 @@
 //   renders/<scene>/1080p60/init.mp4  seg00001.m4s …  index.m3u8   (and 720p60, 480p60)
 
 import { masterPlaylist } from './fmp4.js';
-import { buildRenderJson, formatBytes, isDeterministic, LIMITS } from './renderJson.js';
+import { buildRenderJson, formatBytes, assessDeterminism, LIMITS } from './renderJson.js';
 
 /** The ladder, highest first: target heights and the bitrates the work order names. */
 export const RUNGS = Object.freeze( [
@@ -73,10 +73,12 @@ const bytesOf = v => typeof v === 'string' ? enc.encode( v ) : v;
  *   render:      { mode, renderer, device, fps, frames, frameRange, width, height, renderedAt }
  *   rungs:       [{ rung: { name, width, height, kbps }, packaged: packageRendition() output }]
  *   poster:      Uint8Array
- *   captions:    string | null     (WebVTT)
+ *   captions:    string | null     (WebVTT; written whenever the scene has cues, burned in or not)
+ *   audio:       null | { packaged: packageAudio(), name, language, source: { path, sha256 }, delaySamples }
+ *   determinism: { mode, encoder, hasEndCard, playbackWasRunning }   (assessDeterminism's input)
  * @returns {{ files: { path, bytes: Uint8Array }[], renderJson, total: number, errors: string[], warnings: string[], tree: { path, bytes }[] }}
  */
-export function assemblePublishSet( { path, scene, render, rungs, poster, captions } ) {
+export function assemblePublishSet( { path, scene, render, rungs, poster, captions, audio = null, determinism } ) {
 
 	const files = [];
 	const rel = ( ...p ) => path + '/' + p.join( '/' );
@@ -98,19 +100,34 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 
 	}
 
+	let audioMeta = null;
+	if ( audio ) {
+
+		const a = audio.packaged;
+		add( 'audio/init.mp4', a.init );
+		for ( const s of a.segments ) add( `audio/${ s.name }`, s.data );
+		add( 'audio/index.m3u8', a.playlist );
+		audioMeta = {
+			name: audio.name, language: audio.language, bitrateKbps: 128, sampleRate: 48000, channels: 2, playlist: 'audio/index.m3u8', segments: a.segments.length,
+			maxSegmentBytes: a.maxSegmentBytes, durationS: a.durationSeconds, source: audio.source, delaySamples: audio.delaySamples,
+		};
+
+	}
+
 	add( 'master.m3u8', masterPlaylist( rungs.map( ( { rung, packaged } ) => ( {
 		name: rung.name, width: rung.width, height: rung.height, playlist: `${ rung.name }/index.m3u8`,
 		codec: packaged.codec, bandwidth: packaged.bandwidth, averageBandwidth: packaged.averageBandwidth,
-	} ) ), render.fps ) );
+	} ) ), render.fps, audio ? { groupId: 'aud', name: audio.name, language: audio.language, uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: audio.packaged.bandwidth, averageBandwidth: audio.packaged.averageBandwidth } : null ) );
 
 	const renderJson = buildRenderJson( {
-		scene, render, renditions, captions: captions ? 'captions.vtt' : null,
+		scene, render, renditions, captions: captions ? 'captions.vtt' : null, audio: audioMeta,
+		determinism: assessDeterminism( determinism ),
 		files: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ),
 	} );
 	files.unshift( { path: rel( 'render.json' ), bytes: enc.encode( JSON.stringify( renderJson, null, 2 ) + '\n' ) } );
 
 	const total = files.reduce( ( n, f ) => n + f.bytes.length, 0 );
-	const { errors, warnings } = sizeReport( files, total, renditions, renderJson.render.deterministic );
+	const { errors, warnings } = sizeReport( files, total, audioMeta ? [ ...renditions, { name: 'audio', maxSegmentBytes: audioMeta.maxSegmentBytes } ] : renditions, renderJson.render.deterministic );
 	return { files, renderJson, total, errors, warnings, tree: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ) };
 
 }
@@ -153,4 +170,3 @@ export function stalenessLine( renderHash, currentHash ) {
 
 }
 
-export { isDeterministic };

@@ -13,8 +13,9 @@ import {
 } from '../fmp4.js';
 import { canonicalText, canonicalScene, sceneHash } from '../canonical.js';
 import {
-	buildRenderJson, validateRenderJson, isDeterministic, TIME_SOURCE_AUDIT, LIMITS, formatBytes,
+	buildRenderJson, validateRenderJson, assessDeterminism, TIME_SOURCE_AUDIT, REPEAT_RENDER, LIMITS, formatBytes,
 } from '../renderJson.js';
+import { parseWav, toStereo, planAudioSegments, packageAudio, audioPlaylist, audioMediaSegment, audioInitSegment, AUDIO } from '../audio.js';
 import { planLadder, cuesToVtt, vttTime, defaultPublishPath, assemblePublishSet, sizeReport, stalenessLine } from '../publishSet.js';
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
@@ -296,9 +297,9 @@ await test( 'the hash has the form sha256:<64 hex>', async () => {
 // ── render.json ───────────────────────────────────────────────────────────────
 
 const sceneInfo = { repo: 'tejaswigowda/test1', file: 'piston.json', branch: 'main', commit: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', hash: 'sha256:' + 'ab'.repeat( 32 ) };
-const renderInfo = { mode: 'offline', renderer: 'WebGLRenderer', device: 'webgl2', fps: 60, frames: 6180, frameRange: [ 0, 6179 ], width: 1920, height: 1080, renderedAt: '2026-10-26T19:40:00Z' };
+const renderInfo = { mode: 'offline', renderer: 'WebGLRenderer', device: 'webgl2', encoder: 'software', fps: 60, frames: 6180, frameRange: [ 0, 6179 ], width: 1920, height: 1080, renderedAt: '2026-10-26T19:40:00Z' };
 const renditions = [ { name: '1080p60', width: 1920, height: 1080, bitrateKbps: 3500, playlist: '1080p60/index.m3u8', segments: 18, maxSegmentBytes: 3_100_000 } ];
-const build = ( over = {} ) => buildRenderJson( { scene: sceneInfo, render: { ...renderInfo, ...over }, renditions, files: [ { path: 'a', bytes: 5 } ] } );
+const build = ( over = {}, det = {} ) => buildRenderJson( { scene: sceneInfo, render: { ...renderInfo, ...over }, renditions, files: [ { path: 'a', bytes: 5 } ], determinism: assessDeterminism( { mode: over.mode || 'offline', encoder: over.encoder || renderInfo.encoder, repeat: { verified: true, reason: '' }, ...det } ) } );
 
 await test( 'a built render.json validates and says what it is', () => {
 
@@ -306,20 +307,34 @@ await test( 'a built render.json validates and says what it is', () => {
 	assert.deepStrictEqual( validateRenderJson( j ), [] );
 	assert.strictEqual( j.render.duration_s, 103 );
 	assert.strictEqual( j.render.frames, Math.round( j.render.duration_s * j.render.fps ), 'frames == round(duration_s * fps)' );
-	assert.strictEqual( j.render.exporter, 'strata-export/1.0.0' );
+	assert.strictEqual( j.render.exporter, 'strata-export/1.1.0' );
 	assert.deepStrictEqual( j.checks, { segments_under_20mb: true, files_under_100mb: true, frame_count_matches_duration: true } );
 	assert.strictEqual( j.outputs.master, 'master.m3u8' );
 
 } );
 
-await test( 'deterministic is derived: true only for an offline render whose audit passed', () => {
+await test( 'deterministic is derived: offline + software encoder + no live input; every reason is listed', () => {
 
 	assert.strictEqual( build().render.deterministic, true );
-	assert.strictEqual( build( { mode: 'realtime' } ).render.deterministic, false );
-	assert.strictEqual( isDeterministic( 'offline', { passed: false } ), false );
-	assert.strictEqual( isDeterministic( 'realtime', TIME_SOURCE_AUDIT ), false );
-	assert.ok( TIME_SOURCE_AUDIT.passed && TIME_SOURCE_AUDIT.residuals.length === 3, 'the three residuals are stated, not hidden' );
-	assert.strictEqual( build( { mode: 'realtime' } ).render.time_source_audit, undefined );
+	assert.deepStrictEqual( build().render.not_deterministic_because, [] );
+	const why = ( det ) => assessDeterminism( { mode: 'offline', encoder: 'software', repeat: { verified: true, reason: '' }, ...det } ).reasons.join( ' | ' );
+	assert.match( why( { hasCrossfades: true } ), /crossfades/ );
+	assert.match( why( { encoder: 'hardware' } ), /hardware encoder/ );
+	assert.match( why( { hasEndCard: true } ), /live end card/ );
+	assert.match( why( { playbackWasRunning: true } ), /playback was running/ );
+	assert.match( assessDeterminism( { mode: 'realtime', encoder: 'software' } ).reasons.join(), /realtime/ );
+	// F3: until a repeat-render test passes, nothing may say it is byte-reproducible
+	assert.strictEqual( REPEAT_RENDER.verified, false );
+	const real = assessDeterminism( { mode: 'offline', encoder: 'software' } );
+	assert.strictEqual( real.deterministic, false );
+	assert.match( real.reasons.join(), /not byte-identical when tested/ );
+	assert.match( assessDeterminism( { mode: 'offline', encoder: 'software', audit: { passed: false } } ).reasons.join(), /audit did not pass/ );
+	const j = build( { encoder: 'hardware' }, { hasEndCard: true } );
+	assert.strictEqual( j.render.deterministic, false );
+	assert.strictEqual( j.render.not_deterministic_because.length, 2 );
+	assert.deepStrictEqual( validateRenderJson( j ), [] );
+	assert.deepStrictEqual( TIME_SOURCE_AUDIT.residuals.map( r => r.status ), [ 'accepted', 'live-when-present', 'live-when-present' ], 'each residual is classified, not counted' );
+	assert.deepStrictEqual( build().render.time_source_audit.residuals_accepted, [ 'shell-wall-clock-loops' ] );
 
 } );
 
@@ -328,6 +343,9 @@ await test( 'the validator refuses a lie', () => {
 	const j = build();
 	const bad = ( mutate ) => { const c = JSON.parse( JSON.stringify( j ) ); mutate( c ); return validateRenderJson( c ); };
 	assert.ok( bad( c => { c.render.mode = 'realtime'; } ).some( m => /deterministic is true only for mode offline/.test( m ) ) );
+	assert.ok( bad( c => { c.render.encoder = 'hardware'; } ).some( m => /only with the software encoder/.test( m ) ) );
+	assert.ok( bad( c => { c.render.not_deterministic_because = [ 'x' ]; } ).some( m => /no reasons against it/.test( m ) ) );
+	assert.ok( bad( c => { c.render.deterministic = false; } ).some( m => /says why/.test( m ) ) );
 	assert.ok( bad( c => { c.render.frames = 6000; c.render.frame_range = [ 0, 5999 ]; } ).some( m => /round\(duration_s \* fps\)/.test( m ) ) );
 	assert.ok( bad( c => { c.scene.hash = 'sha1:abc'; } ).some( m => /scene\.hash/.test( m ) ) );
 	assert.ok( bad( c => { c.render.frame_range = [ 0, 100 ]; } ).some( m => /frame_range/.test( m ) ) );
@@ -389,7 +407,7 @@ await test( 'the set holds every file in one list, render.json first, and the ch
 	const samples = fakeSamples( 400, 30 ).map( s => s.data );
 	const packaged = packageRendition( { width: 320, height: 180, fps: 30, avcC, samples, keyframes: Array.from( { length: 14 }, ( _, i ) => i * 30 ) } );
 	const rung = { name: '180p30', width: 320, height: 180, kbps: 300 };
-	const set = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ], width: 320, height: 180 }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1, 2, 3 ), captions: 'WEBVTT\n' } );
+	const set = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ], width: 320, height: 180 }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1, 2, 3 ), captions: 'WEBVTT\n', determinism: { mode: 'offline', encoder: 'software' } } );
 	assert.deepStrictEqual( set.files.map( f => f.path ).slice( 0, 3 ), [ 'renders/x/render.json', 'renders/x/poster.jpg', 'renders/x/captions.vtt' ] );
 	assert.ok( set.files.some( f => f.path === 'renders/x/master.m3u8' ) && set.files.some( f => f.path === 'renders/x/180p30/init.mp4' ) && set.files.some( f => f.path === 'renders/x/180p30/seg00003.m4s' ) );
 	assert.strictEqual( new Set( set.files.map( f => f.path ) ).size, set.files.length, 'no path twice' );
@@ -397,7 +415,7 @@ await test( 'the set holds every file in one list, render.json first, and the ch
 	assert.strictEqual( set.renderJson.outputs.captions, 'captions.vtt' );
 	assert.strictEqual( set.errors.length, 0 );
 	assert.strictEqual( set.total, set.files.reduce( ( n, f ) => n + f.bytes.length, 0 ) );
-	const none = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ] }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1 ), captions: null } );
+	const none = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ] }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1 ), captions: null, determinism: { mode: 'offline', encoder: 'software' } } );
 	assert.strictEqual( none.renderJson.outputs.captions, null );
 	assert.ok( ! none.files.some( f => f.path.endsWith( 'captions.vtt' ) ) );
 

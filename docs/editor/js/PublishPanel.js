@@ -6,14 +6,16 @@
 //   panel.setRender( info )   a finished full-range offline render is available
 //   panel.clear()             a new render started: the old one is gone
 //
-// info: { width, height, fps, frames, samples, keyframes (0-based), avcC, sceneHash, source, renderer, device, renderedAt, cues, burned, baseName }
+// info: { width, height, fps, frames, samples, keyframes (0-based), avcC, sceneHash, source, renderer, device, renderedAt, cues, burned, baseName,
+//         encoder: 'software' | 'hardware', playbackWasRunning, hasEndCard, audioRef: { src, language, label } | null, uncommitted }
 
 import { UIButton, UICheckbox, UIInput, UISelect } from './libs/ui.js';
 import { sceneHash } from './export/canonical.js';
 import { transcodeLadder } from './export/ladder.js';
 import { planLadder, assemblePublishSet, cuesToVtt, defaultPublishPath, stalenessLine } from './export/publishSet.js';
 import { formatBytes } from './export/renderJson.js';
-import { publishSource, commitPublishToRepo } from './Menubar.Git.js';
+import { buildAudioRendition, aacSupport } from './export/audio.js';
+import { publishSource, commitPublishToRepo, fetchRepoFile } from './Menubar.Git.js';
 
 const FIELD = 'display:flex;align-items:center;gap:6px;margin:4px 0;font-size:12px;';
 const LABEL = 'width:64px;flex:none;opacity:0.8;';
@@ -72,6 +74,26 @@ export function createPublishPanel( editor ) {
 	const ladderRow = el( 'div', FIELD + 'flex-wrap:wrap;' );
 	root.appendChild( ladderRow );
 	let rungBoxes = [];
+
+	// ── narration (when the scene declares one) ──
+	const narrationRow = el( 'div', FIELD + 'flex-wrap:wrap;display:none;' );
+	const narrationText = el( 'span', 'flex:1;min-width:160px;' );
+	const narrationFile = el( 'input' );
+	narrationFile.type = 'file';
+	narrationFile.accept = 'audio/*,.wav';
+	narrationFile.style.cssText = 'max-width:170px;font-size:11px;';
+	narrationRow.append( el( 'span', LABEL, 'Audio' ), narrationText, narrationFile );
+	root.appendChild( narrationRow );
+	let narrationOverride = null;     // bytes of a file the user chose instead of the repo's
+	narrationFile.addEventListener( 'change', async () => {
+
+		const f = narrationFile.files && narrationFile.files[ 0 ];
+		narrationOverride = f ? new Uint8Array( await f.arrayBuffer() ) : null;
+		narrationText.textContent = f ? `Using ${ f.name } instead of the repo\u2019s file.` : describeNarration();
+		prepared = null; review.style.display = 'none';
+
+	} );
+	const describeNarration = () => info && info.audioRef ? `Narration: ${ info.audioRef.src } (${ info.audioRef.label || info.audioRef.language }), from the scene.` : 'No narration: the scene declares none (setRenderAudio), so the set is silent.';
 
 	// ── prepare ──
 	const buttons = el( 'div', 'margin:6px 0;display:flex;gap:6px;flex-wrap:wrap;' );
@@ -188,27 +210,73 @@ export function createPublishPanel( editor ) {
 		try {
 
 			await refreshStaleness();
+			// Provenance: the commit this render came from. It is the render-time one if the scene was synced then, or the current one if the scene
+			// is unchanged since and has been committed since; otherwise the render cannot be traced to a repo state, and publishing is blocked.
+			const nowSource = publishSource();
+			const cleanNow = ! ( editor.work && editor.work.isDirty() );
+			let commitSha = null;
+			if ( currentHash && currentHash === info.sceneHash && cleanNow && nowSource && nowSource.commit ) commitSha = nowSource.commit;
+			else if ( info.source && info.source.commit && ! info.uncommitted ) commitSha = info.source.commit;
+			if ( ! commitSha ) {
+
+				setStatus( 'Sync the scene first: this render cannot name the commit it came from' + ( info.uncommitted || ! cleanNow ? ', because the scene has changes that are not committed.' : ', because the scene is not synced to a commit.' ) + ' Commit the scene from the Git tab (the render stays valid while the scene is unchanged), then press Prepare again.' );
+				return;
+
+			}
+			const audioSupport = info.audioRef ? await aacSupport() : { ok: true };
+			if ( ! audioSupport.ok ) { setStatus( 'This scene has narration, and ' + audioSupport.reason ); return; }
+
 			const result = await transcodeLadder( {
 				master: { width: info.width, height: info.height, fps: info.fps, samples: info.samples, keyframes: info.keyframes, avcC: info.avcC },
 				ladder: chosen,
 				onProgress: ( f, text ) => setStatus( text, f ),
 				shouldCancel: () => cancelRequested,
+				software: info.encoder === 'software',
 			} );
 			if ( ! result ) { setStatus( 'Publish cancelled.' ); return; }
 
-			const src = info.source;
+			let audio = null;
+			if ( info.audioRef ) {
+
+				setStatus( 'Loading the narration\u2026', 0 );
+				let bytes = narrationOverride;
+				if ( ! bytes ) {
+
+					try { bytes = await fetchRepoFile( info.audioRef.src ); } catch ( e ) {
+
+						throw new Error( `The scene's narration ${ info.audioRef.src } could not be read from the repo (${ e.message }). Commit that file, or choose it below.` );
+
+					}
+
+				}
+				const digest = await crypto.subtle.digest( 'SHA-256', bytes );
+				const sha = 'sha256:' + Array.from( new Uint8Array( digest ), b => b.toString( 16 ).padStart( 2, '0' ) ).join( '' );
+				const starts = result.rungs[ 0 ].packaged.segments.map( sg => sg.first / info.fps );
+				const built = await buildAudioRendition( { bytes, durationSeconds: info.frames / info.fps, videoStartsSeconds: starts, onProgress: ( f, text ) => setStatus( text, f ) } );
+				audio = { packaged: built.packaged, name: info.audioRef.label || 'English', language: info.audioRef.language || 'en', source: { path: info.audioRef.src, sha256: sha }, delaySamples: built.delaySamples };
+
+			}
+
+			const src = { ...( info.source || {} ), commit: commitSha };
 			const set = assemblePublishSet( {
 				path: t.path,
 				scene: { repo: ( src && src.repo ) || t.repo, file: ( src && src.file ) || '', branch: ( src && src.branch ) || t.branch, commit: src && src.commit, hash: info.sceneHash },
-				render: { mode: 'offline', renderer: info.renderer, device: info.device, fps: info.fps, frames: info.frames, frameRange: [ 0, info.frames - 1 ], width: info.width, height: info.height, renderedAt: info.renderedAt },
+				render: { mode: 'offline', renderer: info.renderer, device: info.device, encoder: info.encoder, fps: info.fps, frames: info.frames, frameRange: [ 0, info.frames - 1 ], width: info.width, height: info.height, renderedAt: info.renderedAt },
 				rungs: result.rungs, poster: result.poster,
-				// burned-in captions would show twice beside a caption track
-				captions: info.burned ? null : cuesToVtt( info.cues ),
+				// always written when there are cues: burning them in is an extra, never a way to skip the file (burned-in text cannot be switched off, styled, read aloud or translated)
+				captions: cuesToVtt( info.cues ),
+				audio,
+				determinism: { mode: 'offline', encoder: info.encoder, hasEndCard: info.hasEndCard, hasCrossfades: info.hasCrossfades, playbackWasRunning: info.playbackWasRunning },
 			} );
 			prepared = set;
 			treeBox.textContent = set.tree.map( f => `${ formatBytes( f.bytes ).padStart( 8 ) }  ${ f.path }` ).join( '\n' ) + `\n${ formatBytes( set.total ).padStart( 8 ) }  total, ${ set.tree.length } files`;
 			errorsBox.textContent = set.errors.join( '\n' );
-			warningsBox.textContent = [ ...set.warnings, ...( info.burned ? [ 'Subtitles are burned into the picture, so no captions.vtt is published.' ] : [] ), ...( ! ( src && src.commit ) ? [ 'The scene has not been committed from this editor (no commit is recorded in render.json): commit it first so the render points at a commit.' ] : [] ) ].join( '\n\n' );
+			const notes = [];
+			if ( ! set.renderJson.render.deterministic ) notes.push( 'Not marked deterministic: ' + set.renderJson.render.not_deterministic_because.join('; ') + '. The frames and the duration are still exact (frame n shows n / fps); only the claim that a repeat render gives the same bytes is withheld.' );
+			if ( info.height < 1080 || info.fps < 60 ) notes.push( `This master is ${ info.width }\u00d7${ info.height } at ${ info.fps } fps, so the ladder has ${ set.renderJson.outputs.renditions.length } rung(s). Render at 1920 \u00d7 1080 and 60 fps for the full ladder.` );
+			if ( info.burned ) notes.push( 'Subtitles are burned into the picture and captions.vtt is published as well: players that show the caption track will show the words twice.' );
+			if ( info.cues.length === 0 ) notes.push( 'The scene has no subtitle cues, so there is no captions.vtt.' );
+			warningsBox.textContent = [ ...set.warnings, ...notes ].join( '\n\n' );
 			review.style.display = '';
 			resultBox.textContent = '';
 			setStatus( set.errors.length ? 'The set is ready, but it cannot be published as it is.' : `Ready: ${ set.tree.length } files, ${ formatBytes( set.total ) }. Nothing has been uploaded yet.` );
@@ -283,6 +351,10 @@ export function createPublishPanel( editor ) {
 			root.style.display = '';
 			pathInput.setValue( defaultPublishPath( ( info.source && info.source.file ) || 'scene.json' ) );
 			renderLadderChoices();
+			narrationOverride = null;
+			narrationFile.value = '';
+			narrationRow.style.display = '';
+			narrationText.textContent = describeNarration();
 			setStatus( '' );
 			const src = publishSource();
 			if ( ! src ) setStatus( 'No repository is set in the Git tab: enter owner/name above to publish to.' );

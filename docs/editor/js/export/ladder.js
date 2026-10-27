@@ -13,11 +13,11 @@ import { codecFromAvcC, packageRendition } from './fmp4.js';
 const sleep = ms => new Promise( r => setTimeout( r, ms ) );
 
 /** The first H.264 level the browser can encode at this size and rate, as a WebCodecs config. */
-export async function pickEncoderConfig( { width, height, fps, bitrate } ) {
+export async function pickEncoderConfig( { width, height, fps, bitrate, software = false } ) {
 
 	for ( const codec of avcCodecCandidates( width, height, fps ) ) {
 
-		const config = { codec, width, height, framerate: fps, bitrate, latencyMode: 'quality', avc: { format: 'avc' } };
+		const config = { codec, width, height, framerate: fps, bitrate, latencyMode: 'quality', avc: { format: 'avc' }, hardwareAcceleration: software ? 'prefer-software' : 'no-preference' };
 		try {
 
 			const s = await VideoEncoder.isConfigSupported( config );
@@ -37,7 +37,7 @@ const toBytes = d => d ? ( ArrayBuffer.isView( d ) ? new Uint8Array( d.buffer.sl
  *   keyframes are 0-based frame numbers
  * @returns {Promise<{ rungs: { rung, packaged }[], poster: Uint8Array } | null>}  null when cancelled
  */
-export async function transcodeLadder( { master, ladder, onProgress = () => {}, shouldCancel = () => false, posterAt = 0.15 } ) {
+export async function transcodeLadder( { master, ladder, onProgress = () => {}, shouldCancel = () => false, posterAt = 0.15, software = false } ) {
 
 	if ( ! window.VideoDecoder || ! window.VideoEncoder || ! window.VideoFrame ) throw new Error( 'This browser has no WebCodecs (VideoDecoder / VideoEncoder).' );
 	const { width, height, fps, samples, keyframes, avcC } = master;
@@ -52,7 +52,7 @@ export async function transcodeLadder( { master, ladder, onProgress = () => {}, 
 	const outs = [];
 	for ( const rung of ladder ) {
 
-		const config = await pickEncoderConfig( { width: rung.width, height: rung.height, fps, bitrate: rung.kbps * 1000 } );
+		const config = await pickEncoderConfig( { width: rung.width, height: rung.height, fps, bitrate: rung.kbps * 1000, software } );
 		const out = { rung, samples: [], keyframes: [], avcC: null, canvas: new OffscreenCanvas( rung.width, rung.height ), encoder: null };
 		out.ctx = out.canvas.getContext( '2d' );
 		out.ctx.imageSmoothingQuality = 'high';

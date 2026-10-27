@@ -13,7 +13,7 @@ The words below are the Render tab's own copy (`docs/editor/js/export/frames.js`
 
 > Frame n always shows timeline time n / fps, so duration and frame count are exact, and two renders of one timeline match to the frame on any machine.
 >
-> On the same device, repeat renders draw pixel-identical frames; the encoded file is byte-identical too with the software encoder, but not always with a hardware one.
+> On the same device, most frames repeat exactly but not all: in a repeat-render test, frames inside a camera crossfade and the end card differed between two renders. Trust a render to be exact in time, not to be byte-reproducible.
 >
 > Across different GPUs and drivers, pixels may differ in the last bit; that is not promised.
 
@@ -22,7 +22,7 @@ Three claims, kept apart:
 | Claim | Status | Meaning |
 |---|---|---|
 | Temporal determinism | **promised** | frame `n` shows timeline time `n / fps`; duration and frame count are exact, whatever the machine or resolution |
-| Pixel determinism, same device | **promised for the drawn frames**; for the file, only with the software encoder | repeat renders draw the same pixels; a hardware H.264 encoder may write different bytes for the same frames |
+| Pixel determinism, same device | **not promised** | most frames repeat exactly; in the repeat-render test (below) frames inside camera crossfades and the end card did not. A hardware H.264 encoder also writes different bytes for identical frames; the software encoder does not |
 | Pixel determinism, across devices | **not promised** | GPU rasterisation differs in the last bit between GPUs and drivers |
 
 One correction to the work order that prompted this: the export does **not** draw with WebGPU. It renders offscreen with a dedicated `WebGLRenderer` (`Sidebar.Render.js`), because the live WebGPU viewport must not share GPU resources with it. The cross-device caveat is the same (GPUs differ), but the end-of-frame fence is WebGL's `gl.finish()`, not `device.queue.onSubmittedWorkDone()`.
@@ -70,6 +70,37 @@ Hits were found by grepping `docs/editor/js` (excluding `libs/` and tests) for `
 
 **Unresolved**: three stated residuals, none hidden: Shell wall-clock loops (not caught), the live end card (excluded), and rendering while playback is running (cause not found).
 
+## The three residuals, classified
+
+The audit left three residuals. They are classified rather than counted, and `render.json` (`export/renderJson.js`, `TIME_SOURCE_AUDIT`) carries the classification:
+
+| Residual | Class | Why |
+|---|---|---|
+| Shell wall-clock loops | **accepted** | A hand-written timer lives in the page, not in the scene file, so a render from a freshly loaded scene cannot contain one. It is listed in `render.time_source_audit.residuals_accepted` |
+| The live end card | **live when present** | A living web page, re-rasterised at the start of every render: frames that show it are only as reproducible as that page. A scene with a call card gets `deterministic: false` with the reason |
+| Playback running when a render starts | **live when present** | Differed by a few hundred pixels per frame, cause not found. The Render tab now records whether playback was running when the render began (`editor.timelinePlaying`); if it was, `deterministic: false` with the reason |
+
+## Repeat-render test (gate F3)
+
+`render.json` says `deterministic` only for what has been verified. The test: the same scene (`projectile.json`, 80.7 s, three camera crossfades and an end card), the same settings, rendered more than once, comparing the pixels of the frames as drawn (hash of the canvas before encoding, every 10th frame, 640 × 360, 30 fps) and, separately, the published segments byte for byte.
+
+| Where | Result |
+|---|---|
+| Real GPU (Apple, Metal), two renders in one page | 15 of 243 hashed frames differed: 310, 610, 620 (inside crossfades) and 2310-2400 (the end card) |
+| Software GL (SwiftShader), two renders in one page | 9 of 122 hashed frames differed: 620, 1300, 1560 (inside crossfades) and 2320 onward (the end card) |
+| A range render of frames 1296-1306, repeated | identical every time |
+| A range render of frames 1250-1310, two renders in one page | the first render matched the short range; the second differed in frames 1300-1310 (inside a crossfade), and matched what a full render gave. Crossfade frames depend on what was rendered before them, so a range is not splice-safe through a transition |
+| Two full publishes (720p30, software encoder, separate page loads) | 31 of 52 files differed: every video segment and the poster (the audio files, init segments and playlists were byte-identical) |
+| The H.264 encoder alone, identical frames encoded three times | **software: identical bytes every time; hardware: three different results** |
+
+So: frames outside crossfades and the end card repeated exactly in the frames compared; the software encoder is byte-reproducible; the hardware encoder is not; crossfade frames are not, and I did not find why. One idea that did not fix it: the first picture of a crossfade is copied into the 2D canvas with `drawImage`, which the browser may read late; a forced read-back after that copy changed nothing and was removed. The published segments also differed from frame 2 on, which the frame hashes at 640 × 360 do not explain, so there is at least one more source; it was not isolated.
+
+Until a repeat-render test passes, `REPEAT_RENDER.verified` stays `false` and every `render.json` says `deterministic: false` with the reasons. What stays true and is separately checked (`checks.frame_count_matches_duration`): frame `n` shows timeline time `n / fps`, so the duration and frame count are exact.
+
+## Preview and export (gate F5)
+
+The live view draws with `WebGPURenderer`; the export draws with a dedicated `WebGLRenderer` (WebGL2). Ten matched frames of `projectile.json` (3, 9, 15, 24, 30, 38, 49, 55, 67, 75 s) through the shot camera, WebGPU viewport on a real GPU (Chrome, Apple Metal) against the 1280 × 720 export frame, both scaled to 640 × 360: mean absolute difference **0.91** levels in 255 (0.62 to 1.89), mean signed difference **-0.3, -0.3, -0.4** (the preview a fraction darker), **1.8%** of pixels differ by more than 16 levels (edges, text anti-aliasing, the distant grid). No visible difference in colour, tone mapping or shadows on this scene. Two cautions: it is one scene, and the first comparison I ran showed a difference of 35 levels: that was the player's Play overlay dimming the viewport, which is in the viewport's pixels until it is dismissed. The Render tab now says which renderer draws which (`RENDERER_COPY`). The command: `node scripts/compare-render.mjs <url> --times … --real-gpu` (its Take Snapshot step timed out in the headless run, so the numbers above came from capturing the export's own frames).
+
 ## Two real bugs the gates found
 
 The simple test scene passed every gate on the first try. The real 98-second scene (`area-volume.json`, text, fades, a camera sequence, an end card) did not, and found two bugs that were not about the clock:
@@ -102,7 +133,7 @@ E2 compares the drawn frame (a hash of the composited canvas, before encoding), 
 
 - **Hold-frame skipping.** 82% of the frames in the 1080p render that prompted this are legitimate holds; an offline renderer could detect unchanged scene state and re-emit rather than re-render. A large speedup on this content, and an optimisation of a path that now has correct timestamps. Next.
 - Accumulation motion blur, supersampling, arbitrary output fps, 4K: unlocked by this, not needed yet.
-- **Audio.** The offline file is video-only. The realtime path adds a silent audio track so `ffmpeg -map 0:a` works downstream; the offline path does not yet. Mux a track in `Mp4Muxer` if a downstream tool needs one.
+- **Audio.** The offline master file is video-only. A published set carries the scene's narration as a separate AAC audio rendition (`guides/PUBLISH.md`); the downloaded master does not include it.
 - **Cross-origin muxing.** The work order proposed handing encoded chunks to `ffmpeg.webcli.app`. There was no hand-off protocol in either repository, so the muxer lives in Strata (`export/Mp4Muxer.js`), and so does the publish step's fMP4/HLS segmenter (`export/fmp4.js`, `guides/PUBLISH.md`): no FFmpeg code is bundled and none is called. The hand-off remains an option if the receiving side is ever built.
 - **Publish metadata.** `render.json` records `rendered_at` from the wall clock. It is metadata only; no frame time, timestamp or segment boundary reads it, and nothing in the file's bytes depends on it except `render.json` itself. `render.deterministic` is true only for an offline render, and it is the *temporal* claim of this page: it does not mention pixels, and it comes with the three residuals above (the file lists how many).
 - The old Preview path logs a WebGPU `Destroyed texture "PointShadowDepthTexture"` validation error when a scene with a point-light shadow is rendered. It is not new, and it appears on the Preview path too.

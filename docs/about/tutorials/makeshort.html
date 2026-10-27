@@ -602,6 +602,8 @@ scene.traverse(o =&gt; {
 if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
 requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
 
+
+
 	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> lengths are counted in tiles: a tile is a 1 × 1 × 1 cube, so the squares on the legs have 9 and 16 tiles and the square on the hypotenuse 25. <em>Assumptions:</em> the triangles are exact integer right triangles (3-4-5, 5-12-13, 8-15-17); the film checks these three by counting tiles and does not prove the theorem for every right triangle. <em>Render:</em> the film in <code>demos/pyth.mp4</code> was committed on 25 October, a day before the offline exporter, so it came from the real-time recorder; it has not been re-rendered since. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
 	<footer>

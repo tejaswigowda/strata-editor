@@ -83,7 +83,7 @@ test( 'the determinism statement separates temporal, same-device and cross-devic
 
 	assert.ok( /exact/.test( DETERMINISM_COPY.temporal ) );
 	assert.ok( /same device/.test( DETERMINISM_COPY.sameDevice ) );
-	assert.ok( /software encoder/.test( DETERMINISM_COPY.sameDevice ) );
+	assert.ok( /not all/.test( DETERMINISM_COPY.sameDevice ) && /crossfade/.test( DETERMINISM_COPY.sameDevice ) );
 	assert.ok( /not promised/.test( DETERMINISM_COPY.crossDevice ) );
 
 } );

@@ -52,6 +52,7 @@ function Timeline( editor ) {
 	let playing = false;
 	let playhead = 0;               // seconds (the shared clock)
 	editor.getTimelinePlayhead = () => playhead; // the shell's keyFromView() defaults to the playhead
+	Object.defineProperty( editor, 'timelinePlaying', { get: () => playing, configurable: true } ); // a publish records whether playback was running when its render started (a live input)
 	let selectedEventId = null;     // the primary selected event: the first of selectedIds (it owns the key options and the code line)
 	let selectedIds = new Set();    // every selected event; shift / ctrl / cmd click builds it up
 	let zoomSpan = null;            // seconds the lane shows; null = fit the whole timeline

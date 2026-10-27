@@ -143,13 +143,20 @@ export function mediaPlaylist( segments, fps, { initName = 'init.mp4' } = {} ) {
 
 }
 
-/** The master playlist. `renditions`: [{ name, width, height, playlist, codec, bandwidth, averageBandwidth }], highest first. */
-export function masterPlaylist( renditions, fps ) {
+/**
+ * The master playlist. `renditions`: [{ name, width, height, playlist, codec, bandwidth, averageBandwidth }], highest first.
+ * `audio` (optional): { groupId, name, language, uri, codec, bandwidth, averageBandwidth }: one audio rendition that every rung references,
+ * so each rung's CODECS lists the audio codec too (a player reading a video-only string will not even try the audio).
+ */
+export function masterPlaylist( renditions, fps, audio = null ) {
 
 	const lines = [ '#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS' ];
+	if ( audio ) lines.push( `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="${ audio.groupId }",NAME="${ audio.name }",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="${ audio.language }",URI="${ audio.uri }"` );
 	for ( const r of renditions ) {
 
-		lines.push( `#EXT-X-STREAM-INF:BANDWIDTH=${ r.bandwidth },AVERAGE-BANDWIDTH=${ r.averageBandwidth },RESOLUTION=${ r.width }x${ r.height },FRAME-RATE=${ fps.toFixed( 3 ) },CODECS="${ r.codec }"`, r.playlist );
+		const codecs = audio ? `${ r.codec },${ audio.codec }` : r.codec;
+		const tail = audio ? `,AUDIO="${ audio.groupId }"` : '';
+		lines.push( `#EXT-X-STREAM-INF:BANDWIDTH=${ r.bandwidth + ( audio ? audio.bandwidth : 0 ) },AVERAGE-BANDWIDTH=${ r.averageBandwidth + ( audio ? audio.averageBandwidth : 0 ) },RESOLUTION=${ r.width }x${ r.height },FRAME-RATE=${ fps.toFixed( 3 ) },CODECS="${ codecs }"${ tail }`, r.playlist );
 
 	}
 	lines.push( '' );

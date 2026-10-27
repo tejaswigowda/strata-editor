@@ -42,7 +42,7 @@
 		"blurb": "A thrown ball's curve is a sideways motion at constant speed plus an up-and-down motion under gravity. Orbit the path to see each alone, then put them back together. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/projectile.jpg",
 		"desc": "Launch a ball and draw its trail, its constant sideways speed, the gravity that changes its vertical speed, and its landing point; show each motion alone as a shadow on the ground and on a pole, orbit the path, then add the two back together on seven ghost balls and change the angle and the speed — all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
-		"embed": "#repo=tejaswigowda/test1@f3a4a0e5874234ae4b3780626827b552038f928d&file=projectile.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&file=projectile.json&present=true"
 	},
 	{
 		"title": "A crank, a rod and a piston: crank-slider kinematics",

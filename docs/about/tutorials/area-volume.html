@@ -510,7 +510,9 @@ scene.traverse(o =&gt; {
 if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
 requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
 
-	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> unit-cube widths: the ratios 6, 3 and 2 are <em>per unit-cube width</em>, and <em>SA / V ∝ 1 / s</em> holds in any units. <em>Assumptions:</em> the cells are idealised cubes with an exact grid of unit cubes; cristae and alveoli illustrate the idea and are not measurements of real membranes. <em>Render:</em> no video render was run for this page. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
+
+
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> unit-cube widths: the ratios 6, 3 and 2 are <em>per unit-cube width</em>, and <em>SA / V ∝ 1 / s</em> holds in any units. <em>Assumptions:</em> the cells are idealised cubes with an exact grid of unit cubes; cristae and alveoli illustrate the idea and are not measurements of real membranes. <em>Render:</em> a render was run and published (<code>renders/projectile</code> in <code>tejaswigowda/test1</code>): 1280 × 720 at 30 fps, video only, made before the narration of step 14 existed. A 1080p60 render with the narration has to be made and published again. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>

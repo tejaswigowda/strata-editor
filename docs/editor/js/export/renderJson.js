@@ -8,14 +8,50 @@
 //   frames         frames == round(duration_s * fps), or the capture is variable-rate and mode says 'realtime'
 
 export const RENDER_JSON_VERSION = 1;
-export const EXPORTER = 'strata-export/1.0.0';
+export const EXPORTER = 'strata-export/1.1.0';
 
-/** The time-source audit (guides/TIME_SOURCES.md): every hit has a disposition, and three residuals are stated, not hidden. */
+/**
+ * The time-source audit (guides/TIME_SOURCES.md) leaves three residuals. They are classified, not counted:
+ *   accepted           bounded and harmless for a published render: it never makes `deterministic` false by itself
+ *   live-when-present  a real input the render reads while it runs: when it applies to THIS render, `deterministic` is false
+ */
 export const TIME_SOURCE_AUDIT = Object.freeze( {
 	document: 'guides/TIME_SOURCES.md',
 	passed: true,
-	residuals: Object.freeze( [ 'Shell wall-clock loops are not caught', 'the live end card is re-baked each render', 'rendering while playback is running differs by a few hundred pixels per frame' ] ),
+	residuals: Object.freeze( [
+		{ id: 'shell-wall-clock-loops', status: 'accepted', why: 'A hand-written Shell timer lives in the page, not in the scene file: a render from a freshly loaded scene cannot contain one.' },
+		{ id: 'end-card', status: 'live-when-present', why: 'The end card is a living web page, re-fetched and re-rasterised at the start of every render, so frames that show it are only as reproducible as that page.' },
+		{ id: 'playback-running', status: 'live-when-present', why: 'A render started while timeline playback was running differed by a few hundred pixels per frame from one started when idle (cause not found).' },
+	] ),
 } );
+
+/**
+ * Why a render is, or is not, deterministic. `deterministic` means: frame n shows timeline time n / fps AND the same scene on the same device
+ * gives byte-identical segments. It is never a claim about pixels across GPUs. Every reason below makes it false.
+ */
+/**
+ * The repeat-render test (guides/TIME_SOURCES.md, "Repeat-render test"): the same scene, rendered twice with the same settings, did NOT give
+ * byte-identical segments on the machines tested. Until a repeat-render test passes, no render may say it is byte-reproducible; flip `verified`
+ * only with that test's result.
+ */
+export const REPEAT_RENDER = Object.freeze( {
+	verified: false,
+	reason: 'repeat renders were not byte-identical when tested (frames inside camera crossfades and the end card differed between two renders; cause not found)',
+} );
+
+export function assessDeterminism( { mode, encoder, hasEndCard = false, hasCrossfades = false, playbackWasRunning = false, audit = TIME_SOURCE_AUDIT, repeat = REPEAT_RENDER } ) {
+
+	const reasons = [];
+	if ( mode !== 'offline' ) reasons.push( 'a realtime capture: wall-clock timing' );
+	if ( audit.passed !== true ) reasons.push( 'the time-source audit did not pass' );
+	if ( encoder !== 'software' ) reasons.push( 'a hardware encoder: its bytes are not promised to repeat' );
+	if ( hasEndCard ) reasons.push( 'the scene shows the live end card (a web page rasterised at render time)' );
+	if ( hasCrossfades ) reasons.push( 'the shot sequence has camera crossfades: frames inside a transition depended on render history when measured' );
+	if ( playbackWasRunning ) reasons.push( 'playback was running when the render started' );
+	if ( repeat.verified !== true ) reasons.push( repeat.reason );
+	return { deterministic: reasons.length === 0, reasons };
+
+}
 
 export const LIMITS = Object.freeze( {
 	segmentBytes: 20 * 1024 * 1024,        // jsDelivr's cap per file served from a repo
@@ -27,16 +63,17 @@ const MB = 1024 * 1024;
 export const formatBytes = n => n >= MB ? ( n / MB ).toFixed( n >= 10 * MB ? 0 : 1 ) + ' MB' : n >= 1024 ? Math.round( n / 1024 ) + ' KB' : n + ' B';
 
 /** deterministic is derived, never typed in. */
-export const isDeterministic = ( mode, audit = TIME_SOURCE_AUDIT ) => mode === 'offline' && audit.passed === true;
 
 /**
  * @param {object} i
  *   scene:   { repo, file, branch, commit|null, hash }
  *   render:  { mode, renderer, device, fps, frames, frameRange:[a,b], width, height, seed?, renderedAt, durationS? }
  *   renditions: [{ name, width, height, bitrateKbps, playlist, segments, maxSegmentBytes }]
+ *   audio:   null, or { name, language, bitrateKbps, sampleRate, channels, playlist, segments, maxSegmentBytes, durationS, source: { path, sha256 }, delaySamples }
+ *   determinism: assessDeterminism() output; render.encoder: 'software' | 'hardware'
  *   files:   [{ path, bytes }]  every file of the set, for the size checks
  */
-export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, audit = TIME_SOURCE_AUDIT } ) {
+export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, audio = null, determinism, audit = TIME_SOURCE_AUDIT } ) {
 
 	const durationS = render.durationS !== undefined ? render.durationS : render.frames / render.fps;
 	const out = {
@@ -44,7 +81,8 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 		scene: { repo: scene.repo, file: scene.file, branch: scene.branch, commit: scene.commit || null, hash: scene.hash },
 		render: {
 			mode: render.mode,
-			deterministic: isDeterministic( render.mode, audit ),
+			deterministic: determinism.deterministic,
+			encoder: render.encoder,
 			renderer: render.renderer,
 			device: render.device,
 			fps: render.fps,
@@ -56,6 +94,8 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			seed: render.seed === undefined ? null : render.seed,
 			exporter: EXPORTER,
 			rendered_at: render.renderedAt,
+			time_source_audit: { document: audit.document, passed: audit.passed, residuals_accepted: audit.residuals.filter( r => r.status === 'accepted' ).map( r => r.id ) },
+			not_deterministic_because: determinism.reasons,
 		},
 		outputs: {
 			master: 'master.m3u8',
@@ -65,14 +105,19 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			} ) ),
 			poster,
 			captions,
+			audio: audio ? {
+				name: audio.name, language: audio.language, codec: 'mp4a.40.2', sample_rate: audio.sampleRate, channels: audio.channels, bitrate_kbps: audio.bitrateKbps,
+				playlist: audio.playlist, segments: audio.segments, max_segment_bytes: audio.maxSegmentBytes, duration_s: Math.round( audio.durationS * 1e6 ) / 1e6,
+				source: audio.source, encoder_delay_samples: audio.delaySamples,
+			} : null,
 		},
 		checks: {
 			segments_under_20mb: renditions.every( r => r.maxSegmentBytes < LIMITS.segmentBytes ),
 			files_under_100mb: files.every( f => f.bytes < LIMITS.fileBytes ),
 			frame_count_matches_duration: render.frames === Math.round( durationS * render.fps ),
+			...( audio ? { audio_duration_matches_video: Math.abs( audio.durationS - durationS ) < 0.05 } : {} ),
 		},
 	};
-	if ( out.render.deterministic ) out.render.time_source_audit = { document: audit.document, passed: true, residuals: audit.residuals.length };
 	return out;
 
 }
@@ -100,6 +145,12 @@ export function validateRenderJson( j ) {
 	need( r.mode === 'offline' || r.mode === 'realtime', 'render.mode must be offline or realtime' );
 	need( typeof r.deterministic === 'boolean', 'render.deterministic must be a boolean' );
 	need( ! r.deterministic || r.mode === 'offline', 'render.deterministic is true only for mode offline' );
+	need( r.encoder === 'software' || r.encoder === 'hardware', 'render.encoder must be software or hardware' );
+	need( ! r.deterministic || r.encoder === 'software', 'render.deterministic is true only with the software encoder' );
+	need( Array.isArray( r.not_deterministic_because ), 'render.not_deterministic_because must be a list' );
+	need( ! r.deterministic || ( Array.isArray( r.not_deterministic_because ) && r.not_deterministic_because.length === 0 ), 'a deterministic render has no reasons against it' );
+	need( r.deterministic || ( Array.isArray( r.not_deterministic_because ) && r.not_deterministic_because.length > 0 ), 'a render that is not deterministic says why' );
+	need( r.time_source_audit && Array.isArray( r.time_source_audit.residuals_accepted ), 'render.time_source_audit.residuals_accepted is required' );
 	need( isStr( r.renderer ) && isStr( r.device ) && isStr( r.exporter ), 'render.renderer, device and exporter are required' );
 	need( isPos( r.fps ), 'render.fps must be positive' );
 	need( isInt( r.frames ) && r.frames > 0, 'render.frames must be a positive integer' );
@@ -121,9 +172,17 @@ export function validateRenderJson( j ) {
 	}
 	need( isStr( o.poster ), 'outputs.poster is required' );
 	need( o.captions === null || isStr( o.captions ), 'outputs.captions must be a path or null' );
+	if ( o.audio !== null && o.audio !== undefined ) {
+
+		const a = o.audio;
+		need( a.codec === 'mp4a.40.2' && isStr( a.playlist ) && isInt( a.segments ) && a.segments > 0 && isInt( a.max_segment_bytes ) && isPos( a.duration_s ) && isPos( a.sample_rate ) && isPos( a.channels ) && isPos( a.bitrate_kbps ), 'outputs.audio: codec, playlist, segments, max_segment_bytes, duration_s, sample_rate, channels and bitrate_kbps are required' );
+		need( a.source && isStr( a.source.path ) && /^sha256:[0-9a-f]{64}$/.test( a.source.sha256 || '' ), 'outputs.audio.source needs a path and a sha256' );
+
+	}
 
 	const c = j.checks || {};
 	for ( const k of [ 'segments_under_20mb', 'files_under_100mb', 'frame_count_matches_duration' ] ) need( typeof c[ k ] === 'boolean', `checks.${ k } must be a boolean` );
+	need( ! o.audio || typeof c.audio_duration_matches_video === 'boolean', 'checks.audio_duration_matches_video is required when there is audio' );
 	return e;
 
 }

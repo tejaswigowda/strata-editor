@@ -2,7 +2,7 @@
 // Measure how far the viewport is from the Render tab's output.
 //
 //   node scripts/compare-render.mjs [sceneUrl] [--times 1,3,5] [--threshold 16] [--out DIR] [--headed] [--size 1100x700]
-//                                   [--override docs/path/file.js=local/file.js] [--hide ObjectName]
+//                                   [--override docs/path/file.js=local/file.js] [--hide ObjectName] [--real-gpu]
 //
 // --hide hides every object with that name (repeatable) to see how much of a gap they cause.
 // --override serves a local file in place of a site file (repeatable), for A/B runs, e.g. the stand-ins
@@ -61,9 +61,12 @@ async function loadPlaywright() {
 
 const { chromium } = await loadPlaywright();
 
+// --real-gpu: leave the software-GL flags off, so a machine with WebGPU runs the viewport on the real WebGPU backend (the comparison the Render tab's note is about)
+const realGpu = argv.includes( '--real-gpu' );
 const browser = await chromium.launch( {
 	headless: ! flag( 'headed', false ),
-	args: [ '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader' ],
+	channel: realGpu ? 'chrome' : undefined,
+	args: realGpu ? [] : [ '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader' ],
 } );
 
 try {

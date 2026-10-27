@@ -17,7 +17,7 @@ import { createPublishPanel } from './PublishPanel.js';
 import { sceneHash } from './export/canonical.js';
 import { publishSource } from './Menubar.Git.js';
 import {
-	DETERMINISM_COPY, totalFrames as frameCount, frameTimestampUs, frameDurationUs, resolveRange, frameTimes,
+	DETERMINISM_COPY, RENDERER_COPY, totalFrames as frameCount, frameTimestampUs, frameDurationUs, resolveRange, frameTimes,
 	avcCodecCandidates, targetBitrate, contractLine,
 } from './export/frames.js';
 
@@ -316,7 +316,7 @@ function SidebarRender( editor ) {
 		'640x360': '640 × 360 (360p)',
 		'1080x1080': '1080 × 1080 (square)',
 	} );
-	resolutionSelect.setValue( '1280x720' );
+	resolutionSelect.setValue( '1920x1080' );
 	resolutionRow.add( resolutionSelect );
 	videoPane.add( resolutionRow );
 
@@ -379,7 +379,7 @@ function SidebarRender( editor ) {
 		fpsRow.add( new UIText( 'FPS' ).setClass( 'Label' ) );
 		S.fpsSelect = new UISelect().setWidth( '160px' );
 		S.fpsSelect.setOptions( { '24': '24', '30': '30', '60': '60' } );
-		S.fpsSelect.setValue( '30' );
+		S.fpsSelect.setValue( '60' );
 		fpsRow.add( S.fpsSelect );
 		pane.add( fpsRow );
 
@@ -425,6 +425,16 @@ function SidebarRender( editor ) {
 		const determinismHelp = new UIText( [ DETERMINISM_COPY.temporal, DETERMINISM_COPY.sameDevice, DETERMINISM_COPY.crossDevice ].join( ' ' ) );
 		determinismHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.6;margin:0 0 10px;line-height:1.4;';
 		pane.add( determinismHelp );
+
+		// Where someone tunes against the preview and blames the render: say which renderer draws which.
+		if ( editor.config.getKey( 'project/renderer/type' ) === 'WebGPURenderer' ) {
+
+			const rendererHelp = new UIText( RENDERER_COPY );
+			rendererHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.6;margin:0 0 10px;line-height:1.4;';
+			rendererHelp.dom.className += ' renderer-note';
+			pane.add( rendererHelp );
+
+		}
 
 		// File name (a template; blank = the default)
 		const nameRow = new UIRow();
@@ -1631,6 +1641,11 @@ function SidebarRender( editor ) {
 		publishPanel.clear();
 		let renderSceneHash = null;
 		const renderSource = publishSource();
+		const playbackWasRunning = !! editor.timelinePlaying;       // read before the render pauses it: a live input (guides/TIME_SOURCES.md)
+		const hasEndCard = findCallcards( editor.scene ).length > 0;
+		const hasCrossfades = ( editor.scene.userData.renderShots || [] ).some( ( s, i ) => i > 0 && s.transition === 'fade' && ( s.transitionDur || 0 ) > 0 );
+		const sceneUncommitted = !! ( editor.work && editor.work.isDirty() );       // the commit below is only this scene's commit if nothing was changed since
+		const audioRef = editor.scene.userData && editor.scene.userData.renderAudio ? { ...editor.scene.userData.renderAudio } : null;
 		if ( offline && ! is360 ) {
 
 			try { renderSceneHash = await sceneHash( editor.toJSON() ); } catch ( e ) { console.warn( 'Could not hash the scene for render.json', e ); }
@@ -2244,6 +2259,7 @@ function SidebarRender( editor ) {
 				publishPanel.setRender( {
 					width, height, fps, frames: range.count,
 					samples: muxer.samples, keyframes: muxer.keyframes.map( k => k - 1 ), avcC: muxer.avcC,
+					encoder: S.encoderSelect.getValue() === 'software' ? 'software' : 'hardware', playbackWasRunning, hasEndCard, hasCrossfades, audioRef, uncommitted: sceneUncommitted,
 					sceneHash: renderSceneHash, source: renderSource, renderer: ( rendererInfo && rendererInfo.renderer ) || 'WebGLRenderer', device: ( rendererInfo && rendererInfo.device ) || 'webgl2',
 					renderedAt: new Date().toISOString(), // metadata only: no frame time ever comes from a wall clock
 					cues: getCues().map( c => ( { start: c.start, end: c.end, text: c.text } ) ), burned: S.burnCheckbox.getValue(), baseName,

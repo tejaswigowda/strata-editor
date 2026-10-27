@@ -3,68 +3,326 @@
   "$id": "https://strataeditor.dev/schemas/render.schema.json",
   "title": "render.json (Strata publish set, version 1)",
   "type": "object",
-  "required": ["version", "scene", "render", "outputs", "checks"],
+  "required": [
+    "version",
+    "scene",
+    "render",
+    "outputs",
+    "checks"
+  ],
   "properties": {
-    "version": { "const": 1 },
+    "version": {
+      "const": 1
+    },
     "scene": {
       "type": "object",
-      "required": ["repo", "file", "branch", "commit", "hash"],
+      "required": [
+        "repo",
+        "file",
+        "branch",
+        "commit",
+        "hash"
+      ],
       "properties": {
-        "repo": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" },
-        "file": { "type": "string", "minLength": 1 },
-        "branch": { "type": "string", "minLength": 1 },
-        "commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{7,40}$" },
-        "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        "repo": {
+          "type": "string",
+          "pattern": "^[^/\\s]+/[^/\\s]+$"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
       }
     },
     "render": {
       "type": "object",
-      "required": ["mode", "deterministic", "renderer", "device", "fps", "frames", "frame_range", "duration_s", "width", "height", "seed", "exporter", "rendered_at"],
+      "required": [
+        "mode",
+        "deterministic",
+        "renderer",
+        "device",
+        "fps",
+        "frames",
+        "frame_range",
+        "duration_s",
+        "width",
+        "height",
+        "seed",
+        "exporter",
+        "rendered_at",
+        "encoder",
+        "not_deterministic_because",
+        "time_source_audit"
+      ],
       "properties": {
-        "mode": { "enum": ["offline", "realtime"] },
-        "deterministic": { "type": "boolean", "description": "Temporal determinism only; true only when mode is offline and the time-source audit passed. Never a claim about pixels." },
-        "renderer": { "type": "string" },
-        "device": { "type": "string" },
-        "fps": { "type": "number", "exclusiveMinimum": 0 },
-        "frames": { "type": "integer", "minimum": 1 },
-        "frame_range": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 2, "maxItems": 2 },
-        "duration_s": { "type": "number", "exclusiveMinimum": 0 },
-        "width": { "type": "integer", "minimum": 1 },
-        "height": { "type": "integer", "minimum": 1 },
-        "seed": { "type": ["number", "null"] },
-        "exporter": { "type": "string" },
-        "rendered_at": { "type": "string", "format": "date-time" },
-        "time_source_audit": { "type": "object", "description": "Present when deterministic is true." }
+        "mode": {
+          "enum": [
+            "offline",
+            "realtime"
+          ]
+        },
+        "deterministic": {
+          "type": "boolean",
+          "description": "True only when mode is offline, the software encoder wrote the segments, and nothing on not_deterministic_because applies: frame n shows timeline time n / fps and a repeat render on the same device gives byte-identical segments. Never a claim about pixels across GPUs."
+        },
+        "renderer": {
+          "type": "string"
+        },
+        "device": {
+          "type": "string"
+        },
+        "fps": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frame_range": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "duration_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "exporter": {
+          "type": "string"
+        },
+        "rendered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "time_source_audit": {
+          "type": "object",
+          "required": [
+            "document",
+            "passed",
+            "residuals_accepted"
+          ],
+          "properties": {
+            "document": {
+              "type": "string"
+            },
+            "passed": {
+              "type": "boolean"
+            },
+            "residuals_accepted": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Residuals classified as bounded and harmless. The live ones (end card, playback running) are not listed here: when they apply they appear in not_deterministic_because."
+            }
+          }
+        },
+        "encoder": {
+          "enum": [
+            "software",
+            "hardware"
+          ],
+          "description": "Which H.264 encoder wrote the ladder. A hardware encoder's bytes are not promised to repeat."
+        },
+        "not_deterministic_because": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Empty when deterministic; otherwise every reason."
+        }
       }
     },
     "outputs": {
       "type": "object",
-      "required": ["master", "renditions", "poster", "captions"],
+      "required": [
+        "master",
+        "renditions",
+        "poster",
+        "captions",
+        "audio"
+      ],
       "properties": {
-        "master": { "const": "master.m3u8" },
+        "master": {
+          "const": "master.m3u8"
+        },
         "renditions": {
-          "type": "array", "minItems": 1,
+          "type": "array",
+          "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["name", "width", "height", "bitrate_kbps", "playlist", "segments", "max_segment_bytes"],
+            "required": [
+              "name",
+              "width",
+              "height",
+              "bitrate_kbps",
+              "playlist",
+              "segments",
+              "max_segment_bytes"
+            ],
             "properties": {
-              "name": { "type": "string" }, "width": { "type": "integer" }, "height": { "type": "integer" },
-              "bitrate_kbps": { "type": "number" }, "playlist": { "type": "string" },
-              "segments": { "type": "integer", "minimum": 1 }, "max_segment_bytes": { "type": "integer", "minimum": 0 }
+              "name": {
+                "type": "string"
+              },
+              "width": {
+                "type": "integer"
+              },
+              "height": {
+                "type": "integer"
+              },
+              "bitrate_kbps": {
+                "type": "number"
+              },
+              "playlist": {
+                "type": "string"
+              },
+              "segments": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "max_segment_bytes": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
         },
-        "poster": { "type": "string" },
-        "captions": { "type": ["string", "null"] }
+        "poster": {
+          "type": "string"
+        },
+        "captions": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audio": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "One AAC-LC audio rendition, referenced by every video rung through an HLS audio group.",
+          "required": [
+            "codec",
+            "playlist",
+            "segments",
+            "max_segment_bytes",
+            "duration_s",
+            "sample_rate",
+            "channels",
+            "bitrate_kbps",
+            "source"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "language": {
+              "type": "string"
+            },
+            "codec": {
+              "const": "mp4a.40.2"
+            },
+            "sample_rate": {
+              "type": "integer"
+            },
+            "channels": {
+              "type": "integer"
+            },
+            "bitrate_kbps": {
+              "type": "number"
+            },
+            "playlist": {
+              "type": "string"
+            },
+            "segments": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_segment_bytes": {
+              "type": "integer"
+            },
+            "duration_s": {
+              "type": "number"
+            },
+            "encoder_delay_samples": {
+              "type": "integer"
+            },
+            "source": {
+              "type": "object",
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "checks": {
       "type": "object",
-      "required": ["segments_under_20mb", "files_under_100mb", "frame_count_matches_duration"],
+      "required": [
+        "segments_under_20mb",
+        "files_under_100mb",
+        "frame_count_matches_duration"
+      ],
       "properties": {
-        "segments_under_20mb": { "type": "boolean" },
-        "files_under_100mb": { "type": "boolean" },
-        "frame_count_matches_duration": { "type": "boolean" }
+        "segments_under_20mb": {
+          "type": "boolean"
+        },
+        "files_under_100mb": {
+          "type": "boolean"
+        },
+        "frame_count_matches_duration": {
+          "type": "boolean"
+        },
+        "audio_duration_matches_video": {
+          "type": "boolean",
+          "description": "Present when there is audio."
+        }
       }
     }
   }

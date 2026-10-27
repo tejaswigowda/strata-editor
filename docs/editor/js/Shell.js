@@ -2038,6 +2038,25 @@ function Shell( editor ) {
 					return object;
 
 				},
+				// setRenderAudio('audio/narration.wav', { language: 'en', label: 'English' }) — the narration track a published render carries:
+				// a path relative to the scene file's folder in the repo (setRenderAudio(null) removes it). renderAudio() reads it.
+				renderAudio: () => ( editor.scene.userData && editor.scene.userData.renderAudio ) || null,
+				setRenderAudio: ( src, opts = {} ) => {
+
+					if ( src === null || src === undefined || src === '' ) {
+
+						delete editor.scene.userData.renderAudio;
+
+					} else {
+
+						if ( typeof src !== 'string' || /^[a-z]+:\/\//i.test( src ) || src.startsWith( '/' ) || src.includes( '..' ) ) throw new Error( 'setRenderAudio: pass a path inside the scene\'s repo folder, like "audio/narration.wav"' );
+						editor.scene.userData.renderAudio = { src, language: opts.language || 'en', label: opts.label || 'English' };
+
+					}
+					if ( editor.work ) editor.work.touch();
+					return editor.scene.userData.renderAudio || null;
+
+				},
 				// lint() → the objects that are not addressable, as text (empty string when all are).
 				lint: () => formatViolations( lintScene( editor.scene ), 40 ),
 				// requireLabels(true) — mark the scene so a commit is refused while any object is unnamed,

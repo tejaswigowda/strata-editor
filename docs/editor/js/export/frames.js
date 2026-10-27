@@ -4,9 +4,12 @@
 // reads a wall clock, so the same inputs give the same numbers everywhere.
 
 /** What the Render tab promises, and what it does not. One source: the UI and guides/TIME_SOURCES.md both quote these strings. */
+/** The two renderers, stated where someone tunes against the preview. Measured on ten matched frames: guides/TIME_SOURCES.md, "Preview and export". */
+export const RENDERER_COPY = 'Preview draws with WebGPU; export draws with WebGL2 (a separate, dedicated renderer). On a real GPU the two agreed closely on the scene tested (mean difference under 1 level in 255; edges and text anti-aliasing differ), but they are different renderers: judge a render by rendering it.';
+
 export const DETERMINISM_COPY = {
 	temporal: 'Frame n always shows timeline time n / fps, so duration and frame count are exact, and two renders of one timeline match to the frame on any machine.',
-	sameDevice: 'On the same device, repeat renders draw pixel-identical frames; the encoded file is byte-identical too with the software encoder, but not always with a hardware one.',
+	sameDevice: 'On the same device, most frames repeat exactly but not all: in a repeat-render test, frames inside a camera crossfade and the end card differed between two renders. Trust a render to be exact in time, not to be byte-reproducible.',
 	crossDevice: 'Across different GPUs and drivers, pixels may differ in the last bit; that is not promised.',
 	offline: 'Render (offline): every frame is drawn and captured, takes as long as it takes, exact timeline.',
 	preview: 'Preview (realtime): plays at what this machine manages, may drop frames, not reproducible.',

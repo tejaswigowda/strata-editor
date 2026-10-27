@@ -847,6 +847,20 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 
 }
 
+/** Bytes of a file in the scene's repo, by a path relative to the scene file's folder, at the commit the scene was synced to (else the branch). */
+export async function fetchRepoFile( relPath ) {
+
+	const cfg = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl || '' );
+	if ( ! parsed ) throw new Error( 'No repository configured' );
+	const file = cfg.scenePath || 'scene.json';
+	const branch = cfg.branch || 'main';
+	const dir = file.includes( '/' ) ? file.slice( 0, file.lastIndexOf( '/' ) + 1 ) : '';
+	const ref = getSyncedCommit( parsed, file, branch ) || branch;
+	return ghGetBytes( parsed, ref, dir + relPath, cfg.pat, 'authoring' );
+
+}
+
 /** Where a published render will point: the scene the Git tab is set to, and the commit it was last synced to. */
 export function publishSource() {
 
