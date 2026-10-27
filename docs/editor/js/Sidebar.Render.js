@@ -13,6 +13,9 @@ import { renderBaseName, DEFAULT_VIDEO_TEMPLATE, DEFAULT_SNAPSHOT_TEMPLATE } fro
 import { sourceFile } from './workState.js';
 import { applyCameraMove, clearCameraMove, MOVE_PRESETS } from './intelligence/cameraMoveEdit.js';
 import { Mp4Muxer } from './export/Mp4Muxer.js';
+import { createPublishPanel } from './PublishPanel.js';
+import { sceneHash } from './export/canonical.js';
+import { publishSource } from './Menubar.Git.js';
 import {
 	DETERMINISM_COPY, totalFrames as frameCount, frameTimestampUs, frameDurationUs, resolveRange, frameTimes,
 	avcCodecCandidates, targetBitrate, contractLine,
@@ -1153,6 +1156,10 @@ function SidebarRender( editor ) {
 	postRenderActions.style.cssText = 'margin-bottom:8px;';
 	outputArea.appendChild( postRenderActions );
 
+	// After a finished offline render: encode the ladder, review, and commit the publish set (see PublishPanel.js)
+	const publishPanel = createPublishPanel( editor );
+	outputArea.appendChild( publishPanel.dom );
+
 	function setProgress( fraction, message ) {
 
 		progressOuter.style.display = '';
@@ -1344,6 +1351,7 @@ function SidebarRender( editor ) {
 			glCanvas.height = height;
 
 			const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true } );
+			rendererInfo = { renderer: 'WebGLRenderer', device: renderer.capabilities.isWebGL2 ? 'webgl2' : 'webgl' };       // what drew these frames (the live view is WebGPU; the export is not)
 			restores.push( () => renderer.dispose() );
 			const output = new LinearOutput( renderer );
 			restores.push( () => output.dispose() );
@@ -1545,6 +1553,7 @@ function SidebarRender( editor ) {
 	async function startRender( kind = 'flat' ) {
 
 		if ( rendering ) return;
+		let rendererInfo = null;
 
 		const is360 = kind === '360';
 		const S = is360 ? pano : flat; // this render's own settings: the 360° tab's, or the Video tab's
@@ -1615,6 +1624,16 @@ function SidebarRender( editor ) {
 				return;
 
 			}
+
+		}
+
+		// The staleness check of a publish: the scene as it is when this render starts, and the commit it was last synced to.
+		publishPanel.clear();
+		let renderSceneHash = null;
+		const renderSource = publishSource();
+		if ( offline && ! is360 ) {
+
+			try { renderSceneHash = await sceneHash( editor.toJSON() ); } catch ( e ) { console.warn( 'Could not hash the scene for render.json', e ); }
 
 		}
 
@@ -2218,6 +2237,19 @@ function SidebarRender( editor ) {
 			const blob = new Blob( muxer.finish( is360 ? [ sphericalMetadataBox() ] : [] ), { type: 'video/mp4' } );
 
 			outputs.push( { blob, ext: 'mp4', isMp4: true } );
+
+			// A full-length, flat, offline render can be published: keep its encoded samples for the ladder, with what render.json must say about it
+			if ( ! is360 && ! partial ) {
+
+				publishPanel.setRender( {
+					width, height, fps, frames: range.count,
+					samples: muxer.samples, keyframes: muxer.keyframes.map( k => k - 1 ), avcC: muxer.avcC,
+					sceneHash: renderSceneHash, source: renderSource, renderer: ( rendererInfo && rendererInfo.renderer ) || 'WebGLRenderer', device: ( rendererInfo && rendererInfo.device ) || 'webgl2',
+					renderedAt: new Date().toISOString(), // metadata only: no frame time ever comes from a wall clock
+					cues: getCues().map( c => ( { start: c.start, end: c.end, text: c.text } ) ), burned: S.burnCheckbox.getValue(), baseName,
+				} );
+
+			}
 
 		}
 

@@ -424,12 +424,13 @@ async function withRateLimitRetry( request, onWait ) {
 
 }
 
-async function commitFiles( parsed, branch, token, files, message, onProgress ) {
+async function commitFiles( parsed, branch, token, files, message, onProgress, { createFrom = null } = {} ) {
 
 	const base = `/repos/${ parsed.owner }/${ parsed.repo }`;
 
 	// Resolve the branch head + its tree. A missing branch (empty repo / typo)
-	// surfaces as a clear error rather than a cryptic 404 later.
+	// surfaces as a clear error rather than a cryptic 404 later; with `createFrom`
+	// (the publish step's "renders" branch) it is created at that branch's head instead.
 	let ref;
 	try {
 
@@ -437,13 +438,11 @@ async function commitFiles( parsed, branch, token, files, message, onProgress ) 
 
 	} catch ( err ) {
 
-		if ( err.message && err.message.includes( '404' ) ) {
-
-			throw new Error( `Branch "${ branch }" not found — create it with an initial commit first.` );
-
-		}
-
-		throw err;
+		if ( ! ( err.message && err.message.includes( '404' ) ) ) throw err;
+		if ( ! createFrom ) throw new Error( `Branch "${ branch }" not found — create it with an initial commit first.` );
+		const from = await ghGet( `${ base }/git/ref/heads/${ createFrom }`, token );
+		await ghSend( 'POST', `${ base }/git/refs`, { ref: `refs/heads/${ branch }`, sha: from.object.sha }, token );
+		ref = { object: { sha: from.object.sha } };
 
 	}
 
@@ -845,6 +844,42 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 	onProgress( 1, '✓ Committed' );
 
 	return commit;
+
+}
+
+/** Where a published render will point: the scene the Git tab is set to, and the commit it was last synced to. */
+export function publishSource() {
+
+	const cfg = loadSettings();
+	const parsed = parseRepo( cfg.repoUrl || '' );
+	if ( ! parsed ) return null;
+	const file = cfg.scenePath || 'scene.json';
+	const branch = cfg.branch || 'main';
+	return { repo: `${ parsed.owner }/${ parsed.repo }`, file, branch, commit: getSyncedCommit( parsed, file, branch ) || cfg.commit || null, hasToken: !! cfg.pat };
+
+}
+
+// Commits a publish set (renders/<scene>/…) as ONE commit: every blob is uploaded first, then a single tree, a single commit and
+// one ref move, so a failure part-way leaves no partial publish on the branch. `target`: { repo?: 'owner/name' (default: the
+// scene's repo), branch, createFrom? } (createFrom: make the branch from that one if it does not exist yet).
+export async function commitPublishToRepo( files, message, target = {}, { onProgress = () => {} } = {} ) {
+
+	const cfg = loadSettings();
+	if ( ! cfg.pat ) throw new Error( 'A token is required to commit' );
+	const parsed = parseRepo( target.repo || cfg.repoUrl || '' );
+	if ( ! parsed ) throw new Error( 'No repository configured' );
+	const branch = ( target.branch || cfg.branch || 'main' ).trim();
+	if ( files.length === 0 ) throw new Error( 'Nothing to publish' );
+
+	onProgress( 0, 'Preparing files…' );
+	const prepared = files.map( f => ( { path: f.path, base64: u8ToBase64( f.bytes ), immutable: false } ) );
+	const commit = await commitFiles( parsed, branch, cfg.pat, prepared, ( message || '' ).trim() || 'Publish render', ( done, total, waitSeconds ) => {
+
+		onProgress( done / total, waitSeconds ? `GitHub rate limit — retrying in ${ waitSeconds }s (${ done }/${ total })…` : `Uploading ${ done }/${ total }…` );
+
+	}, { createFrom: target.createFrom || null } );
+	onProgress( 1, '✓ Committed' );
+	return { commit, repo: `${ parsed.owner }/${ parsed.repo }`, branch };
 
 }
 
