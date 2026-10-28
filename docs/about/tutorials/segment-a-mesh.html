@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cut a textured mesh into named parts — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: import a one-piece textured model, find its parts from the texture layout and the colours painted on it, cut it into separate named, classed meshes without losing a triangle, and check the cut. Built with the Strata JS Shell.">
+<!--
+	/about/tutorials/segment-a-mesh.html — a from-scratch, by-hand tutorial.
+	Every snippet is real Strata surface (JS Shell globals: plain three.js
+	geometry plus the editor's own commands). Paste each block into the Shell tab in
+	order. Static page, no build step, no third-party calls. The scene file is
+	avocado.json in tejaswigowda/test1.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure {
+		margin: 1.2em 0;
+	}
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+	iframe{
+		width: 100%;
+		height: 500px;
+		border: none;
+	}
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Cut a textured mesh into named parts</h1>
+	<iframe src="../../#repo=tejaswigowda/test1@487413ac24a2c29d186d936b67ca920530ca3de7&amp;file=avocado.json&amp;present=true"></iframe>
+
+	<p class="tagline">Models usually arrive as one mesh with one material, so nothing in the scene says "this is the seed". This tutorial imports an avocado half, looks for the evidence the file does carry (which pieces of the texture are separate patches, and what colours are painted on them), cuts the mesh into five separate meshes named <em>skin</em>, <em>pit</em>, <em>pit cavity</em>, <em>flesh</em> and <em>skin edge</em>, and checks the cut. Afterwards <code>$S('#Avocado_Pit')</code> or <code>$S('.flesh-cut')</code> reaches exactly those parts. Built with the JS Shell.</p>
+
+	<h2><span class="step">1</span> The idea, and how far it goes</h2>
+	<p class="lede">A mesh has no idea what its triangles are. Two things in the file do carry hints. <strong>UV islands:</strong> an artist unwraps a model into patches of one texture image, and the patches that touch no other patch (they share no vertices, once the exporter has split vertices along the seams) are often whole parts. <strong>Painted colour:</strong> inside one patch, a ring of orange and a ring of cream are different things even though the triangles are the same size. The method is to <em>look</em> at both, decide what each piece is, then cut by that decision. It is not automatic recognition: the names come from you (or from an AI that is shown the description), and the tool never loses a triangle or invents one that is not on the surface.</p>
+	<p><strong>When it works:</strong> one indexed mesh, with UVs and a base-colour texture, whose parts are laid out as separate islands or are painted in clearly different colours. The avocado is the good case. <strong>When it does not:</strong> a mesh with no UVs, or with only vertex colours or a flat colour (there is no evidence to read); a part that shares an island and a colour with its neighbour (a boundary no one painted cannot be found); and a model whose islands are not parts. The same description, run on a second textured sample model (a toy with one yellow body), gave ten islands of which most were pieces of the same yellow body, so island to part would have produced ten meaningless names. A person merges them, which the plan allows (<code>island</code> takes a list), and this is the real limit: the method makes a decision cheap to check, it does not make the decision.</p>
+	<p><strong>The 3D advantage.</strong> The seed, the flesh and the skin are one fruit; the parts are only separable because the object is three-dimensional data, and you can isolate each one, look at it from behind, and see where the cut really is. A flat picture of the fruit would give you only the colours.</p>
+
+	<h2><span class="step">2</span> Import the model</h2>
+	<p class="lede">The model is the <em>Avocado</em> sample from the Khronos glTF sample models (<a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/main/2.0/Avocado/glTF-Binary/Avocado.glb">Avocado.glb</a>), made by Microsoft and released under <strong>CC0 1.0</strong> (public domain dedication); retrieved 27 October 2026, 8.3 MB, one mesh of 682 triangles and three 2048 × 2048 textures. Download it, then use <strong>File &rarr; Import</strong> (or drop it in the viewport). Accept the import dialog's defaults. The scene now has one object, <code>Avocado</code>, with one material.</p>
+
+	<h2><span class="step">3</span> The tool: SEG</h2>
+	<p class="lede">One block defines <code>SEG</code>, five small functions on <code>globalThis</code> so that the following blocks (the Shell keeps no variables between pastes) can use them. <code>SEG.islands</code> finds the connected pieces of a mesh. <code>SEG.describe</code> prints each piece's size, where it sits in the texture, how big it is in space and its main colours (a small, deterministic k-means over colours sampled across each triangle). <code>SEG.split</code> cuts by a plan. <code>SEG.preview</code> gives every part its own flat colour so you can see the cut, and <code>SEG.restore</code> puts the textured material back.</p>
+	<p>Two details matter. A flat patch is made of a few large triangles, far larger than the rings painted on it, so a part that is divided <em>by colour</em> is first subdivided (each triangle into 4<sup>n</sup>, the same surface and texture, only more triangles) and then each small triangle goes to the palette colour nearest the texture at its centre. And the cut refuses to run if a piece of the mesh has no destination or is used twice: <em>every triangle lands in exactly one part</em>. The new meshes share the original material, so the model looks exactly as before, and the original mesh, with the empty wrapper nodes the importer left around it, is replaced in one undoable step.</p>
+	<pre><code>// SEG: cut one textured mesh into named, addressable parts.
+// Meshes arrive as a single object with a single material, so nothing in them says "this is the pit". Two things in the file do, though:
+//   1. the UV islands: connected pieces of surface that the texture artist laid out as separate patches of the texture
+//      (an exporter splits vertices along a UV seam, so a piece is a set of triangles joined by shared vertices);
+//   2. the colours painted on the texture: inside one island, a ring of orange and a ring of cream are different things.
+// SEG.describe() lists both, so you can look and decide what each one is. SEG.split() then cuts by your decisions, and never loses a triangle.
+const SEG = globalThis.SEG = {};
+
+// the colour of the texture at a point (u, v), read from a copy of the image drawn once
+SEG.reader = map =&gt; {
+  const img = map.image, w = img.width, h = img.height;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(img, 0, 0);
+  const px = cx.getImageData(0, 0, w, h).data;
+  return (u, v) =&gt; {
+    u -= Math.floor(u); v -= Math.floor(v);
+    const x = Math.min(w - 1, Math.floor(u * w)), y = Math.min(h - 1, Math.floor((map.flipY ? 1 - v : v) * h)), p = (y * w + x) * 4;
+    return [px[p], px[p + 1], px[p + 2]];
+  };
+};
+
+// the triangles of each island, largest first
+SEG.islands = geometry =&gt; {
+  const idx = geometry.index.array, n = idx.length / 3;
+  const par = Int32Array.from({ length: geometry.attributes.position.count }, (_, i) =&gt; i);
+  const find = a =&gt; { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+  for (let t = 0; t &lt; n; t++) { const r = find(idx[t * 3]); par[find(idx[t * 3 + 1])] = r; par[find(idx[t * 3 + 2])] = r; }
+  const by = new Map();
+  for (let t = 0; t &lt; n; t++) { const r = find(idx[t * 3]); if (!by.has(r)) by.set(r, []); by.get(r).push(t); }
+  return [...by.values()].sort((a, b) =&gt; b.length - a.length);
+};
+
+// colours sampled across a triangle's face on a small grid of barycentric points, so that even a few large triangles give many samples
+const samples = (uv, idx, t, read, k = 5) =&gt; {
+  const a = idx[t * 3], b = idx[t * 3 + 1], c = idx[t * 3 + 2], out = [];
+  for (let i = 0; i &lt;= k; i++) for (let j = 0; i + j &lt;= k; j++) {
+    const x = i / k, y = j / k, z = 1 - x - y;
+    out.push(read(uv.getX(a) * x + uv.getX(b) * y + uv.getX(c) * z, uv.getY(a) * x + uv.getY(b) * y + uv.getY(c) * z));
+  }
+  return out;
+};
+
+// k-means on colours, started from the colour farthest from those already chosen, so the same input always gives the same answer
+const kmeans = (cols, k) =&gt; {
+  const d2 = (p, q) =&gt; (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+  const c = [cols[0]];
+  while (c.length &lt; k) c.push(cols.reduce((best, p) =&gt; (Math.min(...c.map(q =&gt; d2(p, q))) &gt; Math.min(...c.map(q =&gt; d2(best, q))) ? p : best), cols[0]));
+  let groups = [];
+  for (let it = 0; it &lt; 12; it++) {
+    groups = c.map(() =&gt; []);
+    cols.forEach(p =&gt; groups[c.reduce((bi, q, i) =&gt; (d2(p, q) &lt; d2(p, c[bi]) ? i : bi), 0)].push(p));
+    groups.forEach((g, i) =&gt; { if (g.length) c[i] = [0, 1, 2].map(a =&gt; g.reduce((s, p) =&gt; s + p[a], 0) / g.length); });
+  }
+  return c.map((m, i) =&gt; ({ rgb: m.map(Math.round), share: +(groups[i].length / cols.length).toFixed(2) })).sort((a, b) =&gt; b.share - a.share);
+};
+
+// what is in a mesh: each island's size, where it sits in the texture and in space, and its main colours
+SEG.describe = (node, k = 3) =&gt; {
+  const g = node.geometry, idx = g.index.array, uv = g.attributes.uv, pos = g.attributes.position;
+  const read = SEG.reader(node.material.map);
+  return SEG.islands(g).map((ts, i) =&gt; {
+    const cols = ts.flatMap(t =&gt; samples(uv, idx, t, read)), lo = [9, 9, 9], hi = [-9, -9, -9], u = [9, -9], v = [9, -9];
+    ts.forEach(t =&gt; { for (let q = 0; q &lt; 3; q++) {
+      const a = idx[t * 3 + q]; u[0] = Math.min(u[0], uv.getX(a)); u[1] = Math.max(u[1], uv.getX(a)); v[0] = Math.min(v[0], uv.getY(a)); v[1] = Math.max(v[1], uv.getY(a));
+      for (let c = 0; c &lt; 3; c++) { const p = [pos.getX(a), pos.getY(a), pos.getZ(a)][c]; lo[c] = Math.min(lo[c], p); hi[c] = Math.max(hi[c], p); }
+    } });
+    return `island ${i}: ${ts.length} triangles, texture u ${u.map(x =&gt; x.toFixed(2))} v ${v.map(x =&gt; x.toFixed(2))}, size ${hi.map((x, c) =&gt; (x - lo[c]).toFixed(3))}, colours ${kmeans(cols, k).map(c =&gt; `rgb(${c.rgb}) ${Math.round(c.share * 100)}%`).join('  ')}`;
+  }).join('\n');
+};
+
+// cut by a plan:
+//   { group, classes, parts: [ { name, island, classes },                                   a whole island (or a list of them) becomes one mesh
+//                              { island, subdivide, palette: [ { name, color: [r, g, b], classes } ] } ] }   an island is divided by colour; entries
+//                                                                                                      with the same name make one part
+// A palette part is first subdivided (each triangle becomes 4^subdivide smaller ones, same surface, same texture) because the triangles of a flat
+// patch are far bigger than the rings painted on it; then each small triangle goes to the palette colour nearest the texture colour at its centre.
+SEG.split = (node, plan) =&gt; {
+  const g = node.geometry, idx = g.index.array, A = g.attributes, names = Object.keys(A);
+  const islands = SEG.islands(g), read = SEG.reader(node.material.map);
+  const used = new Set();
+  const vertex = i =&gt; names.flatMap(n =&gt; Array.from({ length: A[n].itemSize }, (_, c) =&gt; A[n].array[i * A[n].itemSize + c]));
+  const tri = t =&gt; [0, 1, 2].map(k =&gt; vertex(idx[t * 3 + k]));
+  const mid = (a, b) =&gt; a.map((x, k) =&gt; (x + b[k]) / 2);
+  const subdivide = (t, n) =&gt; { if (!n) return [t]; const [a, b, c] = t, ab = mid(a, b), bc = mid(b, c), ca = mid(c, a); return [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]].flatMap(s =&gt; subdivide(s, n - 1)); };
+  const UV = names.slice(0, names.indexOf('uv')).reduce((s, n) =&gt; s + A[n].itemSize, 0);
+  const colour = t =&gt; read((t[0][UV] + t[1][UV] + t[2][UV]) / 3, (t[0][UV + 1] + t[1][UV + 1] + t[2][UV + 1]) / 3);
+  const d2 = (p, q) =&gt; (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+
+  const made = [];                                           // [name, classes, triangles]
+  for (const part of plan.parts) {
+    const ids = [].concat(part.island);
+    ids.forEach(i =&gt; { if (!islands[i]) throw new Error('there is no island ' + i); if (used.has(i)) throw new Error('island ' + i + ' is used twice'); used.add(i); });
+    const ts = ids.flatMap(i =&gt; islands[i]).map(tri);
+    if (!part.palette) { made.push([part.name, part.classes, ts]); continue; }
+    const bins = new Map();                                  // several palette colours may share one name (a part with a gradient in it)
+    part.palette.forEach(p =&gt; { if (!bins.has(p.name)) bins.set(p.name, { classes: p.classes, tris: [] }); });
+    ts.flatMap(t =&gt; subdivide(t, part.subdivide || 0)).forEach(t =&gt; { const c = colour(t); bins.get(part.palette.reduce((best, p) =&gt; (d2(c, p.color) &lt; d2(c, best.color) ? p : best), part.palette[0]).name).tris.push(t); });
+    bins.forEach((bin, name) =&gt; { if (bin.tris.length) made.push([name, bin.classes, bin.tris]); });
+  }
+  if (used.size !== islands.length) throw new Error('every island must go to a part: ' + (islands.length - used.size) + ' left over');
+
+  const group = new Group();
+  group.name = plan.group; group.userData.customClasses = plan.classes;
+  node.updateWorldMatrix(true, false); node.matrixWorld.decompose(group.position, group.quaternion, group.scale);   // the new group sits where the mesh was in the world
+  for (const [name, classes, tris] of made) {
+    const geo = new THREE.BufferGeometry(), n = tris.length * 3; let at = 0;
+    names.forEach(an =&gt; {
+      const a = A[an], arr = new a.array.constructor(n * a.itemSize);
+      tris.forEach((t, i) =&gt; t.forEach((v, k) =&gt; { for (let c = 0; c &lt; a.itemSize; c++) arr[(i * 3 + k) * a.itemSize + c] = v[at + c]; }));
+      at += a.itemSize; geo.setAttribute(an, new THREE.BufferAttribute(arr, a.itemSize, a.normalized));
+    });
+    geo.setIndex([...Array(n).keys()]); geo.computeBoundingBox(); geo.computeBoundingSphere();
+    const m = new Mesh(geo, node.material);                  // the same material, so the object looks exactly as it did
+    m.name = name; m.castShadow = node.castShadow; m.receiveShadow = node.receiveShadow; m.userData.customClasses = classes;
+    group.add(m);
+  }
+  // the mesh goes, and so do the empty wrappers the importer left around it (a file name, a root node), so nothing nameless is left behind
+  let gone = node;
+  while (gone.parent &amp;&amp; gone.parent !== editor.scene &amp;&amp; gone.parent.children.length === 1) gone = gone.parent;
+  editor.execute(new RemoveObjectCommand(editor, gone));
+  editor.execute(new AddObjectCommand(editor, group));
+  return made.map(([n, , t]) =&gt; n + ': ' + t.length + ' triangles').join(' | ');
+};
+// check a cut: give every part of a group its own flat colour (one undoable command each), then SEG.restore() puts the textured material back
+const PREVIEW = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#008080', '#9a6324'];
+SEG.preview = group =&gt; {
+  SEG.saved = SEG.saved || new Map();
+  group.children.forEach((m, i) =&gt; {
+    if (!SEG.saved.has(m)) SEG.saved.set(m, m.material);
+    editor.execute(new SetMaterialCommand(editor, m, new MeshBasicMaterial({ color: PREVIEW[i % PREVIEW.length] })));
+  });
+  return group.children.map((m, i) =&gt; PREVIEW[i % PREVIEW.length] + '  ' + m.name).join('\n');
+};
+SEG.restore = () =&gt; { SEG.saved.forEach((material, m) =&gt; editor.execute(new SetMaterialCommand(editor, m, material))); SEG.saved.clear(); return 'textured materials restored'; };
+'SEG ready: ' + Object.keys(SEG).join(', ')</code></pre>
+
+	<h2><span class="step">4</span> Look before you cut</h2>
+	<p class="lede">Ask for the description of the mesh, with four colours per island:</p>
+	<pre><code>// look before cutting: every island of the mesh, with its size and its main colours
+const mesh = $S('#Avocado').nodes[0];
+SEG.describe(mesh, 4)</code></pre>
+	<pre><code>island 0: 483 triangles, texture u 0.01,0.67 v 0.01,0.76, size 0.043,0.063,0.022, colours rgb(51,99,7) 51%  rgb(70,118,26) 28%  rgb(93,148,44) 20%  rgb(97,172,4) 1%
+island 1: 158 triangles, texture u 0.70,0.97 v 0.00,0.33, size 0.019,0.027,0.006, colours rgb(126,62,19) 36%  rgb(187,127,56) 32%  rgb(159,90,34) 23%  rgb(210,159,88) 9%
+island 2: 41 triangles, texture u 0.54,0.98 v 0.35,1.00, size 0.042,0.061,0.000, colours rgb(52,107,2) 39%  rgb(203,227,119) 29%  rgb(247,212,86) 18%  rgb(113,185,21) 14%</code></pre>
+	<p>Read it like evidence. Island 0 is the biggest (483 triangles), 0.043 × 0.063 × 0.022 in size, and dark green throughout: the <strong>skin</strong>. Island 1 is a small patch, 0.019 × 0.027 × 0.006, all brown: the <strong>pit</strong>. Island 2 has 41 triangles and a thickness of 0.000, so it is flat; its colours are dark green, cream, yellow and lime: the <strong>cut face</strong>, which is painted with a dark rim, a cream and lime flesh and a yellow hollow. Looking at the texture image itself agrees: a green sphere-like patch, a brown egg, and a half fruit.</p>
+	<p>Units are the model's own: the fruit is about 0.06 tall, so the sizes are in metres (6 cm). The unit is a property of the file, not of this tutorial.</p>
+
+	<h2><span class="step">5</span> Cut by what you decided</h2>
+	<p class="lede">Islands 0 and 1 become whole parts. Island 2, the cut face, is divided by colour: yellow and orange to the cavity the seed sat in, cream and lime to the flesh, dark green to the edge where the peel meets the cut. Several palette colours can share one name, because the cavity has a gradient. Each part gets a name and classes: <code>skin</code> and <code>peel</code>, <code>pit</code> and <code>seed</code>, and so on, with <code>flesh-cut</code> on the three parts that are the cut face, so one class selects them together.</p>
+	<pre><code>// cut the avocado. Island 0 is the big shell (the outside), island 1 the small egg-shaped patch (the seed), island 2 the flat half-fruit patch (the cut face).
+// The cut face is divided by colour into the hollow around the seed (yellow and orange), the flesh (cream and lime) and the dark edge where the peel meets it.
+const mesh = $S('#Avocado').nodes[0];
+SEG.split(mesh, {
+  group: 'Avocado_Fruit', classes: ['fruit', 'avocado'],
+  parts: [
+    { island: 0, name: 'Avocado_Skin', classes: ['skin', 'peel'] },
+    { island: 1, name: 'Avocado_Pit', classes: ['pit', 'seed'] },
+    { island: 2, subdivide: 4, palette: [
+      { name: 'Avocado_Pit_Cavity', classes: ['cavity', 'flesh-cut'], color: [247, 212, 86] },
+      { name: 'Avocado_Pit_Cavity', classes: ['cavity', 'flesh-cut'], color: [245, 175, 70] },
+      { name: 'Avocado_Flesh', classes: ['flesh', 'edible', 'flesh-cut'], color: [203, 227, 119] },
+      { name: 'Avocado_Flesh', classes: ['flesh', 'edible', 'flesh-cut'], color: [113, 185, 21] },
+      { name: 'Avocado_Skin_Edge', classes: ['skin', 'peel-edge', 'flesh-cut'], color: [52, 107, 2] }
+    ] }
+  ]
+})</code></pre>
+	<pre><code>Avocado_Skin: 483 triangles | Avocado_Pit: 158 triangles | Avocado_Pit_Cavity: 2286 triangles | Avocado_Flesh: 6195 triangles | Avocado_Skin_Edge: 2015 triangles</code></pre>
+	<p>The cut face went from 41 triangles to 10,496 (41 × 4<sup>4</sup>), and the whole fruit from 682 to 11,137: that is the price of a boundary that follows the paint. A smaller subdivision is cheaper and the boundary is more ragged.</p>
+
+	<h2><span class="step">6</span> Check the cut</h2>
+	<p class="lede">A cut is only as good as the decision behind it, so look at it. <code>SEG.preview</code> paints each part a different flat colour (one undoable command per part); <code>isolate</code> hides everything but one selector.</p>
+	<pre><code>SEG.preview($S('#Avocado_Fruit').nodes[0])        // each part its own flat colour
+isolate('#Avocado_Pit')                             // only the pit
+showAll()
+SEG.restore()                                       // the textured material, back</code></pre>
+	<figure>
+		<img src="screenshots/avo-whole.png" alt="The avocado half, textured: green skin, cream and lime flesh and a brown seed, seen straight on." loading="lazy">
+		<figcaption>Before and after look the same: the five parts share the original material.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/avo-parts.png" alt="The same avocado with each part painted a flat colour: orange flesh, a blue ring around a green seed, and a thin purple rim." loading="lazy">
+		<figcaption>Previewed: orange is the flesh, blue the cavity around the seed, green the seed, purple the thin edge. The boundary between the cavity and the flesh follows the paint, so it is ragged.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/avo-pit.png" alt="Only the brown seed is visible." loading="lazy">
+		<figcaption>Isolated: the pit.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/avo-cavity.png" alt="Only a yellow-orange oval patch is visible, with a ragged edge." loading="lazy">
+		<figcaption>Isolated: the pit cavity, the yellow-orange hollow where the seed sat.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/avo-flesh.png" alt="Only a ring of cream and lime green flesh is visible, hollow in the middle." loading="lazy">
+		<figcaption>Isolated: the flesh, a ring that the cavity and the pit fill.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/avo-edge.png" alt="Only a few thin dark green lines are visible along the edge of the fruit." loading="lazy">
+		<figcaption>Isolated: the skin edge, a thin dark green rim, nearly invisible on its own.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/avo-skin.png" alt="Only the outside of the fruit is visible, seen from behind: a dark green skin." loading="lazy">
+		<figcaption>Isolated, from behind: the skin, the outer shell, which hides the cut face from this side.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/avo-back.png" alt="The avocado from behind, a whole dark green pear shape." loading="lazy">
+		<figcaption>From behind there is no cut face: the fruit is closed on this side.</figcaption>
+	</figure>
+
+	<h2><span class="step">7</span> Lights, and the gate</h2>
+	<p class="lede">A directional light and a soft fill, named and classed like everything else, and then <code>requireLabels(true)</code>. That marks the scene: from now on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. This is the second reason to name the parts well: the importer's own wrapper nodes had no class, and the block would not run until they were gone, which is why <code>SEG.split</code> removes them with the mesh.</p>
+	<pre><code>// a light to see it by, and the names and classes that make every object reachable
+const sun = new THREE.DirectionalLight(0xfff1dd, 2.6); sun.name = 'KeyLight'; sun.position.set(0.4, 0.8, 0.9); sun.userData.customClasses = ['light'];
+const sky = new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.4); sky.name = 'FillLight'; sky.userData.customClasses = ['light'];
+editor.execute(new AddObjectCommand(editor, sun));
+editor.execute(new AddObjectCommand(editor, sky));
+requireLabels(true)      // from here on a commit is refused while any object is unnamed, duplicated or classless</code></pre>
+
+	<h2><span class="step">8</span> A view to open with</h2>
+	<p class="lede">The camera, straight on, with the fruit filling the middle of the frame. The scene is at a scale of centimetres, so the camera is about 11 cm away.</p>
+	<pre><code>// the view the scene opens with: the cut face, straight on, the fruit filling the middle of the frame
+const FRONT = [0, 0.032, 0.115], AIM = [0, 0.031, 0];
+editor.camera.position.set(...FRONT);
+editor.controls.center.set(...AIM);
+editor.camera.lookAt(...AIM);
+editor.signals.cameraChanged.dispatch(editor.camera);
+'camera at ' + FRONT</code></pre>
+
+	<h2><span class="step">9</span> Use the parts</h2>
+	<p class="lede">The point of the exercise is what you can now say:</p>
+	<pre><code>$S('#Avocado_Pit')                    // the seed, one mesh
+$S('.flesh-cut')                      // the three parts that make the cut face
+$S('.skin')                           // the outer skin and its thin edge on the cut face
+$S('.edible')                         // just the flesh</code></pre>
+	<p>Anything that works on a selector now works on a part: recolour the flesh, hide the skin, animate the pit away, or let an AI edit "make the seed bigger" and have it resolve to a mesh instead of a guess.</p>
+	<div class="note"><strong>Save it.</strong> Commit from the Git tab. The scene is <a href="../../#repo=tejaswigowda/test1&amp;file=avocado.json">avocado.json</a> in <code>tejaswigowda/test1</code>, with the three textures stored beside it. The player at the top is pinned to a commit (<code>@487413a</code>), which never goes stale; the link in this note reads the branch head.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, in this order, into an empty scene after importing Avocado.glb with the dialog's defaults; the scene was committed and loaded again from that commit, and read back: one material (shared by all five parts), the group and its five meshes with the triangle counts above (483, 158, 2,286, 6,195 and 2,015), every object named and classed, and the scene marked with <code>requireLabels</code>. The 641 triangles of the skin and the pit were carried over unchanged and the cut face's 41 became 41 &times; 256 = 10,496, so the five parts add up to 641 + 10,496 = 11,137 (<code>SEG.split</code> refuses to run when a piece of the mesh has no destination). The screenshots are frames of that scene, with the editor's controls hidden. The same description and split were run on a second textured sample model to test the limits stated in step 1; nothing from it is part of this scene. Nothing here was run through a video render. The boundary between cavity, flesh and edge follows the colours in the texture, not an anatomical measurement, so it is as ragged as the paint.</div>
+	<div class="note" id="source"><strong>The model.</strong> Avocado.glb, from the <a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models">Khronos glTF Sample Models</a> archive, made by Microsoft, CC0 1.0 Universal (public domain dedication), retrieved 27 October 2026. The segmented scene is a derivative of it and is committed to a public repository on the same terms.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

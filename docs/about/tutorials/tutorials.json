@@ -63,6 +63,15 @@
 		"embed": "#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&file=molecule-shapes.json&present=true"
 	},
 	{
+		"title": "Cut a textured mesh into named parts",
+		"href": "segment-a-mesh.html",
+		"group": "Scenes and games",
+		"blurb": "Import a one-piece avocado, read the evidence the file carries (separate patches of the texture, and the colours painted on them), cut it into five named, classed meshes (skin, pit, cavity, flesh, edge) without losing a triangle, and check the cut. Says plainly where the method stops working. Built with the JS Shell.",
+		"thumb": "screenshots/thumbs/segment-a-mesh.jpg",
+		"desc": "Describe a mesh's UV islands and painted colours, decide what each piece is, subdivide and sort the cut face by colour, replace the one mesh with a named group, preview each part in a flat colour and isolate it, then select parts by name or class \u2014 all with the JS Shell, on the CC0 Khronos Avocado sample.",
+		"embed": "#repo=tejaswigowda/test1@487413ac24a2c29d186d936b67ca920530ca3de7&file=avocado.json&present=true"
+	},
+	{
 		"title": "Build a night scene from scratch",
 		"href": "build-a-scene.html",
 		"group": "Scenes and games",
