@@ -372,7 +372,7 @@ Math.random = mulberry(UUID_SEED);
 try { /* ...the whole build... */ } finally { Math.random = realRandom; }</code></pre>
 
 	<h2><span class="step">9</span> Export it and read the file back</h2>
-	<p class="lede">Open the <strong>Export</strong> tab and click the <strong>GLB</strong> label. Then check the file itself, not the editor's idea of it. This reads a GLB's JSON chunk from a file on disk; save it as <code>inspect-glb.mjs</code> and run <code>node inspect-glb.mjs scene.glb</code>:</p>
+	<p class="lede">Open the <strong>Export</strong> tab and click the <strong>GLB</strong> label. Then check the file itself, not the editor's idea of it. This reads a GLB's JSON chunk from a file on disk; save it as <code>inspect-glb.mjs</code> and run <code>node inspect-glb.mjs &lt;the downloaded file&gt;</code> (the download is named after the scene: the file it was loaded from, the scene's own name, or the one thing in it, and <code>scene.glb</code> only when none of those says anything):</p>
 	<pre><code>import { readFileSync } from 'node:fs';
 const b = readFileSync(process.argv[2]);
 const j = JSON.parse(b.toString('utf8', 20, 20 + b.readUInt32LE(12)));   // the JSON chunk follows the 12-byte header and 8-byte chunk header

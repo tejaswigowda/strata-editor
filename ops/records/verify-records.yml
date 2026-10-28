@@ -1,0 +1,61 @@
+# Records CI — copy this file to .github/workflows/verify-records.yml in the repository that holds the records (for example tejaswigowda/test1).
+#
+# NOT YET RUN ON GITHUB. The script it calls (scripts/verify-records.mjs) has been run locally: it validates the schema, re-fetches every source and
+# checks its size and sha256, and checks a review PR against its diff. The workflow around it is plain checkout / setup-node / run.
+#
+# What it enforces (docs/editor/js/export/records.js is the definition; guides/MESH_SEGMENT.md explains it):
+#   - every record's source is the file itself, pinned to a commit, with its sha256 and size;
+#   - every source is RE-FETCHED and hashed: the only thing that will ever tell you that an upstream asset changed. This runs on every PR that touches a
+#     record and once a week, because upstream changes with nobody opening a PR;
+#   - a record carries a verification block, no camera / controls / renderer settings / history, a recorded packaging choice, and is in canonical form
+#     (so opening it in the editor, orbiting and saving changes nothing);
+#   - a review PR appends exactly one review, by the PR's author, that matches what its diff changed (a confirmation appends too).
+name: verify-records
+
+on:
+  pull_request:
+    paths: [ '**/*.json' ]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  records:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: tejaswigowda/threejs.editor.enhanced, path: strata }     # the editor repo: the schema and the script live there. Pin a commit here for a record set you want frozen.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: validate every record, and re-fetch and hash its source
+        run: |
+          files=$(grep -l '"segmentation"' *.json 2>/dev/null || true)
+          if [ -z "$files" ]; then echo "no records"; exit 0; fi
+          node strata/scripts/verify-records.mjs $files
+
+  review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/checkout@v4
+        with: { repository: tejaswigowda/threejs.editor.enhanced, path: strata }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: a PR that changes a record's labels must be a review, and the review must match its diff
+        env:
+          BASE: origin/${{ github.base_ref }}
+          AUTHOR: '@${{ github.event.pull_request.user.login }}'
+        run: |
+          changed=$(git diff --name-only "$BASE"...HEAD -- '*.json' | xargs -r grep -l '"segmentation"' 2>/dev/null || true)
+          for f in $changed; do
+            if ! git cat-file -e "$BASE:$f" 2>/dev/null; then echo "$f is new: seeded, nothing to review"; continue; fi
+            git show "$BASE:$f" > /tmp/base.json
+            node strata/scripts/verify-records.mjs --review /tmp/base.json "$f" --by "$AUTHOR"
+          done

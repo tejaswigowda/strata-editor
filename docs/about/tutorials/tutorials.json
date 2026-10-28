@@ -66,10 +66,17 @@
 		"title": "Cut any textured mesh into named parts",
 		"href": "segment-any-mesh.html",
 		"group": "Scenes and games",
-		"blurb": "The editor's SEG tool on any one-piece textured model: read the UV islands and painted colours, decide what each piece is, and cut it into named, classed meshes in one undo step. An avocado is the easy case, a toy duck the hard one (ten islands, six parts), and the page says where the method stops working. Built with the JS Shell.",
+		"blurb": "The editor's SEG tool on any one-piece textured model: read the UV islands and painted colours, decide what each piece is, and cut it into named, classed meshes in one undo step. An avocado is the easy case, a toy duck the hard one (ten islands, six parts), an animated fox shows a skinned mesh cut with its skeleton and clips intact, and the page says where the method stops working. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/segment-any-mesh.jpg",
-		"desc": "Describe a mesh's islands and colours with SEG.describe, turn the evidence into a table of decisions, cut with SEG.split (whole islands, merged islands, islands divided by colour), check with SEG.preview and isolate, tidy the importer's wrapper, switch on the labelling gate, and select the parts by name or class \u2014 with the CC0 Avocado and the SCEA-licensed Duck from the Khronos samples.",
+		"desc": "Describe a mesh's islands and colours with SEG.describe, turn the evidence into a table of decisions, cut with SEG.split (whole islands, merged islands, islands divided by colour, and a skinned mesh whose parts share the skeleton), check with SEG.preview and isolate, tidy the importer's wrapper or class the rig, switch on the labelling gate, and select the parts by name or class \u2014 with the CC0 Avocado, the SCEA-licensed Duck and the CC0 / CC BY Fox from the Khronos samples.",
 		"embed": "#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=duck.json&present=true"
+	},
+	{
+		"title": "Cut a scene into named parts",
+		"href": "segment-a-scene.html",
+		"group": "Scenes and games",
+		"blurb": "SEG on a furnished room: one mesh, 538 texture islands, no part that is one island. SEG joins the islands that touch into components, measures them in the world frame, places everything you did not name on the nearest anchor you did, and checks the cut; you supply the anchors and their names. Says where the checks fired on the first attempt. Built with the JS Shell.",
+		"desc": "Read a scene's components with SEG.describe, name the anchors and say what each name rests on, preview where everything would go with SEG.attach and what is too far to attach, cut with SEG.split from anchors alone, read the four post-cut assertions (oversize, engulfing, absorbed, orphan sink), and replay the recorded plan \u2014 on a CC Attribution-NonCommercial Sketchfab room that is not republished here."
 	},
 	{
 		"title": "Cut an avocado into named parts, building the tool by hand",

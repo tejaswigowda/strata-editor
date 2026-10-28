@@ -112,15 +112,18 @@ findNear(mesh, radius)     // objects within radius world-units
 ## Cutting a mesh into named parts (`SEG`)
 
 ```js
-SEG.describe('#Duck_mesh')             // one line per UV island: triangles, size, centre across the mesh, main colours
-SEG.split('#Duck_mesh', { group, classes, source: { url, licence, attribution }, parts: [ { island: 0, name, classes }, { island: [6, 8], name, classes },
+SEG.describe('#Duck_mesh')             // one line per UV island: triangles, size, centre across the mesh, main colours (on a scene: per component, in the world frame)
+SEG.source(rawUrl, { licence, attribution }).then( s => { window.src = s } )   // fetch the original file and hash it: the pinned source block a plan needs
+SEG.split('#Duck_mesh', { group, classes, source: window.src, parts: [ { island: 0, name, classes }, { island: [6, 8], name, classes },
                           { island: 2, subdivide: 4, palette: [ { name, classes, color: [r,g,b] }, … ] } ] })
+SEG.components('#room')  /  SEG.attach('#room', anchors, opts)   // a scene: the pieces, and where the unnamed ones would go; SEG.split takes anchors: […]
 SEG.byMaterial('#mesh', { group, source })   // a mesh with several materials: one part per material
 SEG.replay('#mesh', record)                  // cut again from the plan the asset recorded
 SEG.preview('#Duck')  /  SEG.restore()       // a flat colour per part, to check the cut, and back
+asRecord()  /  checkRecord()  /  recordView()   // keep the scene as a dataset record: saved without camera, controls, renderer settings or history; what CI would say
 ```
 
-A one-piece textured model becomes named, classed meshes in one group (one undo step); every island must go to exactly one part, and the asset keeps the plan, the report it was made from, and the source, licence and modifications (`source` is required). Refuses skinned meshes, several materials and morph targets. Full reference, limits and examples in [MESH_SEGMENT.md](MESH_SEGMENT.md).
+A one-piece textured model becomes named, classed meshes in one group (one undo step); every island must go to exactly one part, and the asset keeps the plan, the report it was made from, and the source (the exact file, pinned to a commit and hashed), licence and modifications (`source` is required), and a verification block that starts `seeded`. Cuts skinned meshes too (every part keeps the original skeleton and its clips; `subdivide` is refused on them), and refuses several materials (use `SEG.byMaterial`) and morph targets. The Shell has no top-level `await`; a promise (like `SEG.source`'s) shows its result when it settles. Full reference, limits and examples in [MESH_SEGMENT.md](MESH_SEGMENT.md).
 
 ## Spatial helpers (world-space, via `Box3`)
 
@@ -185,7 +188,7 @@ showAll()                                // undo an isolate
 
 // ── History + exporters (File-menu twins) ──
 undo()  redo()  clearScene()
-exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection, else whole scene
+exportGLB()  exportGLTF()  exportOBJ()  exportSTL()  exportPLY()   // selection, else whole scene; the file is named after the selection, the scene's file, or what is in it (Duck_Beak.glb, duck.glb), not scene.glb
 ```
 
 ### Parity table: UI action → shell call

@@ -17,6 +17,7 @@ import { findSharedMaterials } from './intelligence/editOps.js';
 import { withoutBakedTextures } from './scene/serialize.js';
 import { applyStoredTheme } from './Theme.js';
 import { settleBakedOutline } from './toon/bakedOutlines.js';
+import { isRecordScene, canonicalForm, framing, FRAMING } from './export/records.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 
@@ -770,7 +771,10 @@ Editor.prototype = {
 	fromJSON: async function ( json ) {
 
 		var loader = new THREE.ObjectLoader();
-		var camera = await loader.parseAsync( json.camera );
+
+		// A record (scene.userData.record, see export/records.js) is saved without a camera, controls, renderer settings or history: how the last person looked at
+		// it is not part of it, and would put a camera matrix in every diff. Its view is derived from the scene below.
+		var camera = json.camera !== undefined ? await loader.parseAsync( json.camera ) : null;
 
 		// `json.camera` is whichever camera the VIEWPORT was looking through at
 		// save time (`viewportCamera.toJSON()` in toJSON()) — that may be a genuine
@@ -783,9 +787,9 @@ Editor.prototype = {
 		// the default camera's entry and the "no scene camera" option vanished from
 		// the viewport camera dropdown. Which camera to actually VIEW through is
 		// re-resolved after the scene (and its cameras) exist again, below.
-		const savedViewportCameraUuid = camera.uuid;
+		const savedViewportCameraUuid = camera ? camera.uuid : this.camera.uuid;
 		const defaultCameraName = this.camera.name; // .copy() also copies .name; keep the default camera's own
-		this.camera.copy( camera );
+		if ( camera ) this.camera.copy( camera );
 		this.camera.name = defaultCameraName;
 
 		if ( json.controls !== undefined ) {
@@ -863,6 +867,9 @@ Editor.prototype = {
 		// default free camera.
 		this.setViewportCamera( savedViewportCameraUuid );
 
+		// A record has no saved view: derive it from the scene, the same way every time.
+		if ( json.camera === undefined && isRecordScene( this.scene.userData ) ) this.frameRecord();
+
 		// setScene() copies the scene's children but not its own animations array
 		// — EXCEPT the Universal Timeline clip, which setScene()'s syncTimeline()
 		// call already recompiled fresh from scene.userData.timeline (the model)
@@ -930,7 +937,7 @@ Editor.prototype = {
 
 		} );
 
-		return {
+		const json = {
 
 			metadata: {},
 			project: {
@@ -955,6 +962,26 @@ Editor.prototype = {
 			environmentType: this.environmentType
 
 		};
+
+		// A record is saved without how it was last looked at (camera, controls, renderer settings, undo history), so that opening one, orbiting and
+		// saving changes nothing. Its view is derived from the scene on open (frameRecord). See export/records.js.
+		return isRecordScene( this.scene.userData ) ? canonicalForm( json ) : json;
+
+	},
+
+	/** The view a record opens with: from the scene's bounding box, the same every time; `scene.userData.record.view` ({ position, target }) wins when one was set deliberately. */
+	frameRecord: function () {
+
+		const box = new THREE.Box3().setFromObject( this.scene );
+		if ( box.isEmpty() ) return;
+		const record = this.scene.userData.record, f = framing( { min: box.min.toArray(), max: box.max.toArray() }, record && record.view );
+		this.camera.fov = FRAMING.fov;
+		this.camera.near = f.near; this.camera.far = f.far;
+		this.camera.position.fromArray( f.position );
+		this.camera.updateProjectionMatrix();
+		this.controls.center.fromArray( f.target );
+		this.camera.lookAt( this.controls.center );
+		this.signals.cameraResetted.dispatch();
 
 	},
 

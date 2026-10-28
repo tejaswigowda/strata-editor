@@ -68,6 +68,8 @@ import { buildIndex, retrieveForPrompt, findAPI } from './ai/apiIndex.js';
 import { validateCode } from './ai/validate.js';
 import { runAgentic } from './ai/agentLoop.js';
 import { EVAL_PROMPTS, runEval, formatTable, shouldSuggestPower } from './ai/eval.js';
+import { exportNameFor } from './export/exportNames.js';
+import { PACKAGING, RECORD_SCHEMA, validateRecordJson } from './export/records.js';
 
 // Map common shape words to the substring found in geometry.type, so findObject
 // can resolve "red sphere" even when the object's name carries neither word.
@@ -799,7 +801,7 @@ function Shell( editor ) {
 	];
 
 	// Functions whose first string arg is a selector
-	const SELECTOR_FN_NAMES = '\\$S|Pick|pick|query|queryOne|isolate|soloClass|groupSelection|isValidSelector|SEG\\.(?:describe|data|split|byMaterial|replay|preview)';
+	const SELECTOR_FN_NAMES = '\\$S|Pick|pick|query|queryOne|isolate|soloClass|groupSelection|isValidSelector|SEG\\.(?:describe|data|components|attach|split|byMaterial|replay|preview)';
 
 	let acItems = [];     // current filtered list
 	let acIndex = - 1;    // highlighted index (- 1 = none)
@@ -2174,11 +2176,45 @@ function Shell( editor ) {
 					return 'requireLabels ' + ( on ? 'on: every object is named and classed' : 'off' );
 
 				},
+				// asRecord() — mark the scene as a dataset record: it is then saved without the camera, the controls, the renderer settings or the undo
+				// history, so opening it, orbiting and saving changes nothing; its view is derived from the scene on open. `packaging` says how the geometry
+				// travels ('pack': saved beside the record; 'plan' is declared and not implemented). asRecord(false) lifts it. See guides/MESH_SEGMENT.md.
+				asRecord: ( on = true, { packaging = 'pack' } = {} ) => {
+
+					if ( on ) {
+
+						if ( ! PACKAGING.declared.includes( packaging ) ) throw new Error( 'asRecord: packaging is "pack" or "plan"' );
+						if ( ! PACKAGING.implemented.includes( packaging ) ) throw new Error( 'asRecord: packaging "' + packaging + '" is not implemented yet: the editor cannot regenerate the cut on open, so a record may not claim it' );
+						editor.scene.userData.record = { schema: RECORD_SCHEMA, packaging, ...( editor.scene.userData.record && editor.scene.userData.record.view ? { view: editor.scene.userData.record.view } : {} ) };
+
+					} else delete editor.scene.userData.record;
+					if ( editor.work ) editor.work.touch();
+					return on ? 'record on: saved without the camera, controls, renderer settings or history; packaging ' + packaging : 'record off';
+
+				},
+				// recordView() — set the view a record opens with, deliberately, from the camera as it is now; recordView(false) goes back to the derived one.
+				recordView: ( on = true ) => {
+
+					const rec = editor.scene.userData.record;
+					if ( ! rec ) throw new Error( 'recordView: the scene is not a record; call asRecord() first' );
+					if ( on ) rec.view = { position: editor.camera.position.toArray().map( x => Math.round( x * 1e4 ) / 1e4 ), target: editor.controls.center.toArray().map( x => Math.round( x * 1e4 ) / 1e4 ) }; else delete rec.view;
+					if ( editor.work ) editor.work.touch();
+					return on ? 'view set: ' + JSON.stringify( rec.view ) : 'view derived from the scene';
+
+				},
+				// checkRecord() — what is wrong with this scene as a dataset record (the checks CI runs): the source pinned and hashed, the verification block, no presentation.
+				checkRecord: () => {
+
+					const problems = validateRecordJson( editor.toJSON() );
+					return problems.length ? problems.map( p => '✗ ' + p ).join( '\n' ) : '✓ a valid record';
+
+				},
 				// $M('group') — non-destructive motion editing: $M.group('sparring', ['#f1','#f2']),
 				// then .splice([[1.6,9],[14.6,22.1]], { blend: 0.25 }) / .play({from,to}) / .speed / .hold /
 				// .collision() / .clear() / .asCommand(). The capture is never modified.
 				$M: motion,
-				// SEG.describe('#mesh') lists a mesh's UV islands and painted colours; SEG.split('#mesh', plan) cuts it into named, classed parts (one undo step);
+				// SEG.describe('#mesh') lists a mesh's UV islands and painted colours (or, on a scene unwrapped in pieces, its components: size and position first);
+				// SEG.components / SEG.attach measure and place the pieces of a scene; SEG.split('#mesh', plan) cuts it into named, classed parts (one undo step);
 				// SEG.preview(group) / SEG.restore() check the cut. See guides/MESH_SEGMENT.md.
 				SEG: segment,
 				Pick: query,
@@ -2333,7 +2369,7 @@ function Shell( editor ) {
 					import( 'three/addons/exporters/GLTFExporter.js' ).then( ( { GLTFExporter } ) => {
 
 						new GLTFExporter().parse( editor.selected || editor.scene,
-							( result ) => resolve( _saveBlob( result, 'scene.glb', 'application/octet-stream' ) ),
+							( result ) => resolve( _saveBlob( result, exportNameFor( editor, 'glb', { selection: true } ), 'application/octet-stream' ) ),
 							( err ) => resolve( `export failed: ${ err }` ), { binary: true } );
 
 					} );
@@ -2344,7 +2380,7 @@ function Shell( editor ) {
 					import( 'three/addons/exporters/GLTFExporter.js' ).then( ( { GLTFExporter } ) => {
 
 						new GLTFExporter().parse( editor.selected || editor.scene,
-							( result ) => resolve( _saveBlob( JSON.stringify( result, null, 2 ), 'scene.gltf', 'application/json' ) ),
+							( result ) => resolve( _saveBlob( JSON.stringify( result, null, 2 ), exportNameFor( editor, 'gltf', { selection: true } ), 'application/json' ) ),
 							( err ) => resolve( `export failed: ${ err }` ), {} );
 
 					} );
@@ -2353,13 +2389,13 @@ function Shell( editor ) {
 				exportOBJ: async () => {
 
 					const { OBJExporter } = await import( 'three/addons/exporters/OBJExporter.js' );
-					return _saveBlob( new OBJExporter().parse( editor.selected || editor.scene ), 'model.obj', 'text/plain' );
+					return _saveBlob( new OBJExporter().parse( editor.selected || editor.scene ), exportNameFor( editor, 'obj', { selection: true } ), 'text/plain' );
 
 				},
 				exportSTL: async () => {
 
 					const { STLExporter } = await import( 'three/addons/exporters/STLExporter.js' );
-					return _saveBlob( new STLExporter().parse( editor.selected || editor.scene ), 'model.stl', 'text/plain' );
+					return _saveBlob( new STLExporter().parse( editor.selected || editor.scene ), exportNameFor( editor, 'stl', { selection: true } ), 'text/plain' );
 
 				},
 				exportPLY: () => new Promise( ( resolve ) => {
@@ -2367,7 +2403,7 @@ function Shell( editor ) {
 					import( 'three/addons/exporters/PLYExporter.js' ).then( ( { PLYExporter } ) => {
 
 						new PLYExporter().parse( editor.selected || editor.scene,
-							( result ) => resolve( _saveBlob( result, 'model.ply', 'text/plain' ) ), {} );
+							( result ) => resolve( _saveBlob( result, exportNameFor( editor, 'ply', { selection: true } ), 'text/plain' ) ), {} );
 
 					} );
 
@@ -2980,7 +3016,13 @@ function Shell( editor ) {
 
 			if ( result !== undefined && ! quiet ) {
 
-				appendOutput( formatValue( result ), 'result' );
+				// a promise (SEG.source, the exporters): say so now, and show what it settles to, instead of printing "{}"
+				if ( result && typeof result.then === 'function' ) {
+
+					appendOutput( '… a promise: its result is shown when it settles', 'result' );
+					result.then( v => { if ( v !== undefined ) appendOutput( formatValue( v ), 'result' ); }, e => appendOutput( String( e && e.message ? e.message : e ), 'error' ) );
+
+				} else appendOutput( formatValue( result ), 'result' );
 
 			}
 			

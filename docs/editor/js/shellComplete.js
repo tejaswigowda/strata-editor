@@ -153,13 +153,16 @@ export const ARG_ENUMS = {
 /** Signatures the member lists and the call hints know besides the ones in the word lists. */
 export const STATIC_MEMBERS = {
 	SEG: [
-		{ w: 'describe', h: "(selector, k = 3)  the islands (or materials) of a mesh: size, centre, colours", rank: 3 },
-		{ w: 'split', h: "(selector, { group, classes, source: { url, licence, attribution }, parts: [ { island, name, classes } | { island, subdivide, palette } ] })", rank: 3 },
+		{ w: 'describe', h: "(selector, k = 3, { grain })  the islands, or on a scene the components, or the materials, of a mesh: size, centre, colours", rank: 3 },
+		{ w: 'components', h: "(selector)  the pieces of a scene: islands that touch in space, in the world frame", rank: 3 },
+		{ w: 'attach', h: "(selector, [ { name, classes, component } ], { maxDistance, tie })  where every unnamed component would go; what is too far is left over", rank: 3 },
+		{ w: 'split', h: "(selector, { group, classes, source, parts: [ { island | component, name, classes } | { island, subdivide, palette } ], anchors: [ { name, classes, component, basis } ], attach })  source: { url (raw, commit-pinned), sha256, bytes, licence, attribution }, from SEG.source", rank: 3 },
+		{ w: 'source', h: "(rawCommitPinnedUrl, { licence, attribution })  a promise: fetch the file and hash it; .then( s => … ) gives the source block a plan needs", rank: 2 },
 		{ w: 'byMaterial', h: "(selector, { group, source, parts? })  one part per material", rank: 2 },
 		{ w: 'replay', h: "(selector, record)  cut again from a recorded plan", rank: 1 },
 		{ w: 'preview', h: "(groupSelector)  a flat colour per part", rank: 2 },
 		{ w: 'restore', h: "()  the textured materials back", rank: 2 },
-		{ w: 'data', h: "(selector, k = 3)  the report as objects" }
+		{ w: 'data', h: "(selector, k = 3, { grain })  the report as objects" }
 	]
 };
 
@@ -279,7 +282,7 @@ export function buildStarters( ctx ) {
 			add( g, `SEG.preview(${ id })`, 'each part a flat colour' );
 			add( g, `$S(${ id }).nodes[0].userData.segmentation`, 'what it was cut from' );
 
-		} else if ( sel.isMesh && sel.textured ) add( g, `SEG.describe(${ id })`, 'islands and colours: the evidence for cutting it into parts' );
+		} else if ( sel.isMesh && sel.textured ) add( g, `SEG.describe(${ id })`, 'islands, or on a scene its components, and colours: the evidence for cutting it into parts' );
 		add( g, `$S(${ id }).recolor('')`, 'a colour name or #hex', { caret: `$S(${ id }).recolor('`.length } );
 		add( g, `$S(${ id }).scale(1.5)`, 'make it bigger' );
 		add( g, `$S(${ id }).spin('y', 1)`, 'turn it' );

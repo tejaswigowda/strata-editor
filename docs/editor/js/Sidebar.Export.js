@@ -14,6 +14,7 @@ import { hasChangeEvents, lowerChangeEventsForExport } from './intelligence/text
 import { commitExportToRepo } from './Menubar.Git.js';
 import { promoteClassesForExport } from './scene/exportClasses.js';
 import { cloneSharedResources } from './scene/cloneShared.js';
+import { exportNameFor } from './export/exportNames.js';
 
 // Coerces an exporter's raw output (string / ArrayBuffer / Uint8Array) into
 // the Uint8Array commitExportToRepo needs.
@@ -326,7 +327,7 @@ function SidebarExport( editor ) {
 
 		// TODO: Change to DRACOExporter's parse( geometry, onParse )?
 		const result = exporter.parse( object, options );
-		saveArrayBuffer( result, 'model.drc' );
+		saveArrayBuffer( result, exportNameFor( editor, 'drc', { selection: true } ) );
 
 	} );
 
@@ -389,7 +390,7 @@ function SidebarExport( editor ) {
 		try {
 
 			const result = await buildGLB();
-			if ( result ) saveArrayBuffer( result, 'scene.glb' );
+			if ( result ) saveArrayBuffer( result, exportNameFor( editor, 'glb' ) );
 
 		} catch ( error ) {
 
@@ -493,7 +494,7 @@ function SidebarExport( editor ) {
 		exporter.parse( clone, function ( result ) {
 
 			exportBanner.remove();
-			saveArrayBuffer( result, 'scene.optimized.glb' );
+			saveArrayBuffer( result, exportNameFor( editor, 'glb', { suffix: '.optimized' } ) );
 
 		}, function ( error ) {
 
@@ -543,7 +544,7 @@ function SidebarExport( editor ) {
 		exporter.parse( exportScene, function ( result ) {
 
 			restoreCamera();
-			saveString( JSON.stringify( result, null, 2 ), 'scene.gltf' );
+			saveString( JSON.stringify( result, null, 2 ), exportNameFor( editor, 'gltf' ) );
 
 		}, function ( error ) {
 
@@ -578,7 +579,7 @@ function SidebarExport( editor ) {
 	addButton( 'OBJ', async function () {
 
 		const result = await buildOBJ();
-		if ( result !== null ) saveString( result, 'model.obj' );
+		if ( result !== null ) saveString( result, exportNameFor( editor, 'obj', { selection: true } ) );
 
 	}, { ext: 'obj', build: buildOBJ } );
 
@@ -600,7 +601,7 @@ function SidebarExport( editor ) {
 
 	addButton( 'PLY', async function () {
 
-		saveArrayBuffer( await buildPLY( false ), 'model.ply' );
+		saveArrayBuffer( await buildPLY( false ), exportNameFor( editor, 'ply' ) );
 
 	}, { ext: 'ply', build: () => buildPLY( false ) } );
 
@@ -608,7 +609,7 @@ function SidebarExport( editor ) {
 
 	addButton( 'PLY (BINARY)', async function () {
 
-		saveArrayBuffer( await buildPLY( true ), 'model-binary.ply' );
+		saveArrayBuffer( await buildPLY( true ), exportNameFor( editor, 'ply', { suffix: '-binary' } ) );
 
 	}, { ext: 'ply', build: () => buildPLY( true ) } );
 
@@ -620,7 +621,7 @@ function SidebarExport( editor ) {
 
 		const exporter = new STLExporter();
 
-		saveString( exporter.parse( editor.scene ), 'model.stl' );
+		saveString( exporter.parse( editor.scene ), exportNameFor( editor, 'stl' ) );
 
 	} );
 
@@ -632,7 +633,7 @@ function SidebarExport( editor ) {
 
 		const exporter = new STLExporter();
 
-		saveArrayBuffer( exporter.parse( editor.scene, { binary: true } ), 'model-binary.stl' );
+		saveArrayBuffer( exporter.parse( editor.scene, { binary: true } ), exportNameFor( editor, 'stl', { suffix: '-binary' } ) );
 
 	} );
 
@@ -678,7 +679,7 @@ function SidebarExport( editor ) {
 
 	addButton( 'USDZ', async function () {
 
-		saveArrayBuffer( await buildUSDZ(), 'model.usdz' );
+		saveArrayBuffer( await buildUSDZ(), exportNameFor( editor, 'usdz' ) );
 
 	}, { ext: 'usdz', build: buildUSDZ } );
 

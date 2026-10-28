@@ -2,6 +2,7 @@ import { UIPanel, UIRow, UIHorizontalRule } from './libs/ui.js';
 import { FileLoader } from 'three';
 import { setMenuIcon } from './Menubar.Icons.js';
 import { syncToNewScene } from './Menubar.Git.js';
+import { exportNameFor } from './export/exportNames.js';
 
 function MenubarFile( editor ) {
 
@@ -109,7 +110,7 @@ function MenubarFile( editor ) {
 
 			const json = editor.toJSON();
 			const blob = new Blob( [ JSON.stringify( json ) ], { type: 'application/json' } );
-			editor.utils.save( blob, 'project.json' );
+			editor.utils.save( blob, exportNameFor( editor, 'json', { fallback: 'project' } ) );
 			if ( editor.work ) editor.work.markClean();
 
 		} );

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cut a scene into named parts — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: use the Strata Shell's SEG tool on a furnished room, one mesh with 538 texture islands. SEG joins the islands that touch into components, measures them in the world frame, places everything you did not name on the nearest anchor you did, and checks the cut. You supply the anchors and their names.">
+<!--
+	/about/tutorials/segment-a-scene.html — the scene case of the SEG tutorials.
+	Every snippet is real Strata surface (the SEG global of the JS Shell, documented in
+	guides/MESH_SEGMENT.md, plus $S(), isolate() and lint()). Paste each block into the Shell
+	tab in order. Static page, no build step, no third-party calls.
+	There is no embedded player: the example model is CC Attribution-NonCommercial, and the
+	segmented scene is not committed to the public repository.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Cut a scene into named parts</h1>
+
+	<p class="tagline">An avocado has three texture islands and each one is a part. A furnished room is one mesh with 538 islands, most of them a few triangles of trim or the label on a prop, and no island is "the bed". <code>SEG</code> handles the part of the job that needs no judgment: it joins the islands that touch into <strong>components</strong>, measures them in the <strong>world frame</strong>, places everything you did not name on the nearest thing you did, and checks the result. What is left for you, or for a model, is the one step that never reduced to a rule: <strong>naming the anchors</strong>. Built with the JS Shell.</p>
+
+	<div class="note"><strong>Start with the object tutorial.</strong> This page assumes <a href="segment-any-mesh.html">Cut any textured mesh into named parts</a> (the avocado and the duck): <code>SEG.describe</code>, <code>SEG.split</code>, <code>SEG.preview</code>, the plan, and the record. The reference is <a href="../../../guides/MESH_SEGMENT.md">guides/MESH_SEGMENT.md</a>. An older page, <a href="segment-a-mesh.html">building the tool by hand</a>, is for the object case and uses the name <code>CUT</code>.</div>
+
+	<h2><span class="step">1</span> Same tool, different evidence</h2>
+	<p class="lede">The object tutorial's evidence was mostly <strong>colour</strong>: the cut face of the avocado is cream and orange, the beak of the duck is orange. A room has almost none to give. Its texture is a dark green-black atlas shared by a few hundred pieces, and the two lines that matter most for telling a ceiling from a floor are not colours at all: they are <strong>where</strong> a piece is and <strong>how big</strong>. The tool is the same; the evidence that carries the weight is different, and the report changes with it.</p>
+	<table class="cuts">
+		<tr><th></th><th>An object (avocado, duck)</th><th>A scene (the room)</th></tr>
+		<tr><td>Grain</td><td>the island</td><td>the component: islands that touch in space</td></tr>
+		<tr><td>The report leads with</td><td>texture position, then colours</td><td>size and position in the world, colours last</td></tr>
+		<tr><td>What tells parts apart</td><td>paint: rings, eyes, a beak</td><td>position, size, how much detail: a slab at the bottom is a floor, a 1,892-triangle figure 0.7 high is a cat</td></tr>
+		<tr><td>Who places the small pieces</td><td>you, island by island</td><td>the host, by distance, from the anchors you name</td></tr>
+	</table>
+	<p><strong>Who chooses the grain.</strong> The host does, from the mesh: when there are at most three components for every four islands (the room has 538 islands and 282 components), <code>SEG.describe</code> and <code>SEG.data</code> report components; otherwise islands. A caller can say which: <code>SEG.describe('#Mesh', 3, { grain: 'islands' })</code>. The choice is stated in the last line of the report, and the grain the plan was written against is recorded.</p>
+
+	<h2><span class="step">2</span> The model, and its licence</h2>
+	<p class="lede"><strong>Cyberpunk micro-apartments</strong> by Mikita_Hubanau, from <a href="https://sketchfab.com/3d-models/cyberpunk-micro-apartments-fd8011e2af0e43288f5445600197ea77">Sketchfab</a>, licensed <strong>Creative Commons Attribution-NonCommercial</strong>. Download the glTF and import the <code>.glb</code> with the dialog's defaults. The file has three meshes: <code>Object_4</code> (12,151 triangles, textured, the room), <code>Object_5</code> (7,794 triangles, one flat material) and <code>Object_6</code> (a two-triangle glass pane). This page cuts <code>Object_4</code>.</p>
+	<div class="note"><strong>The segmented scene is not published with this page.</strong> A segmentation is a derivative work, and this model's licence does not allow commercial use, so the scene is not committed to the public repository and there is no embedded player. If you publish your own cut, give the licence and the credit in the plan's <code>source</code>; SEG will not cut without them.</div>
+
+	<h2><span class="step">3</span> Read the components</h2>
+	<pre><code>SEG.describe('#Object_4')</code></pre>
+	<pre><code>component 0: 2270 triangles (12 islands: 0,5,7,9,12,13,…), size 0.754,1.489,0.258, centre -0.919,2.989,-2.331, at 0.41,0.50,0.23, colours rgb(14,17,14) 72%  rgb(25,30,24) 18%  rgb(43,52,40) 10%
+component 1: 1892 triangles (13 islands: 1,2,3,18,19,62,…), size 0.285,0.698,1.159, centre 0.340,1.362,-1.106, at 0.53,0.23,0.37, colours rgb(63,68,65) 48%  rgb(107,120,114) 37%  rgb(171,198,191) 15%
+…
+component 21: 118 triangles (4 islands: 36,84,123,251), size 5.694,0.471,7.736, centre 1.660,5.691,0.475, at 0.67,0.96,0.55, colours rgb(197,240,225) 59%  rgb(55,80,71) 21%  rgb(132,170,156) 20%
+component 29: 75 triangles (11 islands: 122,186,245,246,247,248,…), size 9.193,1.007,7.028, centre 0.355,0.522,0.769, at 0.54,0.09,0.59, colours rgb(14,18,14) 42%  rgb(28,36,27) 40%  rgb(48,61,48) 18%
+…
+(538 islands joined into 282 components where they touch in space; world frame, y up. Pass { grain: 'islands' } for the islands. Name anchors: { name, classes, component: [..] }, and let SEG.attach place the rest)</code></pre>
+	<p>282 lines instead of 538, and each one says what a person asks first: how big, where, how detailed. <strong>Component 21</strong> is 118 triangles, 5.7 × 0.47 × 7.7, with <code>at.y</code> 0.96: a thin slab at the very top, a ceiling. <strong>Component 29</strong> is 75 triangles, 9.2 × 1.0 × 7.0, <code>at.y</code> 0.09: a slab at the bottom, the floor deck. <strong>Component 1</strong> is 1,892 triangles, 0.29 × 0.70 × 1.16, low and in the middle: far too detailed and too small to be furniture. Its colours are grey and white. A cat.</p>
+	<div class="note"><strong>Why "world frame" is a line of its own.</strong> The model is Z-up, and the importer turns it upright with a rotation. In the <em>mesh's</em> frame the ceiling has <code>at.z</code> 0.04 and the floor 0.91: "up" is on the wrong axis and runs the wrong way, and every number looks fine. <code>SEG.components</code> and the scene report apply the node's world matrix, so <code>y</code> is up and 0.96 is high. <code>SEG.describe</code> on an <em>object</em> still reports in the mesh's frame, as its tutorial says; a record says which it used (<code>attach.parameters.frame</code>).</div>
+	<p>The same numbers as objects, for a script or a model: <code>SEG.components('#Object_4')</code>. Each has <code>component</code>, <code>islands</code>, <code>triangles</code>, <code>size</code>, <code>centre</code>, <code>at</code> and <code>colours</code>.</p>
+
+	<h2><span class="step">4</span> Name the anchors</h2>
+	<p class="lede">This is the step that does not reduce to a rule, and the only one that is yours. An <strong>anchor</strong> is a component you can name from the evidence. Start with the biggest and most distinctive; the rest will follow them. Say what each name rests on: <code>position</code>, <code>size</code>, <code>colour</code>, or <code>shape</code> when all you can honestly offer is a description of the form. It is recorded, and a record with many <code>shape</code> names is a different claim from one with none.</p>
+	<table class="cuts">
+		<tr><th>Component</th><th>Evidence</th><th>Name</th><th>Basis</th></tr>
+		<tr><td>1</td><td>1,892 triangles, 0.3 × 0.7 × 1.2, low, grey and white</td><td><code>Cyber_Cat</code></td><td>position, size</td></tr>
+		<tr><td>2</td><td>574 triangles, light, on the bed at the right</td><td><code>Bed_Pillow</code></td><td>position, size, colour</td></tr>
+		<tr><td>7, 47, 68</td><td>thin brown pieces that run the length of the room: the arch round the doorway, and trim</td><td><code>Doorway_Frame_And_Trim</code>, class <code>trim</code></td><td>position, size</td></tr>
+		<tr><td>21</td><td>a thin slab at the very top</td><td><code>Ceiling_Panel</code></td><td>position, size</td></tr>
+		<tr><td>29</td><td>a slab 1.0 thick at the bottom, spanning the floor plan</td><td><code>Floor_Deck</code></td><td>position, size</td></tr>
+		<tr><td>14, 19, 28</td><td>tall thin plates at the edges</td><td><code>Wall_Left_Pillar</code>, <code>Wall_Right_Unit</code>, <code>Wall_Front_Right_Column</code></td><td>position, size</td></tr>
+		<tr><td>16</td><td>a long low frame, 5.2 × 1.0 × 2.9, brown</td><td><code>Bed_Frame</code></td><td>position, size</td></tr>
+		<tr><td>3, 5, 8, 9, 10, 12, 15, 17</td><td>eight components in one cluster at the left front, standing on the deck, about 1.4 across: the crates and what is on them</td><td><code>Crate_Stack</code></td><td>position, size, colour</td></tr>
+		<tr><td>23</td><td>greenish, 0.9 wide and 1.7 high, along the right edge</td><td><code>Plant_Cluster</code></td><td>position, colour</td></tr>
+		<tr><td>22</td><td>the counter at the back, with its small items near it</td><td><code>Kitchen_Counter</code></td><td>position, size</td></tr>
+		<tr><td>4</td><td>0.2 × 0.2 × 0.3, blue, beside the bed</td><td><code>Blue_Mug</code></td><td>position, size, colour</td></tr>
+		<tr><td>0</td><td>2,270 triangles, near-black, 0.75 × 1.5 × 0.26, high on the wall; a small bright panel sits against it in the render</td><td><code>Dark_Console_Unit</code></td><td>shape</td></tr>
+	</table>
+	<p>The last row is the honest one. Nothing in the evidence says what that unit <em>is</em>, so the name describes what can be seen and the basis says <code>shape</code>. It is better than a confident <code>Fridge</code>.</p>
+	<p>Before cutting, ask where everything else would go:</p>
+	<pre><code>SEG.attach('#Object_4', [
+  { name: 'Floor_Deck',    classes: ['floor'],   component: 29 },
+  { name: 'Cyber_Cat',     classes: ['cat'],     component: 1 },
+  { name: 'Ceiling_Panel', classes: ['ceiling'], component: 21 } ], { maxDistance: 0.5 })</code></pre>
+	<p>It returns <code>parts</code> (each anchor with what would be attached), <code>unattached</code> (what is too far), <code>tie_broken</code>, the <code>parameters</code> used and, per part, how many components it would take and how far the furthest was. Nothing is cut.</p>
+
+	<h2><span class="step">5</span> What attaching does, exactly</h2>
+	<p class="lede">The rules are fixed and written down, so a run can be repeated and a result can be questioned.</p>
+	<ol class="steps">
+		<li><strong>Distance is to triangles, not vertices.</strong> A floor is a few huge triangles, and its four corner vertices are metres from anything standing on it. Each unnamed component is sampled at the centres of up to six triangles per island, and the distance is the shortest from a sample to any triangle of the anchor.</li>
+		<li><strong>The nearest anchor wins, but near-ties go to the smaller thing.</strong> Every anchor within <code>tie</code> (0.05 world units) of the nearest is tied with it, and the one with the smaller bounding box wins, so a mug that touches both the counter and the floor belongs to the counter. A prop beats the structure it stands against. On the room the rule decided seven components, each given to a smaller anchor than the strictly nearest one. <code>tie</code> is a recorded parameter, in world units: change it if your scene is a hundred times bigger.</li>
+		<li><strong>Beyond <code>maxDistance</code>, nothing is attached.</strong> There is always a nearest anchor, so without a limit a lamp standing alone across the room would join the nearest wall, and a component that is really an object of its own would be absorbed without a word. The limit defaults to a tenth of the scene's diagonal (1.448 on this room, which is 14.48 across) and the value used is recorded. A component beyond it is <strong>returned to you</strong>, named with its nearest anchor and the distance, and the cut refuses to run until you name it as an anchor of its own, or describe it the way <code>Dark_Console_Unit</code> is described, or raise the limit.</li>
+	</ol>
+	<pre><code>SEG.split('#Object_4', { group: 'Cyber_Room_Parts', source: { … }, anchors: [ … ], attach: { maxDistance: 0.3 } })
+// with the first plan's anchors:
+// SEG.split: 5 components are further than maxDistance (0.3) from every anchor: component 272 (nearest "Kitchen_Counter", 0.38659),
+// component 273 (nearest "Bed_Frame", 0.55048), component 274 (nearest "Bed_Frame", 0.498), component 275 (nearest "Wall_Front_Right_Column", 0.56101),
+// component 281 (…). Name each as an anchor of its own (component: [n]) or raise attach.maxDistance. Nothing was changed</code></pre>
+
+	<h2><span class="step">6</span> Cut</h2>
+	<p>The plan is the anchors, their classes, what each name rests on, and the source. That is all a model has to write.</p>
+	<pre><code>SEG.split('#Object_4', {
+  group: 'Cyber_Room_Parts', classes: ['room', 'interior'],
+  source: { url: 'https://sketchfab.com/3d-models/cyberpunk-micro-apartments-fd8011e2af0e43288f5445600197ea77',
+            fetchable: false,                      // a model page behind a login: the file cannot be re-fetched, so its hash and size are what identify it
+            sha256: 'b2026982a0cd825a2046e2e1c5dc49ad5af56ad36e7aba1954118b12ce85ec73', bytes: 2266956,
+            licence: 'CC Attribution-NonCommercial (as stated on the Sketchfab model page)',
+            attribution: 'Mikita_Hubanau (Sketchfab: cyberpunk micro-apartments)' },
+  anchors: [
+    { name: 'Cyber_Cat',               classes: ['animal', 'cat'],               component: 1,  basis: ['position', 'size'] },
+    { name: 'Bed_Pillow',              classes: ['bedding', 'pillow'],           component: 2,  basis: ['position', 'size', 'colour'] },
+    { name: 'Doorway_Frame_And_Trim',  classes: ['structure', 'doorway', 'trim'], component: [7, 47, 68], basis: ['position', 'size'] },
+    { name: 'Ceiling_Panel',           classes: ['structure', 'ceiling'],        component: 21, basis: ['position', 'size'] },
+    { name: 'Floor_Deck',              classes: ['structure', 'floor'],          component: 29, basis: ['position', 'size'] },
+    // … Wall_Left_Pillar 14, Wall_Right_Unit 19, Wall_Front_Right_Column 28, Bed_Frame 16, Crate_Stack [3,5,8,9,10,12,15,17],
+    //   Plant_Cluster 23, Kitchen_Counter 22, Blue_Mug 4 …
+    { name: 'Dark_Console_Unit',       classes: ['appliance', 'console'],        component: 0,  basis: ['shape'] } ] })</code></pre>
+	<pre><code>Cyber_Cat: 1892 triangles | Bed_Pillow: 643 triangles | Doorway_Frame_And_Trim: 350 triangles | Ceiling_Panel: 140 triangles | Floor_Deck: 95 triangles | Wall_Left_Pillar: 251 triangles | Wall_Right_Unit: 496 triangles | Wall_Front_Right_Column: 89 triangles | Bed_Frame: 428 triangles | Crate_Stack: 2367 triangles | Plant_Cluster: 1130 triangles | Kitchen_Counter: 1340 triangles | Dark_Console_Unit: 2590 triangles | Blue_Mug: 340 triangles
+⚠ orphan sink: Plant_Cluster: it received 167 of the 259 components that were attached (64%): it is the nearest anchor to everything that has no anchor of its own. Name more anchors</code></pre>
+	<p>The triangles add up to the mesh's 12,151, the parts share the original material so the room looks as it did, and one <code>Undo</code> puts <code>Object_4</code> back. Then check it as before: <code>SEG.preview('#Cyber_Room_Parts')</code> and <code>isolate('#Crate_Stack')</code>, from every side.</p>
+
+	<h2><span class="step">7</span> The checks, and the cut they caught</h2>
+	<p class="lede">The first cut of this room was wrong in a way the picture did not show. The thin brown trim that runs round the whole room was attached to the nearest anchor, which was <code>Wall_Front_Right_Column</code>, and the column came out room-sized. What gave it away was a number, not the picture: the part's box spanned 70%, 92% and 99% of the room on x, y and z while it carried 14% of the surface. That is now an assertion, and it fires on exactly that plan.</p>
+	<table class="cuts">
+		<tr><th>Assertion</th><th>Fires when</th></tr>
+		<tr><td>oversize</td><td>a part's box spans at least 60% of the scene on <strong>every</strong> axis while it carries less than 25% of the surface: trim, or several objects, swallowed</td></tr>
+		<tr><td>engulfing</td><td>a part's box contains at least half of the other parts' centres while it carries less than 10% of the surface</td></tr>
+		<tr><td>absorbed</td><td>a part assembled from at least 8 components whose main colour holds at least 85% of its texture footprint</td></tr>
+		<tr><td>orphan sink</td><td>one part received at least half of the components that were attached, out of at least 10</td></tr>
+	</table>
+	<p>A part that <em>declares</em> itself spread out (a class of <code>trim</code>, <code>frame</code>, <code>cable</code>, <code>pipe</code>, <code>wire</code>, <code>rail</code>, <code>network</code>, <code>edge</code> or <code>outline</code>) is exempt from oversize and engulfing, which is how the fix is expressed: name the room-wide trim as one part and say so, as in step 6. Fewer than four parts are not judged. All the thresholds are in <code>ASSERTIONS</code> in <code>meshSegment.js</code> and are recorded with every cut.</p>
+	<p><strong>A fired check does not stop the cut and does not change it.</strong> The cut is one undo step, and the right response to a failed check, undo and cut again with a better plan, is a decision for whoever wrote the plan. The check says which assertion, which part, and the numbers.</p>
+	<div class="note"><strong>The one still firing is real.</strong> On the corrected cut, <code>orphan sink</code> still says <code>Plant_Cluster</code> took 167 of the 259 attached components (64%). It did: its 168 components average about seven triangles each, they lie along the right edge, and no anchor claims them, so the plant is the nearest. What they are (leaves, curtain folds, clutter) was not checked. The cut is usable, but "Plant_Cluster" is the room's catch-all, and the warning is the tool saying so. The remedy is the one in the message: name more anchors for what is there, and cut again. The tutorial leaves the warning in place on purpose.</div>
+
+	<h2><span class="step">8</span> What the record keeps</h2>
+	<pre><code>const rec = $S('#Cyber_Room_Parts').nodes[0].userData.segmentation
+rec.grain                              // 'components'
+rec.plan                               // the anchors, names, classes, basis, source: as given
+rec.describe.components                // the 282-line report the decision was made from
+rec.attach.parameters                  // { max_distance: 1.448, max_distance_default: true, tie: 0.05, samples_per_island: 6, weld_digits: 4, scene_diagonal: 14.48, frame: 'world' }
+rec.attach.per_part                    // per part: components, how many were attached, and the median, 90th percentile and maximum distance
+rec.attach.tie_broken                  // the seven components the tie-break gave to a smaller anchor than the nearest
+rec.attach.unattached                  // [] : nothing was left over
+rec.signals.components_per_part        // Plant_Cluster 168, Crate_Stack 24, Cyber_Cat 1, …: a part made of 168 components is a different claim from one made of 1
+rec.signals.names_by_basis             // { evidence: 13, shape: 1, unstated: 0 }
+rec.signals.assertions                 // what fired, with the numbers; rec.signals.assertion_parameters says what the thresholds were</code></pre>
+	<p><code>SEG.replay('#Object_4', rec)</code> recomputes the components and the attachment from the recorded plan and parameters, and refuses to run if the mesh is not the one the record describes (different triangle counts, or different islands in a component). Run on a fresh import, it gave the same 14 parts, triangle for triangle, and the same attachment record.</p>
+
+	<h2><span class="step">9</span> Your own scene</h2>
+	<ol class="steps">
+		<li><code>SEG.describe('#mesh')</code>. If it reports islands, the mesh is an object: use the <a href="segment-any-mesh.html">object tutorial</a>. If it reports components, read size, centre and <code>at</code> first.</li>
+		<li>Name the 8 to 20 components that you can justify, biggest first. Give each a <code>basis</code>. Use <code>shape</code> for what you can only describe.</li>
+		<li><code>SEG.attach('#mesh', anchors)</code> to see where everything goes and what is left over. Name what is left, or raise <code>maxDistance</code> if you mean it.</li>
+		<li><code>SEG.split</code>. Read every <code>⚠</code>. Declare trim as trim. If a part took most of what was attached, name more anchors.</li>
+		<li><code>SEG.preview</code> and <code>isolate</code> from every side; then <code>lint()</code> and <code>requireLabels(true)</code>.</li>
+	</ol>
+
+	<div class="note"><strong>What was checked, and what was not.</strong> The functions behind this page are tested in node on a synthetic room of boxes (components, the world frame, the tie-break, the limit, each assertion and a recorded plan run again) and on the real room, from the <code>.glb</code> file alone with no browser and no model: 538 islands become 282 components; the 14 anchors of the first cut give the same triangles and islands per part as that cut did when it was made by hand; the first plan fires <code>oversize</code> on <code>Wall_Front_Right_Column</code> and <code>orphan sink</code> on <code>Plant_Cluster</code>; a limit of 0.3 leaves exactly five components unattached. In the editor served from this repository, on a fresh import of the model, these were run: the report, the <code>SEG.attach</code> call of step 4, the cut of step 6 with its record, an undo, and the replay. The refusal at <code>maxDistance: 0.3</code> was checked in node, not in the browser. <code>SEG.preview</code> and <code>isolate</code> were not run on this cut: look at it yourself. Not checked: any model's ability to choose the anchors (that step was done by hand, and its names are my reading of the evidence, not a measurement); the thresholds, which were set on one room and one failure; and <code>Object_5</code> and <code>Object_6</code>, which were left whole.</div>
+	<div class="note"><strong>What a record cannot do.</strong> It cannot prove that the licence or attribution you give is right (SEG only refuses to run without them); it cannot say that the names are correct, only what they were made from, and now also by what rule everything else was placed.</div>
+	<div class="note" id="sources"><strong>The model.</strong> Cyberpunk micro-apartments, Mikita_Hubanau, on <a href="https://sketchfab.com/3d-models/cyberpunk-micro-apartments-fd8011e2af0e43288f5445600197ea77">Sketchfab</a>, Creative Commons Attribution-NonCommercial. No copy of the model or of its segmentation is in this repository.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
