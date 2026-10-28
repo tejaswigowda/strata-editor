@@ -1,6 +1,6 @@
 # Shorts: the standard
 
-Every short in the series (Pythagoras, (a + b)³, Hardy–Weinberg, surface area to volume, projectile, piston) meets this standard, and every new one starts from it. It has two halves: the scene file is **addressable**, and the tutorial states its **contract**.
+Every short in the series (Pythagoras, (a + b)³, Hardy–Weinberg, surface area to volume, projectile, piston, molecule shapes) meets this standard, and every new one starts from it. It has two halves: the scene file is **addressable**, and the tutorial states its **contract**.
 
 ## 1. Addressable: every object named and classed
 

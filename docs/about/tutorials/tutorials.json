@@ -54,6 +54,15 @@
 		"embed": "#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&file=piston.json&present=true"
 	},
 	{
+		"title": "Why molecules are shaped differently: electron-pair repulsion",
+		"href": "molecule-shapes.html",
+		"group": "Animation and rendering",
+		"blurb": "Methane, ammonia and water built from coloured spheres and bonds: four electron pairs spread to the corners of a tetrahedron, and each lone pair, which has no atom on it, closes the angle a little more (109.5°, 107°, 104.5°). Orbit each molecule to see what a flat drawing hides. Built with the JS Shell.",
+		"thumb": "screenshots/thumbs/molecule-shapes.jpg",
+		"desc": "Build three molecules from spheres and bonds, swing methane's bonds out of the flat cross it is drawn as into a tetrahedron, add the lone pairs of ammonia and water, mark each bond angle, look at ammonia from above and from the side, and compare the three shapes side by side \u2014 all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
+		"embed": "#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&file=molecule-shapes.json&present=true"
+	},
+	{
 		"title": "Build a night scene from scratch",
 		"href": "build-a-scene.html",
 		"group": "Scenes and games",

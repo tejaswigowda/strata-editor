@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Why molecules are shaped differently: electron-pair repulsion — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: build methane, ammonia and water from coloured spheres and bonds, and show that electron pairs repelling one another predict a tetrahedral, a trigonal pyramidal and a bent shape. Built with the Strata JS Shell.">
+<!--
+	/about/tutorials/molecule-shapes.html — a from-scratch, by-hand tutorial.
+	Every snippet is real Strata surface (JS Shell globals + the public
+	$S().at()/.animate()/.change()/.fadeIn()/.setKeys() grammar documented in
+	guides/ANIMATION.md and guides/CAMERA_PATHS.md). Paste each block into the
+	Shell tab in order. Static page, no build step, no third-party calls. The
+	scene file is molecule-shapes.json in tejaswigowda/test1.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure {
+		margin: 1.2em 0;
+	}
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+	iframe{
+		width: 100%;
+		height: 500px;
+		border: none;
+	}
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Why molecules are shaped differently: electron-pair repulsion</h1>
+	<iframe src="../../#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&amp;file=molecule-shapes.json&amp;present=true"></iframe>
+
+	<p class="tagline">A 93-second film that builds methane, ammonia and water from coloured spheres and bonds and asks why three molecules that all look like "a central atom with hydrogens" have three different shapes. The answer is one idea: the electron pairs around the central atom repel one another and spread out in space, and a lone pair, which has no atom on it, still takes up room. The film shows the flat drawing, lets the bonds swing out into three dimensions, orbits each molecule, and compares the three angles side by side. Built with the JS Shell.</p>
+
+	<h2><span class="step">1</span> The idea</h2>
+	<p class="lede">Around the central atom of each molecule sit <strong>four electron pairs</strong>: some are shared with a hydrogen (a bond), and some belong to the central atom alone (a lone pair). Pairs of electrons repel one another, so the four of them settle as far apart as they can get, and in three dimensions that means pointing at the corners of a <strong>tetrahedron</strong>, with 109.5° between any two. What we <em>see</em> as the molecule's shape is only where the atoms are, not where the pairs are. Methane has four bonds, so all four pairs hold an atom: a tetrahedron. Ammonia has three bonds and one lone pair, so the atoms make a pyramid. Water has two bonds and two lone pairs, so the atoms make a bent line. That is the key lesson: <strong>electron-pair repulsion predicts molecular geometry</strong>.</p>
+	<p><strong>The 3D advantage.</strong> The angles <em>are</em> the concept, and a flat drawing hides or distorts them. Drawn on paper, methane is a cross with 90° between the bonds; in space the same four bonds are 109.5° apart, and the hydrogens are farther from one another (3.56 against 3.08 when each bond is 2.18 long). The film makes that point by letting the bonds swing out of the flat cross, and again by looking at ammonia from straight above, where the three hydrogens look flat, and then from the side, where the pyramid shows. The shadow each molecule throws on the floor is itself a flat drawing.</p>
+	<p>The numbers the film uses are the measured ones for the three molecules, so the film also shows an ordering the model explains: the angle gets smaller as lone pairs are added.</p>
+	<table class="cuts">
+		<tr><th>Molecule</th><th>Pairs</th><th>Bonds</th><th>Lone pairs</th><th>Atoms' shape</th><th>H–X–H angle</th><th>X–H bond</th></tr>
+		<tr><td>Methane, CH<sub>4</sub></td><td>4</td><td>4</td><td>0</td><td>tetrahedral</td><td>109.5° (cos⁻¹ −⅓)</td><td>0.109 nm</td></tr>
+		<tr><td>Ammonia, NH<sub>3</sub></td><td>4</td><td>3</td><td>1</td><td>trigonal pyramidal</td><td>107°</td><td>0.101 nm</td></tr>
+		<tr><td>Water, H<sub>2</sub>O</td><td>4</td><td>2</td><td>2</td><td>bent</td><td>104.5°</td><td>0.096 nm</td></tr>
+	</table>
+	<p>The units are scene units, 20 to the nanometre, so the bonds are 2.18, 2.02 and 1.92 long. Atoms are drawn at ball-and-stick size (hydrogen 0.42, carbon 0.65, nitrogen 0.62, oxygen 0.60), not at their true sizes. The plan for the clock, with the times the voice sets (the cues were timed first, and every beat sits on its cue), in seconds:</p>
+	<table class="cuts">
+		<tr><th>Time</th><th>What happens</th></tr>
+		<tr><td>0.8 – 10</td><td>The question, and the three molecules built one after another: the central atom, then each bond and the hydrogen on its end</td></tr>
+		<tr><td>10.5 – 17.6</td><td>Methane as it is drawn on paper: the bonds swing into a flat cross, 90° apart</td></tr>
+		<tr><td>18 – 27.3</td><td>Every bond is a pair of electrons (a yellow glow, two dots); the pairs repel, so the bonds swing out of the plane</td></tr>
+		<tr><td>27.8 – 34.6</td><td>A tetrahedron: a gold cage through the four corners and a 109.5° arc, while the camera orbits</td></tr>
+		<tr><td>35 – 46</td><td>Ammonia: three bonding pairs, then the fourth pair, a lone pair with no atom on it, a fatter glow on top</td></tr>
+		<tr><td>46.5 – 56.7</td><td>The same cage; the atoms alone make a pyramid; the lone pair squeezes the bonds to 107°</td></tr>
+		<tr><td>57.2 – 63.7</td><td>The camera looks straight down at ammonia (three hydrogens that look flat), then comes down to the side (the pyramid)</td></tr>
+		<tr><td>64.2 – 74.1</td><td>Water: two bonding pairs, two lone pairs, the cage, bent, 104.5°</td></tr>
+		<tr><td>74.6 – 83.1</td><td>All three side by side: tetrahedral, trigonal pyramidal and bent, with 0, 1 and 2 lone pairs</td></tr>
+		<tr><td>83.6 – 89.7</td><td>The lesson</td></tr>
+		<tr><td>89.7</td><td>Cut to the end card</td></tr>
+	</table>
+
+	<h2><span class="step">2</span> The palette, a room and a floor</h2>
+	<p class="lede">The ten materials of the film are made once, here, and every mesh that uses a colour is handed the same one: white is hydrogen <em>and</em> every label, charcoal is carbon (and the electrons' dots), blue is nitrogen, red is oxygen, grey is a bond, a soft translucent yellow is an electron pair, and gold draws the geometry (the tetrahedron and the angles). Seven in the palette, the room, the floor and the end card make ten. A shared material cannot fade one mesh without fading all of them, so this film reveals things by <em>growing</em> them from a scale of 0.001 and removes them by shrinking. One key light up and in front makes every molecule throw a shadow on the floor.</p>
+	<pre><code>// The palette: every material of the film, made once and handed to every mesh that uses it (ten in all, with the room, the floor and the end card).
+// Atoms follow the usual colours: hydrogen white (the same white as the labels), carbon charcoal, nitrogen blue, oxygen red. Bonds are grey, electron pairs are
+// a soft yellow glow, and gold draws the geometry (the tetrahedron and the angles).
+const mat = (color, k = 0.4, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.45, metalness: 0.05, ...extra });
+globalThis.PAL = {
+  carbon: mat(0x4b5368, 0.3), nitrogen: mat(0x4f7dff, 0.4), oxygen: mat(0xff4d4d, 0.4),
+  bond: mat(0xc4cbe0, 0.25), gold: mat(0xffb703, 0.55),
+  pair: new MeshStandardMaterial({ color: 0xffe066, emissive: 0xffd23f, emissiveIntensity: 0.35, roughness: 0.4, metalness: 0, transparent: true, opacity: 0.42, depthWrite: false }),
+  white: mat(0xffffff, 0.45)                              // hydrogen, and every label
+};
+
+// a room around the scene and a floor under it, for the shadows to land on
+const room = new Mesh(new BoxGeometry(100, 40, 70), new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(0, 12, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+const floor = new Mesh(new PlaneGeometry(100, 70), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// one key light up and in front, so every shadow falls on the floor behind its molecule; one soft fill
+const key = new PointLight(0xfff1dd, 4.5, 0, 0);
+key.name = 'KeyLight';
+key.position.set(4, 24, 14);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 120;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));
+Object.keys(PAL).length      // 7</code></pre>
+
+	<h2><span class="step">3</span> The three molecules</h2>
+	<p class="lede">One builder makes all three, from the same few parts. Each electron pair gets a <strong>pivot</strong>, a group at the central atom turned to point where that pair points. A bonding pivot holds a bond (a cylinder from the nucleus outward), a hydrogen on its end and a pair of electrons (a glow with two dots, halfway along); a lone-pair pivot holds only a fatter glow and two dots. The directions are the geometry: methane's four bonds are at <code>acos(−1/3)</code> from one another; in ammonia the lone pair points straight up and the three bonds are placed so that the H–N–H angle is 107°; in water the bonds are 104.5° apart and the lone pairs 115° apart. Everything is made with <code>make(name, geometry, material, { classes })</code>, so each part has a name an author chose and a class from the start: <code>ch4_nucleus</code>, <code>nh3_2_bond</code>, <code>h2o_lone1</code>.</p>
+	<p>The gold <strong>cage</strong> joins the four pair directions with six edges (each a group at its first corner, so it grows from there), and a gold <strong>arc</strong> marks one bond angle, in the plane of the two bonds. The block also makes the flat 90° arc for the cross. The last line prints the three angles it built, which is the first check: 109.47, 107.00 and 104.50.</p>
+	<pre><code>// The molecules. Each is a group at its own station (methane left, ammonia middle, water right), built from the same few parts:
+//   a nucleus; one PIVOT per electron pair, turned to point where that pair points; inside a bonding pivot, a bond, a hydrogen and a pair of electrons
+//   (a soft glow with two dots); inside a lone-pair pivot, a fatter glow with two dots and no atom; the gold cage that joins the four pair directions
+//   (a tetrahedron; each edge is a group at its first corner holding a bar, so it grows from that corner); and the gold arc that marks one bond angle.
+// Everything starts collapsed (scale 0.001) and grows at its moment: a shared material cannot fade one mesh, so the film reveals by growing.
+globalThis.EV = [];
+globalThis.ev = (t, fn) =&gt; EV.push([t, fn, EV.length]);
+globalThis.flush = () =&gt; { EV.sort((a, b) =&gt; a[0] - b[0] || a[2] - b[2]); EV.forEach(([, fn]) =&gt; fn()); return EV.length; };
+globalThis.show = (sel, t, dur = 450) =&gt; ev(t, () =&gt; $S(sel).at(t).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, dur, 'ease-out'));
+globalThis.hide = (sel, t, dur = 350) =&gt; ev(t, () =&gt; $S(sel).at(t).animate({ to: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, dur, 'ease-in'));
+
+const M = globalThis.MOL = {
+  R: { H: 0.42, C: 0.65, N: 0.62, O: 0.6 },                     // ball-and-stick sizes, not true atomic sizes
+  L: { C: 2.18, N: 2.02, O: 1.92 },                              // the measured bond lengths, 0.109, 0.101 and 0.096 nm, at 20 units per nm
+  ANGLE: { C: 109.47, N: 107, O: 104.5 }, LONE_ANGLE_O: 115,     // the measured bond angles (the tetrahedral angle is acos(-1/3))
+  TET: Math.acos(-1 / 3), Y: 5.2, X: { ch4: -12, nh3: 0, h2o: 12 }
+};
+const V = (x, y, z) =&gt; new THREE.Vector3(x, y, z), UPV = V(0, 1, 0), rad = THREE.MathUtils.degToRad, deg = THREE.MathUtils.radToDeg;
+const polar = (theta, phiDeg) =&gt; { const p = rad(phiDeg); return V(Math.sin(theta) * Math.cos(p), Math.cos(theta), Math.sin(theta) * Math.sin(p)); };
+M.euler = dir =&gt; { const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(UPV, dir.clone().normalize()), 'XYZ'); return [e.x, e.y, e.z]; };
+M.eulerDeg = dir =&gt; M.euler(dir).map(deg);
+
+// the directions of the electron pairs: methane has four bonds; ammonia a lone pair straight up and three bonds; water two bonds and two lone pairs
+const nTheta = Math.acos(-Math.sqrt((2 * Math.cos(rad(M.ANGLE.N)) + 1) / 3));      // the angle from the lone pair to each N-H bond, from the H-N-H angle
+const half = rad(M.ANGLE.O / 2), lone = rad(M.LONE_ANGLE_O / 2), turn = new THREE.Matrix4().makeRotationY(rad(-45));
+const DIRS = {
+  ch4: { bonds: [UPV.clone(), polar(M.TET, -30), polar(M.TET, 90), polar(M.TET, 210)], lone: [] },
+  nh3: { bonds: [polar(nTheta, -30), polar(nTheta, 90), polar(nTheta, 210)], lone: [UPV.clone()] },
+  h2o: { bonds: [V(Math.sin(half), -Math.cos(half), 0), V(-Math.sin(half), -Math.cos(half), 0)], lone: [V(0, Math.cos(lone), Math.sin(lone)), V(0, Math.cos(lone), -Math.sin(lone))] }
+};
+DIRS.h2o.bonds.forEach(d =&gt; d.applyMatrix4(turn)); DIRS.h2o.lone.forEach(d =&gt; d.applyMatrix4(turn));   // turned 45 degrees about the vertical, so from the front both the bend and the two lone pairs show
+M.DIRS = DIRS;
+
+const gAtom = { H: new SphereGeometry(M.R.H, 32, 20), C: new SphereGeometry(M.R.C, 32, 20), N: new SphereGeometry(M.R.N, 32, 20), O: new SphereGeometry(M.R.O, 32, 20) };
+const gDot = new SphereGeometry(0.085, 12, 8);
+const gBond = L =&gt; new CylinderGeometry(0.1, 0.1, L, 16).translate(0, L / 2, 0);                           // from the nucleus out to the hydrogen
+const gLobeBond = L =&gt; new SphereGeometry(1, 24, 16).scale(0.36, L * 0.34, 0.36);
+const gLobeLone = new SphereGeometry(1, 24, 16).scale(0.62, 0.85, 0.62);
+const MAT = { C: PAL.carbon, N: PAL.nitrogen, O: PAL.oxygen };
+const NAME = { ch4: 'methane', nh3: 'ammonia', h2o: 'water' };
+
+// a pair of electrons: a glow with two dots, collapsed until its moment
+function pair(name, parent, at, glow, dotX, classes) {
+  const g = make(name, null, null, { classes: ['pair', ...classes], parent, position: [0, at, 0], scale: 0.001 });
+  make(name + '_glow', glow, PAL.pair, { classes: ['pair-glow', ...classes], parent: g, shadows: false });
+  make(name + '_ea', gDot, PAL.carbon, { classes: ['electron'], parent: g, position: [dotX, 0, 0], shadows: false });
+  make(name + '_eb', gDot, PAL.carbon, { classes: ['electron'], parent: g, position: [-dotX, 0, 0], shadows: false });
+  return g;
+}
+
+M.build = (id, centre) =&gt; {
+  const L = M.L[centre], d = DIRS[id];
+  const mol = make(NAME[id], null, null, { classes: ['molecule', id], position: [M.X[id], M.Y, 0] });
+  make(id + '_nucleus', gAtom[centre], MAT[centre], { classes: ['atom', 'nucleus'], parent: mol, scale: 0.001 });
+  d.bonds.forEach((dir, k) =&gt; {
+    const n = `${id}_${k + 1}`, e = M.euler(dir);
+    const p = make(n + '_pivot', null, null, { classes: ['pivot', 'bonding'], parent: mol, rotation: e });
+    make(n + '_bond', gBond(L), PAL.bond, { classes: ['bond'], parent: p, scale: 0.001 });
+    make(n + '_h', gAtom.H, PAL.white, { classes: ['atom', 'hydrogen'], parent: p, position: [0, L, 0], scale: 0.001 });
+    pair(n + '_pair', p, L / 2, gLobeBond(L), 0.2, ['bonding-pair']);
+  });
+  d.lone.forEach((dir, k) =&gt; {
+    const n = `${id}_lone${k + 1}`;
+    const p = make(n + '_pivot', null, null, { classes: ['pivot', 'lone'], parent: mol, rotation: M.euler(dir) });
+    pair(n, p, 0.95, gLobeLone, 0.24, ['lone-pair']);
+  });
+  // the cage: an edge between every two of the four pair directions, each growing from its first corner
+  const corners = [...d.bonds, ...d.lone].map(v =&gt; v.clone().multiplyScalar(L));
+  for (let i = 0; i &lt; 4; i++) for (let j = i + 1; j &lt; 4; j++) {
+    const delta = corners[j].clone().sub(corners[i]), len = delta.length(), n = `${id}_edge${i + 1}${j + 1}`;
+    const edge = make(n, null, null, { classes: ['cage'], parent: mol, position: corners[i].toArray(), scale: 0.001 });
+    edge.quaternion.setFromUnitVectors(UPV, delta.normalize());
+    make(n + '_bar', new CylinderGeometry(0.04, 0.04, len, 8).translate(0, len / 2, 0), PAL.gold, { classes: ['cage'], parent: edge, shadows: false });
+  }
+  // the bond angle: the pair of bonds that faces the front camera most squarely
+  let best = null;
+  for (let i = 0; i &lt; d.bonds.length; i++) for (let j = i + 1; j &lt; d.bonds.length; j++) {
+    const n = d.bonds[i].clone().cross(d.bonds[j]).normalize(), face = Math.abs(n.z);
+    if (!best || face &gt; best.face) best = { i, j, face };
+  }
+  const a = d.bonds[best.i], b = d.bonds[best.j], theta = a.angleTo(b), r = 1.2;
+  const arc = make(id + '_arc', new TorusGeometry(r, 0.05, 10, 48, theta), PAL.gold, { classes: ['angle'], parent: mol, scale: 0.001, shadows: false });
+  const nz = a.clone().cross(b).normalize(), ny = nz.clone().cross(a);
+  arc.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(a, ny, nz));
+  M[id] = { group: mol, a, b, angle: deg(theta), mid: a.clone().add(b).normalize() };
+  return mol;
+};
+M.build('ch4', 'C');
+M.build('nh3', 'N');
+M.build('h2o', 'O');
+
+// the flat cross that methane is drawn as on paper, and the angle marker between two of its arms
+const flat = [UPV.clone(), V(1, 0, 0), V(0, -1, 0), V(-1, 0, 0)];
+M.flatDeg = flat.map(M.eulerDeg);                       // the four arms, as the rotations the pivots turn to
+M.tetraDeg = DIRS.ch4.bonds.map(M.eulerDeg);
+make('ch4_flatarc', new TorusGeometry(1.2, 0.05, 10, 48, Math.PI / 2), PAL.gold, { classes: ['angle', 'flat'], parent: M.ch4.group, scale: 0.001, shadows: false });
+
+const angles = ['ch4', 'nh3', 'h2o'].map(id =&gt; id + ' ' + M[id].angle.toFixed(2) + ' pair ' + M[id].a.toArray().map(x =&gt; x.toFixed(2)) + ' | ' + M[id].b.toArray().map(x =&gt; x.toFixed(2)));
+angles.join('\n')</code></pre>
+	<figure>
+		<img src="screenshots/mol-three.png" alt="Three small molecules on a floor under the question why are molecules shaped differently: methane, ammonia and water, each a central atom with white hydrogens, named below." loading="lazy">
+		<figcaption>8.5 seconds in: the question, and the three molecules just built, still without their electron pairs.</figcaption>
+	</figure>
+
+	<h2><span class="step">4</span> Seven cameras</h2>
+	<p class="lede">One camera per idea: a wide one, then a close one for each molecule (field of view 28°, so the perspective is shallow and the angles read truly), one that comes down from straight above ammonia to its side, a wide one for the comparison, and the end card. The <code>path()</code> helper writes a move around a centre as a list of keys, each an azimuth, a radius and a height. The close cameras drift a few degrees on each molecule, so the depth shows in the parallax, and swing wider (−30° to +30°) while the tetrahedron is on screen. The block ends by putting the cuts in order.</p>
+	<pre><code>// seven cameras, one per idea: a wide one for the three molecules, one for methane, one for ammonia, one that comes down from above ammonia to its side,
+// one for water, one for the comparison, and the end card (seven shots). Each looks at its molecule from a little above, and drifts around it a few degrees,
+// so the depth shows in the parallax.
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  cam.userData.customClasses = ['camera'];
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+
+// a move around a centre, written as a list of keys: [time, azimuth in degrees (0 = straight in front, looking along -z), radius, height]
+globalThis.path = (cam, pts, aim, center = [0, 0, 0]) =&gt; {
+  const keys = pts.map(([t, az, r, y]) =&gt; ({ t, pos: [center[0] + r * Math.sin(THREE.MathUtils.degToRad(az)), y, center[2] + r * Math.cos(THREE.MathUtils.degToRad(az))], lookAt: aim }));
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+};
+
+const camWide = addCamera('camWide', 40), camMethane = addCamera('camMethane', 28), camAmmonia = addCamera('camAmmonia', 28), camAbove = addCamera('camAbove', 28);
+const camWater = addCamera('camWater', 28), camCompare = addCamera('camCompare', 40), end = addCamera('camCard', 50);
+const Y = MOL.Y;
+path(camWide, [[0.001, -6, 31, Y + 2.9], [9.9, 6, 31, Y + 2.9]], [0, Y - 0.2, 0]);
+path(camMethane, [[9.9, -8, 19, Y + 2.3], [26.9, 8, 19, Y + 2.3], [30.2, -30, 19, Y + 2.3], [34.5, 30, 19, Y + 2.3]], [MOL.X.ch4, Y + 0.25, 0], [MOL.X.ch4, 0, 0]);
+path(camAmmonia, [[34.5, 8, 19, Y + 2.3], [46.4, -8, 19, Y + 2.3], [56.6, 24, 19, Y + 2.3]], [MOL.X.nh3, Y + 0.25, 0], [MOL.X.nh3, 0, 0]);
+// from straight above (the three hydrogens look flat) down to the side (the pyramid shows): a quarter of a circle round the nitrogen
+{
+  const R = 19, pts = [];
+  for (let i = 0; i &lt;= 8; i++) {
+    const t = i &lt; 3 ? 57.15 + i * 1.5 : 60.15 + (i - 2) * 0.5;       // held above for the first words, then down in the second half
+    const el = i &lt; 3 ? 86 : 86 - (i - 2) / 6 * 64;
+    pts.push([t, 6, R * Math.cos(THREE.MathUtils.degToRad(el)), Y + R * Math.sin(THREE.MathUtils.degToRad(el))]);
+  }
+  path(camAbove, pts, [MOL.X.nh3, Y + 0.25, 0], [MOL.X.nh3, 0, 0]);
+}
+path(camWater, [[63.6, 30, 19, Y + 2.3], [70.0, 5, 19, Y + 2.3], [73.9, -30, 19, Y + 2.3]], [MOL.X.h2o, Y + 0.25, 0], [MOL.X.h2o, 0, 0]);
+path(camCompare, [[73.9, -6, 31, Y + 2.9], [89.6, 6, 31, Y + 2.9]], [0, Y - 0.2, 0]);
+end.position.set(0, 9, -17.5);                                         // faces the end card, which hangs on the back wall
+end.lookAt(0, 9, -34);
+
+const cams = Object.fromEntries(['camWide', 'camMethane', 'camAmmonia', 'camAbove', 'camWater', 'camCompare', 'camCard'].map(n =&gt; [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camWide'], [9.9, 'camMethane'], [34.5, 'camAmmonia'], [56.6, 'camAbove'], [63.6, 'camWater'], [73.9, 'camCompare'], [89.6, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 7</code></pre>
+
+	<h2><span class="step">5</span> The labels</h2>
+	<p class="lede">Click the <strong>Text</strong> stencil (Stencils tab) once, and then paste this. Every label is a copy of that stencil, left-aligned; widths come from the font. The font has no subscript digits, so each formula is a few small labels (the letters, then a smaller, lowered digit). Labels are children of their molecule's group, so they sit in its own frame. The words are shown and cleared in step 7, and a molecule's labels are off while the camera is on another molecule, so they do not spill into the next frame.</p>
+	<pre><code>// every label is a copy of the one Text stencil, so they share its font; they share a material per colour too, so each label cuts in (and out)
+// rather than fading, because a shared material cannot fade one label without fading them all. A label's text begins at its own origin, left-aligned:
+// widths come from the font (units of the font size, at scale 1), so a label is centred by subtracting half its width. The font has no subscript
+// digits, so a formula is three small labels: the letters, then a smaller, lowered digit, then any letter that follows.
+const tpl = $S('#Text').nodes[0];
+let first = true;
+globalThis.label = (name, material, cx, y, z, scale, opt = {}) =&gt; {
+  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);
+  m.name = name;
+  m.material = material;
+  m.scale.setScalar(scale);
+  m.position.set(cx - (opt.width || 0) * scale / 2, y, z);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  m.userData.customClasses = ['label', ...(opt.classes || [])];
+  if (opt.parent) opt.parent.add(m); else if (!first) editor.execute(new AddObjectCommand(editor, m));
+  first = false;
+  ev(0, () =&gt; $S('#' + name).at(0).change(''));
+  return m;
+};
+// show a label's text at one time and clear it at another
+globalThis.say = (name, text, from, to) =&gt; {
+  ev(from, () =&gt; $S('#' + name).at(from).change(text));
+  ev(to, () =&gt; $S('#' + name).at(to).change(''));
+};
+
+// widths in the font's own units (helvetiker_bold at scale 1)
+const W = { 'methane  ': 6.40, CH: 2.00, 4: 0.83, 'ammonia  ': 6.65, NH: 1.90, 3: 0.83, 'water  ': 4.52, H: 0.95, 2: 0.83, O: 1.09 };
+const SUB = 0.62;                                                                       // a subscript digit is this much smaller ...
+const TITLES = {
+  ch4: [['methane  ', 0], ['CH', 0], ['4', 1]],
+  nh3: [['ammonia  ', 0], ['NH', 0], ['3', 1]],
+  h2o: [['water  ', 0], ['H', 0], ['2', 1], ['O', 0]]
+};
+// the name and formula of each molecule, on one line under it, centred
+MOL.titles = {};
+for (const id of Object.keys(TITLES)) {
+  const parts = TITLES[id], s = 0.85;
+  const total = parts.reduce((a, [t, sub]) =&gt; a + W[t] * (sub ? SUB : 1) * s, 0);
+  let x = -total / 2;
+  MOL.titles[id] = parts.map(([t, sub], k) =&gt; {
+    const name = `${id}Title${k + 1}`;
+    label(name, PAL.white, x, sub ? -2.9 - 0.2 * s : -2.9, 1.4, sub ? SUB * s : s, { parent: MOL[id].group });
+    x += W[t] * (sub ? SUB : 1) * s;
+    return [name, t];
+  });
+}
+globalThis.titleOn = (id, from, to) =&gt; MOL.titles[id].forEach(([name, t]) =&gt; say(name, t, from, to));
+
+// the words of each beat, placed beside what they name (positions are in each molecule's own frame; every one is centred on the x it is given)
+const G = id =&gt; MOL[id].group, mid = id =&gt; MOL[id].mid;
+const at = (id, r) =&gt; [mid(id).x * r, mid(id).y * r];
+// methane: the flat cross, then the tetrahedron
+label('ch4Flat', PAL.white, 0, 3.05, 1.2, 0.8, { width: 8.95, parent: G('ch4') });
+label('ch4Flat90', PAL.gold, 1.95, 1.7, 1.0, 0.85, { width: 2.12, parent: G('ch4') });
+label('ch4Shape', PAL.white, 0, 3.1, 1.2, 0.9, { width: 7.22, parent: G('ch4') });
+label('ch4Angle', PAL.gold, 3.6, 0.7, 1.0, 0.85, { width: 4.08, parent: G('ch4') });
+// ammonia
+label('nh3Lone', PAL.gold, 2.3, 1.8, 1.0, 0.8, { width: 5.65, parent: G('nh3') });
+label('nh3Shape', PAL.white, 0, 3.1, 1.2, 0.9, { width: 11.8, parent: G('nh3') });
+label('nh3Angle', PAL.gold, 3.3, -1.0, 1.0, 0.85, { width: 2.94, parent: G('nh3') });
+// water
+label('h2oShape', PAL.white, 0, 3.1, 1.2, 0.9, { width: 2.92, parent: G('h2o') });
+label('h2oAngle', PAL.gold, 3.6, -1.4, 1.0, 0.85, { width: 4.08, parent: G('h2o') });
+label('h2oLone', PAL.gold, 2.9, 1.6, 1.0, 0.8, { width: 6.42, parent: G('h2o') });
+// the comparison: how many lone pairs each one has
+label('cmp0', PAL.gold, 0, -4.3, 1.4, 0.8, { width: 7.63, parent: G('ch4') });
+label('cmp1', PAL.gold, 0, -4.3, 1.4, 0.8, { width: 6.85, parent: G('nh3') });
+label('cmp2', PAL.gold, 0, -4.3, 1.4, 0.8, { width: 7.63, parent: G('h2o') });
+// the question, high over the three in the first shot; and the lesson, there again at the end
+label('q1', PAL.white, 0, 12.2, 0, 1.3, { width: 12.39 });
+label('q2', PAL.white, 0, 10.3, 0, 1.3, { width: 12.8 });
+label('rule1', PAL.white, 0, 11.6, 0, 1.0, { width: 14.88 });
+label('rule2', PAL.white, 0, 10.0, 0, 1.0, { width: 19.01 });
+$S('.label').nodes.length      // 28</code></pre>
+
+	<h2><span class="step">6</span> The end card</h2>
+	<p class="lede">Click the <strong>Call card</strong> stencil, then paste. It is hung on the back wall, facing the last camera.</p>
+	<pre><code>// the end card: the Call card stencil, landscape, hung on the back wall and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(0, 9, -34).scaleTo(8);
+card.rotation.set(0, 0, 0);
+card.material.opacity = 0;
+card.userData.customClasses = ['card'];</code></pre>
+
+	<h2><span class="step">7</span> The schedule</h2>
+	<p class="lede">Every reveal and every move of the film, in one place, each on the words that name it. The three molecules are built first (<code>atoms</code>). In cue 2 the four methane pivots <em>turn</em> to the flat cross, with <code>animate({ to: { rotation: [x, y, z] } })</code>; the pose is a rotation, and the animation takes the shortest way between two rotations, so the hydrogen sweeps along an arc. In cue 3 they turn back to the tetrahedron. Everything that appears is a scale from 0.001 to 1: the pairs of electrons, the cages, the arcs. Ammonia's cage, lone pair and words step aside while the camera looks straight down, and return when it comes down to the side.</p>
+	<pre><code>// the schedule of the film: every reveal and every move, queued with its time and written in time order at the end (flush).
+// The cue starts are the narration's, measured with the voice first (see the subtitles): every beat sits on the words that name it.
+const S = [0.8, 10.45, 18.05, 27.775, 35.05, 46.475, 57.15, 64.175, 74.55, 83.55, 90.15];
+
+const nPairs = { ch4: 4, nh3: 3, h2o: 2 }, nLone = { ch4: 0, nh3: 1, h2o: 2 };
+const EDGES = ['12', '13', '14', '23', '24', '34'];
+// the atoms: the nucleus, then each bond and the hydrogen on the end of it
+const atoms = (id, t0) =&gt; {
+  show(`#${id}_nucleus`, t0, 500);
+  for (let k = 1; k &lt;= nPairs[id]; k++) { show(`#${id}_${k}_bond`, t0 + 0.4 + 0.3 * (k - 1), 350); show(`#${id}_${k}_h`, t0 + 0.6 + 0.3 * (k - 1), 300); }
+};
+const bondingPairs = (id, t0, gap) =&gt; { for (let k = 1; k &lt;= nPairs[id]; k++) show(`#${id}_${k}_pair`, t0 + gap * (k - 1), 500); };
+const lonePairs = (id, t0, gap) =&gt; { for (let k = 1; k &lt;= nLone[id]; k++) show(`#${id}_lone${k}`, t0 + gap * (k - 1), 600); };
+const cage = (id, t0, gap) =&gt; EDGES.forEach((e, n) =&gt; show(`#${id}_edge${e}`, t0 + gap * n, 400));
+const uncage = (id, t) =&gt; EDGES.forEach(e =&gt; hide(`#${id}_edge${e}`, t, 300));
+// turn a pivot to a pose (degrees), with a smooth start and stop
+const turn = (sel, t, deg, ms) =&gt; ev(t, () =&gt; $S(sel).at(t).animate({ to: { rotation: deg } }, ms, 'ease-in-out'));
+const pulse = (sel, t, base) =&gt; {
+  ev(t, () =&gt; $S(sel).at(t).animate({ to: { scaleX: base * 1.3, scaleY: base * 1.3, scaleZ: base * 1.3 } }, 300, 'ease-out'));
+  ev(t + 0.4, () =&gt; $S(sel).at(t + 0.4).animate({ to: { scaleX: base, scaleY: base, scaleZ: base } }, 300, 'ease-in-out'));
+};
+const END = 89.6, CMP = 74.0;
+// a label shows in its own beat and again in the comparison; in between it is off, so it does not spill into the next molecule's frame
+const sayWin = (name, text, wins) =&gt; wins.forEach(([a, b]) =&gt; say(name, text, a, b));
+const titleWin = (id, wins) =&gt; wins.forEach(([a, b]) =&gt; titleOn(id, a, b));
+
+// cue 1: the question, and the three molecules, built from spheres and bonds, one after another
+say('q1', 'why are molecules', 0.9, 9.9); say('q2', 'shaped differently?', 0.9, 9.9);
+atoms('ch4', 1.0); atoms('nh3', 3.4); atoms('h2o', 5.6);
+titleWin('ch4', [[1.4, 34.4], [CMP, END]]);
+titleWin('nh3', [[3.8, 9.9], [34.5, 56.5], [61.9, 63.5], [CMP, END]]);
+titleWin('h2o', [[6.0, 9.9], [63.6, END]]);
+
+// cue 2: methane as it is drawn on paper: four bonds in a cross, 90 degrees apart
+for (let k = 0; k &lt; 4; k++) turn(`#ch4_${k + 1}_pivot`, 10.9, MOL.flatDeg[k], 1100);
+show('#ch4_flatarc', 12.6, 400);
+say('ch4Flat', 'a flat drawing', 12.4, 23.9);
+say('ch4Flat90', '90°', 12.8, 23.9);
+
+// cue 3: every bond is a pair of electrons; they repel, and in space the bonds swing apart to the corners of a tetrahedron
+bondingPairs('ch4', 18.9, 0.4);
+hide('#ch4_flatarc', 23.9, 300);
+for (let k = 0; k &lt; 4; k++) turn(`#ch4_${k + 1}_pivot`, 24.0, MOL.tetraDeg[k], 1900);
+
+// cue 4: the tetrahedron, and the angle between any two bonds
+sayWin('ch4Shape', 'tetrahedral', [[28.3, 34.4], [CMP, END]]);
+cage('ch4', 28.5, 0.25);
+show('#ch4_arc', 31.0, 450);
+sayWin('ch4Angle', '109.5°', [[31.3, 34.4], [CMP, END]]);
+
+// cue 5: ammonia has the same four pairs, but one of them is a lone pair, with no atom on it
+bondingPairs('nh3', 37.2, 0.4);
+lonePairs('nh3', 42.6, 0.5);
+say('nh3Lone', 'lone pair', 43.0, 49.6);
+
+// cue 6: the cage is still a tetrahedron; the atoms alone make a pyramid; the fat lone pair squeezes the bonds to 107 degrees
+cage('nh3', 47.0, 0.3);
+sayWin('nh3Shape', 'trigonal pyramidal', [[50.5, 56.4], [62.2, 63.5], [CMP, END]]);
+show('#nh3_arc', 53.8, 450);
+sayWin('nh3Angle', '107°', [[54.1, 56.4], [62.6, 63.5], [CMP, END]]);
+
+// cue 7: from straight above the three hydrogens look flat, so the cage, the lone pair and the words step aside; from the side the pyramid shows
+uncage('nh3', 56.5); hide('#nh3_lone1', 56.5, 300); hide('#nh3_arc', 56.5, 300);
+cage('nh3', 61.6, 0.12);
+show('#nh3_lone1', 62.2, 500); show('#nh3_arc', 62.4, 450);
+
+// cue 8: water has two bonds and two lone pairs: bent
+bondingPairs('h2o', 64.6, 0.4);
+lonePairs('h2o', 66.2, 0.4);
+say('h2oLone', 'lone pairs', 66.8, 70.4);
+cage('h2o', 68.0, 0.25);
+say('h2oShape', 'bent', 69.0, END);
+show('#h2o_arc', 71.6, 450);
+say('h2oAngle', '104.5°', 71.9, END);
+
+// cue 9: the same four pairs, three shapes; each lone pair closes the angle more
+pulse('#ch4Shape', 74.7, 0.9); pulse('#nh3Shape', 76.3, 0.9); pulse('#h2oShape', 78.6, 0.9);
+say('cmp0', '0 lone pairs', 80.6, END);
+say('cmp1', '1 lone pair', 81.6, END);
+say('cmp2', '2 lone pairs', 82.5, END);
+
+// cue 10: the lesson
+say('rule1', 'electron-pair repulsion', 84.2, END);
+say('rule2', 'predicts molecular geometry', 85.9, END);
+
+// the end card fades in as the last camera arrives
+ev(89.7, () =&gt; $S('#callcard').at(89.7).fadeIn(2.0));
+EV.length</code></pre>
+	<figure>
+		<img src="screenshots/mol-flat.png" alt="Methane drawn flat: a dark carbon atom with four white hydrogens in a cross, a gold 90 degree arc, and the words a flat drawing." loading="lazy">
+		<figcaption>14 seconds in: methane as it is drawn on paper, four bonds in a cross.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-pairs.png" alt="The flat cross with a soft yellow glow and two dots along each bond: each bond is a pair of electrons." loading="lazy">
+		<figcaption>22 seconds in: every bond is a pair of electrons, and the pairs repel.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-swing.png" alt="Methane partway between the flat cross and a pyramid shape: three of the bonds have swung out of the plane." loading="lazy">
+		<figcaption>25 seconds in: the bonds swing out of the plane.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-tetra.png" alt="Methane as a tetrahedron: four hydrogens at the corners of a gold cage, a gold arc with the label 109.5 degrees, and the word tetrahedral above." loading="lazy">
+		<figcaption>32.5 seconds in: a tetrahedron, 109.5° between any two bonds.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-lone.png" alt="Ammonia: a blue nitrogen with three hydrogens and, on top with no atom, a larger yellow glow labelled lone pair." loading="lazy">
+		<figcaption>44.5 seconds in: ammonia has four pairs too, but the fourth is a lone pair with no atom on it.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-pyramid.png" alt="Ammonia with its gold cage: the nitrogen and three hydrogens make a pyramid, with an angle of 107 degrees, and the words trigonal pyramidal above." loading="lazy">
+		<figcaption>54.8 seconds in: the same cage, but the atoms make a pyramid; the fatter lone pair squeezes the bonds to 107°.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-above.png" alt="Ammonia seen from directly above: three hydrogens at equal angles round the nitrogen, looking flat, with the shadow of the molecule on the floor behind." loading="lazy">
+		<figcaption>58.6 seconds in: from straight above, the pyramid looks flat.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-side.png" alt="The same ammonia from the side, with the pyramid and its cage showing." loading="lazy">
+		<figcaption>62.8 seconds in: from the side, the pyramid shows.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-water.png" alt="Water: a red oxygen with two hydrogens in a bent shape beneath two yellow lone pairs, a gold arc and the label 104.5 degrees, and the word bent above." loading="lazy">
+		<figcaption>72.5 seconds in: water has two bonds and two lone pairs, so the atoms are bent, at 104.5°.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/mol-compare.png" alt="The three molecules side by side: tetrahedral at 109.5 degrees with 0 lone pairs, trigonal pyramidal at 107 degrees with 1 lone pair, and bent at 104.5 degrees with 2 lone pairs." loading="lazy">
+		<figcaption>82 seconds in: the same four electron pairs, three shapes; each lone pair closes the angle a little more.</figcaption>
+	</figure>
+
+	<h2><span class="step">8</span> Subtitles</h2>
+	<p class="lede">Eleven cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the other shorts. The cues were run through a speech synthesizer (Kokoro, <em>af_sarah</em>) and each cue gets its measured length plus 0.3 seconds, with a gap before the next, so no two ever overlap. Numbers are written as they are spoken ("one hundred nine point five degrees").</p>
+	<pre><code>// the narration as subtitle cues, kept on the scene (scene.userData.renderSubtitles); each cue starts where the voice does and ends where the voice measured
+setSubtitles([
+  { start: 0.8, end: 10.0, text: "Methane, ammonia and water: each is a central atom bonded to\nhydrogens, and each has a different shape. Why?" },
+  { start: 10.45, end: 17.6, text: "Start with methane. A flat drawing puts its four\nbonds in a cross, ninety degrees apart." },
+  { start: 18.05, end: 27.325, text: "But every bond is a pair of electrons, and\nelectron pairs repel each other. In space, the\nbonds can swing further apart." },
+  { start: 27.775, end: 34.6, text: "They settle into a tetrahedron: one hundred nine point\nfive degrees between every pair of bonds." },
+  { start: 35.05, end: 46.025, text: "Now ammonia. Nitrogen also has four electron\npairs, but only three are bonds. The fourth is a\nlone pair, with no atom on it." },
+  { start: 46.475, end: 56.7, text: "The four pairs still form a tetrahedron, but the\natoms make a pyramid. The fatter lone pair squeezes\nthe bonds to one hundred seven degrees." },
+  { start: 57.15, end: 63.725, text: "Look from above, and the pyramid looks flat.\nOnly from the side does its shape show." },
+  { start: 64.175, end: 74.1, text: "Water has two bonds and two lone pairs, so its atoms\nare bent, and the two fat lone pairs squeeze the angle\nto one hundred four point five degrees." },
+  { start: 74.55, end: 83.1, text: "Tetrahedral, trigonal pyramidal, bent: the\nsame four electron pairs, and each lone pair\ncloses the angle a little more." },
+  { start: 83.55, end: 89.7, text: "Electron pairs repel each other, and that\nrepulsion predicts the shape of a molecule." },
+  { start: 90.15, end: 92.35, text: "Made with Strata." }
+]).length   // 11</code></pre>
+
+	<h2><span class="step">9</span> Write the animation</h2>
+	<p class="lede">One last block of animation. Every animation queued above is written now, in time order, so no object's track is ever written out of order.</p>
+	<pre><code>// every animation of the film is written now, in time order
+flush()</code></pre>
+
+	<h2><span class="step">10</span> Name and class everything</h2>
+	<p class="lede">The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S('#nh3_lone1')</code>, <code>$S('.lone-pair')</code>, <code>$S('.cage')</code>, an AI edit or a tutorial step cannot reach it. Everything the film made was named and classed where it was made, so this last block only classes the room, the lights, the cameras and the card, from one table, and then calls <code>requireLabels(true)</code>. That marks the scene: from now on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. Objects the engine makes itself (the dark shadow of each text label, whose names start with <code>__</code>) are exempt. With the classes in place, <code>$S('.lone-pair')</code> reaches every lone pair of the film (one in ammonia, two in water, with the glow and the dots inside each), and <code>$S('.cage')</code> every edge of every tetrahedron.</p>
+	<pre><code>// Every part was named, and given its classes, where it was made (make(name, geometry, material, { classes })): a nucleus is 'ch4_nucleus', a bond 'nh3_2_bond',
+// the glow of a lone pair 'h2o_lone1_glow'. This last block only classes what the stencils and the room made, from one table, and then calls requireLabels(true).
+// Anything left without a class is listed and the block stops.
+const rules = [
+  [/^(Room|Floor)$/, ['environment']], [/Light$/, ['light']], [/^cam/, ['camera']], [/^callcard$/, ['card']]
+];
+const left = [];
+scene.traverse(o =&gt; {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);
+  o.userData.customClasses = [...new Set([...(o.userData.customClasses || []), ...add])];
+  if (o.userData.customClasses.length === 0) left.push(o.name || '(unnamed)');
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+
+	<h2><span class="step">11</span> The narration</h2>
+	<p class="lede">The eleven subtitle cues were written to be read aloud. A voice track made from them with <a href="https://dub.webcli.app">dub.webcli.app</a> (every cue placed at its start time in one WAV, voice <em>af_sarah</em>, 92.65 s, no cue overlaps another) is committed beside the scene as <code>audio/molecule-shapes.wav</code>, and this one-line block tells the scene to carry it: the path is relative to the scene file's folder in the repo. When the render is published (Render tab, Publish), the track is encoded once as AAC and every video rung references it through an HLS audio group.</p>
+	<pre><code>// The narration the published render carries: the voice track made from the subtitles (a WAV with every cue at its start time, from dub.webcli.app),
+// stored in the repo beside the scene. The path is relative to the scene file's folder.
+setRenderAudio('audio/molecule-shapes.wav', { language: 'en', label: 'English' })</code></pre>
+
+	<h2><span class="step">12</span> Render it</h2>
+	<ol class="steps">
+		<li>Open the <strong>Render</strong> tab and its <strong>Video</strong> sub-tab. The Camera Sequence already holds the seven shots from step 4.</li>
+		<li>Choose <strong>Render (offline)</strong>, 1920 × 1080 at 60 fps, and click <strong>Render</strong>. Every frame is drawn and captured at its exact timeline time, so the result is the same on a fast or a slow machine. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>
+	</ol>
+	<figure>
+		<img src="screenshots/mol-card.png" alt="The end card on the back wall, with a QR code and the words Made with Strata." loading="lazy">
+		<figcaption>92 seconds in: the last cut, to the end card.</figcaption>
+	</figure>
+	<div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence, the subtitles and the narration path all live in the scene file.</div>
+
+	<h2><span class="step">13</span> Open the scene file</h2>
+	<p class="lede">The scene is <a href="../../#repo=tejaswigowda/test1&amp;file=molecule-shapes.json">molecule-shapes.json</a> in <code>tejaswigowda/test1</code>. It is the scene <em>file</em>, not a still: the timeline, the camera sequence and the subtitles are saved inside it, so opening it plays the film without any script, and the blocks on this page are how it was authored. Scrub the Animations tab: at 11&nbsp;s the flat cross, at 29&nbsp;s the tetrahedron, at 44&nbsp;s the lone pair, at 59&nbsp;s ammonia from above, at 72&nbsp;s water, and from 89.7&nbsp;s the card fills the frame.</p>
+	<div class="note"><strong>Why the player at the top is pinned to a commit.</strong> The player reads the scene through a CDN that can keep serving a branch's previous version for hours after a push, so a link by branch name could show the version before this page was written. The player's address names the commit (<code>@e223905</code>), which never goes stale; the link in this step reads the branch head. When the scene is republished, move the commit in the player's address.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and read back: ten materials of its own (each text label also makes a dark shadow material when it is shown), 103 geometries, 191 objects (every one named and classed, apart from the engine's label shadows: <code>lint()</code> reports nothing, and the scene is marked with <code>requireLabels</code>), 93 timeline tracks, 7 shots and 11 cues. The geometry was read back from the loaded scene by seeking to a moment and measuring the distances and angles between the atoms' world positions: at 2 s (as built) every H–C–H angle was 109.47° and every C–H 2.18, the three H–N–H angles were 107.00° with N–H 2.02, and H–O–H was 104.50° with O–H 1.92 (and 115.00° between the two lone pairs); at 12.5 s and 22 s the methane arms were a flat cross, 90° and 180°, with H–H 3.083 along each side; from 30 s on they were the tetrahedron again, H–H 3.560. The screenshots are frames of the pasted scene at 8.5, 14, 22, 25, 32.5, 44.5, 54.8, 58.6, 62.8, 72.5, 82 and 92&nbsp;s, with the editor's controls hidden. Rendering to a video file (step 12) was not run for this page.</div>
+	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> scene units, 20 to the nanometre, so the bonds are 2.18, 2.02 and 1.92 long (0.109, 0.101 and 0.096 nm) and the angles are the measured 109.5°, 107° and 104.5°; atoms are drawn at ball-and-stick sizes, not true sizes, and the length of a bond is a property of the molecule, not of any ruler in the scene. <em>Assumptions:</em> a qualitative model: electron pairs around a central atom repel and spread to the corners of a tetrahedron, and a lone pair, which is held by one nucleus, takes up more room than a bonding pair. The model explains the shapes and the order of the angles (109.5° &gt; 107° &gt; 104.5°), not the exact numbers, which are measured; the glows, dots and gold cage are schematic, not electron clouds; the lone pairs of water are drawn 115° apart for clarity; the flat cross is how a molecule is sometimes drawn on paper, not a real arrangement; the film does not cover molecules with other numbers of pairs. <em>Render:</em> no video render was run for this page; the narration track was made and is committed beside the scene, and a 1080p60 render has to be made and published. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

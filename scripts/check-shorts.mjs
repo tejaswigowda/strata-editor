@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dir = path.join( path.dirname( fileURLToPath( import.meta.url ) ), '..', 'docs', 'about', 'tutorials' );
-const SHORTS = [ 'makeshort.html', 'a-plus-b-cubed.html', 'hardy-weinberg.html', 'area-volume.html', 'projectile.html', 'piston.html' ];
+const SHORTS = [ 'makeshort.html', 'a-plus-b-cubed.html', 'hardy-weinberg.html', 'area-volume.html', 'projectile.html', 'piston.html', 'molecule-shapes.html' ];
 const PROOF_OK = { 'a-plus-b-cubed.html': 'it is a genuine dissection proof of the identity for positive lengths, and says so in its contract' };
 const REQUIRED = [ 'Units:', 'Assumptions:', 'Render:', 'Addressable:' ];
 
