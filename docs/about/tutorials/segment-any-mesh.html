@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cut any textured mesh into named parts — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: use the Strata Shell's SEG tool to cut any one-piece textured model into named, classed parts from its UV islands and painted colours, with an avocado as the easy case and a toy duck as the hard one, and learn where the method stops working.">
+<!--
+	/about/tutorials/segment-any-mesh.html — a from-scratch, by-hand tutorial.
+	Every snippet is real Strata surface (the SEG global of the JS Shell, documented in
+	guides/MESH_SEGMENT.md, plus $S(), isolate() and lint()). Paste each block into the Shell
+	tab in order. Static page, no build step, no third-party calls. The scenes are
+	avocado.json and duck.json in tejaswigowda/test1.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	figure {
+		margin: 1.2em 0;
+	}
+	figure img {
+		display: block;
+		width: 100%;
+		border-radius: 8px;
+		border: 1px solid #2a2e36;
+	}
+	figure figcaption {
+		margin-top: 0.5em;
+		font-size: 0.82rem;
+		color: #7d8794;
+		text-align: center;
+	}
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+	iframe{
+		width: 100%;
+		height: 500px;
+		border: none;
+	}
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Cut any textured mesh into named parts</h1>
+	<iframe src="../../#repo=tejaswigowda/test1@1286469d0342c60bb724bb28b6e1d0ee8186dad9&amp;file=duck.json&amp;present=true"></iframe>
+
+	<p class="tagline">A model usually arrives as one mesh with one material, so nothing in the scene says "this is the beak". The editor's <code>SEG</code> tool cuts such a mesh into separate named, classed meshes in one undo step, from the evidence the file carries: which pieces of the texture are separate patches, and what colours are painted on them. This page uses it twice: on an avocado, where the file practically labels itself, and on a toy duck, where you have to read the evidence and decide. It also says where the method stops. Built with the JS Shell.</p>
+
+	<div class="note"><strong>The tool is in the editor; this page uses it.</strong> <code>SEG</code> is a Shell global, with no setup. If you want to see what it does written out by hand, the older tutorial <a href="segment-a-mesh.html">Cut an avocado into named parts, building the tool by hand</a> builds the same thing step by step. The reference is <a href="../../../guides/MESH_SEGMENT.md">guides/MESH_SEGMENT.md</a>.</div>
+
+	<h2><span class="step">1</span> The idea, and how far it goes</h2>
+	<p class="lede">A mesh has no idea what its triangles are, but two things in the file do carry hints. <strong>UV islands:</strong> an artist unwraps a model into patches of one texture image, and a patch that shares no vertices with any other is often a whole part (a seed, a beak, a wing). <strong>Painted colour:</strong> inside one patch, a ring of orange and a ring of cream are different things even though the triangles are all alike. <code>SEG</code> reports both, you decide what each piece is, and <code>SEG.split</code> cuts exactly there. <strong>It does not recognise anything:</strong> the names come from you (or from an AI that you show the report to), and it never loses a triangle.</p>
+	<p><strong>The 3D advantage.</strong> The parts are only separable because the object is three-dimensional data: you can isolate the beak, see from behind that the cut is where you think it is, and tell the left wing from the right by where its centre sits in space. The report says that in one column.</p>
+	<p><strong>It works when</strong> the model is one indexed mesh with UVs and a base-colour texture, and its parts are laid out as separate islands or are painted in clearly different colours. <strong>It does not work when</strong> the mesh has no UVs, or only vertex colours or one flat colour (there is no evidence to read); when a part shares an island and a colour with its neighbour (a boundary nobody painted cannot be found); or when the model has several materials, a skeleton or morph targets (<code>SEG</code> refuses these, and says why, rather than break them). And even when it works, it does not decide what an island <em>is</em>: the duck below has ten islands for about six parts, and you have to merge them.</p>
+
+	<h2><span class="step">2</span> The models, and their licences</h2>
+	<p class="lede">Both are from the Khronos glTF Sample Models archive, retrieved 27 October 2026. Download the <code>.glb</code> files, then <strong>File &rarr; Import</strong> (or drop one in the viewport), accepting the import dialog's defaults. Import one at a time into an empty scene.</p>
+	<table class="cuts">
+		<tr><th>Model</th><th>Source</th><th>Licence</th></tr>
+		<tr><td>Avocado</td><td><a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/main/2.0/Avocado/glTF-Binary/Avocado.glb">Avocado.glb</a>, Microsoft; 8.3 MB, one mesh of 682 triangles, three 2048 × 2048 textures</td><td>CC0 1.0 (public domain dedication)</td></tr>
+		<tr><td>Duck</td><td><a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/main/2.0/Duck/glTF-Binary/Duck.glb">Duck.glb</a>, Copyright 2006 Sony Computer Entertainment Inc.; 120 KB, one mesh of 4,212 triangles, one 512 × 512 texture</td><td><a href="https://web.archive.org/web/20160320123355/http://research.scea.com/scea_shared_source_license.html">SCEA Shared Source License 1.0</a>: free to use, modify and redistribute, derivatives must carry the licence and notices and identify the modifications, as is, with no warranty</td></tr>
+	</table>
+	<div class="note"><strong>The duck scene is a modified copy, and says so.</strong> <code>duck.json</code> in <code>tejaswigowda/test1</code> is committed with the full licence text (<code>licenses/SCEA-Shared-Source-License-1.0.txt</code>) and a notice (<code>licenses/duck-NOTICE.md</code>) that gives the copyright line and lists the modifications: the one mesh cut into ten, two eyes subdivided, a light added. The texture and material are unchanged. If you publish a scene made from the duck, do the same. The avocado needs nothing, but the page credits it.</div>
+
+	<h2><span class="step">3</span> The easy case: the avocado</h2>
+	<p class="lede">Import <code>Avocado.glb</code>. The scene holds one mesh, <code>Avocado</code>, inside a wrapper node named after the file. Ask for the report:</p>
+	<pre><code>SEG.describe('#Avocado')</code></pre>
+	<pre><code>island 0: 483 triangles, texture u 0.01,0.67 v 0.01,0.76, size 0.043,0.063,0.022, at 0.50,0.50,0.61, colours rgb(54,102,10) 65%  rgb(85,139,38) 34%  rgb(96,170,4) 1%
+island 1: 158 triangles, texture u 0.70,0.97 v 0.00,0.33, size 0.019,0.027,0.006, at 0.50,0.45,0.12, colours rgb(132,66,22) 48%  rgb(181,119,51) 41%  rgb(207,155,85) 11%
+island 2: 41 triangles, texture u 0.54,0.98 v 0.35,1.00, size 0.042,0.061,0.000, at 0.49,0.50,0.22, colours rgb(220,221,107) 46%  rgb(52,107,2) 39%  rgb(113,186,22) 14%</code></pre>
+	<p>Read it as evidence. Island 0 is the biggest, dark green: the <strong>skin</strong>. Island 1 is small and brown: the <strong>seed</strong>. Island 2 has a thickness of 0.000 (the third number of <code>size</code>), so it is flat, and it holds cream, dark green and lime: the <strong>cut face</strong>. Its 41 triangles are far too coarse to follow the rings painted on it, so the plan subdivides it and sorts the small triangles by colour. The <code>at</code> column is the island's centre across the whole mesh, 0 to 1 on x, y, z: the seed sits at the back of the mesh (z 0.12), the cut face just in front of it.</p>
+	<pre><code>// Island 0 (483 triangles, dark green, the biggest) is the outside: the skin. Island 1 (158, brown, small, at the back of the mesh in z) is the seed.
+// Island 2 has thickness 0.000: it is flat, so it is the cut face, painted dark green (the rim), cream and lime (the flesh) and yellow-orange (the hollow).
+// The flat face is far too coarse (41 triangles) to follow those rings, so it is subdivided four times (41 x 256) and each small triangle goes to the
+// nearest palette colour; two colours may share one name.
+SEG.split('#Avocado', {
+  group: 'Avocado_Fruit', classes: ['fruit', 'avocado'],
+  parts: [
+    { island: 0, name: 'Avocado_Skin', classes: ['skin', 'peel'] },
+    { island: 1, name: 'Avocado_Pit', classes: ['pit', 'seed'] },
+    { island: 2, subdivide: 4, palette: [
+      { name: 'Avocado_Pit_Cavity', classes: ['cavity', 'flesh-cut'], color: [247, 212, 86] },
+      { name: 'Avocado_Pit_Cavity', classes: ['cavity', 'flesh-cut'], color: [245, 175, 70] },
+      { name: 'Avocado_Flesh', classes: ['flesh', 'edible', 'flesh-cut'], color: [203, 227, 119] },
+      { name: 'Avocado_Flesh', classes: ['flesh', 'edible', 'flesh-cut'], color: [113, 185, 21] },
+      { name: 'Avocado_Skin_Edge', classes: ['skin', 'peel-edge', 'flesh-cut'], color: [52, 107, 2] } ] }
+  ]
+})</code></pre>
+	<pre><code>Avocado_Skin: 483 triangles | Avocado_Pit: 158 triangles | Avocado_Pit_Cavity: 2286 triangles | Avocado_Flesh: 6195 triangles | Avocado_Skin_Edge: 2015 triangles</code></pre>
+	<p>The cut face went from 41 triangles to 10,496 (41 × 4<sup>4</sup>); that is the price of a boundary that follows the paint, and the boundary is as ragged as the paint is. <code>SEG.preview('#Avocado_Fruit')</code> paints each part a flat colour so you can check it (step 6 does this on the duck); here the cavity, flesh, seed and rim were all where they should be. The finished scene is <a href="../../#repo=tejaswigowda/test1&amp;file=avocado.json">avocado.json</a>, and a tutorial that builds the whole tool by hand on this avocado is <a href="segment-a-mesh.html">here</a>.</p>
+	<figure>
+		<img src="screenshots/avo-parts.png" alt="The avocado with each part painted a flat colour: orange flesh, a blue ring around a green seed, and a thin purple rim." loading="lazy">
+		<figcaption>The avocado previewed: orange is the flesh, blue the cavity around the seed, green the seed, purple the thin edge.</figcaption>
+	</figure>
+
+	<h2><span class="step">4</span> The hard case: the duck</h2>
+	<p class="lede">Start again with an empty scene and import <code>Duck.glb</code>. First look at what the importer gave you, then at the report:</p>
+	<pre><code>// What did the importer give us? One mesh, wrapped in two nameless nodes, and a camera the file carried.
+// Then the description of the mesh: one line per island, largest first, with its size, where its centre sits across the whole mesh (0 to 1 on x, y, z)
+// and its main colours.
+const list = []; scene.traverse(o =&gt; { if (o !== scene) list.push(o.type + '  ' + (o.name || '(unnamed)')); });
+list.join('\n') + '\n\n' + SEG.describe('#LOD3spShape')</code></pre>
+	<pre><code>Group  Duck.glb
+Object3D  (unnamed)
+Mesh  LOD3spShape
+PerspectiveCamera  (unnamed)</code></pre>
+	<pre><code>island 0: 2532 triangles, texture u 0.83,0.97 v 0.46,0.60, size 153.687,154.041,115.150, at 0.47,0.50,0.50, colours rgb(255,216,0) 100%
+island 1: 882 triangles, texture u 0.84,0.98 v 0.64,0.80, size 35.060,33.478,46.304, at 0.89,0.73,0.40, colours rgb(255,127,0) 98%  rgb(255,163,0) 2%  rgb(255,189,0) 0%
+island 2: 160 triangles, texture u 0.03,0.72 v 0.02,0.49, size 63.264,45.328,12.817, at 0.41,0.24,0.94, colours rgb(255,214,0) 58%  rgb(255,188,0) 23%  rgb(255,200,0) 20%
+island 3: 160 triangles, texture u 0.03,0.72 v 0.03,0.49, size 63.248,44.110,12.691, at 0.41,0.23,0.06, colours rgb(255,214,0) 54%  rgb(255,188,0) 25%  rgb(255,201,0) 20%
+island 4: 138 triangles, texture u 0.63,0.98 v 0.03,0.44, size 10.149,13.927,10.728, at 0.80,0.83,0.65, colours rgb(0,0,0) 66%  rgb(255,255,255) 33%  rgb(142,142,142) 1%
+island 5: 138 triangles, texture u 0.63,0.98 v 0.03,0.44, size 13.382,14.072,6.043, at 0.72,0.82,0.22, colours rgb(0,0,0) 66%  rgb(255,255,255) 33%  rgb(113,113,113) 1%
+island 6: 76 triangles, texture u 0.03,0.42 v 0.44,0.96, size 30.104,52.185,46.208, at 0.09,0.38,0.32, colours rgb(255,215,0) 78%  rgb(255,198,0) 12%  rgb(255,189,0) 11%
+island 7: 62 triangles, texture u 0.04,0.42 v 0.44,0.96, size 31.217,52.005,43.767, at 0.09,0.38,0.69, colours rgb(255,216,0) 77%  rgb(255,191,0) 15%  rgb(255,203,0) 8%
+island 8: 36 triangles, texture u 0.46,0.86 v 0.53,0.98, size 28.316,29.575,44.034, at 0.20,0.45,0.33, colours rgb(255,214,0) 64%  rgb(255,200,0) 26%  rgb(255,188,0) 11%
+island 9: 28 triangles, texture u 0.48,0.85 v 0.53,0.98, size 28.674,27.768,41.070, at 0.21,0.46,0.68, colours rgb(255,214,0) 67%  rgb(255,202,0) 21%  rgb(255,190,0) 11%</code></pre>
+	<p>Ten islands, for a toy with a body, a head, a beak, two wings, a tail and two eyes. Reading them is the work, and the report gives you what you need:</p>
+	<table class="cuts">
+		<tr><th>Island</th><th>Evidence</th><th>Decision</th></tr>
+		<tr><td>0</td><td>2,532 triangles, 154 high, <code>at</code> 0.47, 0.50, 0.50: the middle of the mesh in every direction; one colour, yellow, 100%</td><td>The body and the head, <em>as a single island</em>: the file does not separate them, and the tool cannot</td></tr>
+		<tr><td>1</td><td>882 triangles, orange 98%, <code>at x</code> 0.89: the front</td><td>The beak</td></tr>
+		<tr><td>2, 3</td><td>160 triangles each, 63 long but only 12.7 wide (flat), yellow, <code>at z</code> 0.94 and 0.06: one on each side</td><td>The wings. The duck faces +x with y up, so its right is +z: island 2 is the right wing, 3 the left</td></tr>
+		<tr><td>4, 5</td><td>138 triangles each, <em>black 66%, white 33%</em>, <code>at</code> y 0.83, z 0.65 and 0.22: high on the head, one on each side</td><td>The eyes, each painted with a black eye and a white highlight. Divide each by colour</td></tr>
+		<tr><td>6, 8 and 7, 9</td><td>76 + 36 and 62 + 28 triangles, yellow, <code>at x</code> 0.09 to 0.21: the back, <code>z</code> 0.32 and 0.69</td><td>The tail, in <em>two pieces on each side</em>: merge each pair with a list, <code>island: [6, 8]</code></td></tr>
+	</table>
+	<p>Two things in this table are the real lesson. The islands do <em>not</em> map one to one onto the parts: the tail is four islands and the body and head are one. And two of the decisions rest on the <code>at</code> column (left from right) and on a colour split (the eyes) that no amount of automatic cutting could have guessed. Now the plan:</p>
+	<pre><code>// Reading the description. The beak island is the orange one (882 triangles, centre at x 0.89, the front). The two big flat ones at z 0.06 and 0.94
+// are the wings, one a side. The two 138-triangle islands (black and white in the texture) are the eyes, at z 0.22 and 0.65. The small pairs at x 0.09
+// and 0.20 are the tail, in two pieces on each side. The biggest island, 2532 triangles at the middle of the mesh, is the body and the head in one.
+// The duck faces +x with y up, so its right is +z and its left -z, which is how the "at" column tells left from right.
+// Each eye is divided by colour: the black is the eye itself, the white is the highlight painted on it.
+SEG.split('#LOD3spShape', {
+  group: 'Duck', classes: ['toy', 'duck'],
+  parts: [
+    { island: 0, name: 'Duck_Body_And_Head', classes: ['body', 'head'] },
+    { island: 1, name: 'Duck_Beak', classes: ['beak'] },
+    { island: 3, name: 'Duck_Wing_Left', classes: ['wing', 'left'] },
+    { island: 2, name: 'Duck_Wing_Right', classes: ['wing', 'right'] },
+    { island: [6, 8], name: 'Duck_Tail_Left', classes: ['tail', 'left'] },
+    { island: [7, 9], name: 'Duck_Tail_Right', classes: ['tail', 'right'] },
+    { island: 5, subdivide: 2, palette: [
+      { name: 'Duck_Eye_Left', classes: ['eye', 'left'], color: [1, 1, 1] },
+      { name: 'Duck_Eye_Highlight_Left', classes: ['eye-highlight', 'left'], color: [253, 253, 253] } ] },
+    { island: 4, subdivide: 2, palette: [
+      { name: 'Duck_Eye_Right', classes: ['eye', 'right'], color: [1, 1, 1] },
+      { name: 'Duck_Eye_Highlight_Right', classes: ['eye-highlight', 'right'], color: [253, 253, 253] } ] }
+  ]
+})</code></pre>
+	<pre><code>Duck_Body_And_Head: 2532 triangles | Duck_Beak: 882 triangles | Duck_Wing_Left: 160 triangles | Duck_Wing_Right: 160 triangles | Duck_Tail_Left: 112 triangles | Duck_Tail_Right: 90 triangles | Duck_Eye_Left: 1478 triangles | Duck_Eye_Highlight_Left: 730 triangles | Duck_Eye_Right: 1489 triangles | Duck_Eye_Highlight_Right: 719 triangles</code></pre>
+	<p>Ten parts: 3,936 triangles for the ones taken whole, and the eyes, 276 triangles that were subdivided into 16 each, 4,416, so 8,352 in all (4,212 before). The two eyes keep their own pieces of the texture, so they still look as before.</p>
+
+	<h2><span class="step">5</span> Tidy up, and turn the gate on</h2>
+	<p class="lede">The importer's wrapper (a node named after the file, an empty node and a camera the file carried) is all that is left of the original, and it is nameless and classless, which the <a href="../../../guides/SHORTS_TEMPLATE.md">labelling gate</a> would refuse. Remove it, add a light to see by, and call <code>requireLabels(true)</code>. (<code>SEG.split</code> removes the wrappers that hold only the mesh; this file's wrapper held a camera too.)</p>
+	<pre><code>// The importer's wrapper (a node named after the file, an empty node and the camera the file carried) is all that is left of the original, and it is
+// nameless and classless, so the gate would refuse the scene. Remove it, add a light to see by, and turn the gate on.
+editor.execute(new RemoveObjectCommand(editor, scene.getObjectByName('Duck.glb')));
+const sun = new THREE.DirectionalLight(0xfff1dd, 2.6); sun.name = 'KeyLight'; sun.position.set(80, 200, 160); sun.userData.customClasses = ['light'];
+const sky = new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.4); sky.name = 'FillLight'; sky.userData.customClasses = ['light'];
+editor.execute(new AddObjectCommand(editor, sun));
+editor.execute(new AddObjectCommand(editor, sky));
+requireLabels(true)      // from here on a commit is refused while any object is unnamed, duplicated or classless</code></pre>
+
+	<h2><span class="step">6</span> Check the cut</h2>
+	<p class="lede">A cut is only as good as the decision behind it, so look at it. <code>SEG.preview</code> gives every part its own flat colour, in one undoable step; <code>isolate</code> shows only one selector; <code>SEG.restore()</code> puts the textured material back.</p>
+	<pre><code>SEG.preview('#Duck')                // every part its own flat colour
+isolate('#Duck_Beak')               // only the beak
+isolate('.eye')                     // only the two eyes (not their highlights)
+isolate('.wing')
+isolate('.left')                    // a wing, a tail piece, an eye and its highlight: everything on the left
+showAll()
+SEG.restore()                       // the textured materials, back</code></pre>
+	<figure>
+		<img src="screenshots/duck-whole.png" alt="A yellow rubber duck with an orange beak and a black eye, seen from its front and right." loading="lazy">
+		<figcaption>Before and after look the same: the ten parts share the original material.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/duck-parts.png" alt="The duck with each part painted a flat colour: a red body and head, a green beak, an orange right wing, cyan and purple tail pieces and a teal eye." loading="lazy">
+		<figcaption>Previewed: red is the body and head, green the beak, orange the right wing, cyan and purple the right tail, teal and brown the eye.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/duck-beak.png" alt="Only the orange beak is visible." loading="lazy">
+		<figcaption><code>isolate(&#39;#Duck_Beak&#39;)</code>.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/duck-eyes.png" alt="Only a small black eye is visible, floating where the head was." loading="lazy">
+		<figcaption><code>isolate(&#39;.eye&#39;)</code>: the eyes, without their highlights. Only the right one faces this camera.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/duck-wings.png" alt="Only a curved yellow wing is visible." loading="lazy">
+		<figcaption><code>isolate(&#39;.wing&#39;)</code>: the wing on this side; the other is behind the body.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/duck-tail.png" alt="Only a curved yellow tail piece is visible." loading="lazy">
+		<figcaption><code>isolate(&#39;.tail&#39;)</code>.</figcaption>
+	</figure>
+	<figure>
+		<img src="screenshots/duck-left.png" alt="Only a few small yellow pieces are visible from the right side." loading="lazy">
+		<figcaption><code>isolate(&#39;.left&#39;)</code> seen from the right: only the parts that stick out past the body.</figcaption>
+	</figure>
+	<p>Orbit while previewing: a cut that looks right from the front can be wrong behind. <code>Undo</code> walks back through all of it, and a single undo of the split restores the importer's original, one mesh and its wrappers.</p>
+
+	<h2><span class="step">7</span> What it refuses</h2>
+	<p class="lede">A plan that would lose or duplicate something is refused before anything changes, and the message says what to fix. These are the real messages, from this duck:</p>
+	<pre><code>SEG.split('#LOD3spShape', { group: 'Duck', classes: ['toy'], parts: [{ island: 0, name: 'Duck_Body', classes: ['body'] }] })
+//   SEG.split: every island must go to a part, and 9 of 10 have none
+//   ... island: 0 twice          SEG.split: island 0 is used twice
+//   ... name: 'Mesh'             SEG.split: every part needs a name an author chose, and "Mesh" is a default
+//   ... classes: []              SEG.split: part "Duck_All" needs at least one class</code></pre>
+	<p>It also refuses a node that is not a mesh, a skinned mesh (cutting would break the skeleton), a mesh with several materials or morph targets, and a colour cut on a mesh with no UVs or no base-colour texture.</p>
+
+	<h2><span class="step">8</span> Use the parts</h2>
+	<p class="lede">The point of the exercise is what you can now say. Anything that works on a selector works on a part: recolour, hide, animate, or let an AI edit "make the beak red" resolve to a mesh instead of a guess.</p>
+	<pre><code>$S('#Duck_Beak').recolor('#e11')       // the beak
+$S('.wing')                            // both wings
+$S('.eye.left')                        // the left eye only
+$S('.tail').scale(1.3)                 // both tail pieces</code></pre>
+	<h2><span class="step">9</span> Your own model</h2>
+	<ol class="steps">
+		<li>Import it, and find its mesh (<code>list = []; scene.traverse(o =&gt; o.isMesh &amp;&amp; list.push(o.name))</code>).</li>
+		<li><code>SEG.describe('#name')</code>. If it says <em>no uv</em> or <em>no texture</em>, stop: there is nothing to read. If every island has the same colours and a similar size, expect to merge.</li>
+		<li>Write the table, as in step 4: island, evidence, decision. Use <code>size</code> to tell flat from solid, <code>at</code> to tell left from right and front from back, and the colours to find painted regions.</li>
+		<li>Write the plan; start with whole islands and <code>SEG.preview</code>. Only then add colour cuts, with the smallest <code>subdivide</code> that follows the paint (each step multiplies the triangles by 4).</li>
+		<li>Check from behind and from above. Clean up the importer's wrapper, and <code>requireLabels(true)</code>.</li>
+	</ol>
+	<div class="note"><strong>Save it.</strong> Commit from the Git tab. The scenes are <a href="../../#repo=tejaswigowda/test1&amp;file=duck.json">duck.json</a> and <a href="../../#repo=tejaswigowda/test1&amp;file=avocado.json">avocado.json</a> in <code>tejaswigowda/test1</code>, with their textures beside them. The player at the top is pinned to a commit (<code>@1286469</code>), which never goes stale; these links read the branch head.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, in this order, into an empty scene after importing the <code>.glb</code> with the dialog's defaults, in the editor served from this repository. The duck scene was committed, loaded again from that commit and read back: one material shared by all ten parts, the group and its ten meshes with the triangle counts above (every object named and classed, the two lights, and the scene marked with <code>requireLabels</code>). The avocado scene was checked the same way: five parts, 483, 158, 2,286, 6,195 and 2,015 triangles. A single undo of each split restored the importer's original mesh, and redo brought the parts back. The refusal messages above were copied from the running editor. The screenshots are frames of the duck scene with the editor's guide lines hidden. The parts' names are decisions made from the evidence; the colour boundaries (the avocado's rings, the eyes) follow the paint, not an anatomical or physical measurement. No video render was run for this page.</div>
+	<div class="note" id="sources"><strong>The models.</strong> Avocado.glb: Microsoft, CC0 1.0 Universal, from the <a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models">Khronos glTF Sample Models</a>. Duck.glb: Copyright 2006 Sony Computer Entertainment Inc., licensed under the SCEA Shared Source License 1.0, from the same archive. Both retrieved 27 October 2026. The segmented scenes are derivatives, committed to a public repository with the notices above.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>

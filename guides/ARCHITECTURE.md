@@ -70,6 +70,7 @@ docs/editor/js/
     opPrimitive.js     op-JSON contract + op()/ops()/$S dispatcher; subset-sanity guard
     animationRecipes.js spin/bounce/pulse to winding-safe keyframe clips (command-backed)
     vocabInjection.js  current-scene selectors + op schema for the model prompt
+    meshSegment.js     SEG: cut a textured mesh into named parts from UV islands and painted colour (pure core + Shell surface)
   import/
     pipeline.js        import stages: normalize, descriptors, classes, diagnose, label, verify hook
     labelPass.js       Stage-4 LLM labeling (confidence + low-confidence flags)

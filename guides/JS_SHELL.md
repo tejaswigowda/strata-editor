@@ -92,6 +92,17 @@ findNear(mesh, radius)     // objects within radius world-units
 
 `findObject` is word-scored. It resolves descriptive queries even when the name is unhelpful. `findObject('red sphere')` matches an unnamed red `SphereGeometry` mesh via material color and geometry type. It also indexes material names and decodes glTF `_0XX_` escapes, so `findObject('tail light')` finds a part whose material is `Tail_032Light`.
 
+## Cutting a mesh into named parts (`SEG`)
+
+```js
+SEG.describe('#Duck_mesh')             // one line per UV island: triangles, size, centre across the mesh, main colours
+SEG.split('#Duck_mesh', { group, classes, parts: [ { island: 0, name, classes }, { island: [6, 8], name, classes },
+                          { island: 2, subdivide: 4, palette: [ { name, classes, color: [r,g,b] }, … ] } ] })
+SEG.preview('#Duck')  /  SEG.restore()   // a flat colour per part, to check the cut, and back
+```
+
+A one-piece textured model becomes named, classed meshes in one group (one undo step); every island must go to exactly one part. Refuses skinned meshes, several materials and morph targets. Full reference, limits and examples in [MESH_SEGMENT.md](MESH_SEGMENT.md).
+
 ## Spatial helpers (world-space, via `Box3`)
 
 ```js

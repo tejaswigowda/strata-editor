@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Cut a textured mesh into named parts — Strata tutorials</title>
+<title>Cut an avocado into named parts, building the tool by hand — Strata tutorials</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
@@ -130,32 +130,34 @@
 </head>
 <body>
 <main>
-	<h1>Cut a textured mesh into named parts</h1>
+	<h1>Cut an avocado into named parts, building the tool by hand</h1>
 	<iframe src="../../#repo=tejaswigowda/test1@487413ac24a2c29d186d936b67ca920530ca3de7&amp;file=avocado.json&amp;present=true"></iframe>
+
+	<div class="note"><strong>The editor now has this tool built in.</strong> What this page builds by hand, a block called <code>CUT</code> here, ships in the editor as <code>SEG</code> (<code>SEG.describe</code>, <code>SEG.split</code>, <code>SEG.preview</code>, <code>SEG.restore</code>), with more checks: it refuses meshes it cannot cut safely (skinned, several materials, morph targets), reads the texture's own transform, welds on position and UV, and cuts in one undo step. To cut a model of your own, use the general tutorial, <a href="segment-any-mesh.html">Cut any textured mesh into named parts</a>, which uses <code>SEG</code>, and has this avocado as its quick example and a toy duck as its hard one. This page is kept because writing the tool once shows exactly what it does. It uses the name <code>CUT</code> so that it does not clash with the built-in <code>SEG</code>.</div>
 
 	<p class="tagline">Models usually arrive as one mesh with one material, so nothing in the scene says "this is the seed". This tutorial imports an avocado half, looks for the evidence the file does carry (which pieces of the texture are separate patches, and what colours are painted on them), cuts the mesh into five separate meshes named <em>skin</em>, <em>pit</em>, <em>pit cavity</em>, <em>flesh</em> and <em>skin edge</em>, and checks the cut. Afterwards <code>$S('#Avocado_Pit')</code> or <code>$S('.flesh-cut')</code> reaches exactly those parts. Built with the JS Shell.</p>
 
 	<h2><span class="step">1</span> The idea, and how far it goes</h2>
 	<p class="lede">A mesh has no idea what its triangles are. Two things in the file do carry hints. <strong>UV islands:</strong> an artist unwraps a model into patches of one texture image, and the patches that touch no other patch (they share no vertices, once the exporter has split vertices along the seams) are often whole parts. <strong>Painted colour:</strong> inside one patch, a ring of orange and a ring of cream are different things even though the triangles are the same size. The method is to <em>look</em> at both, decide what each piece is, then cut by that decision. It is not automatic recognition: the names come from you (or from an AI that is shown the description), and the tool never loses a triangle or invents one that is not on the surface.</p>
-	<p><strong>When it works:</strong> one indexed mesh, with UVs and a base-colour texture, whose parts are laid out as separate islands or are painted in clearly different colours. The avocado is the good case. <strong>When it does not:</strong> a mesh with no UVs, or with only vertex colours or a flat colour (there is no evidence to read); a part that shares an island and a colour with its neighbour (a boundary no one painted cannot be found); and a model whose islands are not parts. The same description, run on a second textured sample model (a toy with one yellow body), gave ten islands of which most were pieces of the same yellow body, so island to part would have produced ten meaningless names. A person merges them, which the plan allows (<code>island</code> takes a list), and this is the real limit: the method makes a decision cheap to check, it does not make the decision.</p>
+	<p><strong>When it works:</strong> one indexed mesh, with UVs and a base-colour texture, whose parts are laid out as separate islands or are painted in clearly different colours. The avocado is the good case. <strong>When it does not:</strong> a mesh with no UVs, or with only vertex colours or a flat colour (there is no evidence to read); a part that shares an island and a colour with its neighbour (a boundary no one painted cannot be found); and a model whose islands are not parts. The same description, run on a second textured sample model (a toy duck with one yellow body), gave ten islands of which most were pieces of the same yellow body, so island to part would have produced ten meaningless names. A person merges them, which the plan allows (<code>island</code> takes a list; the general tutorial does exactly that), and this is the real limit: the method makes a decision cheap to check, it does not make the decision.</p>
 	<p><strong>The 3D advantage.</strong> The seed, the flesh and the skin are one fruit; the parts are only separable because the object is three-dimensional data, and you can isolate each one, look at it from behind, and see where the cut really is. A flat picture of the fruit would give you only the colours.</p>
 
 	<h2><span class="step">2</span> Import the model</h2>
 	<p class="lede">The model is the <em>Avocado</em> sample from the Khronos glTF sample models (<a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/main/2.0/Avocado/glTF-Binary/Avocado.glb">Avocado.glb</a>), made by Microsoft and released under <strong>CC0 1.0</strong> (public domain dedication); retrieved 27 October 2026, 8.3 MB, one mesh of 682 triangles and three 2048 × 2048 textures. Download it, then use <strong>File &rarr; Import</strong> (or drop it in the viewport). Accept the import dialog's defaults. The scene now has one object, <code>Avocado</code>, with one material.</p>
 
-	<h2><span class="step">3</span> The tool: SEG</h2>
-	<p class="lede">One block defines <code>SEG</code>, five small functions on <code>globalThis</code> so that the following blocks (the Shell keeps no variables between pastes) can use them. <code>SEG.islands</code> finds the connected pieces of a mesh. <code>SEG.describe</code> prints each piece's size, where it sits in the texture, how big it is in space and its main colours (a small, deterministic k-means over colours sampled across each triangle). <code>SEG.split</code> cuts by a plan. <code>SEG.preview</code> gives every part its own flat colour so you can see the cut, and <code>SEG.restore</code> puts the textured material back.</p>
+	<h2><span class="step">3</span> The tool: CUT</h2>
+	<p class="lede">One block defines <code>CUT</code>, six small functions on <code>globalThis</code> so that the following blocks (the Shell keeps no variables between pastes) can use them. <code>CUT.islands</code> finds the connected pieces of a mesh. <code>CUT.describe</code> prints each piece's size, where it sits in the texture, how big it is in space and its main colours (a small, deterministic k-means over colours sampled across each triangle). <code>CUT.split</code> cuts by a plan. <code>CUT.preview</code> gives every part its own flat colour so you can see the cut, and <code>CUT.restore</code> puts the textured material back.</p>
 	<p>Two details matter. A flat patch is made of a few large triangles, far larger than the rings painted on it, so a part that is divided <em>by colour</em> is first subdivided (each triangle into 4<sup>n</sup>, the same surface and texture, only more triangles) and then each small triangle goes to the palette colour nearest the texture at its centre. And the cut refuses to run if a piece of the mesh has no destination or is used twice: <em>every triangle lands in exactly one part</em>. The new meshes share the original material, so the model looks exactly as before, and the original mesh, with the empty wrapper nodes the importer left around it, is replaced in one undoable step.</p>
-	<pre><code>// SEG: cut one textured mesh into named, addressable parts.
+	<pre><code>// CUT: cut one textured mesh into named, addressable parts.
 // Meshes arrive as a single object with a single material, so nothing in them says "this is the pit". Two things in the file do, though:
 //   1. the UV islands: connected pieces of surface that the texture artist laid out as separate patches of the texture
 //      (an exporter splits vertices along a UV seam, so a piece is a set of triangles joined by shared vertices);
 //   2. the colours painted on the texture: inside one island, a ring of orange and a ring of cream are different things.
-// SEG.describe() lists both, so you can look and decide what each one is. SEG.split() then cuts by your decisions, and never loses a triangle.
-const SEG = globalThis.SEG = {};
+// CUT.describe() lists both, so you can look and decide what each one is. CUT.split() then cuts by your decisions, and never loses a triangle.
+const CUT = globalThis.CUT = {};
 
 // the colour of the texture at a point (u, v), read from a copy of the image drawn once
-SEG.reader = map =&gt; {
+CUT.reader = map =&gt; {
   const img = map.image, w = img.width, h = img.height;
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(img, 0, 0);
@@ -168,7 +170,7 @@ SEG.reader = map =&gt; {
 };
 
 // the triangles of each island, largest first
-SEG.islands = geometry =&gt; {
+CUT.islands = geometry =&gt; {
   const idx = geometry.index.array, n = idx.length / 3;
   const par = Int32Array.from({ length: geometry.attributes.position.count }, (_, i) =&gt; i);
   const find = a =&gt; { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
@@ -203,10 +205,10 @@ const kmeans = (cols, k) =&gt; {
 };
 
 // what is in a mesh: each island's size, where it sits in the texture and in space, and its main colours
-SEG.describe = (node, k = 3) =&gt; {
+CUT.describe = (node, k = 3) =&gt; {
   const g = node.geometry, idx = g.index.array, uv = g.attributes.uv, pos = g.attributes.position;
-  const read = SEG.reader(node.material.map);
-  return SEG.islands(g).map((ts, i) =&gt; {
+  const read = CUT.reader(node.material.map);
+  return CUT.islands(g).map((ts, i) =&gt; {
     const cols = ts.flatMap(t =&gt; samples(uv, idx, t, read)), lo = [9, 9, 9], hi = [-9, -9, -9], u = [9, -9], v = [9, -9];
     ts.forEach(t =&gt; { for (let q = 0; q &lt; 3; q++) {
       const a = idx[t * 3 + q]; u[0] = Math.min(u[0], uv.getX(a)); u[1] = Math.max(u[1], uv.getX(a)); v[0] = Math.min(v[0], uv.getY(a)); v[1] = Math.max(v[1], uv.getY(a));
@@ -222,9 +224,9 @@ SEG.describe = (node, k = 3) =&gt; {
 //                                                                                                      with the same name make one part
 // A palette part is first subdivided (each triangle becomes 4^subdivide smaller ones, same surface, same texture) because the triangles of a flat
 // patch are far bigger than the rings painted on it; then each small triangle goes to the palette colour nearest the texture colour at its centre.
-SEG.split = (node, plan) =&gt; {
+CUT.split = (node, plan) =&gt; {
   const g = node.geometry, idx = g.index.array, A = g.attributes, names = Object.keys(A);
-  const islands = SEG.islands(g), read = SEG.reader(node.material.map);
+  const islands = CUT.islands(g), read = CUT.reader(node.material.map);
   const used = new Set();
   const vertex = i =&gt; names.flatMap(n =&gt; Array.from({ length: A[n].itemSize }, (_, c) =&gt; A[n].array[i * A[n].itemSize + c]));
   const tri = t =&gt; [0, 1, 2].map(k =&gt; vertex(idx[t * 3 + k]));
@@ -269,24 +271,24 @@ SEG.split = (node, plan) =&gt; {
   editor.execute(new AddObjectCommand(editor, group));
   return made.map(([n, , t]) =&gt; n + ': ' + t.length + ' triangles').join(' | ');
 };
-// check a cut: give every part of a group its own flat colour (one undoable command each), then SEG.restore() puts the textured material back
+// check a cut: give every part of a group its own flat colour (one undoable command each), then CUT.restore() puts the textured material back
 const PREVIEW = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#008080', '#9a6324'];
-SEG.preview = group =&gt; {
-  SEG.saved = SEG.saved || new Map();
+CUT.preview = group =&gt; {
+  CUT.saved = CUT.saved || new Map();
   group.children.forEach((m, i) =&gt; {
-    if (!SEG.saved.has(m)) SEG.saved.set(m, m.material);
+    if (!CUT.saved.has(m)) CUT.saved.set(m, m.material);
     editor.execute(new SetMaterialCommand(editor, m, new MeshBasicMaterial({ color: PREVIEW[i % PREVIEW.length] })));
   });
   return group.children.map((m, i) =&gt; PREVIEW[i % PREVIEW.length] + '  ' + m.name).join('\n');
 };
-SEG.restore = () =&gt; { SEG.saved.forEach((material, m) =&gt; editor.execute(new SetMaterialCommand(editor, m, material))); SEG.saved.clear(); return 'textured materials restored'; };
-'SEG ready: ' + Object.keys(SEG).join(', ')</code></pre>
+CUT.restore = () =&gt; { CUT.saved.forEach((material, m) =&gt; editor.execute(new SetMaterialCommand(editor, m, material))); CUT.saved.clear(); return 'textured materials restored'; };
+'CUT ready: ' + Object.keys(CUT).join(', ')</code></pre>
 
 	<h2><span class="step">4</span> Look before you cut</h2>
 	<p class="lede">Ask for the description of the mesh, with four colours per island:</p>
 	<pre><code>// look before cutting: every island of the mesh, with its size and its main colours
 const mesh = $S('#Avocado').nodes[0];
-SEG.describe(mesh, 4)</code></pre>
+CUT.describe(mesh, 4)</code></pre>
 	<pre><code>island 0: 483 triangles, texture u 0.01,0.67 v 0.01,0.76, size 0.043,0.063,0.022, colours rgb(51,99,7) 51%  rgb(70,118,26) 28%  rgb(93,148,44) 20%  rgb(97,172,4) 1%
 island 1: 158 triangles, texture u 0.70,0.97 v 0.00,0.33, size 0.019,0.027,0.006, colours rgb(126,62,19) 36%  rgb(187,127,56) 32%  rgb(159,90,34) 23%  rgb(210,159,88) 9%
 island 2: 41 triangles, texture u 0.54,0.98 v 0.35,1.00, size 0.042,0.061,0.000, colours rgb(52,107,2) 39%  rgb(203,227,119) 29%  rgb(247,212,86) 18%  rgb(113,185,21) 14%</code></pre>
@@ -298,7 +300,7 @@ island 2: 41 triangles, texture u 0.54,0.98 v 0.35,1.00, size 0.042,0.061,0.000,
 	<pre><code>// cut the avocado. Island 0 is the big shell (the outside), island 1 the small egg-shaped patch (the seed), island 2 the flat half-fruit patch (the cut face).
 // The cut face is divided by colour into the hollow around the seed (yellow and orange), the flesh (cream and lime) and the dark edge where the peel meets it.
 const mesh = $S('#Avocado').nodes[0];
-SEG.split(mesh, {
+CUT.split(mesh, {
   group: 'Avocado_Fruit', classes: ['fruit', 'avocado'],
   parts: [
     { island: 0, name: 'Avocado_Skin', classes: ['skin', 'peel'] },
@@ -316,11 +318,11 @@ SEG.split(mesh, {
 	<p>The cut face went from 41 triangles to 10,496 (41 × 4<sup>4</sup>), and the whole fruit from 682 to 11,137: that is the price of a boundary that follows the paint. A smaller subdivision is cheaper and the boundary is more ragged.</p>
 
 	<h2><span class="step">6</span> Check the cut</h2>
-	<p class="lede">A cut is only as good as the decision behind it, so look at it. <code>SEG.preview</code> paints each part a different flat colour (one undoable command per part); <code>isolate</code> hides everything but one selector.</p>
-	<pre><code>SEG.preview($S('#Avocado_Fruit').nodes[0])        // each part its own flat colour
+	<p class="lede">A cut is only as good as the decision behind it, so look at it. <code>CUT.preview</code> paints each part a different flat colour (one undoable command per part); <code>isolate</code> hides everything but one selector.</p>
+	<pre><code>CUT.preview($S('#Avocado_Fruit').nodes[0])        // each part its own flat colour
 isolate('#Avocado_Pit')                             // only the pit
 showAll()
-SEG.restore()                                       // the textured material, back</code></pre>
+CUT.restore()                                       // the textured material, back</code></pre>
 	<figure>
 		<img src="screenshots/avo-whole.png" alt="The avocado half, textured: green skin, cream and lime flesh and a brown seed, seen straight on." loading="lazy">
 		<figcaption>Before and after look the same: the five parts share the original material.</figcaption>
@@ -355,7 +357,7 @@ SEG.restore()                                       // the textured material, ba
 	</figure>
 
 	<h2><span class="step">7</span> Lights, and the gate</h2>
-	<p class="lede">A directional light and a soft fill, named and classed like everything else, and then <code>requireLabels(true)</code>. That marks the scene: from now on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. This is the second reason to name the parts well: the importer's own wrapper nodes had no class, and the block would not run until they were gone, which is why <code>SEG.split</code> removes them with the mesh.</p>
+	<p class="lede">A directional light and a soft fill, named and classed like everything else, and then <code>requireLabels(true)</code>. That marks the scene: from now on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. This is the second reason to name the parts well: the importer's own wrapper nodes had no class, and the block would not run until they were gone, which is why <code>CUT.split</code> removes them with the mesh.</p>
 	<pre><code>// a light to see it by, and the names and classes that make every object reachable
 const sun = new THREE.DirectionalLight(0xfff1dd, 2.6); sun.name = 'KeyLight'; sun.position.set(0.4, 0.8, 0.9); sun.userData.customClasses = ['light'];
 const sky = new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.4); sky.name = 'FillLight'; sky.userData.customClasses = ['light'];
@@ -381,7 +383,7 @@ $S('.skin')                           // the outer skin and its thin edge on the
 $S('.edible')                         // just the flesh</code></pre>
 	<p>Anything that works on a selector now works on a part: recolour the flesh, hide the skin, animate the pit away, or let an AI edit "make the seed bigger" and have it resolve to a mesh instead of a guess.</p>
 	<div class="note"><strong>Save it.</strong> Commit from the Git tab. The scene is <a href="../../#repo=tejaswigowda/test1&amp;file=avocado.json">avocado.json</a> in <code>tejaswigowda/test1</code>, with the three textures stored beside it. The player at the top is pinned to a commit (<code>@487413a</code>), which never goes stale; the link in this note reads the branch head.</div>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, in this order, into an empty scene after importing Avocado.glb with the dialog's defaults; the scene was committed and loaded again from that commit, and read back: one material (shared by all five parts), the group and its five meshes with the triangle counts above (483, 158, 2,286, 6,195 and 2,015), every object named and classed, and the scene marked with <code>requireLabels</code>. The 641 triangles of the skin and the pit were carried over unchanged and the cut face's 41 became 41 &times; 256 = 10,496, so the five parts add up to 641 + 10,496 = 11,137 (<code>SEG.split</code> refuses to run when a piece of the mesh has no destination). The screenshots are frames of that scene, with the editor's controls hidden. The same description and split were run on a second textured sample model to test the limits stated in step 1; nothing from it is part of this scene. Nothing here was run through a video render. The boundary between cavity, flesh and edge follows the colours in the texture, not an anatomical measurement, so it is as ragged as the paint.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, in this order, into an empty scene after importing Avocado.glb with the dialog's defaults; the scene was committed and loaded again from that commit, and read back: one material (shared by all five parts), the group and its five meshes with the triangle counts above (483, 158, 2,286, 6,195 and 2,015), every object named and classed, and the scene marked with <code>requireLabels</code>. The 641 triangles of the skin and the pit were carried over unchanged and the cut face's 41 became 41 &times; 256 = 10,496, so the five parts add up to 641 + 10,496 = 11,137 (<code>CUT.split</code> refuses to run when a piece of the mesh has no destination). The screenshots are frames of that scene, with the editor's controls hidden. The limits stated in step 1 were tested on a second textured sample model, a toy duck, which is the subject of the general tutorial; nothing from it is part of this scene. Nothing here was run through a video render. The boundary between cavity, flesh and edge follows the colours in the texture, not an anatomical measurement, so it is as ragged as the paint.</div>
 	<div class="note" id="source"><strong>The model.</strong> Avocado.glb, from the <a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models">Khronos glTF Sample Models</a> archive, made by Microsoft, CC0 1.0 Universal (public domain dedication), retrieved 27 October 2026. The segmented scene is a derivative of it and is committed to a public repository on the same terms.</div>
 
 	<footer>

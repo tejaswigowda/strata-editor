@@ -63,10 +63,19 @@
 		"embed": "#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&file=molecule-shapes.json&present=true"
 	},
 	{
-		"title": "Cut a textured mesh into named parts",
+		"title": "Cut any textured mesh into named parts",
+		"href": "segment-any-mesh.html",
+		"group": "Scenes and games",
+		"blurb": "The editor's SEG tool on any one-piece textured model: read the UV islands and painted colours, decide what each piece is, and cut it into named, classed meshes in one undo step. An avocado is the easy case, a toy duck the hard one (ten islands, six parts), and the page says where the method stops working. Built with the JS Shell.",
+		"thumb": "screenshots/thumbs/segment-any-mesh.jpg",
+		"desc": "Describe a mesh's islands and colours with SEG.describe, turn the evidence into a table of decisions, cut with SEG.split (whole islands, merged islands, islands divided by colour), check with SEG.preview and isolate, tidy the importer's wrapper, switch on the labelling gate, and select the parts by name or class \u2014 with the CC0 Avocado and the SCEA-licensed Duck from the Khronos samples.",
+		"embed": "#repo=tejaswigowda/test1@1286469d0342c60bb724bb28b6e1d0ee8186dad9&file=duck.json&present=true"
+	},
+	{
+		"title": "Cut an avocado into named parts, building the tool by hand",
 		"href": "segment-a-mesh.html",
 		"group": "Scenes and games",
-		"blurb": "Import a one-piece avocado, read the evidence the file carries (separate patches of the texture, and the colours painted on them), cut it into five named, classed meshes (skin, pit, cavity, flesh, edge) without losing a triangle, and check the cut. Says plainly where the method stops working. Built with the JS Shell.",
+		"blurb": "The editor's SEG tool, written out by hand on a one-piece avocado: read the evidence the file carries (separate patches of the texture, and the colours painted on them), cut it into five named, classed meshes (skin, pit, cavity, flesh, edge) without losing a triangle, and check the cut. Says plainly where the method stops working. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/segment-a-mesh.jpg",
 		"desc": "Describe a mesh's UV islands and painted colours, decide what each piece is, subdivide and sort the cut face by colour, replace the one mesh with a named group, preview each part in a flat colour and isolate it, then select parts by name or class \u2014 all with the JS Shell, on the CC0 Khronos Avocado sample.",
 		"embed": "#repo=tejaswigowda/test1@487413ac24a2c29d186d936b67ca920530ca3de7&file=avocado.json&present=true"
