@@ -5,12 +5,33 @@
 <title>Tutorials — Strata</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Step-by-step Strata tutorials, by hand with no AI required: scenes and games, animation and rendering, characters, and motion capture.">
+<meta name="description" content="25 step-by-step walkthroughs for building scenes, games, animation and characters with Strata — by hand, no AI required.">
+<!-- social:start (generated from tutorials.json by hand; node scripts/tutorial-policy.cjs lint checks it) -->
+<link rel="canonical" href="https://strataeditor.dev/about/tutorials/">
+<meta property="og:site_name" content="Strata">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tutorials — Strata">
+<meta property="og:description" content="25 step-by-step walkthroughs for building scenes, games, animation and characters with Strata — by hand, no AI required.">
+<meta property="og:url" content="https://strataeditor.dev/about/tutorials/">
+<meta property="og:image" content="https://strataeditor.dev/demo.png">
+<meta property="og:image:width" content="800">
+<meta property="og:image:height" content="435">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Tutorials — Strata">
+<meta name="twitter:description" content="25 step-by-step walkthroughs for building scenes, games, animation and characters with Strata — by hand, no AI required.">
+<meta name="twitter:image" content="https://strataeditor.dev/demo.png">
+<!-- social:end -->
 <!--
 	/about/tutorials — index of step-by-step tutorials. Static, no build
-	step, same-origin only. The list is NOT written here: it is rendered from
-	tutorials.json (the same file the welcome page reads), so adding a tutorial
-	is one entry there plus its thumbnail:
+	step, same-origin only. tutorials.json (the file the welcome page also reads)
+	is the canonical definition of a tutorial; this page REPEATS it as plain HTML
+	so a crawler, a link preview and a reader with scripting off all see the list.
+	Two sources of listing, no generator: adding a tutorial is one entry in
+	tutorials.json plus the same card here (inside list:start/list:end), the
+	section link and count, and the social tags in the new page (and in this
+	page's head, which carries the count). `node scripts/tutorial-policy.cjs lint`
+	fails when they disagree and prints the text to paste in. The script at the
+	end only adds a search box.
 	  { title, href, group, blurb, desc, thumb, embed?, hidden? }
 	  group  one of GROUPS below (an unknown group lands under "More")
 	  blurb  one short sentence for the card; desc is the long form
@@ -116,159 +137,269 @@
 <body>
 <main>
 	<h1>Tutorials</h1>
-	<p class="tagline">Step-by-step walkthroughs for building scenes, games, animation and characters with Strata — by hand, no AI required. <span id="count"></span></p>
+	<p class="tagline">Step-by-step walkthroughs for building scenes, games, animation and characters with Strata — by hand, no AI required. <span id="count">25 tutorials.</span></p>
 
-	<nav class="jump" id="jump" aria-label="Sections"></nav>
+	<nav class="jump" id="jump" aria-label="Sections">
+		<!-- jump:start -->
+		<a href="#scenes">Scenes<span class="n">5</span></a>
+		<a href="#games">Games<span class="n">4</span></a>
+		<a href="#animation-and-rendering">Animation and rendering<span class="n">8</span></a>
+		<a href="#characters">Characters<span class="n">5</span></a>
+		<a href="#motion-capture">Motion capture<span class="n">3</span></a>
+		<!-- jump:end -->
+	</nav>
 
-	<div id="list"><p class="status">Loading tutorials…</p></div>
-	<noscript><p class="status">This page lists the tutorials from <a href="tutorials.json">tutorials.json</a> using a little JavaScript. With scripting off, open that file, or go <a href="../">back to about</a>.</p></noscript>
+	<div id="list">
+		<!-- list:start -->
+		<section>
+			<h2 id="scenes">Scenes</h2>
+			<p class="note">Build and label a scene, or cut a model into named parts.</p>
+			<div class="grid">
+			<article class="card">
+				<a class="thumb" href="segment-any-mesh.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/segment-any-mesh.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="segment-any-mesh.html">Cut any textured mesh into named parts</a></h3>
+					<p>The editor's SEG tool on any one-piece textured model: read the UV islands and painted colours, decide what each piece is, and cut it into named, classed meshes in one undo step. An avocado is the easy case, a toy duck the hard one (ten islands, six parts), an animated fox shows a skinned mesh cut with its skeleton and clips intact, and the page says where the method stops working. Built with the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&amp;file=duck.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="segment-a-scene.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/segment-a-scene.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="segment-a-scene.html">Cut a scene into named parts</a></h3>
+					<p>SEG on a furnished room: one mesh, 538 texture islands, no part that is one island. SEG joins the islands that touch into components, measures them in the world frame, places everything you did not name on the nearest anchor you did, and checks the cut; you supply the anchors and their names. Says where the checks fired on the first attempt. Built with the JS Shell.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="segment-a-mesh.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/segment-a-mesh.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="segment-a-mesh.html">Cut an avocado into named parts, building the tool by hand</a></h3>
+					<p>The editor's SEG tool, written out by hand on a one-piece avocado: read the evidence the file carries (separate patches of the texture, and the colours painted on them), cut it into five named, classed meshes (skin, pit, cavity, flesh, edge) without losing a triangle, and check the cut. Says plainly where the method stops working. Built with the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&amp;file=avocado.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="build-a-scene.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/build-a-scene.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="build-a-scene.html">Build a night scene from scratch</a></h3>
+					<p>The from-scratch workflow: helper functions, noise-displaced ground, night lighting, a moving object and a hero camera.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1&amp;file=short.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="wizard-hat-sculpt.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/wizard-hat-sculpt.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="wizard-hat-sculpt.html">Build a wizard hat and sculpt a face into it</a></h3>
+					<p>Assemble a hat from primitives, then sculpt a relief smiley into it as one undoable step.</p>
+				</div>
+			</article>
+			</div>
+		</section>
+		<section>
+			<h2 id="games">Games</h2>
+			<p class="note">Build a scene, label it, and leave the behaviour to game code.</p>
+			<div class="grid">
+			<article class="card">
+				<a class="thumb" href="paddle-table-view.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/paddle-table-view.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="paddle-table-view.html">Build a table-view paddle game scene</a></h3>
+					<p>Build a paddle game as a receding table, and verify the camera framing by projecting points to screen space.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="bubble-shooter-scene.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/bubble-shooter-scene.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="bubble-shooter-scene.html">Build a bubble shooter scene</a></h3>
+					<p>A lane, one class-tagged bubble template for game code to clone, a rainforest backdrop and a score sign.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="fight-arena-scene.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/fight-arena-scene.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="fight-arena-scene.html">Build a fighting-game arena scene</a></h3>
+					<p>A tavern stage, two class-tagged fighters and a health-and-mana HUD, built for game code to drive.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="racing-circuit-scene.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/racing-circuit-scene.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="racing-circuit-scene.html">Build a labelled racing circuit with a script</a></h3>
+					<p>Generate a whole circuit from corner points and name every object at creation so game engines can find it.</p>
+				</div>
+			</article>
+			</div>
+		</section>
+		<section>
+			<h2 id="animation-and-rendering">Animation and rendering</h2>
+			<p class="note">Timelines, cameras and shots.</p>
+			<div class="grid">
+			<article class="card">
+				<a class="thumb" href="makeshort.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/makeshort.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="makeshort.html">Make a Pythagorean-theorem short</a></h3>
+					<p>Build a 100-second animated demonstration that 3² + 4² = 5², extend it to two more triples with quarter turns of the camera, and add subtitles, using the JS Shell and the Universal Timeline.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1&amp;file=pyth.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="a-plus-b-cubed.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/a-plus-b-cubed.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="a-plus-b-cubed.html">Build the (a + b)³ proof in 3D</a></h3>
+					<p>A 3D visual proof of (a + b)³ = a³ + 3a²b + 3ab² + b³ with no numbers: a whole cube falls apart into eight coloured blocks that line up under the expanded equation, with five cameras, an x-ray and subtitles, all from the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1&amp;file=a%2Bb-cubed.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="hardy-weinberg.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/hw.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="hardy-weinberg.html">Hardy–Weinberg as a square</a></h3>
+					<p>The Hardy–Weinberg law as a square: p² + 2pq + q² for one round of random mating, then a count of the alleles that shows p and q are unchanged, with the assumptions listed. Built with the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&amp;file=hw.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="area-volume.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/area-volume.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="area-volume.html">Why cells are small: surface area to volume</a></h3>
+					<p>Cubes of side 1, 2 and 3 have surface-to-volume ratios of 6, 3 and 2 per unit-cube width, falling as 1 / side in any units: why cells stay small and divide, and why mitochondria and lungs fold their membranes. Built with the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&amp;file=area-volume.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="projectile.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/projectile.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="projectile.html">A projectile: two motions, one path</a></h3>
+					<p>A thrown ball's curve is a sideways motion at constant speed plus an up-and-down motion under gravity. Orbit the path to see each alone, then put them back together. Built with the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&amp;file=projectile.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="piston.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/piston.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="piston.html">A crank, a rod and a piston: crank-slider kinematics</a></h3>
+					<p>A crankshaft, connecting rod and piston through one revolution: the dead centers, the stroke, and the mechanical advantage drawn as a gap that vanishes at the dead centers. Orbit the assembly to see what a flat view hides. Built with the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&amp;file=piston.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="molecule-shapes.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/molecule-shapes.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="molecule-shapes.html">Why molecules are shaped differently: electron-pair repulsion</a></h3>
+					<p>Methane, ammonia and water built from coloured spheres and bonds: four electron pairs spread to the corners of a tetrahedron, and each lone pair, which has no atom on it, closes the angle a little more (109.5°, 107°, 104.5°). Orbit each molecule to see what a flat drawing hides. Built with the JS Shell.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&amp;file=molecule-shapes.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="render-camera-sequence.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/render-camera-sequence.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="render-camera-sequence.html">Add a static hero camera to a render sequence</a></h3>
+					<p>Cut a fixed hero camera into a render sequence to show a moment your main camera does not frame well.</p>
+				</div>
+			</article>
+			</div>
+		</section>
+		<section>
+			<h2 id="characters">Characters</h2>
+			<p class="note">Import, restyle, pose and animate a character.</p>
+			<div class="grid">
+			<article class="card">
+				<a class="thumb" href="make-your-own-metahuman.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/make-your-own-metahuman.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="make-your-own-metahuman.html">Make your own MetaHuman</a></h3>
+					<p>Import a MetaHuman GLB, restyle it, pose its 51 face blendshapes and capture a still.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="two-character-dance.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/two-character-dance.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="two-character-dance.html">One dance, two characters</a></h3>
+					<p>Bake one Mixamo dance onto two different characters and stage them with an orbiting camera.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="vrm-restyle-explorer.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/vrm-restyle-explorer.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="vrm-restyle-explorer.html">Restyle a VRM into an explorer with the JS Shell</a></h3>
+					<p>Restyle a VRoid base model into an expedition explorer: retint, re-clothe, attach gear and pose a smirk.</p>
+				</div>
+			</article>
+			<article class="card">
+				<div class="body">
+					<h3><a href="animate-a-character.html">Animate a finished character: clips, a timeline and a camera</a></h3>
+					<p>Open a finished VRM that carries a baked body clip and a baked face clip, read what the file holds, start the body on cue and keep a camera on her as she walks. Character by portrait.webcli.app and look.webcli.app, rigged with rig.webcli.app.</p>
+					<a class="try" href="../../#repo=tejaswigowda/test1@543069a031abcea1ce4103a82710ee1845efa019&amp;file=facebind.json&amp;present=true" title="Open the finished scene in the editor">Open example →</a>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="author-a-face.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/author-a-face.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="author-a-face.html">Authoring a face: gaze and idle</a></h3>
+					<p>Give two characters a face with timeline keys: gaze that follows, a seeded blink and held expressions.</p>
+				</div>
+			</article>
+			</div>
+		</section>
+		<section>
+			<h2 id="motion-capture">Motion capture</h2>
+			<p class="note">Work from recorded performances.</p>
+			<div class="grid">
+			<article class="card">
+				<a class="thumb" href="martial-arts-dojo.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/martial-arts-dojo.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="martial-arts-dojo.html">A martial-arts lesson, then a sparring match, in a bamboo dojo</a></h3>
+					<p>Two characters share one mocap clip in a bamboo dojo: a lesson, then a sparring match filmed by four cameras.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="edit-captured-motion.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/edit-captured-motion.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="edit-captured-motion.html">Editing captured motion as data</a></h3>
+					<p>Cut a 170-second two-performer capture to 53 seconds with a non-destructive edit list.</p>
+				</div>
+			</article>
+			<article class="card">
+				<a class="thumb" href="sparring-from-mocap.html" tabindex="-1" aria-hidden="true"><img src="screenshots/thumbs/sparring-from-mocap.jpg" alt="" width="640" height="400" loading="lazy"></a>
+				<div class="body">
+					<h3><a href="sparring-from-mocap.html">A sparring match from a two-person motion capture</a></h3>
+					<p>Turn a two-person sparring capture into a 53-second match, checked frame by frame for collisions.</p>
+				</div>
+			</article>
+			</div>
+		</section>
+		<!-- list:end -->
+	</div>
 
 	<footer>
 		<a href="../">← Back to about</a>
 	</footer>
 </main>
 <script>
+// Enhancement only: the list above is already in the page (and in tutorials.json, which a script elsewhere reads).
+// This adds a search box that hides the cards that do not match, and the sections that are left empty.
 ( function () {
 
-	// Section order and a one-line note for each. Unknown groups are listed last, under "More".
-	const GROUPS = [
-		{ name: 'Scenes', note: 'Build and label a scene, or cut a model into named parts.' },
-		{ name: 'Games', note: 'Build a scene, label it, and leave the behaviour to game code.' },
-		{ name: 'Animation and rendering', note: 'Timelines, cameras and shots.' },
-		{ name: 'Characters', note: 'Import, restyle, pose and animate a character.' },
-		{ name: 'Motion capture', note: 'Work from recorded performances.' },
-		{ name: 'Strata Play', note: 'The player: run, fork and wire up the games you build here.' },
-	];
-
 	const list = document.getElementById( 'list' );
-	const jump = document.getElementById( 'jump' );
+	const cards = [ ...list.querySelectorAll( '.card' ) ];
+	const sections = [ ...list.querySelectorAll( 'section' ) ];
+	const box = document.createElement( 'input' );
+	box.type = 'search';
+	box.placeholder = 'Search the tutorials';
+	box.setAttribute( 'aria-label', 'Search the tutorials' );
+	box.style.cssText = 'display:block;width:100%;max-width:360px;margin:1em 0 0;padding:0.5em 0.8em;border-radius:8px;border:1px solid #2a2e36;background:#1a1d23;color:#d9dde3;font:inherit';
+	document.getElementById( 'jump' ).after( box );
 
-	const slug = ( s ) => s.toLowerCase().replace( /[^a-z0-9]+/g, '-' ).replace( /^-|-$/g, '' );
+	box.addEventListener( 'input', () => {
 
-	function card( t ) {
+		const words = box.value.toLowerCase().split( /\s+/ ).filter( Boolean );
+		for ( const c of cards ) {
 
-		const el = document.createElement( 'article' );
-		el.className = 'card';
-
-		if ( t.thumb ) {
-
-			const thumb = document.createElement( 'a' );
-			thumb.className = 'thumb';
-			thumb.href = t.href;
-			thumb.tabIndex = - 1;
-			thumb.setAttribute( 'aria-hidden', 'true' );
-			const img = document.createElement( 'img' );
-			img.src = t.thumb;
-			img.alt = '';
-			img.width = 640;
-			img.height = 400;
-			img.loading = 'lazy';
-			thumb.appendChild( img );
-			el.appendChild( thumb );
+			const text = c.textContent.toLowerCase();
+			c.hidden = ! words.every( ( w ) => text.includes( w ) );
 
 		}
+		for ( const s of sections ) s.hidden = ! s.querySelector( '.card:not([hidden])' );
 
-		const body = document.createElement( 'div' );
-		body.className = 'body';
-
-		const h = document.createElement( 'h3' );
-		const a = document.createElement( 'a' );
-		a.href = t.href;
-		a.textContent = t.title;
-		h.appendChild( a );
-		body.appendChild( h );
-
-		const p = document.createElement( 'p' );
-		p.textContent = t.blurb || t.desc;
-		body.appendChild( p );
-
-		if ( /^https?:\/\//.test( t.href ) ) {
-
-			const ext = document.createElement( 'span' );
-			ext.className = 'ext';
-			ext.textContent = new URL( t.href ).hostname + ' ↗';
-			body.appendChild( ext );
-
-		}
-
-		if ( t.embed ) {
-
-			const open = document.createElement( 'a' );
-			open.className = 'try';
-			open.href = '../../' + t.embed;
-			open.textContent = 'Open example →';
-			open.title = 'Open the finished scene in the editor';
-			body.appendChild( open );
-
-		}
-
-		el.appendChild( body );
-		return el;
-
-	}
-
-	function render( tutorials ) {
-
-		tutorials = tutorials.filter( ( t ) => ! t.hidden );	// staged entries stay out until switched on
-
-		const byGroup = new Map();
-		for ( const t of tutorials ) {
-
-			const known = GROUPS.some( ( g ) => g.name === t.group );
-			const key = known ? t.group : 'More';
-			if ( ! byGroup.has( key ) ) byGroup.set( key, [] );
-			byGroup.get( key ).push( t );
-
-		}
-
-		const order = GROUPS.map( ( g ) => g.name ).concat( 'More' ).filter( ( n ) => byGroup.has( n ) );
-		list.innerHTML = '';
-		jump.innerHTML = '';
-
-		for ( const name of order ) {
-
-			const items = byGroup.get( name );
-			const note = ( GROUPS.find( ( g ) => g.name === name ) || {} ).note;
-
-			const nav = document.createElement( 'a' );
-			nav.href = '#' + slug( name );
-			nav.textContent = name;
-			const n = document.createElement( 'span' );
-			n.className = 'n';
-			n.textContent = items.length;
-			nav.appendChild( n );
-			jump.appendChild( nav );
-
-			const section = document.createElement( 'section' );
-			const h2 = document.createElement( 'h2' );
-			h2.id = slug( name );
-			h2.textContent = name;
-			section.appendChild( h2 );
-			if ( note ) {
-
-				const np = document.createElement( 'p' );
-				np.className = 'note';
-				np.textContent = note;
-				section.appendChild( np );
-
-			}
-
-			const grid = document.createElement( 'div' );
-			grid.className = 'grid';
-			for ( const t of items ) grid.appendChild( card( t ) );
-			section.appendChild( grid );
-			list.appendChild( section );
-
-		}
-
-		document.getElementById( 'count' ).textContent = tutorials.length + ' tutorials.';
-
-	}
-
-	fetch( 'tutorials.json' )
-		.then( ( r ) => r.ok ? r.json() : Promise.reject( new Error( 'HTTP ' + r.status ) ) )
-		.then( render )
-		.catch( ( e ) => { list.innerHTML = ''; const p = document.createElement( 'p' ); p.className = 'status'; p.textContent = 'Could not load tutorials.json (' + e.message + '). If you opened this file directly, serve the folder over http instead.'; list.appendChild( p ); } );
+	} );
 
 }() );
 </script>

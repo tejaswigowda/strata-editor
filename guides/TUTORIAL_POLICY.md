@@ -70,6 +70,12 @@ else writePublicPage( plan.slug, plan.title, run );                      // capa
   headings, alt text, captions, image paths, link targets, body text, file and screenshot names,
   `tutorials.json`). `node scripts/tutorial-policy.cjs selftest` runs one
   named-IP and one archetype run through the gate. Run both before committing tutorial changes.
+* The same `lint` also checks what a crawler and a link preview see (`scripts/tutorial-site.cjs`): the
+  tutorial list is in `index.html`'s HTML source and equals `tutorials.json`, the index and every page
+  carry `og:` / `twitter:` tags (`og:image` is the entry's `thumb`, else the site's `demo.png`), and
+  `docs/sitemap.xml` lists the index and every page and `docs/robots.txt` points at it. There is no
+  generator: the pages repeat `tutorials.json` by hand, and the check prints the text to paste when they
+  differ. `.github/workflows/tutorials.yml` runs it on every push that touches `docs/about/tutorials/`.
 
 ### Prompt fragment for the authoring step
 

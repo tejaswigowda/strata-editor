@@ -166,6 +166,9 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 	if ( fs.existsSync( thumbsDir ) ) for ( const f of fs.readdirSync( thumbsDir ) ) for ( const hit of findViolations( words( f ) ) ) add( 'screenshots/thumbs/' + f, 'file name', hit );
 	for ( const f of fs.readdirSync( dir ) ) if ( /\.(gif|png|jpe?g|webp)$/i.test( f ) ) for ( const hit of findViolations( words( f ) ) ) add( f, 'file name', hit );
 
+	// What a crawler and a link preview see: the static list, the social tags, sitemap.xml, robots.txt (scripts/tutorial-site.cjs).
+	if ( dir === TUTORIAL_DIR ) problems.push( ...require( './tutorial-site.cjs' ).check( dir ) );
+
 	return problems;
 
 }
