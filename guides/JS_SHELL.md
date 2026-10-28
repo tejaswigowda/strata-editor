@@ -14,8 +14,25 @@ The shell is the **SHELL tab** in the right sidebar (toggle with **View, JS Shel
 | `Enter` | Execute |
 | `Shift+Enter` | New line |
 | `Up` / `Down` | Command history |
+| `Tab` | Accept the highlighted completion (on an empty line: the first starter) |
+| `Esc` | Close the completion list |
 | AI input + `Enter` | (Optional) Generate and run code |
 | AI input `? question` | (Optional) Ask about the scene. Plain-text answer, no code |
+
+## Completion (no AI, no network)
+
+The input completes as you type, from what is actually there rather than from a fixed word list. `Tab` or `Enter` accepts the highlighted item, `Up`/`Down` move, `Esc` closes. The code is [`shellComplete.js`](../docs/editor/js/shellComplete.js) (pure functions, tested in node by [`shellComplete.test.mjs`](../docs/editor/js/__tests__/shellComplete.test.mjs)); [`Shell.js`](../docs/editor/js/Shell.js) draws it.
+
+| Where the cursor is | What is offered |
+|---|---|
+| **An empty line** | *Starters*, in groups: for the **selected object**, commands that suit it (`SEG.describe('#Mesh')` for a textured mesh, `SEG.preview('#Group')` for a segmented one, then `recolor`, `scale`, `spin`, `isolate`, its `children()`); **In this scene**, the classes the author wrote on objects (or the top-level names), most used first; **Recent**, your last distinct one-line commands; **Explore**: `listSelectors()`, `lint()`, `help`. An empty scene is offered a light and a box instead. Nothing is selected until you press `Tab` (the first starter) or arrow down. A starter with a gap (`recolor('')`) puts the caret inside the quotes and goes on to offer the values |
+| **A word** | Fuzzy matches across every global the shell really has (read from its scope, so a new one needs no second list): a prefix first, then **initials** (`mt` finds `moveTo`, `apc` finds `Avocado_Pit_Cavity`), then a substring, then letters in order. Words you type often in your own history rank first among equals. Accepting a function adds `(` and shows its signature |
+| **After `name.`** | The members of the real object, read from it without calling any getter: `SEG.` (with signatures), `Math.`, `THREE.`, `editor.`, `editor.scene.` and so on, with each method's parameters and each property's type |
+| **After `$S(...).`** | The chainable methods, fuzzy, with signatures |
+| **Inside a call** | The **signature** of the call you are in, pinned at the top of the list (`SEG.split(selector, { group, classes, source: {…}, parts: […] })`, `scale(factor, axis?)`), whichever argument you are on |
+| **Inside a selector string** (`$S('`, `isolate('`, `SEG.describe('`, …) | The scene's own selectors: classes, ids, types, **and the names of its objects** (`#Duck_Beak`), with how many each reaches |
+| **Inside a string with fixed values** | The values: colours for `recolor('`, `x`/`y`/`z` for `spin('`, light kinds for `addLight('`, move kinds for `cameraMove('` |
+| **After an operator** (`=`, `+`, …) | Nothing, so the list is not noise |
 
 ## Code Editor Integration (Monaco)
 
@@ -96,12 +113,14 @@ findNear(mesh, radius)     // objects within radius world-units
 
 ```js
 SEG.describe('#Duck_mesh')             // one line per UV island: triangles, size, centre across the mesh, main colours
-SEG.split('#Duck_mesh', { group, classes, parts: [ { island: 0, name, classes }, { island: [6, 8], name, classes },
+SEG.split('#Duck_mesh', { group, classes, source: { url, licence, attribution }, parts: [ { island: 0, name, classes }, { island: [6, 8], name, classes },
                           { island: 2, subdivide: 4, palette: [ { name, classes, color: [r,g,b] }, … ] } ] })
-SEG.preview('#Duck')  /  SEG.restore()   // a flat colour per part, to check the cut, and back
+SEG.byMaterial('#mesh', { group, source })   // a mesh with several materials: one part per material
+SEG.replay('#mesh', record)                  // cut again from the plan the asset recorded
+SEG.preview('#Duck')  /  SEG.restore()       // a flat colour per part, to check the cut, and back
 ```
 
-A one-piece textured model becomes named, classed meshes in one group (one undo step); every island must go to exactly one part. Refuses skinned meshes, several materials and morph targets. Full reference, limits and examples in [MESH_SEGMENT.md](MESH_SEGMENT.md).
+A one-piece textured model becomes named, classed meshes in one group (one undo step); every island must go to exactly one part, and the asset keeps the plan, the report it was made from, and the source, licence and modifications (`source` is required). Refuses skinned meshes, several materials and morph targets. Full reference, limits and examples in [MESH_SEGMENT.md](MESH_SEGMENT.md).
 
 ## Spatial helpers (world-space, via `Box3`)
 

@@ -5,7 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
-const { islandsOf, kmeans, describeIslands, formatIslands, planParts, carveAttributes, triangleIndex } = await import( pathToFileURL( path.join( here, '..', 'meshSegment.js' ) ).href );
+const { islandsOf, kmeans, describeIslands, formatIslands, planParts, carveAttributes, triangleIndex, validateSource, buildRecord, compareDescribe, materialParts, planMaterialParts, SEG_VERSION } = await import( pathToFileURL( path.join( here, '..', 'meshSegment.js' ) ).href );
+const { footprintColour } = await import( pathToFileURL( path.join( here, '..', 'textureColour.js' ) ).href );
 
 let pass = 0, fail = 0;
 function test( name, fn ) {
@@ -163,6 +164,126 @@ test( 'integer attributes are rounded, not truncated, after subdividing', () => 
 	assert.strictEqual( made[ 0 ].triangles.length, 4 );
 	assert.ok( out.attrs.color.array instanceof Uint8Array && out.attrs.color.normalized );
 	assert.ok( out.attrs.color.array.includes( 128 ) && ! out.attrs.color.array.includes( 127 ) );    // the midpoint of 0 and 255 is 127.5
+
+} );
+
+// ── the record, the provenance, the replay, the colour of a part, the cut by material ──────────────────
+
+const SOURCE = { url: 'https://example.org/models/squares.glb', licence: 'CC0 1.0', attribution: 'Test Studio' };
+
+test( 'a source is required, and says where the model is from, under what licence, and who to credit', () => {
+
+	assert.deepStrictEqual( validateSource( SOURCE ), { source_url: SOURCE.url, source_licence: 'CC0 1.0', attribution: 'Test Studio' } );
+	assert.throws( () => validateSource( undefined ), /derivative work/ );
+	assert.throws( () => validateSource( { ...SOURCE, licence: ' ' } ), /source\.licence is missing/ );
+	assert.throws( () => validateSource( { ...SOURCE, attribution: undefined } ), /source\.attribution is missing/ );
+	assert.throws( () => validateSource( { ...SOURCE, url: 'squares.glb' } ), /http\(s\)/ );
+
+} );
+
+function recordOf( plan, data = mesh() ) {
+
+	const made = planParts( data, plan, read );
+	return { made, rec: buildRecord( { method: 'islands', from: 'Squares', plan, describe: { k: 3, islands: describeIslands( data, read, 3 ) }, made, data, sourceTriangles: 4, sourceUnits: 2, source: plan.source } ) };
+
+}
+const planA = { group: 'Squares_Group', classes: [ 'toy' ], source: SOURCE, modifications: 'Recoloured nothing.', parts: byColour.parts };
+
+test( 'the record carries the provenance, the plan verbatim, the evidence, the counts, the version and the modifications', () => {
+
+	const { rec } = recordOf( planA );
+	assert.strictEqual( rec.seg_version, SEG_VERSION );
+	assert.strictEqual( rec.from, 'Squares' );
+	assert.strictEqual( rec.source_url, SOURCE.url );
+	assert.strictEqual( rec.source_licence, 'CC0 1.0' );
+	assert.strictEqual( rec.attribution, 'Test Studio' );
+	assert.deepStrictEqual( rec.plan, JSON.parse( JSON.stringify( planA ) ) );       // as given, with the palette, subdivide and island numbers
+	assert.notStrictEqual( rec.plan, planA );                                         // a copy: later edits to the plan do not change the record
+	assert.strictEqual( rec.describe.islands.length, 2 );
+	assert.ok( rec.describe.islands[ 0 ].colours.length > 0 );
+	assert.deepStrictEqual( Object.keys( rec.parts ).sort(), [ 'Blue_Half', 'Red_Half', 'Red_Square' ] );
+	assert.ok( rec.modifications.some( m => /subdivided into 64 \(2 to 128 triangles\)/.test( m ) ), rec.modifications.join( ' | ' ) );
+	assert.ok( rec.modifications.includes( 'Recoloured nothing.' ) );
+	assert.ok( rec.modifications[ 0 ].includes( 'SEG ' + SEG_VERSION ) );
+	assert.deepStrictEqual( rec.signals.compound_names, [] );
+	assert.strictEqual( rec.signals.source_units, 2 );
+	assert.ok( rec.signals.largest_part_area_share > 0 && rec.signals.largest_part_area_share <= 1 );
+
+} );
+
+test( 'the signals note a compound name', () => {
+
+	const plan = { group: 'G_Group', source: SOURCE, parts: [ { island: 0, name: 'Duck_Body_And_Head', classes: [ 'a' ] }, { island: 1, name: 'Wing_Left', classes: [ 'b' ] } ] };
+	assert.deepStrictEqual( recordOf( plan ).rec.signals.compound_names, [ 'Duck_Body_And_Head' ] );
+
+} );
+
+test( 'G4: the recorded plan, kept as JSON and run again on the same mesh, gives exactly the same parts', () => {
+
+	const first = recordOf( planA ), saved = JSON.parse( JSON.stringify( first.rec ) );          // what an exported asset keeps
+	const again = recordOf( saved.plan );
+	assert.deepStrictEqual( again.rec.parts, saved.parts );
+	assert.deepStrictEqual( again.made.map( p => p.triangles ), first.made.map( p => p.triangles ) );     // the very triangles, not only the counts
+	assert.deepStrictEqual( again.rec.describe, saved.describe );
+
+} );
+
+test( 'a record is checked against the mesh it is replayed on: the same mesh matches, a changed one is named', () => {
+
+	const { rec } = recordOf( planA );
+	const fresh = { k: 3, islands: describeIslands( mesh(), read, 3 ) };
+	assert.deepStrictEqual( compareDescribe( rec.describe, fresh ), [] );
+	const other = mesh(); other.index = other.index.slice( 0, 9 );                                   // one triangle fewer in island 1
+	const diffs = compareDescribe( rec.describe, { k: 3, islands: describeIslands( other, read, 3 ) } );
+	assert.ok( diffs.some( d => /island 1 has 1 triangles, the record says 2/.test( d ) ), diffs.join( ' | ' ) );
+	assert.ok( compareDescribe( rec.describe, { k: 3, islands: [] } )[ 0 ].includes( 'the record has 2 islands and this mesh has 0' ) );
+	assert.ok( compareDescribe( rec.describe, { materials: [] } )[ 0 ].includes( 'made from islands' ) );
+
+} );
+
+// a 4-triangle mesh in two materials: triangles 0 and 2 in material 0, 1 and 3 in material 1, as four groups
+function twoMaterials() {
+
+	const m = mesh();
+	return { data: { index: m.index.slice( 0, 12 ), attrs: m.attrs }, groups: [ { start: 0, count: 3, materialIndex: 0 }, { start: 3, count: 3, materialIndex: 1 }, { start: 6, count: 3, materialIndex: 0 }, { start: 9, count: 3, materialIndex: 1 } ] };
+
+}
+
+test( 'cut by material: every triangle of each material, nothing lost, exact', () => {
+
+	const { data, groups } = twoMaterials();
+	const by = materialParts( data, groups );
+	assert.deepStrictEqual( [ ...by.get( 0 ) ], [ 0, 2 ] );
+	assert.deepStrictEqual( [ ...by.get( 1 ) ], [ 1, 3 ] );
+	const made = planMaterialParts( data, groups, { parts: [ { material: 0, name: 'Body_Part', classes: [ 'body' ] }, { material: 1, name: 'Trim_Part', classes: [ 'trim' ] } ] } );
+	assert.deepStrictEqual( made.map( p => [ p.name, p.material, p.triangles.length ] ), [ [ 'Body_Part', 0, 2 ], [ 'Trim_Part', 1, 2 ] ] );
+
+} );
+
+test( 'a cut by material is refused when the groups leave a triangle out, overlap, or a material has no part', () => {
+
+	const { data, groups } = twoMaterials();
+	assert.throws( () => materialParts( data, groups.slice( 0, 3 ) ), /do not cover every triangle/ );
+	assert.throws( () => materialParts( data, [ ...groups, { start: 0, count: 3, materialIndex: 1 } ] ), /overlap/ );
+	assert.throws( () => planMaterialParts( data, groups, { parts: [ { material: 0, name: 'Body_Part', classes: [ 'body' ] } ] } ), /every material must go to a part, and 1 of 2 have none/ );
+	assert.throws( () => planMaterialParts( data, groups, { parts: [ { material: 0, name: 'Mesh', classes: [ 'a' ] }, { material: 1, name: 'B_Part', classes: [ 'b' ] } ] } ), /default/ );
+	assert.throws( () => planMaterialParts( data, groups, { parts: [ { material: 5, name: 'X_Part', classes: [ 'x' ] } ] } ), /no material 5/ );
+
+} );
+
+test( 'the colour of a part is the texture under that part, not the whole atlas', () => {
+
+	const data = mesh(), atlasRead = u => ( u < 0.5 ? [ 220, 30, 30 ] : [ 30, 30, 220 ] );        // a red patch and a blue patch in one texture
+	const parts = islandsOf( data ).map( ts => ( { index: ts.flatMap( t => [ 0, 1, 2 ].map( k => data.index[ t * 3 + k ] ) ), attrs: data.attrs } ) );
+	const left = footprintColour( parts[ 0 ], atlasRead ), right = footprintColour( parts[ 1 ], atlasRead );
+	assert.deepStrictEqual( left.median, [ 220, 30, 30 ] );
+	assert.deepStrictEqual( right.median, [ 30, 30, 220 ] );
+	assert.strictEqual( left.clusters.length, 1 );
+	assert.ok( left.clusters[ 0 ].hex === '#dc1e1e' && left.clusters[ 0 ].share === 1 );
+	const both = footprintColour( parts[ 1 ], read );                                              // this one is painted half red, half blue
+	assert.ok( both.clusters.length === 2 && both.clusters.some( c => c.rgb[ 2 ] > 200 ) && both.clusters.some( c => c.rgb[ 0 ] > 200 ) );
+	assert.deepStrictEqual( footprintColour( parts[ 1 ], atlasRead ), right );                     // deterministic
+	assert.strictEqual( footprintColour( { index: null, attrs: { position: data.attrs.position } }, read ), null );   // no uv: no footprint
 
 } );
 

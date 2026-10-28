@@ -131,7 +131,7 @@
 <body>
 <main>
 	<h1>Cut any textured mesh into named parts</h1>
-	<iframe src="../../#repo=tejaswigowda/test1@1286469d0342c60bb724bb28b6e1d0ee8186dad9&amp;file=duck.json&amp;present=true"></iframe>
+	<iframe src="../../#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&amp;file=duck.json&amp;present=true"></iframe>
 
 	<p class="tagline">A model usually arrives as one mesh with one material, so nothing in the scene says "this is the beak". The editor's <code>SEG</code> tool cuts such a mesh into separate named, classed meshes in one undo step, from the evidence the file carries: which pieces of the texture are separate patches, and what colours are painted on them. This page uses it twice: on an avocado, where the file practically labels itself, and on a toy duck, where you have to read the evidence and decide. It also says where the method stops. Built with the JS Shell.</p>
 
@@ -162,8 +162,14 @@ island 2: 41 triangles, texture u 0.54,0.98 v 0.35,1.00, size 0.042,0.061,0.000,
 // Island 2 has thickness 0.000: it is flat, so it is the cut face, painted dark green (the rim), cream and lime (the flesh) and yellow-orange (the hollow).
 // The flat face is far too coarse (41 triangles) to follow those rings, so it is subdivided four times (41 x 256) and each small triangle goes to the
 // nearest palette colour; two colours may share one name.
+// The source is required: a segmentation is a derivative work, and its record says what it derives from and under what licence.
 SEG.split('#Avocado', {
   group: 'Avocado_Fruit', classes: ['fruit', 'avocado'],
+  source: {
+    url: 'https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/main/2.0/Avocado/glTF-Binary/Avocado.glb',
+    licence: 'CC0 1.0 Universal',
+    attribution: 'Microsoft (Khronos glTF Sample Models: Avocado)'
+  },
   parts: [
     { island: 0, name: 'Avocado_Skin', classes: ['skin', 'peel'] },
     { island: 1, name: 'Avocado_Pit', classes: ['pit', 'seed'] },
@@ -218,8 +224,14 @@ island 9: 28 triangles, texture u 0.48,0.85 v 0.53,0.98, size 28.674,27.768,41.0
 // and 0.20 are the tail, in two pieces on each side. The biggest island, 2532 triangles at the middle of the mesh, is the body and the head in one.
 // The duck faces +x with y up, so its right is +z and its left -z, which is how the "at" column tells left from right.
 // Each eye is divided by colour: the black is the eye itself, the white is the highlight painted on it.
+// The source is required: a segmentation is a derivative work, and its record says what it derives from and under what licence.
 SEG.split('#LOD3spShape', {
   group: 'Duck', classes: ['toy', 'duck'],
+  source: {
+    url: 'https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/main/2.0/Duck/glTF-Binary/Duck.glb',
+    licence: 'SCEA Shared Source License 1.0',
+    attribution: 'Copyright 2006 Sony Computer Entertainment Inc.'
+  },
   parts: [
     { island: 0, name: 'Duck_Body_And_Head', classes: ['body', 'head'] },
     { island: 1, name: 'Duck_Beak', classes: ['beak'] },
@@ -294,25 +306,48 @@ SEG.restore()                       // the textured materials, back</code></pre>
 //   SEG.split: every island must go to a part, and 9 of 10 have none
 //   ... island: 0 twice          SEG.split: island 0 is used twice
 //   ... name: 'Mesh'             SEG.split: every part needs a name an author chose, and "Mesh" is a default
-//   ... classes: []              SEG.split: part "Duck_All" needs at least one class</code></pre>
-	<p>It also refuses a node that is not a mesh, a skinned mesh (cutting would break the skeleton), a mesh with several materials or morph targets, and a colour cut on a mesh with no UVs or no base-colour texture.</p>
+//   ... classes: []              SEG.split: part "Duck_All" needs at least one class
+//   ... no source in the plan    SEG.split: the plan needs a source: { url, licence, attribution }. A segmentation is a derivative work, and its record must say what it derives from and under what licence</code></pre>
+	<p>It also refuses a node that is not a mesh, a skinned mesh (cutting would break the skeleton), a mesh with morph targets, and a colour cut on a mesh with no UVs or no base-colour texture. A mesh with <em>several materials</em> is not refused as a dead end: it is sent to <code>SEG.byMaterial</code> (step 9), which is better evidence than islands.</p>
 
-	<h2><span class="step">8</span> Use the parts</h2>
+	<h2><span class="step">8</span> What the asset records</h2>
+	<p class="lede">The cut is verifiable by anyone who has the file: the triangles are conserved and the parts do not overlap. The <em>naming</em> is only as good as what it was made from, so <code>SEG.split</code> writes that into the asset, on the <code>Duck</code> node's <code>userData.segmentation</code> (it travels in the scene file and in an exported <code>.glb</code> as <code>extras</code>):</p>
+	<table class="cuts">
+		<tr><th>Field</th><th>What it holds</th></tr>
+		<tr><td><code>source_url</code>, <code>source_licence</code>, <code>attribution</code></td><td>Where the original model is, under what licence, and the credit line. <strong>Required:</strong> the plan's <code>source</code> is refused without them, because a segmentation is a derivative work. SEG cannot check them; they are your statement</td></tr>
+		<tr><td><code>modifications</code></td><td>What was done to the model, written by SEG: the cut, any subdivision (138 to 2,208 triangles on each eye), that the material and texture are unchanged; plus anything the plan's <code>modifications</code> adds</td></tr>
+		<tr><td><code>plan</code></td><td>The plan <em>as given</em>, verbatim: islands, subdivision, palette colours, names, classes</td></tr>
+		<tr><td><code>describe</code></td><td>The report the decision was made from: the islands with their sizes, centres and colours</td></tr>
+		<tr><td><code>parts</code>, <code>seg_version</code></td><td>Triangles per part, and the version of SEG that cut it</td></tr>
+		<tr><td><code>signals</code></td><td>Facts that may one day be worth refusing on, recorded and not acted on: the number of islands, the number of parts, the share of the surface the largest part covers (0.779 here), and compound names (<code>Duck_Body_And_Head</code>)</td></tr>
+	</table>
+	<p>Every part also has its own <code>descriptors</code>, written when it is made, and its <code>color</code> is the colour of the texture <em>under that part</em>, with the main clusters and their shares, not of the whole atlas. The duck's beak is orange (<code>#ff7e00</code>), its eyes black (<code>#000000</code>), the highlights white (<code>#ffffff</code>) and its body yellow (<code>#ffd800</code>); the avocado's skin, pit, cavity and flesh are <code>#47791c</code>, <code>#af6f2e</code>, <code>#f8d24d</code> and <code>#bfe36e</code>. The material's own colour (one value for all parts, because they share it) is kept separately as <code>materialColor</code>. To see it, <code>$S('#Duck_Beak').nodes[0].userData.descriptors.color</code>.</p>
+	<p><strong>The record is enough to do it again.</strong> Import the original model, and run the recorded plan:</p>
+	<pre><code>const rec = $S('#Duck').nodes[0].userData.segmentation       // or the record from a scene or a .glb
+editor.history.undo()                                          // (here, back to the single mesh)
+SEG.replay('#LOD3spShape', rec)
+//   replayed: all 10 parts match the record</code></pre>
+	<p><code>SEG.replay</code> first checks that the mesh is the one the record describes (the same islands, triangle counts, sizes and colours) and refuses, before changing anything, if it is not: for example <em>the record has 10 islands and this mesh has 12; island 0 has 2280 triangles, the record says 2532</em>. It then cuts, and refuses if any part has a different count from the record. This was run on the committed <code>duck.json</code>'s record against a fresh import of <code>Duck.glb</code>, and all ten parts matched.</p>
+
+	<h2><span class="step">9</span> A mesh with several materials</h2>
+	<p class="lede">Some formats (OBJ with a material library, for example) give one mesh several materials. That is the best case, not the worst: the author of the model assigned each triangle to a material, so there are no seam artefacts and no guessing. <code>SEG.describe</code> lists the materials; <code>SEG.byMaterial</code> cuts one part per material, named from the material's own name (or from the plan's <code>parts: [ { material: 0, name, classes } ]</code>). Every material must go to a part, and the mesh's groups must cover every triangle. The same record is written (with <code>method: 'material'</code>), the geometry is unchanged, and each part keeps its own material. A part can be cut further with <code>SEG.split</code> if it is textured. Checked on a six-material crate standing on a shelf: six parts, the group placed under the shelf in the same world position, undo restoring the crate, and a replay matching the record. (The glTF importer makes a separate mesh for every material, so glTF models arrive already cut this way.)</p>
+	<h2><span class="step">10</span> Use the parts</h2>
 	<p class="lede">The point of the exercise is what you can now say. Anything that works on a selector works on a part: recolour, hide, animate, or let an AI edit "make the beak red" resolve to a mesh instead of a guess.</p>
 	<pre><code>$S('#Duck_Beak').recolor('#e11')       // the beak
 $S('.wing')                            // both wings
 $S('.eye.left')                        // the left eye only
 $S('.tail').scale(1.3)                 // both tail pieces</code></pre>
-	<h2><span class="step">9</span> Your own model</h2>
+	<h2><span class="step">11</span> Your own model</h2>
 	<ol class="steps">
 		<li>Import it, and find its mesh (<code>list = []; scene.traverse(o =&gt; o.isMesh &amp;&amp; list.push(o.name))</code>).</li>
 		<li><code>SEG.describe('#name')</code>. If it says <em>no uv</em> or <em>no texture</em>, stop: there is nothing to read. If every island has the same colours and a similar size, expect to merge.</li>
 		<li>Write the table, as in step 4: island, evidence, decision. Use <code>size</code> to tell flat from solid, <code>at</code> to tell left from right and front from back, and the colours to find painted regions.</li>
-		<li>Write the plan; start with whole islands and <code>SEG.preview</code>. Only then add colour cuts, with the smallest <code>subdivide</code> that follows the paint (each step multiplies the triangles by 4).</li>
+		<li>Write the plan, with its <code>source</code>; start with whole islands and <code>SEG.preview</code>. Only then add colour cuts, with the smallest <code>subdivide</code> that follows the paint (each step multiplies the triangles by 4).</li>
 		<li>Check from behind and from above. Clean up the importer's wrapper, and <code>requireLabels(true)</code>.</li>
 	</ol>
-	<div class="note"><strong>Save it.</strong> Commit from the Git tab. The scenes are <a href="../../#repo=tejaswigowda/test1&amp;file=duck.json">duck.json</a> and <a href="../../#repo=tejaswigowda/test1&amp;file=avocado.json">avocado.json</a> in <code>tejaswigowda/test1</code>, with their textures beside them. The player at the top is pinned to a commit (<code>@1286469</code>), which never goes stale; these links read the branch head.</div>
-	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, in this order, into an empty scene after importing the <code>.glb</code> with the dialog's defaults, in the editor served from this repository. The duck scene was committed, loaded again from that commit and read back: one material shared by all ten parts, the group and its ten meshes with the triangle counts above (every object named and classed, the two lights, and the scene marked with <code>requireLabels</code>). The avocado scene was checked the same way: five parts, 483, 158, 2,286, 6,195 and 2,015 triangles. A single undo of each split restored the importer's original mesh, and redo brought the parts back. The refusal messages above were copied from the running editor. The screenshots are frames of the duck scene with the editor's guide lines hidden. The parts' names are decisions made from the evidence; the colour boundaries (the avocado's rings, the eyes) follow the paint, not an anatomical or physical measurement. No video render was run for this page.</div>
+	<div class="note"><strong>Save it.</strong> Commit from the Git tab. The scenes are <a href="../../#repo=tejaswigowda/test1&amp;file=duck.json">duck.json</a> and <a href="../../#repo=tejaswigowda/test1&amp;file=avocado.json">avocado.json</a> in <code>tejaswigowda/test1</code>, with their textures beside them. The player at the top is pinned to a commit (<code>@554a8ee</code>), which never goes stale; these links read the branch head.</div>
+	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, in this order, into an empty scene after importing the <code>.glb</code> with the dialog's defaults, in the editor served from this repository. The duck scene was committed, loaded again from that commit, exported to a <code>.glb</code> and read back, to check that the descriptors and the record are in the file: one material shared by all ten parts, the group and its ten meshes with the triangle counts above (every object named and classed, the two lights, and the scene marked with <code>requireLabels</code>). The avocado scene was checked the same way: five parts, 483, 158, 2,286, 6,195 and 2,015 triangles. A single undo of each split restored the importer's original mesh, and redo brought the parts back. The refusal messages above were copied from the running editor. The recorded plan of the committed duck was replayed on a fresh import and matched all ten parts. The screenshots are frames of the duck scene with the editor's guide lines hidden. The parts' names are decisions made from the evidence; the colour boundaries (the avocado's rings, the eyes) follow the paint, not an anatomical or physical measurement. No video render was run for this page.</div>
+	<div class="note"><strong>What a record cannot do.</strong> It cannot prove that the licence or attribution you give is right (SEG only refuses to run without them); it cannot say that the names are correct, only what they were made from; and a replay depends on the texture decoding to the same pixels, which it does on the same browser (a different one may move a colour by a count or two, which the check allows for). Records made before SEG 1.1.0 (the first release) kept only the source name and the part sizes.</div>
 	<div class="note" id="sources"><strong>The models.</strong> Avocado.glb: Microsoft, CC0 1.0 Universal, from the <a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models">Khronos glTF Sample Models</a>. Duck.glb: Copyright 2006 Sony Computer Entertainment Inc., licensed under the SCEA Shared Source License 1.0, from the same archive. Both retrieved 27 October 2026. The segmented scenes are derivatives, committed to a public repository with the notices above.</div>
 
 	<footer>

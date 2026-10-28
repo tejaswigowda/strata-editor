@@ -58,6 +58,8 @@ import { executeRecipeOp } from './intelligence/animationRecipes.js';
 import { op as runOp, ops as runOps, makeQuery, OP_VOCABULARY } from './intelligence/opPrimitive.js';
 import { makeMotion } from './intelligence/motionEditOps.js';
 import { makeSegment } from './intelligence/meshSegment.js';
+import { indexSubtree } from './intelligence/descriptors.js';
+import { rankItems, historyBoosts, enclosingCall, memberContext, argumentChoices, membersOf, signatureFor, buildStarters, hintOf } from './shellComplete.js';
 import { colorToName } from './intelligence/colorName.js';
 import { whatsVisible, whatsAt } from './intelligence/gpuPick.js';
 import { lassoSelect } from './intelligence/lassoSelect.js';
@@ -480,7 +482,7 @@ function Shell( editor ) {
 	input.spellcheck = false;
 	input.autocomplete = 'off';
 	input.rows = 1;
-	input.placeholder = 'Type JavaScript, no AI needed (try help) — Shift+Enter newline, ↑↓ history';
+	input.placeholder = 'JavaScript, no AI needed. Tab completes, ↑↓ history (try help)';
 
 	inputRow.appendChild( prompt );
 	inputRow.appendChild( input );
@@ -797,13 +799,14 @@ function Shell( editor ) {
 	];
 
 	// Functions whose first string arg is a selector
-	const SELECTOR_FUNCS = /\b(\$S|Pick|pick|query|queryOne|isolate|soloClass|groupSelection|isValidSelector)\s*\(\s*['"]/;
+	const SELECTOR_FN_NAMES = '\\$S|Pick|pick|query|queryOne|isolate|soloClass|groupSelection|isValidSelector|SEG\\.(?:describe|data|split|byMaterial|replay|preview)';
 
 	let acItems = [];     // current filtered list
 	let acIndex = - 1;    // highlighted index (- 1 = none)
 	let acPrefix = '';    // the token being completed
 	let acStart = - 1;    // cursor position where the token starts
-	let acMode = 'general'; // 'general' | 'selector' | 'chain'
+	let acMode = 'general'; // 'general' | 'selector' | 'chain' | 'member' | 'arg' | 'starter'
+	let acSig = null;     // { name, sig }: the signature of the call the cursor is in
 
 	// ── Context detection ─────────────────────────────────────────────────────
 
@@ -814,7 +817,7 @@ function Shell( editor ) {
 
 		// 1) Inside a selector string? e.g. $S('  or Pick("
 		// Find the last unmatched opening quote preceded by a selector function
-		const selectorMatch = before.match( /\b(\$S|Pick|pick|query|queryOne|isolate|soloClass|groupSelection|isValidSelector)\s*\(\s*(['"])([^'"]*?)$/ );
+		const selectorMatch = before.match( new RegExp( '\\b(' + SELECTOR_FN_NAMES + ')\\s*\\(\\s*([\'"])([^\'"]*?)$' ) );
 		if ( selectorMatch ) {
 
 			const selectorText = selectorMatch[ 3 ];
@@ -822,6 +825,15 @@ function Shell( editor ) {
 			const parts = selectorText.split( /(\s+|>)/ );
 			const lastPart = parts[ parts.length - 1 ] || '';
 			return { mode: 'selector', prefix: lastPart, start: pos - lastPart.length };
+
+		}
+
+		// 1b) Inside a string argument with a fixed set of values: a colour for recolor(', an axis for spin(', a light kind for addLight('
+		const call = enclosingCall( before );
+		if ( call && call.quote ) {
+
+			const choices = argumentChoices( call, [] );
+			if ( choices.kind ) return { mode: 'arg', prefix: call.text, start: pos - call.text.length, items: choices.items };
 
 		}
 
@@ -842,6 +854,10 @@ function Shell( editor ) {
 
 		}
 
+		// 2b) After `name.` for a real object: SEG., Math., editor.scene., THREE., … (read from the object itself)
+		const member = memberContext( before );
+		if ( member ) return { mode: 'member', prefix: member.prefix, start: pos - member.prefix.length, path: member.path };
+
 		// 3) General mode — the default identifier completion
 		let i = before.length - 1;
 		while ( i >= 0 && /[\w$]/.test( before[ i ] ) ) i --;
@@ -860,11 +876,22 @@ function Shell( editor ) {
 			// ranked+capped source so the dropdown and the model never disagree about
 			// what's addressable. Each entry already carries its resolved node count.
 			const index = buildSelectorIndex( editor.scene );
-			return index.map( ( { selector, count } ) => ( {
+			const out = index.map( ( { selector, count } ) => ( {
 				w: selector,
 				k: 'selector',
 				h: count > 1 ? '×' + count : '',
 			} ) );
+			// the names an author gave (what SEG, the tutorials and the outliner say): #Duck_Beak, not only the classes
+			const have = new Set( out.map( o => o.w.toLowerCase() ) ), names = new Map();
+			editor.scene.traverse( n => {
+
+				if ( n === editor.scene || ! n.name || n.name.startsWith( '__' ) || isDefaultName( n.name ) || ! /^[\w-]+$/.test( n.name ) ) return;
+				const key = n.name.toLowerCase();
+				names.set( key, names.has( key ) ? { name: n.name, count: names.get( key ).count + 1 } : { name: n.name, count: 1 } );
+
+			} );
+			for ( const [ key, { name, count } ] of names ) if ( ! have.has( '#' + key ) ) out.push( { w: '#' + name, k: 'selector', h: count > 1 ? '×' + count : '', rank: - 1 } );
+			return out;
 
 		} catch ( e ) {
 
@@ -876,30 +903,64 @@ function Shell( editor ) {
 
 	// ── Filtering ─────────────────────────────────────────────────────────────
 
+	let acBoostsFor = - 1, acBoosts = new Map();
+
 	function acFilter ( prefix, wordList ) {
 
-		const lc = prefix.toLowerCase();
+		// what the user types often ranks first among equals
+		if ( acBoostsFor !== history.length ) { acBoosts = historyBoosts( history ); acBoostsFor = history.length; }
+		return rankItems( prefix, wordList, { boosts: acBoosts, limit: 24 } );
 
-		if ( ! prefix ) {
+	}
 
-			// No prefix: show all items (capped)
-			return wordList.slice( 0, 24 ).map( item => ( { ...item, score: 0 } ) );
+	// the signature of a word, from the tables the Shell already has (word lists, chain methods, and the real globals once a command has run)
+	let acHintTable = null;
+	function acHintFor ( word ) {
+
+		if ( ! acHintTable || acHintTable.globals !== editor.shellGlobals ) {
+
+			acHintTable = { globals: editor.shellGlobals, map: new Map() };
+			for ( const it of [ ...AC_WORDS, ...AC_CHAIN_METHODS ] ) if ( it.h && ! acHintTable.map.has( it.w ) ) acHintTable.map.set( it.w, it.h );
+			for ( const [ w, g ] of Object.entries( editor.shellGlobals || {} ) ) if ( g.h && ! acHintTable.map.has( w ) ) acHintTable.map.set( w, g.h );
 
 		}
+		return acHintTable.map.get( word ) || null;
 
-		return wordList
-			.map( item => {
+	}
 
-				const w = item.w;
-				if ( w.startsWith( prefix ) ) return { ...item, score: 3 };
-				if ( w.toLowerCase().startsWith( lc ) ) return { ...item, score: 2 };
-				if ( w.toLowerCase().includes( lc ) ) return { ...item, score: 1 };
-				return null;
+	// globals the real scope has that the static list does not (known after the first command has run)
+	function acExtraGlobals () {
 
-			} )
-			.filter( Boolean )
-			.sort( ( a, b ) => b.score - a.score || a.w.localeCompare( b.w ) )
-			.slice( 0, 24 );
+		const known = new Set( AC_WORDS.map( x => x.w ) );
+		return Object.entries( editor.shellGlobals || {} ).filter( ( [ w ] ) => ! known.has( w ) && ! w.startsWith( '_' ) ).map( ( [ w, g ] ) => ( { w, k: g.k, h: g.h } ) );
+
+	}
+
+	// the selected object, the scene's classes and the recent commands, as starters for an empty line
+	function acStarters () {
+
+		const o = editor.selected;
+		let selected = null;
+		if ( o && o.name && ! isDefaultName( o.name ) && /^[\w-]+$/.test( o.name ) ) {
+
+			const mat = o.isMesh ? ( Array.isArray( o.material ) ? o.material[ 0 ] : o.material ) : null;
+			selected = { name: o.name, isMesh: !! o.isMesh, textured: !! ( mat && mat.map && o.geometry && o.geometry.attributes && o.geometry.attributes.uv ), hasRecord: !! ( o.userData && o.userData.segmentation ), childCount: o.children.length };
+
+		}
+		// what an author gave the scene: the classes written on objects, most used first, else the names of its top-level objects. (The classes the editor
+		// derives itself, like .blocky or .center, are real but are not what someone reaching for a part is looking for.)
+		const counts = new Map();
+		let objectCount = 0;
+		editor.scene.traverse( n => {
+
+			if ( n === editor.scene ) return;
+			objectCount ++;
+			for ( const c of ( n.userData && n.userData.customClasses ) || [] ) if ( c ) counts.set( '.' + c, ( counts.get( '.' + c ) || 0 ) + 1 );
+
+		} );
+		let classes = [ ...counts ].sort( ( a, b ) => b[ 1 ] - a[ 1 ] || a[ 0 ].localeCompare( b[ 0 ] ) ).map( ( [ selector, count ] ) => ( { selector, count } ) );
+		if ( classes.length === 0 ) classes = editor.scene.children.filter( n => n.name && /^[\w-]+$/.test( n.name ) && ! isDefaultName( n.name ) && ! n.name.startsWith( '__' ) ).map( n => ( { selector: '#' + n.name, count: 1 } ) );
+		return buildStarters( { selected, classes, objectCount, history } );
 
 	}
 
@@ -909,20 +970,42 @@ function Shell( editor ) {
 
 		acDropdown.innerHTML = '';
 
-		if ( acItems.length === 0 ) {
+		if ( acItems.length === 0 && ! acSig ) {
 
 			acDropdown.classList.remove( 'visible' );
 			return;
 
 		}
 
+		// where the cursor is in a call: its signature, always on top, not selectable
+		if ( acSig ) {
+
+			const sig = document.createElement( 'div' );
+			sig.className = 'shell-ac-sig';
+			const nm = document.createElement( 'span' ); nm.className = 'shell-ac-signame'; nm.textContent = acSig.name;
+			sig.appendChild( nm ); sig.appendChild( document.createTextNode( acSig.sig ) );
+			acDropdown.appendChild( sig );
+
+		}
+
 		const kindLabels = {
 			fn: 'function', class: 'class', var: 'variable', obj: 'object', kw: 'keyword',
 			method: 'method', prop: 'property', anim: 'animation', query: 'query',
-			selector: 'selector', type: 'type', pseudo: 'pseudo',
+			selector: 'selector', type: 'type', pseudo: 'pseudo', color: 'colour', value: 'value', starter: '',
 		};
 
+		let lastGroup = null;
 		for ( let i = 0; i < acItems.length; i ++ ) {
+
+			if ( acItems[ i ].group && acItems[ i ].group !== lastGroup ) {
+
+				lastGroup = acItems[ i ].group;
+				const head = document.createElement( 'div' );
+				head.className = 'shell-ac-group';
+				head.textContent = lastGroup;
+				acDropdown.appendChild( head );
+
+			}
 
 			const div = document.createElement( 'div' );
 			div.className = 'shell-ac-item' + ( i === acIndex ? ' active' : '' );
@@ -943,7 +1026,7 @@ function Shell( editor ) {
 
 			const kindSpan = document.createElement( 'span' );
 			kindSpan.className = 'shell-ac-kind';
-			kindSpan.textContent = kindLabels[ acItems[ i ].k ] || acItems[ i ].k;
+			kindSpan.textContent = acItems[ i ].k in kindLabels ? kindLabels[ acItems[ i ].k ] : acItems[ i ].k;
 			div.appendChild( kindSpan );
 
 			div.addEventListener( 'mousedown', ( e ) => {
@@ -960,6 +1043,7 @@ function Shell( editor ) {
 
 		const active = acDropdown.querySelector( '.active' );
 		if ( active ) active.scrollIntoView( { block: 'nearest' } );
+		else acDropdown.scrollTop = 0;
 
 	}
 
@@ -967,24 +1051,30 @@ function Shell( editor ) {
 
 	function acAccept ( idx ) {
 
-		const item = acItems[ idx !== undefined ? idx : acIndex ];
+		const item = acItems[ idx !== undefined ? idx : ( acIndex >= 0 ? acIndex : 0 ) ];
 		if ( ! item ) return;
 
-		const before = input.value.slice( 0, acStart );
-		const after  = input.value.slice( input.selectionStart );
-		input.value  = before + item.w + after;
+		// a starter replaces the whole (empty) line; anything else replaces the word being typed
+		let text = item.w, caret = null;
+		const callable = ( item.k === 'fn' || item.k === 'method' || item.k === 'anim' || item.k === 'query' ) && ! /^\s*\(/.test( input.value.slice( input.selectionStart ) );
+		if ( item.k === 'starter' ) caret = item.caret !== undefined ? item.caret : null;
+		else if ( callable && item.h !== undefined && /^\(/.test( item.h ) ) { text = item.w + ( /^\(\s*\)/.test( item.h ) ? '()' : '(' ); caret = text.length; }
+		const start = item.k === 'starter' ? 0 : acStart;
+		const before = input.value.slice( 0, start );
+		const after  = item.k === 'starter' ? '' : input.value.slice( input.selectionStart );
+		input.value  = before + text + after;
 
-		const newPos = acStart + item.w.length;
+		let newPos = caret !== null ? start + caret : start + text.length;
+		// a value chosen inside a string (a colour, an axis): step over the closing quote, and the choice is done
+		if ( acMode === 'arg' && /^['"`]/.test( after ) ) newPos ++;
 		input.selectionStart = input.selectionEnd = newPos;
+		input.style.height = 'auto';
+		input.style.height = Math.min( 120, input.scrollHeight ) + 'px';
 
 		acHide();
 
-		// After accepting in selector mode, re-trigger to allow continued typing
-		if ( acMode === 'selector' ) {
-
-			setTimeout( acUpdate, 0 );
-
-		}
+		// keep going: after a selector, an argument or a call opened with its parenthesis, offer what comes next
+		if ( acMode === 'selector' || ( callable && /\($/.test( text ) ) || ( item.k === 'starter' && caret !== null ) ) setTimeout( acUpdate, 0 );
 
 	}
 
@@ -994,6 +1084,7 @@ function Shell( editor ) {
 		acIndex = - 1;
 		acPrefix = '';
 		acStart = - 1;
+		acSig = null;
 		acDropdown.classList.remove( 'visible' );
 		acDropdown.innerHTML = '';
 
@@ -1007,6 +1098,11 @@ function Shell( editor ) {
 		acMode = ctx.mode;
 		acPrefix = ctx.prefix;
 		acStart = ctx.start;
+		const before = input.value.slice( 0, input.selectionStart );
+
+		// the signature of the call the cursor is in, unless it is inside a string (then the choices are the help)
+		const call = enclosingCall( before );
+		acSig = call && ! call.quote ? signatureFor( call, acHintFor ) : null;
 
 		let wordList;
 
@@ -1015,37 +1111,43 @@ function Shell( editor ) {
 			// Merge live scene selectors + static type selectors
 			wordList = [ ...acGetSceneSelectors(), ...AC_SELECTOR_TYPES ];
 
+		} else if ( ctx.mode === 'arg' ) {
+
+			wordList = ctx.items;
+
 		} else if ( ctx.mode === 'chain' ) {
 
 			wordList = AC_CHAIN_METHODS;
 
+		} else if ( ctx.mode === 'member' ) {
+
+			const roots = { editor, scene: editor.scene, THREE: window.THREE, camera: editor.camera, document: undefined };
+			delete roots.document;
+			wordList = membersOf( ctx.path, roots ) || [];
+
 		} else {
 
-			wordList = AC_WORDS;
+			wordList = [ ...AC_WORDS, ...acExtraGlobals() ];
 
 		}
 
 		acItems = acFilter( ctx.prefix, wordList );
 
-		// In general mode, if prefix is empty and input is empty, show all
-		// If prefix is empty but there's other text, only show when at start of a new token
+		// General mode with nothing typed. An empty line gets starters made from the selection, the scene and what was typed lately, not the head of a
+		// word list; in the middle of a line nothing is offered until a letter is typed (the signature, if there is one, is still shown).
 		if ( ctx.mode === 'general' && ! ctx.prefix ) {
 
-			const before = input.value.slice( 0, input.selectionStart );
-			// Show if empty or after whitespace/open-paren/semicolon/comma/equals
-			if ( before.length === 0 || /[\s(;,={\[+\-*/%|&!~<>?:]$/.test( before ) ) {
+			if ( before.trim().length === 0 && input.value.trim().length === 0 ) {
 
-				acItems = acFilter( '', wordList );
+				acMode = 'starter';
+				acItems = acStarters();
 
-			} else {
-
-				acItems = [];
-
-			}
+			} else acItems = [];
 
 		}
 
-		acIndex = acItems.length > 0 ? 0 : - 1;
+		// a starter list waits to be chosen (arrow down, or Tab for the first); a typed prefix has its best match highlighted
+		acIndex = acItems.length > 0 && acMode !== 'starter' ? 0 : - 1;
 		acRender();
 
 	}
@@ -1543,7 +1645,7 @@ function Shell( editor ) {
 			// inside that function reliably sees all parameters as local variables.
 			const query = makeQuery( editor ); // shared selector-picker ($S, Pick, pick)
 			const motion = makeMotion( editor ); // $M — motion edit lists (cut captured clips as data)
-			const segment = makeSegment( editor, { THREE: window.THREE, commands: { AddObjectCommand, RemoveObjectCommand, SetMaterialCommand, MultiCmdsCommand }, query } ); // SEG — cut a textured mesh into named parts
+			const segment = makeSegment( editor, { THREE: window.THREE, commands: { AddObjectCommand, RemoveObjectCommand, SetMaterialCommand, MultiCmdsCommand }, query, index: indexSubtree } ); // SEG — cut a textured mesh into named parts
 
 			// ── Parity helpers (shared by the UI-to-shell globals below) ──
 			// isolate/solo: one undoable batch flipping mesh.visible so only the matched
@@ -2852,6 +2954,17 @@ function Shell( editor ) {
 			// eval() inside such a function reliably sees those locals.
 			// eslint-disable-next-line no-new-func
 			const __keys = Object.keys( scope );
+			if ( ! editor.shellGlobals ) {
+
+				// remember what the real scope holds, so the autocomplete knows every global (and its parameters) without a second list to keep in step
+				editor.shellGlobals = {};
+				for ( const k of __keys ) {
+
+					try { const v = scope[ k ]; editor.shellGlobals[ k ] = typeof v === 'function' ? { k: /^[A-Z]/.test( k ) ? 'class' : 'fn', h: /^[A-Z]/.test( k ) ? undefined : hintOf( v ) } : { k: 'var' }; } catch ( e ) { editor.shellGlobals[ k ] = { k: 'var' }; }
+
+				}
+
+			}
 			const __vals = __keys.map( k => scope[ k ] );
 			const __fn   = new Function( ...__keys, '__shell_src__', 'return eval(__shell_src__)' );
 			const result = __fn.call( null, ...__vals, code );
@@ -4349,7 +4462,7 @@ ${ notes.join( '\n' ) }
 		// ── Autocomplete keyboard handling ────────────────────────────────────
 		if ( acDropdown.classList.contains( 'visible' ) ) {
 
-			if ( event.key === 'Tab' || ( event.key === 'Enter' && ! event.shiftKey && acIndex >= 0 ) ) {
+			if ( ( event.key === 'Tab' && acItems.length > 0 ) || ( event.key === 'Enter' && ! event.shiftKey && acIndex >= 0 ) ) {
 
 				event.preventDefault();
 				acAccept();

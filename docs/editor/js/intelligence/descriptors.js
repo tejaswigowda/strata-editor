@@ -7,7 +7,7 @@
 //
 // Descriptor bundle shape (per node):
 //   {
-//     v: 1,                          schema version
+//     v: 2,                          schema version
 //     geomHash: string,             for invalidation
 //     bbox: { center:[x,y,z], size:[x,y,z] },   world-space
 //     region: { x, y, z },          'left|center|right' etc.
@@ -18,7 +18,9 @@
 //     role: 'leaf'|'group',
 //     childCount, depth, parentName,
 //     adjacency: [names...],        siblings whose bbox this overlaps
-//     color: { name, base, hex } | null,
+//     color: { name, base, hex, source?, clusters? } | null,   a textured mesh with UVs: the colour of the texture UNDER THIS MESH
+//                                    (source 'uv-footprint', clusters [{ rgb, hex, share }]), not of the whole atlas
+//     materialColor: { name, base, hex } | null,               the material's own colour (the whole atlas, or the flat colour)
 //     materials: [string...],       decoded material name(s) ("Rims","Grille")
 //     pair: { mateUuid, axis, side } | null
 //   }
@@ -26,8 +28,9 @@
 import { colorToName, rgbToColorName } from './colorName.js';
 import { detectSymmetryPairs } from './symmetry.js';
 import { materialNames } from '../scene/summarize.js';
+import { footprintColour, dataOfGeometry, textureReader, hexOf } from './textureColour.js';
 
-const SCHEMA = 1;
+const SCHEMA = 2;   // 2: `color` of a textured mesh is its own footprint in the texture, and the material's colour moved to `materialColor`
 
 // ── Geometry hash (cheap, for invalidation) ───────────────────────────────────
 
@@ -159,7 +162,8 @@ function dominantTextureColor( map ) {
 
 }
 
-function colorOf( mesh ) {
+// The material's own colour: a real texture's dominant colour (over the whole atlas) when the base colour is the default white, else the base colour.
+function materialColorOf( mesh ) {
 
 	const mat = Array.isArray( mesh.material ) ? mesh.material[ 0 ] : mesh.material;
 	if ( ! mat ) return null;
@@ -175,6 +179,39 @@ function colorOf( mesh ) {
 	if ( mat.color ) return colorToName( mat.color );
 	if ( mat.map ) { const tex = dominantTextureColor( mat.map ); if ( tex ) return tex; }
 	return null;
+
+}
+
+// The colour of the texture under this mesh alone: sampled through its own UVs, over its own surface. A model's parts share one atlas, so the atlas's
+// dominant colour says nothing about which part this is; this does. Null when the mesh is not textured, has no UVs, or the texture cannot be read.
+function footprintColorOf( mesh ) {
+
+	try {
+
+		const mat = Array.isArray( mesh.material ) ? mesh.material[ 0 ] : mesh.material;
+		if ( ! mat || ! mat.map || ! mat.map.image || ! mesh.geometry || ! mesh.geometry.attributes.uv || ! mesh.geometry.attributes.position ) return null;
+		if ( Array.isArray( mesh.material ) ) return null;                      // several materials: each part is described once it is split
+		const f = footprintColour( dataOfGeometry( mesh.geometry ), textureReader( mat.map ), { samples: 1024, k: 3 } );
+		if ( ! f ) return null;
+		const tint = mat.color ? [ mat.color.getHex() >> 16 & 255, mat.color.getHex() >> 8 & 255, mat.color.getHex() & 255 ].map( c => c / 255 ) : [ 1, 1, 1 ];
+		const rgb = f.median.map( ( c, i ) => c * tint[ i ] );
+		const named = rgbToColorName( rgb[ 0 ] / 255, rgb[ 1 ] / 255, rgb[ 2 ] / 255 );
+		return {
+			name: named.name, base: named.base, hex: hexOf( rgb ), source: 'uv-footprint',
+			clusters: f.clusters.map( c => ( { rgb: c.rgb.map( ( x, i ) => Math.round( x * tint[ i ] ) ), hex: hexOf( c.rgb.map( ( x, i ) => x * tint[ i ] ) ), share: c.share } ) )
+		};
+
+	} catch {
+
+		return null; // CORS-tainted texture, no 2D context, or no DOM (node)
+
+	}
+
+}
+
+function colorOf( mesh ) {
+
+	return footprintColorOf( mesh ) || materialColorOf( mesh );
 
 }
 
@@ -308,6 +345,7 @@ export function indexSubtree( root, force = false ) {
 		}
 
 		const color = n.isMesh ? colorOf( n ) : groupColor( n );
+		const materialColor = n.isMesh ? materialColorOf( n ) : null;
 
 		n.userData.descriptors = {
 			v: SCHEMA,
@@ -327,6 +365,7 @@ export function indexSubtree( root, force = false ) {
 			parentName: ( n.parent && n.parent !== root ? ( n.parent.name || n.parent.type ) : ( root.name || 'root' ) ),
 			adjacency,
 			color: color || null,
+			materialColor: materialColor || null,
 			materials: materialsOf( n ),
 			pair: null, // filled in symmetry pass
 		};
