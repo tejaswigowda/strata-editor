@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animate a finished character — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: open a finished, rigged VRM character that carries a baked body clip and a baked face clip, read what the file holds, sample the timeline to see what plays when, start the body on cue, and keep a camera on the moving character. The character was made with portrait.webcli.app and look.webcli.app and rigged with rig.webcli.app.">
+<!--
+	/about/tutorials/animate-a-character.html — a by-hand tutorial on one finished character.
+	Every number quoted was measured in the editor on the scene linked below, by sampling the
+	timeline with holdTimelineAt(t) and reading the bones, morph weights and camera. Static page,
+	no build step. Paste each Shell block in order, into one scene.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main { max-width: 760px; margin: 0 auto; padding: 8vh 24px 14vh; }
+	h1 { margin: 0 0 0.2em; font-size: 1.9rem; font-weight: 700; color: #f3f5f8; }
+	.tagline { margin: 0 0 2.4em; color: #9aa4b2; font-size: 1.05rem; }
+	h2 { margin: 2.6em 0 0.3em; font-size: 1.2rem; color: #f3f5f8; display: flex; align-items: baseline; gap: 0.5em; }
+	h2 .step { color: #7db2ff; font-variant-numeric: tabular-nums; font-weight: 700; }
+	h2 + p.lede { margin-top: 0.2em; color: #c3c9d1; }
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre { background: #1a1d23; border: 1px solid #2a2e36; border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 0.86rem; line-height: 1.55; }
+	pre code { background: none; padding: 0; }
+	.note { border-left: 3px solid #3a4152; background: #1a1d23; padding: 0.8em 1em; border-radius: 0 6px 6px 0; color: #a9b1bd; font-size: 0.92rem; margin: 1em 0; }
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	footer { margin-top: 3.5em; padding-top: 1.2em; border-top: 1px solid #2a2e36; color: #5b6470; font-size: 0.85rem; }
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Animate a finished character</h1>
+	<p class="tagline">One character, two baked clips and a timeline. Read what the file carries, start the body on cue, keep a camera on a character who walks, and check every claim by sampling the pose at a time and reading the numbers. It also says plainly where this scene stopped working.</p>
+
+	<div class="note"><strong>Where the character comes from, and the credit.</strong> The character is made outside Strata, with three browser tools from the Web-CLI family, all of which run on your device (their pages say nothing leaves it). <strong>Character creation:</strong> <a href="https://portrait.webcli.app/">portrait.webcli.app</a> (portrait-webCLI: a photo in, a VRM out whose face blendshapes are driven from the face it read; the shape and colour matching is described on its page as a rough nudge, not a likeness) and <a href="https://look.webcli.app/">look.webcli.app</a> (look-webCLI: a VRM in, an edited VRM out, with its textures, colours, materials, outfits and accessories changed). <strong>Animation rigging:</strong> <a href="https://rig.webcli.app/">rig.webcli.app</a> (bodyrig-webCLI: retargets BVH, FBX or GLB motion, and ARKit-52 face records, onto a skinned character and exports one GLB with every animation as its own named track). This page starts where they stop: with the finished file open in Strata.</div>
+
+	<div class="note"><strong>What you'll need.</strong> The scene, <a href="../../#repo=tejaswigowda/test1@543069a031abcea1ce4103a82710ee1845efa019&amp;file=facebind.json"><code>facebind.json</code></a> in <code>tejaswigowda/test1</code>, pinned to a commit (it opens without a token; it is a 21 MB scene with its geometry and textures beside it, so give it half a minute). Open the <strong>Shell</strong> tab and paste each block in order. Each Shell line is its own scope: a <code>const</code> on one line is gone on the next, so the blocks below repeat the selector instead of naming it.</div>
+
+	<h2><span class="step">1</span> Give the character a name you can type</h2>
+	<p class="lede">The importer names the character's group after the file and derives a class from it, <code>.vroidv110femalev1132-tracksglb</code>. Add a short class and use that from now on:</p>
+	<pre><code>tagClass(scene.children[0], 'actor'); $S('.actor').count()</code></pre>
+	<pre><code>1</code></pre>
+	<p>(End the line with the count: <code>tagClass</code> on its own returns the whole object, and the Shell prints all of it.)</p>
+
+	<h2><span class="step">2</span> Read what the file carries</h2>
+	<p class="lede">The scene has 198 objects, 22,021 vertices and 32,914 triangles. Most of that is 73 skinned meshes (56 of them pieces of hair) sharing one skeleton of <strong>118 bones</strong>, and three animations:</p>
+	<pre><code>editor.scene.animations.map(a =&gt; a.name + ': ' + a.duration.toFixed(1) + ' s, ' + a.tracks.length + ' tracks')</code></pre>
+	<pre><code>[
+  "Timeline: 35.1 s, 0 tracks",
+  "test: 33.1 s, 119 tracks",
+  "testface: 11.5 s, 9 tracks"
+]</code></pre>
+	<table class="cuts">
+		<tr><th>Animation</th><th>What it is</th></tr>
+		<tr><td>Timeline</td><td>The scene's own clock (35.1 s), with no tracks of its own: the timeline in step 3 drives the other two.</td></tr>
+		<tr><td>test</td><td>The <strong>body</strong>: 994 keys at 30 frames a second over 33.1 s, on 118 rotation tracks (one per bone) and one position track (the hips, <code>J_Bip_C_Hips</code>). The hips position is the character's root motion: she does not dance on the spot.</td></tr>
+		<tr><td>testface</td><td>The <strong>face</strong>: 346 keys over 11.5 s, as one morph-weight track on each of the nine face meshes. Each mesh has 124 morph targets, the VRoid expressions (<code>Fcl_MTH_A</code>, <code>Fcl_EYE_Close</code>, …) and the 52 ARKit names (<code>jawOpen</code>, <code>mouthSmileLeft</code>, <code>eyeBlinkLeft</code>, …). The clip moves 44 of the 124 by more than 0.05.</td></tr>
+	</table>
+	<p>The file is named <code>…_2-tracks.glb</code>: two tracks, the body and the face. They are baked data, and Strata does not edit their keys. What you author is <em>control</em>: which clip, when, how fast, and what lies over it.</p>
+
+	<h2><span class="step">3</span> The timeline is two events</h2>
+	<p class="lede">The scene's clock, <code>editor.timeline</code>, holds one <code>play</code> event per clip:</p>
+	<pre><code>JSON.stringify(editor.timeline.toJSON().tracks.map(t =&gt; [t.target, t.events.map(e =&gt; [e.at, e.op, +e.dur.toFixed(1)])]))</code></pre>
+	<pre><code>[["#test",[[2,"play",33.1]]],["#testface",[[0,"play",11.5]]]]</code></pre>
+	<p>The body starts at 2 s and the face at 0. To see what that does, <code>holdTimelineAt(t)</code> jumps the whole scene to <code>t</code> seconds, and then the bones and the morph weights can be read like any other property. Run it at a few times and read the hips, one upper-arm bone and the total morph weight on the face:</p>
+	<pre><code>holdTimelineAt(6); JSON.stringify([scene.getObjectByName('J_Bip_C_Hips').position, scene.getObjectByName('J_Bip_R_UpperArm').quaternion].map(v =&gt; v.toArray().map(x =&gt; +x.toFixed(3))))</code></pre>
+	<pre><code>[[-0.766,0.82,-1.069],[-0.167,0.511,-0.363,0.761]]</code></pre>
+	<p>The same reading at eight times (measured on this scene; the face column is the sum of the absolute morph weights on the first face mesh, <code>Facebaked_custom</code>):</p>
+	<table class="cuts">
+		<tr><th>t (s)</th><th>hips (x, y, z)</th><th>arm quaternion</th><th>face</th></tr>
+		<tr><td>0</td><td>−0.397, 0.848, −0.577</td><td>0.027, 0.149, −0.306, 0.940</td><td>9.573</td></tr>
+		<tr><td>1.9</td><td>−0.397, 0.848, −0.577</td><td>0.027, 0.149, −0.306, 0.940</td><td>4.751</td></tr>
+		<tr><td>2</td><td>−0.397, 0.848, −0.577</td><td>0.027, 0.149, −0.306, 0.940</td><td>9.358</td></tr>
+		<tr><td>6</td><td>−0.766, 0.820, −1.069</td><td>−0.167, 0.511, −0.363, 0.761</td><td>12.896</td></tr>
+		<tr><td>11.4</td><td>−0.794, 0.795, −1.123</td><td>−0.074, 0.627, −0.463, 0.622</td><td>4.483</td></tr>
+		<tr><td>11.6</td><td>−0.827, 0.828, −1.128</td><td>−0.083, 0.622, −0.488, 0.607</td><td>5.493</td></tr>
+		<tr><td>20</td><td>−0.031, 0.824, 0.046</td><td>−0.156, 0.600, −0.459, 0.636</td><td>5.493</td></tr>
+		<tr><td>35.1</td><td>−1.316, 0.809, −0.023</td><td>−0.162, 0.595, −0.496, 0.611</td><td>5.493</td></tr>
+	</table>
+	<p>Two things in the table are the point of this page:</p>
+	<ol class="steps">
+		<li><strong>The body holds its first pose for two seconds.</strong> The hips and the arm are identical at 0, 1.9 and 2, then move. Before a clip's first <code>play</code> it holds its first frame, so a character that should be moving from the first frame of the render is standing still for 2 s.</li>
+		<li><strong>The face stops at 11.5 s.</strong> The face column changes up to 11.4 s and is then 5.493 at 11.6, 20 and 35.1: the clip has ended and holds its last frame, while the body carries on for another 23.6 s with a frozen face.</li>
+	</ol>
+
+	<h2><span class="step">4</span> Start the body at zero</h2>
+	<p class="lede">The obvious fix is wrong, and it is worth seeing why:</p>
+	<pre><code>$S('#test').at(0).play('test')</code></pre>
+	<p>This does not move the clip's event: it <strong>adds a second one</strong>. The timeline now has <code>play</code> events for <code>test</code> at 2 s and at 0 s, and the two fight. Sampling the arm shows it: at 1 s it moves, and at 2 s it is back at the first pose (<code>0.027, 0.149, −0.306, 0.940</code>), because the event at 2 s restarted the clip. Undo it (<strong>Undo</strong>, or <code>undo()</code>), then move the event that is already there, by its id:</p>
+	<pre><code>editor.timeline.moveEvent(editor.timeline.tracks[0].events[0].id, 0)</code></pre>
+	<pre><code>true</code></pre>
+	<p>(<code>tracks[0]</code> is the <code>#test</code> track here; the event is the purple block on that row of the <strong>Animations</strong> tab, which you can drag instead.) <strong>This edit is not on the Undo stack</strong> (checked: the undo count did not change, and <strong>Undo</strong> afterwards took back the <code>tagClass</code> of step 1 and left the event at 0), so reload the scene to get the original timing back. Sampling again, the arm is at its first pose at 0 s and has moved by 1 s and by 2 s, with no reset:</p>
+	<table class="cuts">
+		<tr><th>t (s)</th><th>arm quaternion, body event at 0</th></tr>
+		<tr><td>0</td><td>0.027, 0.149, −0.306, 0.940</td></tr>
+		<tr><td>1</td><td>−0.258, 0.428, −0.421, 0.757</td></tr>
+		<tr><td>2</td><td>−0.141, 0.605, −0.533, 0.575</td></tr>
+	</table>
+	<p><code>.play()</code> takes the other controls too, and each adds its own event: <code>{ speed: 0.5 }</code> makes the event 66.2 s long (the clip at half speed), and <code>{ loop: true }</code> keeps the 33.1 s. Use them on a clip you have removed or not yet placed, not on top of the one already there.</p>
+
+	<h2><span class="step">5</span> The face: what the clip leaves, and a warning</h2>
+	<p class="lede">Step 3 showed the face clip ending at 11.5 s and the body carrying on. Everything the clip drives is frozen at its last value from then on, including the eyelids: sampled at 11.6, 20 and 35.1 s the face is identical (5.493), so for the last 23.6 s of the take she does not blink. The way to fix it in Strata is an authored face (<a href="author-a-face.html">Authoring a face</a>): keys that name the shapes you want, which win over the clip's frozen value for those shapes only, plus a seeded idle layer for the blink. In the one run of this scene where such a key finished, a smile key at 14 s (<code>face.keyAt(14, { shapes: { mouthSmileLeft: 0.8, mouthSmileRight: 0.8 }, duration: 600, easing: 'ease-out' })</code>) read back like this:</p>
+	<table class="cuts">
+		<tr><th>t (s)</th><th>mouthSmileLeft</th><th>eyeBlinkLeft</th></tr>
+		<tr><td>10</td><td>0.509</td><td>0.688</td></tr>
+		<tr><td>13.9</td><td>0.764</td><td>0.431</td></tr>
+		<tr><td>14.7</td><td>0.800</td><td>0.431</td></tr>
+		<tr><td>20</td><td>0.800</td><td>0.431</td></tr>
+	</table>
+	<p>The key took the smile from the clip's last value to 0.8; <code>eyeBlinkLeft</code>, which the key did not name, stayed at the clip's last value, 0.431, to the end of the take.</p>
+	<div class="note"><strong>Do not paste face edits into this scene yet.</strong> They are not offered here as a recipe because they <strong>hung the browser tab</strong> on this character: of five attempts (<code>face.keyAt</code> twice on the long class and once on a short class, <code>face.idle({ seed: 7 })</code> twice), four froze the tab until the browser killed its renderer, and only the smile above finished. Camera and clip edits (steps 4 and 6) did not do this. The cause is not known; it may be specific to a character whose face morphs are driven by a baked clip. If you try it, save first and expect to lose the tab.</div>
+
+	<h2><span class="step">6</span> Keep her in frame</h2>
+	<p class="lede">The scene's camera, <code>cam-render</code>, sits at (−1.97, 0.80, 2.51) and has no keys of its own, but the hips travel about 1.3 m in <em>x</em> and 1.2 m in <em>z</em> in the sampled frames in step 3, so a camera that never turns loses her. A camera key arrives at a time with an aim point (<code>lookAt</code>). The first key of a camera needs a position (<code>keyAt: the first key of a camera needs a pos</code> is the error otherwise); later keys that name only <code>lookAt</code> turn the camera without moving it. Rather than type aim points, sample the hips with <code>holdTimelineAt</code> every 2.5 s and aim at them, at about chest height:</p>
+	<pre><code>for (let t = 0; t &lt;= 35; t += 2.5) { holdTimelineAt(t); const p = scene.getObjectByName('J_Bip_C_Hips').getWorldPosition(new THREE.Vector3()); const aim = [+p.x.toFixed(2), 1.0, +p.z.toFixed(2)]; $S('#cam-render').keyAt(t, t === 0 ? { pos: [-1.97, 0.8, 2.51], lookAt: aim } : { lookAt: aim }) }</code></pre>
+	<pre><code>… a promise: its result is shown when it settles
+✨ Scene updated — 15 commands executed</code></pre>
+	<p>Fifteen keys (the first lands at 0.001 s), one undo step each, and the camera never leaves its position. Check the aim the same way as the body: sample the scene, and measure the angle between the camera's forward direction and the direction from the camera to the hips at chest height:</p>
+	<pre><code>t (s)         0.5  1.25    2   3.75     6   8.75    13  16.25    20  26.25    28    33    35
+off aim (°)   0.6   1.5  2.3   2.1   1.8   1.2   0.4   12.5     0    1.2   1.5   1.3     0</code></pre>
+	<p>The camera is within 2.3° of her at twelve of the thirteen times, and 12.5° off at 16.25 s, between the keys at 15 and 17.5 s: the hips move faster there than a straight turn between two keys follows. Add a key (<code>$S('#cam-render').keyAt(16.25, { lookAt: [x, 1.0, z] })</code> with the hips at that time) or sample every second in the loop. <code>$S('#cam-render').keys()</code> lists the keys and <code>.smooth(true)</code> plays them as one curve; <a href="../../../guides/CAMERA_PATHS.md">Editing camera moves by hand</a> has the one-click moves.</p>
+
+	<h2><span class="step">7</span> Render it</h2>
+	<p class="lede">Open the <strong>Render</strong> tab. The scene's one shot (<code>cam-render</code> from 0 s) is in the Camera Sequence; pick the size and frame rate, and render. The length of the take is the timeline's duration, which the saved scene has as 35.1 s because the body started at 2 s: after step 4, check the duration in the Animations tab before you render, and trim it if the take should end with the body clip.</p>
+
+	<div class="note"><strong>What was checked, and what was not.</strong> <em>Checked in the editor, on the pinned scene, with the Shell blocks as written:</em> steps 1 to 3 (their outputs are copied from the editor); the second event and the arm resetting at 2 s in step 4; <code>moveEvent</code>, the arm samples after it, and that it is not an undo step; the camera loop in step 6 and the thirteen aim measurements. The smile table in step 5 is from the single run that finished, with the long class <code>.vroidv110femalev1132-tracksglb</code> in place of a short one. <em>Not checked:</em> dragging the event in the Animations tab instead of calling <code>moveEvent</code>; the Render tab in step 7 (no render was made); any face edit after the first (they hung the tab); and the thumbnail and the "Open example" player for this page. Which of the three tools made which part of the file is as credited at the top; this page did not run those tools.</div>
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="https://portrait.webcli.app/">portrait.webcli.app</a> · <a href="https://look.webcli.app/">look.webcli.app</a> · <a href="https://rig.webcli.app/">rig.webcli.app</a> · <a href="author-a-face.html">Authoring a face</a> · <a href="two-character-dance.html">One dance, two characters</a>
+	</footer>
+</main>
+</body>
+</html>
