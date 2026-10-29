@@ -15,8 +15,8 @@ import { validateSource, initialVerification, sha256Hex } from '../export/record
 
 export { kmeans, textureReader };
 
-/** Written into every record. Records made before 1.1.0 carry no version, no plan and no evidence; 1.2.0 adds components, attachment and the post-cut assertions; 1.3.0 pins and hashes the source and adds the verification block (see export/records.js); 1.4.0 cuts skinned meshes. */
-export const SEG_VERSION = '1.4.0';   // the schema itself (records.js, SCHEMA_SEG_VERSION) has not changed since 1.3.0
+/** Written into every record. Records made before 1.1.0 carry no version, no plan and no evidence; 1.2.0 adds components, attachment and the post-cut assertions; 1.3.0 pins and hashes the source and adds the verification block (see export/records.js); 1.4.0 cuts skinned meshes; 1.5.0 records the parent triangle of every output triangle (`parents`). */
+export const SEG_VERSION = '1.5.0';   // the schema itself (records.js, SCHEMA_SEG_VERSION) has not changed since 1.3.0; `parents` is an addition
 
 /**
  * The numbers the scene methods use, all recorded with the cut (`attach.parameters`, `signals.assertion_parameters`) so that a cut can be audited and run again.
@@ -552,22 +552,24 @@ export function planParts( data, plan, read, ctx = {} ) {
 
 		}
 		if ( part.basis !== undefined && ! [].concat( part.basis ).every( b => BASES.includes( b ) ) ) throw new Error( 'SEG.split: part "' + part.name + '" has a basis that is not one of ' + BASES.join( ', ' ) );
-		const tris = ids.flatMap( i => islands[ i ] ).map( t => [ 0, 1, 2 ].map( k => vertexOf( data, names, idx[ t * 3 + k ] ) ) );
+		const parentOf = ids.flatMap( i => islands[ i ] );     // the input triangle each of `tris` is, so every output triangle can say where it came from
+		const tris = parentOf.map( t => [ 0, 1, 2 ].map( k => vertexOf( data, names, idx[ t * 3 + k ] ) ) );
 		const from = { islands: ids, subdivide: part.subdivide || 0, source_triangles: tris.length, basis: part.basis };
-		if ( ! part.palette ) { addPart( part.name, part.classes, tris, from ); continue; }
+		if ( ! part.palette ) { addPart( part.name, part.classes, tris, from, { parents: parentOf } ); continue; }
 		if ( ! read || UV < 0 ) throw new Error( 'SEG.split: dividing an island by colour needs a mesh with uv and a base-colour texture' );
 		if ( ! part.palette.length ) throw new Error( 'SEG.split: an empty palette' );
 		const bins = new Map();             // several palette colours may share one name (a part with a gradient in it)
-		part.palette.forEach( p => { if ( ! bins.has( p.name ) ) bins.set( p.name, { classes: p.classes, triangles: [] } ); } );
-		for ( const t of tris.flatMap( s => subdivide( s, part.subdivide || 0 ) ) ) {
+		part.palette.forEach( p => { if ( ! bins.has( p.name ) ) bins.set( p.name, { classes: p.classes, triangles: [], parents: [] } ); } );
+		for ( const [ j, source ] of tris.entries() ) for ( const t of subdivide( source, part.subdivide || 0 ) ) {
 
 			const c = read( ( t[ 0 ][ UV ] + t[ 1 ][ UV ] + t[ 2 ][ UV ] ) / 3, ( t[ 0 ][ UV + 1 ] + t[ 1 ][ UV + 1 ] + t[ 2 ][ UV + 1 ] ) / 3 );
 			let best = part.palette[ 0 ];
 			for ( const p of part.palette ) if ( d2( c, p.color ) < d2( c, best.color ) ) best = p;
 			bins.get( best.name ).triangles.push( t );
+			bins.get( best.name ).parents.push( parentOf[ j ] );
 
 		}
-		bins.forEach( ( bin, name ) => { if ( bin.triangles.length ) addPart( name, bin.classes, bin.triangles, from ); } );
+		bins.forEach( ( bin, name ) => { if ( bin.triangles.length ) addPart( name, bin.classes, bin.triangles, from, { parents: bin.parents } ); } );
 
 	}
 	if ( used.size !== islands.length ) throw new Error( 'SEG.split: every island must go to a part, and ' + ( islands.length - used.size ) + ' of ' + islands.length + ' have none' );
@@ -578,7 +580,40 @@ export function planParts( data, plan, read, ctx = {} ) {
 	meta.attach = attach && { parameters: attach.parameters, per_part: Object.fromEntries( attach.perAnchor.map( a => [ a.name, { anchor_components: a.anchor_components, attached_components: a.attached_components, components: a.components, distance: a.distance } ] ) ), tie_broken: attach.tieBroken, unattached: attach.unattached };
 	meta.anchors = anchored ? plan.anchors.length : 0;
 	meta.assertions = cutAssertions( { made, data, scene, matrix: ctx.matrix, attach, read } );
+	const broken = parentProblems( made, idx.length / 3 );
+	if ( broken.length ) throw new Error( 'SEG.split: the parent triangles are inconsistent, which is a bug in SEG and not in the plan: ' + broken.join( '; ' ) );
 	return made;
+
+}
+
+/**
+ * Provenance check: every output triangle names the input triangle it was cut from (`parents`, one entry per output triangle, in the part's own order).
+ * Cutting never loses or invents surface, so every input triangle must appear in total 4^n times, over all parts together, for one n: once when it was not
+ * divided (so an undivided cut's parents are a permutation of the input triangles, split across the parts with nothing twice and nothing missing), and
+ * 4^n times when it was divided by colour, where its children may land in different parts. Returns what is wrong, empty when it is sound.
+ */
+export function parentProblems( made, inputTriangles ) {
+
+	const out = [], seen = new Uint32Array( inputTriangles );
+	for ( const p of made ) {
+
+		if ( ! Array.isArray( p.parents ) || p.parents.length !== p.triangles.length ) { out.push( `part "${ p.name }" has ${ p.parents ? p.parents.length : 'no' } parents for ${ p.triangles.length } triangles` ); continue; }
+		for ( const t of p.parents ) { if ( ! ( Number.isInteger( t ) && t >= 0 && t < inputTriangles ) ) { out.push( `part "${ p.name }" has a parent ${ t } that is not an input triangle` ); break; } seen[ t ] ++; }
+
+	}
+	if ( out.length ) return out;
+	let missing = 0, notPower = 0;
+	for ( let t = 0; t < inputTriangles; t ++ ) {
+
+		let n = seen[ t ];
+		if ( n === 0 ) { missing ++; continue; }
+		while ( n % 4 === 0 ) n /= 4;
+		if ( n !== 1 ) notPower ++;
+
+	}
+	if ( missing ) out.push( missing + ' input triangles have no output triangle' );
+	if ( notPower ) out.push( notPower + ' input triangles were cut into a number of pieces that is not a power of 4' );
+	return out;
 
 }
 
@@ -647,6 +682,8 @@ function areaOf( triangles, at ) {
  *   plan        the plan as given, verbatim: re-running SEG.split on the same model with it gives the same parts,
  *   describe    the report the decision was made from (the islands with their sizes and colours, or the materials),
  *   parts       { name: triangles },
+ *   parents     { name: [ parent triangle, … ] }: for every output triangle of a part, in the part's order, the number of the input triangle it was cut from
+ *               (identity for a part that was not divided; the same number 4^n times when an island was divided by colour). Exact provenance: nothing has to be matched by position.
  *   signals     facts about the cut that may one day be worth refusing on (nothing is refused on them yet),
  *   verification  { status: 'seeded', reviews: [] }: who has looked, appended to by each review.
  */
@@ -689,6 +726,7 @@ export function buildRecord( { method, from, plan, describe, made, data, sourceT
 		describe,
 		...( meta.attach ? { attach: meta.attach } : {} ),
 		parts: Object.fromEntries( made.map( p => [ p.name, p.triangles.length ] ) ),
+		parents: Object.fromEntries( made.map( p => [ p.name, p.parents ] ) ),
 		signals: {
 			source_units: sourceUnits, part_count: made.length,
 			largest_part_area_share: +( Math.max( ...areas ) / total ).toFixed( 3 ),
@@ -765,10 +803,12 @@ export function planMaterialParts( data, groups, plan ) {
 		if ( used.has( part.material ) ) throw new Error( 'SEG.byMaterial: material ' + part.material + ' is used twice' );
 		used.add( part.material );
 		const tris = by.get( part.material ).map( t => [ 0, 1, 2 ].map( k => vertexOf( data, names, idx[ t * 3 + k ] ) ) );
-		add( part.name, part.classes, tris, { source_triangles: tris.length }, { material: part.material } );
+		add( part.name, part.classes, tris, { source_triangles: tris.length }, { material: part.material, parents: by.get( part.material ).slice() } );
 
 	}
 	if ( used.size !== by.size ) throw new Error( 'SEG.byMaterial: every material must go to a part, and ' + ( by.size - used.size ) + ' of ' + by.size + ' have none' );
+	const broken = parentProblems( add.made, idx.length / 3 );
+	if ( broken.length ) throw new Error( 'SEG.byMaterial: the parent triangles are inconsistent, which is a bug in SEG and not in the plan: ' + broken.join( '; ' ) );
 	return add.made;
 
 }
@@ -1009,6 +1049,7 @@ export function makeSegment( editor, { THREE, commands, query, index } ) {
 		const done = prepare( what, plan, method );
 		const want = JSON.stringify( rec.parts ), got = JSON.stringify( done.record.parts );
 		if ( want !== got ) throw new Error( 'SEG.replay: the plan gives different parts from the record (' + got + ' against ' + want + '); nothing was changed' );
+		if ( rec.parents && JSON.stringify( rec.parents ) !== JSON.stringify( done.record.parents ) ) throw new Error( 'SEG.replay: the plan gives the same part sizes as the record but different parent triangles; nothing was changed' );
 		return commit( done ) + '\nreplayed: all ' + done.made.length + ' parts match the record';
 
 	};

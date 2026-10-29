@@ -319,5 +319,18 @@ await test( 'a legacy record migrates offline to the schema, keeps its cut and i
 
 } );
 
+await test( 'SEG 1.5.0: parents, when present, are one per output triangle and name the same parts', () => {
+
+	const j = record();
+	seg( j ).parts = { Duck_Beak: 2, Duck_Body: 1 };
+	seg( j ).parents = { Duck_Beak: [ 0, 1 ], Duck_Body: [ 2 ] };
+	assert.deepStrictEqual( validateRecordJson( j ), [] );
+	const short = clone( j ); seg( short ).parents.Duck_Beak = [ 0 ];
+	assert.ok( validateRecordJson( short ).some( p => /"Duck_Beak" has 1 parents for 2 triangles/.test( p ) ) );
+	const other = clone( j ); delete seg( other ).parents.Duck_Body;
+	assert.ok( validateRecordJson( other ).some( p => /do not name the same parts/.test( p ) ) );
+
+} );
+
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );

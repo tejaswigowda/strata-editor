@@ -412,6 +412,14 @@ export function validateRecordJson( json ) {
 		if ( s.source && s.source.url && ! RAW_GITHUB.test( s.source.url ) && /github\.com/.test( s.source.url ) ) out.push( `${ w }: source.url is not a raw, commit-pinned address` );
 		for ( const k of [ 'source_url', 'source_licence', 'attribution' ] ) if ( k in s ) out.push( `${ w }: "${ k }" is the old flat form: it lives in source now, and a second copy is a second source of truth` );
 		out.push( ...validateVerification( s.verification ).map( p => `${ w }: ${ p }` ) );
+		if ( s.parents !== undefined ) {
+
+			// SEG 1.5.0: one parent triangle per output triangle, so a part's parents are as many as its triangles
+			const names = Object.keys( s.parts || {} );
+			if ( JSON.stringify( Object.keys( s.parents ) ) !== JSON.stringify( names ) ) out.push( `${ w }: parents and parts do not name the same parts` );
+			else for ( const n of names ) if ( ! Array.isArray( s.parents[ n ] ) || s.parents[ n ].length !== s.parts[ n ] ) out.push( `${ w }: "${ n }" has ${ Array.isArray( s.parents[ n ] ) ? s.parents[ n ].length : 'no' } parents for ${ s.parts[ n ] } triangles` );
+
+		}
 
 	}
 	const ud = json.scene && json.scene.object && json.scene.object.userData;

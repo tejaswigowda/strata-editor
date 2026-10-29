@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
-const { skinnedPlanProblem, islandsOf, kmeans, describeIslands, formatIslands, planParts, carveAttributes, triangleIndex, validateSource, buildRecord, compareDescribe, materialParts, planMaterialParts, SEG_VERSION,
+const { skinnedPlanProblem, islandsOf, kmeans, describeIslands, formatIslands, planParts, carveAttributes, triangleIndex, validateSource, buildRecord, compareDescribe, materialParts, planMaterialParts, parentProblems, SEG_VERSION,
 	componentsOf, describeComponents, formatComponents, grainOf, attachComponents, anchorParts, cutAssertions, SCENE, ASSERTIONS } = await import( pathToFileURL( path.join( here, '..', 'meshSegment.js' ) ).href );
 const { footprintColour } = await import( pathToFileURL( path.join( here, '..', 'textureColour.js' ) ).href );
 
@@ -655,6 +655,60 @@ test( 'a record made from components is compared with the mesh by component, and
 	const diffs = compareDescribe( rec, { components: describeComponents( other, null, { matrix: ZUP_TO_YUP } ) } );
 	assert.ok( diffs.some( d => /the record has 7 components and this mesh has 6/.test( d ) ), diffs.join( ' | ' ) );
 	assert.ok( compareDescribe( rec, { islands: [] } )[ 0 ].includes( 'made from components' ) );
+
+} );
+
+
+// ── parent triangles: where every output triangle came from (exact provenance, nothing matched by position) ──
+
+test( 'F2: an undivided cut emits parents that are a permutation of the input triangles, split across the parts, with nothing twice and nothing missing', () => {
+
+	const data = mesh(), made = planParts( data, { parts: [ { island: 1, name: 'Second_Square', classes: [ 's' ] }, { island: 0, name: 'First_Square', classes: [ 'f' ] } ] }, read );
+	assert.deepStrictEqual( made.map( p => p.parents ), [ [ 2, 3 ], [ 0, 1 ] ] );
+	const all = made.flatMap( p => p.parents ).sort( ( a, b ) => a - b );
+	assert.deepStrictEqual( all, triangleIndex( data ).map( ( _, i ) => i ).filter( i => i < 4 ), 'a permutation of 0..3' );
+	assert.deepStrictEqual( parentProblems( made, 4 ), [] );
+
+} );
+
+test( 'F1: a part divided by colour carries its parent 4^n times, and the children of one parent may land in different parts', () => {
+
+	const made = planParts( mesh(), byColour, read ), by = Object.fromEntries( made.map( p => [ p.name, p ] ) );
+	assert.deepStrictEqual( by.Red_Square.parents, [ 0, 1 ], 'a whole island is identity, still emitted' );
+	for ( const p of made ) assert.strictEqual( p.parents.length, p.triangles.length, 'one parent per output triangle' );
+	const count = ( p, t ) => p.parents.filter( x => x === t ).length;
+	for ( const t of [ 2, 3 ] ) assert.strictEqual( count( by.Red_Half, t ) + count( by.Blue_Half, t ), 64, 'a triangle divided 3 times has 4^3 children, wherever they went' );
+	assert.ok( [ 2, 3 ].some( t => count( by.Red_Half, t ) > 0 && count( by.Blue_Half, t ) > 0 ), 'the paint boundary crosses a parent triangle' );
+	assert.deepStrictEqual( parentProblems( made, 4 ), [] );
+
+} );
+
+test( 'a cut by material emits the identity provenance', () => {
+
+	const { data, groups } = twoMaterials();
+	const made = planMaterialParts( data, groups, { parts: [ { material: 0, name: 'Body_Part', classes: [ 'body' ] }, { material: 1, name: 'Trim_Part', classes: [ 'trim' ] } ] } );
+	assert.deepStrictEqual( made.map( p => p.parents ), [ [ 0, 2 ], [ 1, 3 ] ] );
+
+} );
+
+test( 'parentProblems names a lost triangle, a triangle cut into a number of pieces that is not a power of 4, and a parent that is not in the input', () => {
+
+	const part = ( name, parents ) => ( { name, parents, triangles: parents.map( () => null ) } );
+	assert.deepStrictEqual( parentProblems( [ part( 'A', [ 0, 1 ] ) ], 3 ), [ '1 input triangles have no output triangle' ] );
+	assert.match( parentProblems( [ part( 'A', [ 0, 0 ] ), part( 'B', [ 1 ] ) ], 2 )[ 0 ], /not a power of 4/ );
+	assert.match( parentProblems( [ part( 'A', [ 0, 7 ] ) ], 2 )[ 0 ], /parent 7 that is not an input triangle/ );
+	assert.match( parentProblems( [ { name: 'A', triangles: [ 1 ] } ], 1 )[ 0 ], /no parents/ );
+
+} );
+
+test( 'the record keeps the parents per part, in step with the part sizes, and a replay reproduces them', () => {
+
+	const { made, rec } = recordOf( planA );
+	assert.deepStrictEqual( Object.keys( rec.parents ), Object.keys( rec.parts ) );
+	for ( const [ name, n ] of Object.entries( rec.parts ) ) assert.strictEqual( rec.parents[ name ].length, n );
+	assert.deepStrictEqual( JSON.parse( JSON.stringify( rec.parents ) ), Object.fromEntries( made.map( p => [ p.name, p.parents ] ) ) );
+	const again = recordOf( planA ).rec;
+	assert.strictEqual( JSON.stringify( again.parents ), JSON.stringify( rec.parents ), 'the same plan on the same mesh gives the same provenance' );
 
 } );
 
