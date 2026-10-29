@@ -132,6 +132,25 @@ sparring.rootOffset([0.5, 0, 0]);             // move it in the world, same vect
 
 	<div class="note"><strong>Honest note on what is and isn't modified.</strong> The captured clip on the scene is only ever read. The cut is compiled in memory from the edit list each time it is needed (and for glTF export), the way the Timeline clip is, and is never saved. Saving the scene writes the capture as it was plus a few hundred bytes of edit list. Saved animation values are quantized (quaternions 5 decimals, positions and times 4) — a deliberate, deterministic, lossy size saving applied at save, independent of any edit.</div>
 
+	<!-- credits:start -->
+	<section class="credits" id="credits">
+		<style>.credits{margin:2.2em 0 1em;padding-top:1em;border-top:1px solid rgba(127,127,127,.35);font-size:.9em}.credits h2{margin:0 0 .5em;font-size:1.05em}.credits h3{margin:.9em 0 .2em;font-size:.95em;opacity:.8}.credits ul{margin:.2em 0;padding-left:1.2em}.credits li{margin:.25em 0}.credits .lic{opacity:.8}</style>
+		<h2>Credits and licences</h2>
+		<h3>People</h3>
+		<ul>
+			<li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script)</span></li>
+			<li><a href="https://search.asu.edu/profile/1795222">Pavan Turaga</a> <span class="lic">(asset)</span></li>
+			<li><a href="https://search.asu.edu/profile/215415">Assegid Kidane</a> <span class="lic">(asset)</span></li>
+		</ul>
+		<h3>Assets</h3>
+		<ul>
+			<li><a href="https://search.asu.edu/profile/1795222">Sparring capture: clips st1_1072026Skeleton and st2_1072026Skeleton (170.17 s)</a>: Recorded with an OptiTrack system in &quot;Martial Arts and Motion Capture&quot; (GAME 294), Arizona State University; course run by Pavan Turaga, recorded by Assegid Kidane; the two performers are not named <span class="lic">Licence: not stated.</span></li>
+		</ul>
+		<h3>Tools</h3>
+		<p>None used.</p>
+	</section>
+	<!-- credits:end -->
+
 	<footer>
 		<a href="./">← All tutorials</a>
 	</footer>

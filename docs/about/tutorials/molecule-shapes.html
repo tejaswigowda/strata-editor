@@ -659,6 +659,25 @@ setRenderAudio('audio/molecule-shapes.wav', { language: 'en', label: 'English' }
 	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, one paste at a time, in this order, into an empty scene, with the Text stencil and the Call card stencil clicked where the text says so; the scene was then committed and loaded again from that commit, and read back: ten materials of its own (each text label also makes a dark shadow material when it is shown), 103 geometries, 191 objects (every one named and classed, apart from the engine's label shadows: <code>lint()</code> reports nothing, and the scene is marked with <code>requireLabels</code>), 93 timeline tracks, 7 shots and 11 cues. The geometry was read back from the loaded scene by seeking to a moment and measuring the distances and angles between the atoms' world positions: at 2 s (as built) every H–C–H angle was 109.47° and every C–H 2.18, the three H–N–H angles were 107.00° with N–H 2.02, and H–O–H was 104.50° with O–H 1.92 (and 115.00° between the two lone pairs); at 12.5 s and 22 s the methane arms were a flat cross, 90° and 180°, with H–H 3.083 along each side; from 30 s on they were the tetrahedron again, H–H 3.560. The screenshots are frames of the pasted scene at 8.5, 14, 22, 25, 32.5, 44.5, 54.8, 58.6, 62.8, 72.5, 82 and 92&nbsp;s, with the editor's controls hidden. Rendering to a video file (step 12) was not run for this page.</div>
 	<div class="note" id="film-contract"><strong>The film's contract.</strong> <em>Units:</em> scene units, 20 to the nanometre, so the bonds are 2.18, 2.02 and 1.92 long (0.109, 0.101 and 0.096 nm) and the angles are the measured 109.5°, 107° and 104.5°; atoms are drawn at ball-and-stick sizes, not true sizes, and the length of a bond is a property of the molecule, not of any ruler in the scene. <em>Assumptions:</em> a qualitative model: electron pairs around a central atom repel and spread to the corners of a tetrahedron, and a lone pair, which is held by one nucleus, takes up more room than a bonding pair. The model explains the shapes and the order of the angles (109.5° &gt; 107° &gt; 104.5°), not the exact numbers, which are measured; the glows, dots and gold cage are schematic, not electron clouds; the lone pairs of water are drawn 115° apart for clarity; the flat cross is how a molecule is sometimes drawn on paper, not a real arrangement; the film does not cover molecules with other numbers of pairs. <em>Render:</em> no video render was run for this page; the narration track was made and is committed beside the scene, and a 1080p60 render has to be made and published. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 
+	<!-- credits:start -->
+	<section class="credits" id="credits">
+		<style>.credits{margin:2.2em 0 1em;padding-top:1em;border-top:1px solid rgba(127,127,127,.35);font-size:.9em}.credits h2{margin:0 0 .5em;font-size:1.05em}.credits h3{margin:.9em 0 .2em;font-size:.95em;opacity:.8}.credits ul{margin:.2em 0;padding-left:1.2em}.credits li{margin:.25em 0}.credits .lic{opacity:.8}</style>
+		<h2>Credits and licences</h2>
+		<h3>People</h3>
+		<ul>
+			<li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script, scene)</span></li>
+		</ul>
+		<h3>Assets</h3>
+		<p>None used.</p>
+		<h3>Tools</h3>
+		<ul>
+			<li><a href="https://huggingface.co/hexgrad/Kokoro-82M">Kokoro (voice af_sarah)</a> <span class="lic">(Apache-2.0)</span></li>
+			<li><a href="https://dub.webcli.app">dub.webcli.app</a> <span class="lic">(GPL-3.0)</span></li>
+			<li><a href="https://github.com/espeak-ng/espeak-ng">eSpeak NG</a> <span class="lic">(GPL-3.0)</span> Speaks the phonemes for dub.webcli.app; invoked across an origin, not bundled with Strata (guides/HANDOFF.md).</li>
+		</ul>
+	</section>
+	<!-- credits:end -->
+
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
 	</footer>

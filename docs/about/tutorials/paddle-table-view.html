@@ -300,6 +300,21 @@ setBackground('#f2a45c');</code></pre>
 editor.history.undos.length;  // commands issued this session</code></pre>
 	<div class="note"><strong>Why this matters.</strong> A stray keystroke reaching the viewport instead of the Shell input (an unclosed autocomplete dropdown, focus lost between two automated steps) can trigger the app's global keyboard shortcuts — Delete removes whatever's currently selected. It's silent: the Shell shows no error, and the deletion is a normal <code>RemoveObjectCommand</code> sitting in the same undo stack as your real edits. Checking <code>editor.history.undos</code> for command types you didn't intend to run is the fastest way to catch it, and every entry there is individually undoable if something needs reverting.</div>
 
+	<!-- credits:start -->
+	<section class="credits" id="credits">
+		<style>.credits{margin:2.2em 0 1em;padding-top:1em;border-top:1px solid rgba(127,127,127,.35);font-size:.9em}.credits h2{margin:0 0 .5em;font-size:1.05em}.credits h3{margin:.9em 0 .2em;font-size:.95em;opacity:.8}.credits ul{margin:.2em 0;padding-left:1.2em}.credits li{margin:.25em 0}.credits .lic{opacity:.8}</style>
+		<h2>Credits and licences</h2>
+		<h3>People</h3>
+		<ul>
+			<li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script)</span></li>
+		</ul>
+		<h3>Assets</h3>
+		<p>None used.</p>
+		<h3>Tools</h3>
+		<p>None used.</p>
+	</section>
+	<!-- credits:end -->
+
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
 	</footer>

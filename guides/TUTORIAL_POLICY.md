@@ -76,6 +76,18 @@ else writePublicPage( plan.slug, plan.title, run );                      // capa
   `docs/sitemap.xml` lists the index and every page and `docs/robots.txt` points at it. There is no
   generator: the pages repeat `tutorials.json` by hand, and the check prints the text to paste when they
   differ. `.github/workflows/tutorials.yml` runs it on every push that touches `docs/about/tutorials/`.
+* **Credits live in `tutorials.json`, per tutorial**, and every listed tutorial must declare all three
+  (`[]` means "none used"):
+  `contributors` `[{ name, role: scene | script | voice | review | asset, url }]` (at least one `script`),
+  `assets` `[{ name, source, licence, attribution }]` (every file someone else made that the tutorial ships or
+  loads, including the card thumbnail), and `tools` `[{ name, licence, url, note? }]` (software the walkthrough
+  has you use). The credit block on each page (`<!-- credits:start -->` … `<!-- credits:end -->`, just before
+  `<footer>`) repeats it, and the check prints the block to paste when they differ. A missing attribution, a
+  missing licence or a malformed entry fails the lint. A licence of `not stated` is allowed, because it is
+  true, and is printed as a note. The check also reads each page's prose for names it knows (Kokoro, Mixamo,
+  Sketchfab, Khronos, metahuman-to-glb, meshoptimizer, bodyrig-webCLI, the webcli.app tools, OptiTrack/arXiv
+  captures, the VRoid base model) and fails if the page names one that `tutorials.json` does not credit. Add a
+  line to `MENTIONS` in `scripts/tutorial-site.cjs` when a tutorial starts using something new.
 
 ### Prompt fragment for the authoring step
 

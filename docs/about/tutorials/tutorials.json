@@ -6,7 +6,21 @@
 		"blurb": "Build a 100-second animated demonstration that 3² + 4² = 5², extend it to two more triples with quarter turns of the camera, and add subtitles, using the JS Shell and the Universal Timeline.",
 		"thumb": "screenshots/thumbs/makeshort.jpg",
 		"desc": "Build the tile squares and a right triangle, choreograph the demonstration on the timeline with tiles that tumble onto the hypotenuse square, repeat it for the 5-12-13 and 8-15-17 triples with quarter turns of the camera, add subtitles, and end on a living call-card — all with the JS Shell and the Universal Timeline.",
-		"embed": "#repo=tejaswigowda/test1&file=pyth.json&present=true"
+		"embed": "#repo=tejaswigowda/test1&file=pyth.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Build the (a + b)³ proof in 3D",
@@ -15,7 +29,27 @@
 		"blurb": "A 3D visual proof of (a + b)³ = a³ + 3a²b + 3ab² + b³ with no numbers: a whole cube falls apart into eight coloured blocks that line up under the expanded equation, with five cameras, an x-ray and subtitles, all from the JS Shell.",
 		"thumb": "screenshots/thumbs/a-plus-b-cubed.jpg",
 		"desc": "Start with a whole cube whose side is cut into a and b, build its eight blocks of four kinds, colour each kind like its term in the equation, light a room with soft shadows, cut between five cameras, explode the cube and sort the blocks into a row under the equation, turn the other blocks to glass one kind at a time — all with the JS Shell, the Universal Timeline and the camera sequence.",
-		"embed": "#repo=tejaswigowda/test1&file=a%2Bb-cubed.json&present=true"
+		"embed": "#repo=tejaswigowda/test1&file=a%2Bb-cubed.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": [
+			{
+				"name": "Kokoro (voice af_sarah)",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/hexgrad/Kokoro-82M"
+			}
+		]
 	},
 	{
 		"title": "Hardy–Weinberg as a square",
@@ -24,7 +58,27 @@
 		"blurb": "The Hardy–Weinberg law as a square: p² + 2pq + q² for one round of random mating, then a count of the alleles that shows p and q are unchanged, with the assumptions listed. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/hw.jpg",
 		"desc": "Cut a square of tiles at p and q, name each piece as a kind of child (AA, Aa, Aa, aa), sort the pieces under their terms of (p + q)² = p² + 2pq + q², with the two Aa pieces stacked under 2pq; then give up every child's two alleles into two bins and measure the bins with the same p and q rulers that measured the parents, to show the allele frequencies are unchanged — all with the JS Shell, the Universal Timeline and the camera sequence, in nine materials.",
-		"embed": "#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=hw.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=hw.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": [
+			{
+				"name": "Kokoro (voice af_sarah)",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/hexgrad/Kokoro-82M"
+			}
+		]
 	},
 	{
 		"title": "Why cells are small: surface area to volume",
@@ -33,7 +87,27 @@
 		"blurb": "Cubes of side 1, 2 and 3 have surface-to-volume ratios of 6, 3 and 2 per unit-cube width, falling as 1 / side in any units: why cells stay small and divide, and why mitochondria and lungs fold their membranes. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/area-volume.jpg",
 		"desc": "Build one cube at three sizes out of unit cubes, show its skin, glass the outside to find the starving middle, cut the big cube into slabs, bars and 27 cubes so the ratio returns to 6, and fold a flat membrane into a zigzag — all with the JS Shell, the Universal Timeline and the camera sequence.",
-		"embed": "#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=area-volume.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=area-volume.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": [
+			{
+				"name": "Kokoro (voice af_sarah)",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/hexgrad/Kokoro-82M"
+			}
+		]
 	},
 	{
 		"title": "A projectile: two motions, one path",
@@ -42,7 +116,38 @@
 		"blurb": "A thrown ball's curve is a sideways motion at constant speed plus an up-and-down motion under gravity. Orbit the path to see each alone, then put them back together. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/projectile.jpg",
 		"desc": "Launch a ball and draw its trail, its constant sideways speed, the gravity that changes its vertical speed, and its landing point; show each motion alone as a shadow on the ground and on a pole, orbit the path, then add the two back together on seven ghost balls and change the angle and the speed — all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
-		"embed": "#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&file=projectile.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&file=projectile.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": [
+			{
+				"name": "Kokoro (voice af_sarah)",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/hexgrad/Kokoro-82M"
+			},
+			{
+				"name": "dub.webcli.app",
+				"licence": "GPL-3.0",
+				"url": "https://dub.webcli.app"
+			},
+			{
+				"name": "eSpeak NG",
+				"licence": "GPL-3.0",
+				"url": "https://github.com/espeak-ng/espeak-ng",
+				"note": "Speaks the phonemes for dub.webcli.app; invoked across an origin, not bundled with Strata (guides/HANDOFF.md)."
+			}
+		]
 	},
 	{
 		"title": "A crank, a rod and a piston: crank-slider kinematics",
@@ -51,7 +156,27 @@
 		"blurb": "A crankshaft, connecting rod and piston through one revolution: the dead centers, the stroke, and the mechanical advantage drawn as a gap that vanishes at the dead centers. Orbit the assembly to see what a flat view hides. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/piston.jpg",
 		"desc": "Animate a crank-slider with exact kinematics: label top and bottom dead center, bracket the stroke, show that the piston covers more than half its stroke in the first quarter turn, and draw the leverage as the gap between the shaft and the point where the rod's line crosses the vertical through it \u2014 all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
-		"embed": "#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&file=piston.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&file=piston.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": [
+			{
+				"name": "Kokoro (voice af_sarah)",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/hexgrad/Kokoro-82M"
+			}
+		]
 	},
 	{
 		"title": "Why molecules are shaped differently: electron-pair repulsion",
@@ -60,7 +185,38 @@
 		"blurb": "Methane, ammonia and water built from coloured spheres and bonds: four electron pairs spread to the corners of a tetrahedron, and each lone pair, which has no atom on it, closes the angle a little more (109.5°, 107°, 104.5°). Orbit each molecule to see what a flat drawing hides. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/molecule-shapes.jpg",
 		"desc": "Build three molecules from spheres and bonds, swing methane's bonds out of the flat cross it is drawn as into a tetrahedron, add the lone pairs of ammonia and water, mark each bond angle, look at ammonia from above and from the side, and compare the three shapes side by side \u2014 all with the JS Shell, the Universal Timeline and the camera sequence, in ten materials.",
-		"embed": "#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&file=molecule-shapes.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&file=molecule-shapes.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": [
+			{
+				"name": "Kokoro (voice af_sarah)",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/hexgrad/Kokoro-82M"
+			},
+			{
+				"name": "dub.webcli.app",
+				"licence": "GPL-3.0",
+				"url": "https://dub.webcli.app"
+			},
+			{
+				"name": "eSpeak NG",
+				"licence": "GPL-3.0",
+				"url": "https://github.com/espeak-ng/espeak-ng",
+				"note": "Speaks the phonemes for dub.webcli.app; invoked across an origin, not bundled with Strata (guides/HANDOFF.md)."
+			}
+		]
 	},
 	{
 		"title": "Cut any textured mesh into named parts",
@@ -69,7 +225,46 @@
 		"blurb": "The editor's SEG tool on any one-piece textured model: read the UV islands and painted colours, decide what each piece is, and cut it into named, classed meshes in one undo step. An avocado is the easy case, a toy duck the hard one (ten islands, six parts), an animated fox shows a skinned mesh cut with its skeleton and clips intact, and the page says where the method stops working. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/segment-any-mesh.jpg",
 		"desc": "Describe a mesh's islands and colours with SEG.describe, turn the evidence into a table of decisions, cut with SEG.split (whole islands, merged islands, islands divided by colour, and a skinned mesh whose parts share the skeleton), check with SEG.preview and isolate, tidy the importer's wrapper or class the rig, switch on the labelling gate, and select the parts by name or class \u2014 with the CC0 Avocado, the SCEA-licensed Duck and the CC0 / CC BY Fox from the Khronos samples.",
-		"embed": "#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=duck.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=duck.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "Avocado.glb",
+				"source": "https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/d7a3cc8e51d7c573771ae77a57f16b0662a905c6/2.0/Avocado/glTF-Binary/Avocado.glb",
+				"licence": "CC0 1.0 Universal",
+				"attribution": "Microsoft (Khronos glTF Sample Models: Avocado)"
+			},
+			{
+				"name": "Duck.glb",
+				"source": "https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/d7a3cc8e51d7c573771ae77a57f16b0662a905c6/2.0/Duck/glTF-Binary/Duck.glb",
+				"licence": "SCEA Shared Source License 1.0",
+				"attribution": "Copyright 2006 Sony Computer Entertainment Inc."
+			},
+			{
+				"name": "Fox.glb",
+				"source": "https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/d7a3cc8e51d7c573771ae77a57f16b0662a905c6/2.0/Fox/glTF-Binary/Fox.glb",
+				"licence": "CC0 1.0 (the model); CC BY 4.0 (the rigging and animation, credited next)",
+				"attribution": "Low poly fox by PixelMannen; rigging and animation by @tomkranis; glTF conversion by @AsoboStudio and @scurest"
+			},
+			{
+				"name": "Fox rigging and animation (Sketchfab)",
+				"source": "https://sketchfab.com/models/371dea88d7e04a76af5763f2a36866bc",
+				"licence": "CC BY 4.0",
+				"attribution": "@tomkranis on Sketchfab. Attribution is required, and applies to the Fox.glb above"
+			}
+		],
+		"tools": []
 	},
 	{
 		"title": "Cut a scene into named parts",
@@ -77,7 +272,35 @@
 		"group": "Scenes",
 		"thumb": "screenshots/thumbs/segment-a-scene.jpg",
 		"blurb": "SEG on a furnished room: one mesh, 538 texture islands, no part that is one island. SEG joins the islands that touch into components, measures them in the world frame, places everything you did not name on the nearest anchor you did, and checks the cut; you supply the anchors and their names. Says where the checks fired on the first attempt. Built with the JS Shell.",
-		"desc": "Read a scene's components with SEG.describe, name the anchors and say what each name rests on, preview where everything would go with SEG.attach and what is too far to attach, cut with SEG.split from anchors alone, read the four post-cut assertions (oversize, engulfing, absorbed, orphan sink), and replay the recorded plan \u2014 on a CC Attribution-NonCommercial Sketchfab room that is not republished here."
+		"desc": "Read a scene's components with SEG.describe, name the anchors and say what each name rests on, preview where everything would go with SEG.attach and what is too far to attach, cut with SEG.split from anchors alone, read the four post-cut assertions (oversize, engulfing, absorbed, orphan sink), and replay the recorded plan \u2014 on a CC Attribution-NonCommercial Sketchfab room that is not republished here.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "cyberpunk micro-apartments (room .glb)",
+				"source": "https://sketchfab.com/3d-models/cyberpunk-micro-apartments-fd8011e2af0e43288f5445600197ea77",
+				"licence": "CC BY-NC (as stated on the Sketchfab model page)",
+				"attribution": "Mikita_Hubanau (Sketchfab: cyberpunk micro-apartments). Not for commercial use, so the segmented scene is not published"
+			},
+			{
+				"name": "Fox.glb",
+				"source": "https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/d7a3cc8e51d7c573771ae77a57f16b0662a905c6/2.0/Fox/glTF-Binary/Fox.glb",
+				"licence": "CC0 1.0 (the model); CC BY 4.0 (the rigging and animation, credited next)",
+				"attribution": "Low poly fox by PixelMannen; rigging and animation by @tomkranis; glTF conversion by @AsoboStudio and @scurest"
+			},
+			{
+				"name": "Fox rigging and animation (Sketchfab)",
+				"source": "https://sketchfab.com/models/371dea88d7e04a76af5763f2a36866bc",
+				"licence": "CC BY 4.0",
+				"attribution": "@tomkranis on Sketchfab. Attribution is required, and applies to the Fox.glb above"
+			}
+		],
+		"tools": []
 	},
 	{
 		"title": "Cut an avocado into named parts, building the tool by hand",
@@ -86,7 +309,28 @@
 		"blurb": "The editor's SEG tool, written out by hand on a one-piece avocado: read the evidence the file carries (separate patches of the texture, and the colours painted on them), cut it into five named, classed meshes (skin, pit, cavity, flesh, edge) without losing a triangle, and check the cut. Says plainly where the method stops working. Built with the JS Shell.",
 		"thumb": "screenshots/thumbs/segment-a-mesh.jpg",
 		"desc": "Describe a mesh's UV islands and painted colours, decide what each piece is, subdivide and sort the cut face by colour, replace the one mesh with a named group, preview each part in a flat colour and isolate it, then select parts by name or class \u2014 all with the JS Shell, on the CC0 Khronos Avocado sample.",
-		"embed": "#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=avocado.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=avocado.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "Avocado.glb",
+				"source": "https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/d7a3cc8e51d7c573771ae77a57f16b0662a905c6/2.0/Avocado/glTF-Binary/Avocado.glb",
+				"licence": "CC0 1.0 Universal",
+				"attribution": "Microsoft (Khronos glTF Sample Models: Avocado)"
+			}
+		],
+		"tools": []
 	},
 	{
 		"title": "Build a night scene from scratch",
@@ -95,7 +339,21 @@
 		"blurb": "The from-scratch workflow: helper functions, noise-displaced ground, night lighting, a moving object and a hero camera.",
 		"thumb": "screenshots/thumbs/build-a-scene.jpg",
 		"desc": "Reusable helper functions, a noise-displaced ground, a grouped structure, night lighting (and the Environment setting that silently undoes it), a moving object, and a static hero camera — the full from-scratch workflow.",
-		"embed": "#repo=tejaswigowda/test1&file=short.json&present=true"
+		"embed": "#repo=tejaswigowda/test1&file=short.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Add a static hero camera to a render sequence",
@@ -103,7 +361,16 @@
 		"group": "Animation and rendering",
 		"blurb": "Cut a fixed hero camera into a render sequence to show a moment your main camera does not frame well.",
 		"thumb": "screenshots/thumbs/render-camera-sequence.jpg",
-		"desc": "A focused deep-dive on just the Render tab's Camera Sequence feature — add a fixed, non-animated camera and cut it in to showcase one moment your main animated camera doesn't frame well."
+		"desc": "A focused deep-dive on just the Render tab's Camera Sequence feature — add a fixed, non-animated camera and cut it in to showcase one moment your main animated camera doesn't frame well.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Build a table-view paddle game scene",
@@ -111,7 +378,16 @@
 		"group": "Games",
 		"blurb": "Build a paddle game as a receding table, and verify the camera framing by projecting points to screen space.",
 		"thumb": "screenshots/thumbs/paddle-table-view.jpg",
-		"desc": "Build a two-paddle ball game as a real receding table instead of a flat arcade screen — pick the depth axis before placing anything, group parts with one AddObjectCommand, verify camera framing by projecting points to NDC, and swap the backdrop for a sunset desert without touching the table."
+		"desc": "Build a two-paddle ball game as a real receding table instead of a flat arcade screen — pick the depth axis before placing anything, group parts with one AddObjectCommand, verify camera framing by projecting points to NDC, and swap the backdrop for a sunset desert without touching the table.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Build a bubble shooter scene",
@@ -119,7 +395,16 @@
 		"group": "Games",
 		"blurb": "A lane, one class-tagged bubble template for game code to clone, a rainforest backdrop and a score sign.",
 		"thumb": "screenshots/thumbs/bubble-shooter-scene.jpg",
-		"desc": "Build the scene, not the game: a lane, exactly one class-tagged Bubble template for runtime logic to clone and recolor, a rainforest background, and a wooden single-score sign — plus two real bugs (a local-space distance offset, and JavaScript's negative modulo) worth checking for."
+		"desc": "Build the scene, not the game: a lane, exactly one class-tagged Bubble template for runtime logic to clone and recolor, a rainforest background, and a wooden single-score sign — plus two real bugs (a local-space distance offset, and JavaScript's negative modulo) worth checking for.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Build a fighting-game arena scene",
@@ -127,7 +412,21 @@
 		"group": "Games",
 		"blurb": "A tavern stage, two class-tagged fighters and a health-and-mana HUD, built for game code to drive.",
 		"thumb": "screenshots/thumbs/fight-arena-scene.jpg",
-		"desc": "Build the scene, not the game: a plank-floor stage with a tavern backdrop, two class-tagged fighter placeholders facing each other, a health-and-mana HUD whose fills are anchored so game code only sets scale.x, and a round timer — plus the rotated-rig axis bug, and a ready-made fight.json to open."
+		"desc": "Build the scene, not the game: a plank-floor stage with a tavern backdrop, two class-tagged fighter placeholders facing each other, a health-and-mana HUD whose fills are anchored so game code only sets scale.x, and a round timer — plus the rotated-rig axis bug, and a ready-made fight.json to open.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Build a wizard hat and sculpt a face into it",
@@ -135,7 +434,16 @@
 		"group": "Scenes",
 		"blurb": "Assemble a hat from primitives, then sculpt a relief smiley into it as one undoable step.",
 		"thumb": "screenshots/thumbs/wizard-hat-sculpt.jpg",
-		"desc": "Assemble a floppy purple hat from a lathe brim, a three-section bending cone, a band, a buckle and extruded stars, then sculpt a real relief smiley into it: a dense mesh pushed out along its normals using surface coordinates, as one undoable step — plus the z-fighting joint bug and the cylinder-seam normals trap."
+		"desc": "Assemble a floppy purple hat from a lathe brim, a three-section bending cone, a band, a buckle and extruded stars, then sculpt a real relief smiley into it: a dense mesh pushed out along its normals using surface coordinates, as one undoable step — plus the z-fighting joint bug and the cylinder-seam normals trap.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Build a labelled racing circuit with a script",
@@ -143,7 +451,16 @@
 		"group": "Games",
 		"blurb": "Generate a whole circuit from corner points and name every object at creation so game engines can find it.",
 		"thumb": "screenshots/thumbs/racing-circuit-scene.jpg",
-		"desc": "Generate a whole circuit from thirteen corner points: a road ribbon on rolling terrain, a harbour built from shared shapes, and every object named and classed at creation so a game engine can find the start line, checkpoints, grid and racing line. Check it, export it, read the GLB back, and play it in strata-play — plus the traps (a material named like a class, a sun that points the wrong way, 236 materials where ten were authored)."
+		"desc": "Generate a whole circuit from thirteen corner points: a road ribbon on rolling terrain, a harbour built from shared shapes, and every object named and classed at creation so a game engine can find the start line, checkpoints, grid and racing line. Check it, export it, read the GLB back, and play it in strata-play — plus the traps (a material named like a class, a sun that points the wrong way, 236 materials where ten were authored).",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "Make your own MetaHuman",
@@ -151,7 +468,29 @@
 		"group": "Characters",
 		"blurb": "Import a MetaHuman GLB, restyle it, pose its 51 face blendshapes and capture a still.",
 		"thumb": "screenshots/thumbs/make-your-own-metahuman.jpg",
-		"desc": "Import a MetaHuman GLB straight from the metahuman-to-glb project's URL, then make it yours with the JS Shell: hide the hair, retint the skin and swap the outfit, pose the 51 ARKit face blendshapes, tag parts with classes, and capture a still with the Render tab's Take Snapshot."
+		"desc": "Import a MetaHuman GLB straight from the metahuman-to-glb project's URL, then make it yours with the JS Shell: hide the hair, retint the skin and swap the outfit, pose the 51 ARKit face blendshapes, tag parts with classes, and capture a still with the Render tab's Take Snapshot.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "Bruce (MetaHuman sample .glb)",
+				"source": "https://github.com/creategamecharacters/metahuman-to-glb",
+				"licence": "not stated for the character (the pipeline code is MIT); a MetaHuman is an Epic Games asset",
+				"attribution": "creategamecharacters, metahuman-to-glb; MetaHuman by Epic Games"
+			}
+		],
+		"tools": [
+			{
+				"name": "metahuman-to-glb",
+				"licence": "MIT",
+				"url": "https://github.com/creategamecharacters/metahuman-to-glb"
+			}
+		]
 	},
 	{
 		"title": "One dance, two characters",
@@ -159,7 +498,56 @@
 		"group": "Characters",
 		"blurb": "Bake one Mixamo dance onto two different characters and stage them with an orbiting camera.",
 		"thumb": "screenshots/thumbs/two-character-dance.jpg",
-		"desc": "Two different sources — a Mixamo FBX and a MetaHuman GLB — map natively into Strata through bodyrig-webCLI: download The Boss from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both, then stage them on a blank white stage: Bruce leads, The Boss copies three seconds later, and an orbiting camera keeps their faces in frame."
+		"desc": "Two different sources — a Mixamo FBX and a MetaHuman GLB — map natively into Strata through bodyrig-webCLI: download The Boss from Mixamo and Bruce from metahuman-to-glb, bake the same dance onto both, then stage them on a blank white stage: Bruce leads, The Boss copies three seconds later, and an orbiting camera keeps their faces in frame.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "The Boss (Mixamo character, .fbx)",
+				"source": "https://www.mixamo.com",
+				"licence": "Adobe Mixamo terms (free with an Adobe ID)",
+				"attribution": "Mixamo, Adobe"
+			},
+			{
+				"name": "Bruce (MetaHuman sample .glb)",
+				"source": "https://github.com/creategamecharacters/metahuman-to-glb",
+				"licence": "not stated for the character (the pipeline code is MIT); a MetaHuman is an Epic Games asset",
+				"attribution": "creategamecharacters, metahuman-to-glb; MetaHuman by Epic Games"
+			},
+			{
+				"name": "mocap-33s.bvh (bodyrig-webCLI sample motion)",
+				"source": "http://tejaswigowda.com/bodyrig-webCLI/samples/mocap-33s.bvh",
+				"licence": "not stated (bodyrig-webCLI is GPL-3.0; the sample motion has no terms of its own)",
+				"attribution": "bodyrig-webCLI sample motion (the page does not say who captured it)"
+			}
+		],
+		"tools": [
+			{
+				"name": "bodyrig-webCLI",
+				"licence": "GPL-3.0",
+				"url": "https://tejaswigowda.com/bodyrig-webCLI/"
+			},
+			{
+				"name": "metahuman-to-glb",
+				"licence": "MIT",
+				"url": "https://github.com/creategamecharacters/metahuman-to-glb"
+			},
+			{
+				"name": "meshoptimizer",
+				"licence": "MIT",
+				"url": "https://github.com/zeux/meshoptimizer"
+			},
+			{
+				"name": "Mixamo",
+				"licence": "Adobe Mixamo terms (free with an Adobe ID)",
+				"url": "https://www.mixamo.com"
+			}
+		]
 	},
 	{
 		"title": "Restyle a VRM into an explorer with the JS Shell",
@@ -167,7 +555,23 @@
 		"group": "Characters",
 		"blurb": "Restyle a VRoid base model into an expedition explorer: retint, re-clothe, attach gear and pose a smirk.",
 		"thumb": "screenshots/thumbs/vrm-restyle-explorer.jpg",
-		"desc": "Download the free VRoid base model from 52blendshapes-for-VRoid-face, import the .vrm, and restyle it into a generic expedition explorer with the JS Shell: retint hair and skin, cut the clothes into a crop top and shorts, attach a belt, satchel and headband to the skeleton, lower the arms, and pose a smirk with the ARKit blendshapes."
+		"desc": "Download the free VRoid base model from 52blendshapes-for-VRoid-face, import the .vrm, and restyle it into a generic expedition explorer with the JS Shell: retint hair and skin, cut the clothes into a crop top and shorts, attach a belt, satchel and headband to the skeleton, lower the arms, and pose a smirk with the ARKit blendshapes.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "VRoid_V110_Female_v1.1.3.vrm",
+				"source": "https://github.com/hinzka/52blendshapes-for-VRoid-face",
+				"licence": "Custom terms in the repository README: free personal and commercial use, redistribution allowed, no credit required (no licence file)",
+				"attribution": "hinzka, 52blendshapes-for-VRoid-face (credit is not required; given anyway)"
+			}
+		],
+		"tools": []
 	},
 	{
 		"title": "Animate a finished character: clips, a timeline and a camera",
@@ -175,7 +579,49 @@
 		"group": "Characters",
 		"blurb": "Open a finished VRM that carries a baked body clip and a baked face clip, read what the file holds, start the body on cue and keep a camera on her as she walks. Character by portrait.webcli.app and look.webcli.app, rigged with rig.webcli.app.",
 		"desc": "Name the character, read its 118 bones, 124 face morph targets and two clips, sample the timeline with holdTimelineAt to see the body hold its first pose and the face freeze at 11.5 s, move the body event instead of adding a second one, and key the render camera onto the moving hips and measure how far off aim it is \u2014 with a note on the face edits that hung the tab. Credited to portrait.webcli.app, look.webcli.app and rig.webcli.app.",
-		"embed": "#repo=tejaswigowda/test1@543069a031abcea1ce4103a82710ee1845efa019&file=facebind.json&present=true"
+		"embed": "#repo=tejaswigowda/test1@543069a031abcea1ce4103a82710ee1845efa019&file=facebind.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "facebind.json (the character scene)",
+				"source": "https://github.com/tejaswigowda/test1/blob/543069a031abcea1ce4103a82710ee1845efa019/facebind.json",
+				"licence": "not stated",
+				"attribution": "Tejaswi Gowda, test1 repository; the character was made with portrait.webcli.app, look.webcli.app and rig.webcli.app"
+			}
+		],
+		"tools": [
+			{
+				"name": "portrait.webcli.app",
+				"licence": "GPL-3.0",
+				"url": "https://portrait.webcli.app/"
+			},
+			{
+				"name": "look.webcli.app",
+				"licence": "GPL-3.0",
+				"url": "https://look.webcli.app/"
+			},
+			{
+				"name": "rig.webcli.app",
+				"licence": "GPL-3.0",
+				"url": "https://rig.webcli.app/"
+			},
+			{
+				"name": "bodyrig-webCLI",
+				"licence": "GPL-3.0",
+				"url": "https://tejaswigowda.com/bodyrig-webCLI/"
+			}
+		]
 	},
 	{
 		"title": "A martial-arts lesson, then a sparring match, in a bamboo dojo",
@@ -183,7 +629,55 @@
 		"group": "Motion capture",
 		"blurb": "Two characters share one mocap clip in a bamboo dojo: a lesson, then a sparring match filmed by four cameras.",
 		"thumb": "screenshots/thumbs/martial-arts-dojo.jpg",
-		"desc": "Two rigged VRoid characters share one mocap clip: stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut with warm lantern lighting, and a four-camera render sequence — plus the two skinned-mesh pitfalls (parts vanishing, slow playback) that two characters expose, and a pass that dresses the characters, gives them a face (gaze, a seeded blink) and re-lights the hut. Part 2 swaps in two fighters from a two-person capture and turns the lesson into a 170-second sparring match, with cameras that follow the pair and shots cut by distance and verified frame by frame."
+		"desc": "Two rigged VRoid characters share one mocap clip: stage a teacher and a student face to face, have the student repeat the routine in chunks, then build a dojo floor, a bamboo hut with warm lantern lighting, and a four-camera render sequence — plus the two skinned-mesh pitfalls (parts vanishing, slow playback) that two characters expose, and a pass that dresses the characters, gives them a face (gaze, a seeded blink) and re-lights the hut. Part 2 swaps in two fighters from a two-person capture and turns the lesson into a 170-second sparring match, with cameras that follow the pair and shots cut by distance and verified frame by frame.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Pavan Turaga",
+				"role": "asset",
+				"url": "https://search.asu.edu/profile/1795222"
+			},
+			{
+				"name": "Assegid Kidane",
+				"role": "asset",
+				"url": "https://search.asu.edu/profile/215415"
+			}
+		],
+		"assets": [
+			{
+				"name": "Clip p2 (46.83 s)",
+				"source": "https://arxiv.org/abs/2512.22690",
+				"licence": "not stated",
+				"attribution": "Mesquite MoCap: Democratizing Real-Time Motion Capture with Affordable, Bodyworn IoT Sensors and WebXR SLAM (arXiv:2512.22690)"
+			},
+			{
+				"name": "Sparring capture: clips st1_1072026Skeleton and st2_1072026Skeleton (170.17 s)",
+				"source": "https://search.asu.edu/profile/1795222",
+				"licence": "not stated",
+				"attribution": "Recorded with an OptiTrack system in \"Martial Arts and Motion Capture\" (GAME 294), Arizona State University; course run by Pavan Turaga, recorded by Assegid Kidane; the two performers are not named"
+			}
+		],
+		"tools": [
+			{
+				"name": "facebind",
+				"licence": "not stated (the strata-editor repository carries no licence file)",
+				"url": "https://tejaswigowda.com/strata-editor/facebind/"
+			},
+			{
+				"name": "bodyrig-webCLI",
+				"licence": "GPL-3.0",
+				"url": "https://tejaswigowda.com/bodyrig-webCLI/"
+			}
+		]
 	},
 	{
 		"title": "Editing captured motion as data",
@@ -191,7 +685,33 @@
 		"group": "Motion capture",
 		"blurb": "Cut a 170-second two-performer capture to 53 seconds with a non-destructive edit list.",
 		"thumb": "screenshots/thumbs/edit-captured-motion.jpg",
-		"desc": "Cut a 170-second two-performer capture to 53 seconds with a non-destructive edit list: register the pair, splice eight spans with a blend, check hip-to-hip collisions, remap the cameras, then undo or clear it — all from the JS Shell, and the capture itself is never modified."
+		"desc": "Cut a 170-second two-performer capture to 53 seconds with a non-destructive edit list: register the pair, splice eight spans with a blend, check hip-to-hip collisions, remap the cameras, then undo or clear it — all from the JS Shell, and the capture itself is never modified.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Pavan Turaga",
+				"role": "asset",
+				"url": "https://search.asu.edu/profile/1795222"
+			},
+			{
+				"name": "Assegid Kidane",
+				"role": "asset",
+				"url": "https://search.asu.edu/profile/215415"
+			}
+		],
+		"assets": [
+			{
+				"name": "Sparring capture: clips st1_1072026Skeleton and st2_1072026Skeleton (170.17 s)",
+				"source": "https://search.asu.edu/profile/1795222",
+				"licence": "not stated",
+				"attribution": "Recorded with an OptiTrack system in \"Martial Arts and Motion Capture\" (GAME 294), Arizona State University; course run by Pavan Turaga, recorded by Assegid Kidane; the two performers are not named"
+			}
+		],
+		"tools": []
 	},
 	{
 		"title": "Authoring a face: gaze and idle",
@@ -199,7 +719,16 @@
 		"group": "Characters",
 		"blurb": "Give two characters a face with timeline keys: gaze that follows, a seeded blink and held expressions.",
 		"thumb": "screenshots/thumbs/author-a-face.jpg",
-		"desc": "Give two characters a face with timeline keys: named-target gaze that follows a moving character (eyes lead, head lags, anatomical clamp), a seeded blink / breath idle layer under the keys, and held expressions with easing and duration — authored from the JS Shell, mirrored in the Customize tab, deterministic, and no face capture."
+		"desc": "Give two characters a face with timeline keys: named-target gaze that follows a moving character (eyes lead, head lags, anatomical clamp), a seeded blink / breath idle layer under the keys, and held expressions with easing and duration — authored from the JS Shell, mirrored in the Customize tab, deterministic, and no face capture.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [],
+		"tools": []
 	},
 	{
 		"title": "A sparring match from a two-person motion capture",
@@ -207,7 +736,33 @@
 		"group": "Motion capture",
 		"blurb": "Turn a two-person sparring capture into a 53-second match, checked frame by frame for collisions.",
 		"thumb": "screenshots/thumbs/sparring-from-mocap.jpg",
-		"desc": "Turn a 170-second OptiTrack capture of two people sparring (recorded in the Martial Arts and Motion Capture course, GAME 294, ASU — run by Pavan Turaga, recorded by Assegid Kidane) into a 53-second match: register the pair, cut it with a non-destructive edit list, check every frame for collisions, move the camera shots onto the new timeline, and give both fighters an eyeline and an idle face — all from the JS Shell."
+		"desc": "Turn a 170-second OptiTrack capture of two people sparring (recorded in the Martial Arts and Motion Capture course, GAME 294, ASU — run by Pavan Turaga, recorded by Assegid Kidane) into a 53-second match: register the pair, cut it with a non-destructive edit list, check every frame for collisions, move the camera shots onto the new timeline, and give both fighters an eyeline and an idle face — all from the JS Shell.",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Pavan Turaga",
+				"role": "asset",
+				"url": "https://search.asu.edu/profile/1795222"
+			},
+			{
+				"name": "Assegid Kidane",
+				"role": "asset",
+				"url": "https://search.asu.edu/profile/215415"
+			}
+		],
+		"assets": [
+			{
+				"name": "Sparring capture: clips st1_1072026Skeleton and st2_1072026Skeleton (170.17 s)",
+				"source": "https://search.asu.edu/profile/1795222",
+				"licence": "not stated",
+				"attribution": "Recorded with an OptiTrack system in \"Martial Arts and Motion Capture\" (GAME 294), Arizona State University; course run by Pavan Turaga, recorded by Assegid Kidane; the two performers are not named"
+			}
+		],
+		"tools": []
 	},
 	{
 		"title": "Strata Play tutorials",

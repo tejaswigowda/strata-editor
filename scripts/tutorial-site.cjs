@@ -133,6 +133,110 @@ function sitemapUrls( list ) {
 
 function between( text, a, b ) { const i = text.indexOf( a ); const j = text.indexOf( b, i + a.length ); return i < 0 || j < 0 ? null : text.slice( i, j + b.length ); }
 
+// ── credits: who and what a tutorial stands on, declared in tutorials.json and generated into the page ────────────────
+// "contributors": [ { name, role: scene | script | voice | review | asset, url } ]   people (an asset's author is credited in the asset's own attribution too)
+// "assets":       [ { name, source, licence, attribution } ]                         every file a tutorial ships or loads that someone else made
+// "tools":        [ { name, licence, url, note? } ]                                  software the walkthrough has you use that Strata is not
+// All three are required on every listed tutorial (an empty list says "none used"), so a tutorial that was never audited fails. The page's credit block
+// (between <!-- credits:start --> and <!-- credits:end -->, just before the footer) is generated from them. A licence of "not stated" is allowed, because
+// it is true, and is reported as a note rather than a failure; a missing credit or licence is a failure.
+
+const ROLES = [ 'scene', 'script', 'voice', 'review', 'asset' ];
+const NOT_STATED = /^not stated/i;
+const isUrl = ( u ) => /^https?:\/\/[^\s]+$/.test( String( u ) );
+const blank = ( v ) => typeof v !== 'string' || ! v.trim();
+
+/** What a page's prose names that tutorials.json must also declare, so that a credit cannot be dropped without the check noticing. */
+const MENTIONS = [
+	[ /Kokoro/, 'Kokoro', ( t ) => has( t.tools, /kokoro/i ) ],
+	[ /Mixamo/, 'Mixamo', ( t ) => has( t.tools, /mixamo/i ) || has( t.assets, /mixamo/i ) ],
+	[ /sketchfab\.com/i, 'a Sketchfab model', ( t ) => has( t.assets, /sketchfab/i ) ],
+	[ /Khronos/, 'a Khronos sample model', ( t ) => has( t.assets, /khronos/i ) ],
+	[ /metahuman-to-glb/, 'metahuman-to-glb', ( t ) => has( t.tools, /metahuman-to-glb/i ) ],
+	[ /meshoptimizer/, 'meshoptimizer', ( t ) => has( t.tools, /meshoptimizer/i ) ],
+	[ /bodyrig-webCLI/, 'bodyrig-webCLI', ( t ) => has( t.tools, /bodyrig/i ) ],
+	[ /(portrait|look|rig|dub)\.webcli\.app/, 'a webcli.app tool', ( t ) => has( t.tools, /webcli/i ) ],
+	[ /OptiTrack|arXiv:\d|170\.17 s/, 'captured motion', ( t ) => has( t.assets, /mocap|motion|clip|capture/i ) ],
+	[ /52blendshapes-for-VRoid-face/, 'the VRoid base model', ( t ) => has( t.assets, /vroid|52blendshapes/i ) ]
+];
+function has( list, re ) { return ( list || [] ).some( ( x ) => re.test( [ x.name, x.source, x.url ].join( ' ' ) ) ); }
+
+/** Problems (a credit is missing or malformed) and notes (true, but worth a person's attention) for one tutorial's declarations. */
+function creditsOf( t ) {
+
+	const problems = [], notes = [], who = t.href + ': ';
+	for ( const k of [ 'contributors', 'assets', 'tools' ] ) if ( ! Array.isArray( t[ k ] ) ) problems.push( who + `"${ k }" is not declared (use [] to say none are used)` );
+	( t.contributors || [] ).forEach( ( c, i ) => {
+
+		if ( blank( c.name ) ) problems.push( who + `contributors[${ i }] has no name` );
+		if ( ! ROLES.includes( c.role ) ) problems.push( who + `contributors[${ i }] (${ c.name }) has role "${ c.role }": use ${ ROLES.join( ', ' ) }` );
+		if ( ! isUrl( c.url ) ) problems.push( who + `contributors[${ i }] (${ c.name }) has no https url` );
+
+	} );
+	if ( Array.isArray( t.contributors ) && ! t.contributors.some( ( c ) => c.role === 'script' ) ) problems.push( who + 'no contributor has the role "script": someone has to be accountable for the text' );
+	( t.assets || [] ).forEach( ( a, i ) => {
+
+		const n = `assets[${ i }] (${ a.name })`;
+		if ( blank( a.name ) ) problems.push( who + `assets[${ i }] has no name` );
+		if ( ! isUrl( a.source ) ) problems.push( who + `${ n } has no https source` );
+		if ( blank( a.licence ) ) problems.push( who + `${ n } has no licence (say "not stated" if the source gives none)` );
+		else if ( NOT_STATED.test( a.licence ) ) notes.push( who + `${ n }: licence not stated. Ask the owner, or do not redistribute it` );
+		if ( blank( a.attribution ) ) problems.push( who + `${ n } has no attribution` );
+
+	} );
+	( t.tools || [] ).forEach( ( x, i ) => {
+
+		const n = `tools[${ i }] (${ x.name })`;
+		if ( blank( x.name ) ) problems.push( who + `tools[${ i }] has no name` );
+		if ( blank( x.licence ) ) problems.push( who + `${ n } has no licence (say "not stated" if there is none)` );
+		else if ( NOT_STATED.test( x.licence ) ) notes.push( who + `${ n }: licence not stated` );
+		if ( ! isUrl( x.url ) ) problems.push( who + `${ n } has no https url` );
+
+	} );
+	return { problems, notes };
+
+}
+
+const creditsStyle = '<style>.credits{margin:2.2em 0 1em;padding-top:1em;border-top:1px solid rgba(127,127,127,.35);font-size:.9em}.credits h2{margin:0 0 .5em;font-size:1.05em}.credits h3{margin:.9em 0 .2em;font-size:.95em;opacity:.8}.credits ul{margin:.2em 0;padding-left:1.2em}.credits li{margin:.25em 0}.credits .lic{opacity:.8}</style>';
+const link = ( text, url ) => ( url ? `<a href="${ esc( url ) }">${ esc( text ) }</a>` : esc( text ) );
+
+/** The credit block for a tutorial's page, generated from its declarations. */
+function renderCredits( t ) {
+
+	const none = '<p>None used.</p>', ul = ( items ) => ( items.length ? '<ul>\n' + items.map( ( i ) => '\t\t\t<li>' + i + '</li>' ).join( '\n' ) + '\n\t\t</ul>' : none );
+	const byPerson = new Map();
+	for ( const c of t.contributors || [] ) { const k = c.name + '|' + c.url; if ( ! byPerson.has( k ) ) byPerson.set( k, { ...c, roles: [] } ); byPerson.get( k ).roles.push( c.role ); }
+	const people = [ ...byPerson.values() ].map( ( c ) => `${ link( c.name, c.url ) } <span class="lic">(${ esc( c.roles.join( ', ' ) ) })</span>` );
+	const assets = ( t.assets || [] ).map( ( a ) => `${ link( a.name, a.source ) }: ${ esc( a.attribution ) } <span class="lic">Licence: ${ esc( a.licence ) }.</span>` );
+	const tools = ( t.tools || [] ).map( ( x ) => `${ link( x.name, x.url ) } <span class="lic">(${ esc( x.licence ) })</span>${ x.note ? ' ' + esc( x.note ) : '' }` );
+	return [ '<!-- credits:start -->', '\t<section class="credits" id="credits">', '\t\t' + creditsStyle, '\t\t<h2>Credits and licences</h2>',
+		'\t\t<h3>People</h3>', '\t\t' + ul( people ), '\t\t<h3>Assets</h3>', '\t\t' + ul( assets ), '\t\t<h3>Tools</h3>', '\t\t' + ul( tools ), '\t</section>', '\t<!-- credits:end -->' ].join( '\n' );
+
+}
+
+/** Credit problems and notes for every listed tutorial, plus the pages' own prose checked against what is declared. */
+function auditCredits( list, dir = DIR ) {
+
+	const problems = [], notes = [];
+	for ( const t of visible( list ) ) {
+
+		if ( isExternal( t.href ) ) continue;
+		const c = creditsOf( t );
+		problems.push( ...c.problems ); notes.push( ...c.notes );
+		const file = path.join( dir, t.href );
+		if ( ! fs.existsSync( file ) ) continue;
+		const html = fs.readFileSync( file, 'utf8' );
+		const got = between( html, '<!-- credits:start -->', '<!-- credits:end -->' );
+		if ( ! got ) problems.push( t.href + ': no <!-- credits:start --> … <!-- credits:end --> block, just before <footer>' );
+		else if ( norm( got ) !== norm( renderCredits( t ) ) ) problems.push( t.href + ': the credit block differs from tutorials.json. Expected:\n' + renderCredits( t ) );
+		const prose = html.replace( /<!-- credits:start -->[\s\S]*?<!-- credits:end -->/, '' ).replace( /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ' );
+		for ( const [ re, what, declared ] of MENTIONS ) if ( re.test( prose ) && ! declared( t ) ) problems.push( t.href + `: the page names ${ what }, but tutorials.json does not credit it (add it to "assets" or "tools")` );
+
+	}
+	return { problems, notes };
+
+}
+
 /** Everything wrong between tutorials.json and the static pages. */
 function check( dir = DIR ) {
 
@@ -188,16 +292,21 @@ function check( dir = DIR ) {
 
 	}
 
+	// 4. credits: contributors, assets and tools declared, and generated into every page.
+	problems.push( ...auditCredits( list, dir ).problems );
+
 	return problems;
 
 }
 
-module.exports = { SITE, GROUPS, load, visible, imageOf, renderSocial, socialOf, socialOfIndex, renderCard, renderList, sitemapUrls, indexDescription, indexTitle, check };
+module.exports = { SITE, GROUPS, load, visible, imageOf, renderSocial, socialOf, socialOfIndex, renderCard, renderList, sitemapUrls, indexDescription, indexTitle, check, creditsOf, renderCredits, auditCredits, ROLES };
 
 if ( require.main === module ) {
 
 	const problems = check();
 	if ( problems.length ) { console.error( problems.join( '\n\n' ) ); console.error( '\n' + problems.length + ' tutorial site problem(s)' ); process.exit( 1 ); }
-	console.log( 'tutorial site: index, social tags, sitemap and robots agree with tutorials.json' );
+	console.log( 'tutorial site: index, social tags, credits, sitemap and robots agree with tutorials.json' );
+	const notes = auditCredits( load() ).notes;
+	if ( notes.length ) console.log( '\n' + notes.length + ' note(s):\n' + notes.join( '\n' ) );
 
 }

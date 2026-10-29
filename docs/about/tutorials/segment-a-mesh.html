@@ -401,6 +401,23 @@ $S('.edible')                         // just the flesh</code></pre>
 	<div class="note"><strong>What was checked, and what differs.</strong> Every block on this page was pasted, in this order, into an empty scene after importing Avocado.glb with the dialog's defaults; the scene was committed and loaded again from that commit, and read back: one material (shared by all five parts), the group and its five meshes with the triangle counts above (483, 158, 2,286, 6,195 and 2,015), every object named and classed, and the scene marked with <code>requireLabels</code>. The 641 triangles of the skin and the pit were carried over unchanged and the cut face's 41 became 41 &times; 256 = 10,496, so the five parts add up to 641 + 10,496 = 11,137 (<code>CUT.split</code> refuses to run when a piece of the mesh has no destination). The screenshots are frames of that scene, with the editor's controls hidden. The limits stated in step 1 were tested on a second textured sample model, a toy duck, which is the subject of the general tutorial; nothing from it is part of this scene. The committed scene was later rebuilt with the editor's own SEG, which writes the descriptors, the plan and the source into the scene on top of what is built here (see the general tutorial); the parts and their triangle counts are the same. Nothing here was run through a video render. The boundary between cavity, flesh and edge follows the colours in the texture, not an anatomical measurement, so it is as ragged as the paint.</div>
 	<div class="note" id="source"><strong>The model.</strong> Avocado.glb, from the <a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models">Khronos glTF Sample Models</a> archive, made by Microsoft, CC0 1.0 Universal (public domain dedication), retrieved 27 October 2026. The segmented scene is a derivative of it and is committed to a public repository on the same terms.</div>
 
+	<!-- credits:start -->
+	<section class="credits" id="credits">
+		<style>.credits{margin:2.2em 0 1em;padding-top:1em;border-top:1px solid rgba(127,127,127,.35);font-size:.9em}.credits h2{margin:0 0 .5em;font-size:1.05em}.credits h3{margin:.9em 0 .2em;font-size:.95em;opacity:.8}.credits ul{margin:.2em 0;padding-left:1.2em}.credits li{margin:.25em 0}.credits .lic{opacity:.8}</style>
+		<h2>Credits and licences</h2>
+		<h3>People</h3>
+		<ul>
+			<li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script, scene)</span></li>
+		</ul>
+		<h3>Assets</h3>
+		<ul>
+			<li><a href="https://github.com/KhronosGroupArchives/glTF-Sample-Models/blob/d7a3cc8e51d7c573771ae77a57f16b0662a905c6/2.0/Avocado/glTF-Binary/Avocado.glb">Avocado.glb</a>: Microsoft (Khronos glTF Sample Models: Avocado) <span class="lic">Licence: CC0 1.0 Universal.</span></li>
+		</ul>
+		<h3>Tools</h3>
+		<p>None used.</p>
+	</section>
+	<!-- credits:end -->
+
 	<footer>
 		<a href="./">← All tutorials</a> · <a href="../">About</a>
 	</footer>
