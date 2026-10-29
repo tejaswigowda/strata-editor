@@ -15,8 +15,8 @@ import { validateSource, initialVerification, sha256Hex } from '../export/record
 
 export { kmeans, textureReader };
 
-/** Written into every record. Records made before 1.1.0 carry no version, no plan and no evidence; 1.2.0 adds components, attachment and the post-cut assertions; 1.3.0 pins and hashes the source and adds the verification block (see export/records.js); 1.4.0 cuts skinned meshes; 1.5.0 records the parent triangle of every output triangle (`parents`). */
-export const SEG_VERSION = '1.5.0';   // the schema itself (records.js, SCHEMA_SEG_VERSION) has not changed since 1.3.0; `parents` is an addition
+/** Written into every record. Records made before 1.1.0 carry no version, no plan and no evidence; 1.2.0 adds components, attachment and the post-cut assertions; 1.3.0 pins and hashes the source and adds the verification block (see export/records.js); 1.4.0 cuts skinned meshes; 1.5.0 records the parent triangle of every output triangle (`parents`); 1.6.0 adds SEG.wouldRefuse and regenerating a plan record from its source. */
+export const SEG_VERSION = '1.6.0';   // the schema itself (records.js, SCHEMA_SEG_VERSION) has not changed since 1.3.0; `parents` is an addition, and optional in a saved record
 
 /**
  * The numbers the scene methods use, all recorded with the cut (`attach.parameters`, `signals.assertion_parameters`) so that a cut can be audited and run again.
@@ -628,6 +628,40 @@ export function skinnedPlanProblem( plan ) {
 
 }
 
+/**
+ * Why SEG refused, as a code a program can switch on, from the message it threw. `reason` is stable across versions; `detail` is the message, for a person.
+ * The codes: not-a-mesh, skinned-no-skeleton, skinned-subdivide, morph-targets, no-positions, multi-material, single-material, no-source, bad-source, group-name,
+ * no-colour-evidence, name-in-use, plan-coverage (an island or component left over, used twice, or missing), plan-names (a default or missing name or class),
+ * unattached (a component further than maxDistance from every anchor), bad-material-groups, no-selection, plan-invalid (anything else the plan got wrong).
+ */
+export function refusalOf( message ) {
+
+	const m = String( message );
+	const table = [
+		[ /nothing matches/, 'no-selection' ],
+		[ /is not a mesh/, 'not-a-mesh' ],
+		[ /skinned mesh with no skeleton/, 'skinned-no-skeleton' ],
+		[ /skinned mesh cannot be divided by colour with subdivide/, 'skinned-subdivide' ],
+		[ /morph targets/, 'morph-targets' ],
+		[ /has no positions/, 'no-positions' ],
+		[ /materials\. Cut it by material first/, 'multi-material' ],
+		[ /has one material; use SEG\.split/, 'single-material' ],
+		[ /material group|material groups|cut by material would lose/, 'bad-material-groups' ],
+		[ /plan needs a source|source is missing/, 'no-source' ],
+		[ /source\.(url|sha256|bytes|commit|licence|attribution)|is a web page|names "main"/, 'bad-source' ],
+		[ /group name an author chose/, 'group-name' ],
+		[ /needs a mesh with uv and a base-colour texture|an empty palette/, 'no-colour-evidence' ],
+		[ /is already used in the scene/, 'name-in-use' ],
+		[ /every island must go to a part|every component|used twice|there is no (island|component|material)|is in a part and in the anchor|every material must go/, 'plan-coverage' ],
+		[ /name an author chose|needs a name|at least one class|default/, 'plan-names' ],
+		[ /further than maxDistance/, 'unattached' ],
+	];
+	for ( const [ re, reason ] of table ) if ( re.test( m ) ) return { reason, detail: m };
+	return { reason: 'plan-invalid', detail: m };
+
+}
+
+
 /** The arrays of one part's geometry: every attribute, one vertex per triangle corner, and an index. Normals are renormalised after subdividing. */
 export function carveAttributes( data, triangles ) {
 
@@ -834,6 +868,7 @@ const slug = s => String( s ).trim().toLowerCase().replace( /[^a-z0-9]+/g, '-' )
  *   SEG.split(node | selector, plan)          cut into named, classed meshes in one group (one undo step). plan.source is required; a scene plan gives anchors
  *   SEG.byMaterial(node | selector, plan)     the same for a mesh with several materials, cut by material: exact evidence from the model's author
  *   SEG.replay(node | selector, record)       cut again from a recorded plan; refuses if the mesh is not the one the record was made from
+ *   SEG.wouldRefuse(node | selector, plan?)   null, or { reason, detail, seg_version }: would SEG refuse this mesh (and plan)? nothing is changed
  *   SEG.preview(group | selector)             a flat colour per part, to check the cut;  SEG.restore() puts the materials back
  * `index(root, force)` (the descriptor writer) is called on the new group, so every part has its own descriptors from the start.
  */
@@ -992,6 +1027,23 @@ export function makeSegment( editor, { THREE, commands, query, index } ) {
 	};
 
 	SEG.split = ( what, plan ) => commit( prepare( what, plan, 'islands' ) );
+	/**
+	 * Would SEG refuse this? null when it would not, else { reason, detail, seg_version }: `reason` is a stable code (see refusalOf), `detail` the message a person
+	 * reads, `seg_version` the SEG that answered, so a verdict can be filed with the version it is true for. Nothing is changed. With no plan, only what is wrong
+	 * with the mesh itself is checked (not a mesh, morph targets, several materials, …); with a plan, the whole cut is prepared and discarded.
+	 *   SEG.wouldRefuse('#Mesh', plan)  // method 'islands'; give plan.method = 'material' for SEG.byMaterial
+	 */
+	SEG.wouldRefuse = ( what, plan ) => {
+
+		try {
+
+			if ( plan === undefined || plan === null ) resolve( what, 'mesh' );
+			else prepare( what, plan, plan.method === 'material' ? 'material' : 'islands' );
+			return null;
+
+		} catch ( e ) { return { ...refusalOf( e && e.message ), seg_version: SEG_VERSION }; }
+
+	};
 	SEG.byMaterial = ( what, plan = {} ) => {
 
 		const node = resolve( what, 'any' );

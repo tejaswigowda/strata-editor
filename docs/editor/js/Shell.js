@@ -24,6 +24,8 @@ import { AIEngine, getModelList } from './AIEngine.js';
 import { objectToJS, sceneToJS } from './scene/codegen.js';
 import { simplifyAllCameras } from './intelligence/cameraMoveEdit.js';
 import { sceneEqual } from './scene/sceneEqual.js';
+import { stampExport } from './export/glbStamp.js';
+import { exportWarnings } from './export/records.js';
 import { summarizeScene as summarizeSceneFull, getSize, getTopY, getWorldCenter, searchableLabel } from './scene/summarize.js';
 import { booleanUnion, booleanSubtract, booleanIntersect } from './mesh/ops/boolean.js';
 import { mirrorMesh } from './mesh/ops/mirror.js';
@@ -2178,18 +2180,37 @@ function Shell( editor ) {
 				},
 				// asRecord() — mark the scene as a dataset record: it is then saved without the camera, the controls, the renderer settings or the undo
 				// history, so opening it, orbiting and saving changes nothing; its view is derived from the scene on open. `packaging` says how the geometry
-				// travels ('pack': saved beside the record; 'plan' is declared and not implemented). asRecord(false) lifts it. See guides/MESH_SEGMENT.md.
-				asRecord: ( on = true, { packaging = 'pack' } = {} ) => {
+				// travels: 'pack' (saved beside the record) or 'plan' (only the labels, the source and the plan are saved, and the cut is regenerated from the hashed
+				// source when the record is opened; not for skinned meshes). `parents` (default false) keeps SEG's one-integer-per-triangle provenance in the saved
+				// record, which only the scoring path reads and which buries a name change in a diff. asRecord(false) lifts it. See guides/MESH_SEGMENT.md.
+				asRecord: ( on = true, { packaging = 'pack', parents = false } = {} ) => {
 
 					if ( on ) {
 
 						if ( ! PACKAGING.declared.includes( packaging ) ) throw new Error( 'asRecord: packaging is "pack" or "plan"' );
-						if ( ! PACKAGING.implemented.includes( packaging ) ) throw new Error( 'asRecord: packaging "' + packaging + '" is not implemented yet: the editor cannot regenerate the cut on open, so a record may not claim it' );
-						editor.scene.userData.record = { schema: RECORD_SCHEMA, packaging, ...( editor.scene.userData.record && editor.scene.userData.record.view ? { view: editor.scene.userData.record.view } : {} ) };
+						if ( ! PACKAGING.implemented.includes( packaging ) ) throw new Error( 'asRecord: packaging "' + packaging + '" is not implemented' );
+						if ( packaging === 'plan' ) {
+
+							let groups = 0, skinned = null;
+							editor.scene.traverse( o => { if ( o.userData && o.userData.segmentation ) { groups ++; o.traverse( m => { if ( m.isSkinnedMesh && ! skinned ) skinned = m; } ); } } );
+							if ( ! groups ) throw new Error( 'asRecord: packaging "plan" regenerates a cut from its source, and this scene has none (SEG.split a model first)' );
+							if ( skinned ) throw new Error( 'asRecord: packaging "plan" does not cover skinned meshes ("' + skinned.name + '"): the skeleton, the weights and the clips are the source\'s, so a record of one has to keep them. Use packaging "pack"' );
+
+						}
+						editor.scene.userData.record = { schema: RECORD_SCHEMA, packaging, ...( parents ? { parents: true } : {} ), ...( editor.scene.userData.record && editor.scene.userData.record.view ? { view: editor.scene.userData.record.view } : {} ) };
 
 					} else delete editor.scene.userData.record;
 					if ( editor.work ) editor.work.touch();
-					return on ? 'record on: saved without the camera, controls, renderer settings or history; packaging ' + packaging : 'record off';
+					return on ? 'record on: saved without the camera, controls, renderer settings or history; packaging ' + packaging + ( parents ? '; with parents' : '; without parents' ) : 'record off';
+
+				},
+				// recordStatus() — for a plan record: whether each segmented group's geometry was regenerated from its source ('ready', and whether from the cache or
+				// the network) or is 'unavailable' (with why). The record is open either way.
+				recordStatus: () => {
+
+					const out = [];
+					editor.scene.traverse( o => { if ( o.userData && o.userData.segmentation ) { const st = editor.recordStatus && editor.recordStatus.get( o.uuid ); out.push( o.name + ': ' + ( st ? st.state + ( st.from ? ' (' + st.from + ')' : '' ) + ( st.message ? ' — ' + st.message : '' ) : 'geometry present (not a plan record, or not regenerated)' ) ); } } );
+					return out.length ? out.join( '\n' ) : 'no segmented groups in this scene';
 
 				},
 				// recordView() — set the view a record opens with, deliberately, from the camera as it is now; recordView(false) goes back to the derived one.
@@ -2364,23 +2385,30 @@ function Shell( editor ) {
 				clearScene: () => { editor.clear(); return 'scene cleared'; },
 
 				// Exporters (File → Export twins). Export the selection, else the whole scene.
-				exportGLB: () => new Promise( ( resolve ) => {
+				// A source with no licence, or a proprietary one, is not exported until the caller says they know: exportGLB({ acknowledged: true }).
+				exportGLB: ( opts = {} ) => new Promise( ( resolve ) => {
+
+					const root = editor.selected || editor.scene, warnings = exportWarnings( root );
+					if ( warnings.length && ! opts.acknowledged ) return resolve( 'export refused: ' + warnings.join( '; ' ) + '. Pass { acknowledged: true } to export anyway; the file carries the source\'s licence and attribution in asset.copyright.' );
 
 					import( 'three/addons/exporters/GLTFExporter.js' ).then( ( { GLTFExporter } ) => {
 
-						new GLTFExporter().parse( editor.selected || editor.scene,
-							( result ) => resolve( _saveBlob( result, exportNameFor( editor, 'glb', { selection: true } ), 'application/octet-stream' ) ),
+						new GLTFExporter().parse( root,
+							( result ) => resolve( _saveBlob( stampExport( root, result ), exportNameFor( editor, 'glb', { selection: true } ), 'application/octet-stream' ) ),
 							( err ) => resolve( `export failed: ${ err }` ), { binary: true } );
 
 					} );
 
 				} ),
-				exportGLTF: () => new Promise( ( resolve ) => {
+				exportGLTF: ( opts = {} ) => new Promise( ( resolve ) => {
+
+					const root = editor.selected || editor.scene, warnings = exportWarnings( root );
+					if ( warnings.length && ! opts.acknowledged ) return resolve( 'export refused: ' + warnings.join( '; ' ) + '. Pass { acknowledged: true } to export anyway; the file carries the source\'s licence and attribution in asset.extras.' );
 
 					import( 'three/addons/exporters/GLTFExporter.js' ).then( ( { GLTFExporter } ) => {
 
-						new GLTFExporter().parse( editor.selected || editor.scene,
-							( result ) => resolve( _saveBlob( JSON.stringify( result, null, 2 ), exportNameFor( editor, 'gltf', { selection: true } ), 'application/json' ) ),
+						new GLTFExporter().parse( root,
+							( result ) => resolve( _saveBlob( JSON.stringify( stampExport( root, result ), null, 2 ), exportNameFor( editor, 'gltf', { selection: true } ), 'application/json' ) ),
 							( err ) => resolve( `export failed: ${ err }` ), {} );
 
 					} );

@@ -328,8 +328,11 @@ export function canonicalMatrix( m ) {
  */
 export function canonicalForm( json ) {
 
-	const out = recordForm( json );
+	let out = recordForm( json );
 	if ( ! out.scene ) return out;
+	const ud = out.scene.object && out.scene.object.userData, rec = ud && ud.record;
+	if ( rec && rec.packaging === 'plan' ) out = planForm( out );
+	const keepParents = !! ( rec && rec.parents === true );
 	const scene = { ...out.scene };
 	if ( Array.isArray( scene.images ) ) {
 
@@ -338,16 +341,170 @@ export function canonicalForm( json ) {
 		if ( Array.isArray( scene.textures ) ) scene.textures = scene.textures.map( t => ( t.image !== undefined && ids.has( t.image ) ? { ...t, image: ids.get( t.image ) } : t ) );
 
 	}
+	// A light's `target` names an object that is not in the scene, so three.js makes a new one, with a new uuid, every time the scene is loaded: unless it is
+	// pinned, every save of a record with a directional light differs in that line.
+	const present = new Set();
+	( function collect( o ) { present.add( o.uuid ); ( o.children || [] ).forEach( collect ); } )( scene.object || {} );
 	const object = o => {
 
 		const c = { ...o };
 		if ( Array.isArray( c.matrix ) ) c.matrix = canonicalMatrix( c.matrix );
+		if ( typeof c.target === 'string' && ! present.has( c.target ) ) c.target = c.uuid + '-target';
+		// `parents` (one integer per output triangle) is the scoring path's, not the review path's: it buries a one-line name change in a diff. Written only on request.
+		if ( ! keepParents && c.userData && c.userData.segmentation && c.userData.segmentation.parents !== undefined ) {
+
+			const { parents, ...segmentation } = c.userData.segmentation;
+			c.userData = { ...c.userData, segmentation };
+
+		}
 		if ( Array.isArray( c.children ) ) c.children = c.children.map( object );
 		return c;
 
 	};
 	if ( scene.object ) scene.object = object( scene.object );
 	out.scene = scene;
+	return out;
+
+}
+
+// ── plan packaging: the record keeps the labels and the plan, not the source's geometry ────────────────
+
+/** The JSON with `parents` taken off every segmentation record (they are optional; see canonicalForm). The input is not modified. */
+export function dropParents( json ) {
+
+	if ( ! json || ! json.scene || ! json.scene.object ) return json;
+	const object = o => {
+
+		let c = o;
+		if ( o.userData && o.userData.segmentation && o.userData.segmentation.parents !== undefined ) { const { parents, ...segmentation } = o.userData.segmentation; c = { ...o, userData: { ...o.userData, segmentation } }; }
+		if ( Array.isArray( c.children ) ) c = { ...c, children: c.children.map( object ) };
+		return c;
+
+	};
+	return { ...json, scene: { ...json.scene, object: object( json.scene.object ) } };
+
+}
+
+const MESH_TYPES = new Set( [ 'Mesh', 'SkinnedMesh', 'InstancedMesh' ] );
+const GEOMETRY_KEYS = new Set( [ 'geometry', 'material', 'skeleton', 'bindMode', 'bindMatrix', 'count', 'instanceMatrix', 'instanceColor', 'morphTargetInfluences' ] );
+
+/** A part with no geometry: what a plan record keeps of a mesh (its place, its name, its classes and descriptors) so the record opens with its labels. */
+function placeholderOf( o ) {
+
+	if ( o.type === 'SkinnedMesh' ) throw new Error( 'plan packaging does not cover skinned meshes: the skeleton, the weights and the clips are the source\'s, so a record of one has to keep them (use packaging "pack")' );
+	const out = {};
+	for ( const k of Object.keys( o ) ) if ( ! GEOMETRY_KEYS.has( k ) && k !== 'castShadow' && k !== 'receiveShadow' ) out[ k ] = o[ k ];
+	out.type = 'Group';
+	return out;
+
+}
+
+/** Is this object one a plan record left empty: a Group that stands in for a part of a segmented group? */
+export function isPlaceholderOf( group, child ) {
+
+	const parts = group && group.userData && group.userData.segmentation && group.userData.segmentation.parts;
+	return !! ( parts && child && child.type === 'Group' && ! child.geometry && ! child.material && Object.prototype.hasOwnProperty.call( parts, child.name ) && ( child.children || [] ).length === 0 );
+
+}
+
+/**
+ * The editor's JSON as a PLAN record keeps it: the parts of every segmented group stand as empty groups (name, classes, descriptors, transform, uuid), and the
+ * geometries, materials, textures and images that only they used are dropped. The source, the plan and the report stay on the group's `userData.segmentation`,
+ * which is what regenerates the geometry from the hashed source (export/regenerate.js). Nothing the source's author made is left in the file. The input is not modified.
+ */
+export function planForm( json ) {
+
+	const scene = json && json.scene;
+	if ( ! scene || ! scene.object ) return json;
+	const object = o => {
+
+		const c = { ...o };
+		if ( o.userData && o.userData.segmentation ) c.children = ( o.children || [] ).map( ch => ( MESH_TYPES.has( ch.type ) ? placeholderOf( ch ) : ch ) );
+		if ( Array.isArray( c.children ) ) c.children = c.children.map( object );
+		return c;
+
+	};
+	const root = object( scene.object ), used = { geometry: new Set(), material: new Set() };
+	( function collect( o ) { if ( o.geometry ) used.geometry.add( o.geometry ); for ( const m of [].concat( o.material || [] ) ) used.material.add( m ); ( o.children || [] ).forEach( collect ); } )( root );
+	const out = { ...scene, object: root };
+	if ( Array.isArray( scene.geometries ) ) out.geometries = scene.geometries.filter( g => used.geometry.has( g.uuid ) );
+	if ( Array.isArray( scene.materials ) ) {
+
+		out.materials = scene.materials.filter( m => used.material.has( m.uuid ) );
+		const textures = new Set(), texUuids = new Set( ( scene.textures || [] ).map( t => t.uuid ) );
+		for ( const m of out.materials ) for ( const v of Object.values( m ) ) if ( typeof v === 'string' && texUuids.has( v ) ) textures.add( v );
+		if ( Array.isArray( scene.textures ) ) {
+
+			out.textures = scene.textures.filter( t => textures.has( t.uuid ) );
+			const images = new Set( out.textures.map( t => t.image ) );
+			if ( Array.isArray( scene.images ) ) out.images = scene.images.filter( im => images.has( im.uuid ) );
+
+		}
+
+	}
+	for ( const k of [ 'geometries', 'materials', 'textures', 'images' ] ) if ( Array.isArray( out[ k ] ) && ! out[ k ].length ) delete out[ k ];
+	delete out.skeletons;
+	return { ...json, scene: out };
+
+}
+
+// ── the licence travels with the geometry ─────────────────────────────────────────────────────────────
+
+const NO_GRANT = /\b(eula|proprietary|all rights reserved|no licen[cs]e|unlicen[cs]ed|unknown|not stated|donated)\b/i;
+
+/**
+ * Is the source's licence a grant? `null` or empty (the author stated nothing, and no licence is not permission) and a proprietary one (an EULA, all rights
+ * reserved) are not; the person who regenerates the geometry and passes it on is the one who needs to know. Returns { level: 'ok' | 'missing' | 'proprietary', why }.
+ */
+export function licenceLevel( licence ) {
+
+	if ( licence === null || licence === undefined || ! String( licence ).trim() ) return { level: 'missing', why: 'no licence is stated, and no licence is not a grant' };
+	if ( NO_GRANT.test( String( licence ) ) ) return { level: 'proprietary', why: 'the licence is proprietary or not a grant: "' + String( licence ).trim() + '"' };
+	return { level: 'ok', why: '' };
+
+}
+
+/** The segmentation records in a live scene (or a JSON object tree), each with the node that carries it. */
+export function recordsIn( root ) {
+
+	const out = [];
+	( function visit( o ) { const s = o && o.userData && o.userData.segmentation; if ( s ) out.push( { name: o.name, record: s } ); const kids = o.children || []; for ( const c of kids ) visit( c ); } )( root );
+	return out;
+
+}
+
+/**
+ * What an exported glTF must carry when the geometry in it came from a record: `asset.copyright` (the credit and the licence, one line per source) and
+ * `asset.extras.strata_source` (source url, commit, sha256, licence, attribution, and what was done to it). A copy of fields the record already has.
+ * Returns null when the scene holds no record.
+ */
+export function exportNotice( root ) {
+
+	const recs = recordsIn( root ), seen = new Set(), sources = [];
+	for ( const { record } of recs ) {
+
+		const s = record.source || {}, key = ( s.sha256 || s.url || '' ) + '|' + ( record.from || '' );
+		if ( seen.has( key ) ) continue;
+		seen.add( key );
+		sources.push( { url: s.url || null, page: s.page || null, commit: s.commit || null, sha256: s.sha256 || null, licence: s.licence === undefined ? null : s.licence, attribution: s.attribution || null, modifications: [ ...( record.modifications || [] ) ], seg_version: record.seg_version || null } );
+
+	}
+	if ( ! sources.length ) return null;
+	const line = s => [ s.attribution && String( s.attribution ).trim().replace( /\.+$/, '' ), s.licence ? 'licence: ' + s.licence : 'licence: none stated', s.url ? 'source: ' + s.url : null ].filter( Boolean ).join( '. ' );
+	return { copyright: [ ...new Set( sources.map( line ) ) ].join( '\n' ), extras: { strata_source: sources } };
+
+}
+
+/** Warnings for an export of this scene: one string per source whose licence is missing or proprietary. */
+export function exportWarnings( root ) {
+
+	const out = [];
+	for ( const { name, record } of recordsIn( root ) ) {
+
+		const s = record.source || {}, lv = licenceLevel( s.licence );
+		if ( lv.level !== 'ok' ) out.push( `"${ name }" (${ s.attribution || s.url || 'unknown source' }): ${ lv.why }` );
+
+	}
 	return out;
 
 }
@@ -373,10 +530,10 @@ export function framing( box, view = null ) {
 /**
  * `pack`: the cut geometry is saved with the record (assets/pack-*.bin): it opens with no network and no regeneration, and it redistributes the source's
  *   geometry, so the source's licence obligations attach to the pack as well as to the plan.
- * `plan`: only the source and the plan are saved, and the cut is regenerated from the hashed source. It is ~35× smaller and redistributes instructions, not
- *   geometry. NOT IMPLEMENTED: the editor does not yet regenerate on open, so a record may not claim it.
+ * `plan`: only the source and the plan are saved (the parts are empty groups with their labels), and the cut is regenerated from the hashed source when the
+ *   record is opened (export/regenerate.js). It is ~35× smaller and redistributes instructions, not geometry. Not offered for skinned meshes.
  */
-export const PACKAGING = { implemented: [ 'pack' ], declared: [ 'pack', 'plan' ] };
+export const PACKAGING = { implemented: [ 'pack', 'plan' ], declared: [ 'pack', 'plan' ] };
 
 // ── what CI runs ──────────────────────────────────────────────────────────────────────────────────
 
@@ -427,10 +584,16 @@ export function validateRecordJson( json ) {
 	else {
 
 		for ( const k of PRESENTATION ) if ( k in json ) out.push( `the record carries "${ k }": presentation, which makes every diff include how the last person looked at it` );
-		if ( ! PRESENTATION.some( k => k in json ) && JSON.stringify( canonicalForm( json ) ) !== JSON.stringify( json ) ) out.push( 'the record is not in canonical form: image ids or transform matrices carry the noise of a load (image uuids are regenerated on every open, matrices drift by 1e-10), so opening and saving it would change it. Save it from the editor with the scene marked as a record (asRecord())' );
+		if ( ! PRESENTATION.some( k => k in json ) && JSON.stringify( canonicalForm( json ) ) !== JSON.stringify( ud.record.parents === true ? json : dropParents( json ) ) ) out.push( 'the record is not in canonical form: image ids or transform matrices carry the noise of a load (image uuids are regenerated on every open, matrices drift by 1e-10), so opening and saving it would change it. Save it from the editor with the scene marked as a record (asRecord())' );
 		const p = ud.record.packaging;
 		if ( ! PACKAGING.declared.includes( p ) ) out.push( `userData.record.packaging is "${ p }": say "pack" or "plan", so that how the geometry travels is a recorded choice` );
 		else if ( ! PACKAGING.implemented.includes( p ) ) out.push( `userData.record.packaging is "${ p }", which the editor does not implement yet` );
+		if ( p === 'plan' ) {
+
+			// a plan record redistributes instructions, not geometry: the parts are empty groups, and nothing of the source's is left in the file
+			for ( const g of groups ) for ( const c of g.children || [] ) if ( ! isPlaceholderOf( g, c ) ) out.push( `"${ g.name }": "${ c.name }" carries geometry (${ c.type }), but the record says packaging "plan": it would redistribute the source's geometry. Save it with asRecord(true, { packaging: 'plan' })` );
+
+		}
 		if ( ud.record.view !== undefined && ! ( Array.isArray( ud.record.view.position ) && Array.isArray( ud.record.view.target ) ) ) out.push( 'userData.record.view must be { position: [x,y,z], target: [x,y,z] }' );
 
 	}

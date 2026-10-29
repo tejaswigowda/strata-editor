@@ -5,7 +5,7 @@ import assert from 'node:assert';
 import { createHash } from 'node:crypto';
 import {
 	validateSource, verifySource, sha256Hex, initialVerification, validateVerification, statusOf, deriveReview, appendReview, checkReviewPR, labelChanges,
-	isRecordScene, recordForm, canonicalForm, canonicalMatrix, composeTRS, decomposeTRS, framing, FRAMING, PRESENTATION, PACKAGING, validateRecordJson, migrateRecord, atLeast, RECORD_SCHEMA, REVIEW_METHODS
+	isRecordScene, recordForm, canonicalForm, canonicalMatrix, composeTRS, decomposeTRS, framing, FRAMING, PRESENTATION, PACKAGING, validateRecordJson, migrateRecord, dropParents, licenceLevel, exportNotice, exportWarnings, atLeast, RECORD_SCHEMA, REVIEW_METHODS
 } from '../records.js';
 
 let pass = 0, fail = 0;
@@ -282,15 +282,113 @@ await test( 'A: a source that cannot be re-fetched (a model page behind a login)
 
 } );
 
-await test( 'D: how the geometry travels is a recorded choice: pack is implemented, plan is declared and refused until it is', () => {
+await test( 'D: how the geometry travels is a recorded choice, and both pack and plan are implemented', () => {
 
-	assert.deepStrictEqual( PACKAGING, { implemented: [ 'pack' ], declared: [ 'pack', 'plan' ] } );
+	assert.deepStrictEqual( PACKAGING, { implemented: [ 'pack', 'plan' ], declared: [ 'pack', 'plan' ] } );
 	const noChoice = record(); delete noChoice.scene.object.userData.record.packaging;
 	assert.ok( validateRecordJson( noChoice ).some( p => /say "pack" or "plan"/.test( p ) ) );
-	const plan = record(); plan.scene.object.userData.record.packaging = 'plan';
-	assert.ok( validateRecordJson( plan ).some( p => /does not implement yet/.test( p ) ) );
+	const odd = record(); odd.scene.object.userData.record.packaging = 'zip';
+	assert.ok( validateRecordJson( odd ).some( p => /say "pack" or "plan"/.test( p ) ) );
 	const view = record(); view.scene.object.userData.record.view = { position: [ 1, 2, 3 ] };
 	assert.ok( validateRecordJson( view ).some( p => /record\.view must be/.test( p ) ) );
+
+} );
+
+// ── plan-only records: the parts are placeholders, the geometry is the source's ─────────────────────────
+
+function planJson( { parents } = {} ) {
+
+	const j = editorJson();
+	const o = j.scene.object;
+	o.userData.record.packaging = 'plan';
+	j.scene.geometries = [ { uuid: 'geo1', type: 'BufferGeometry' }, { uuid: 'geo-other', type: 'BufferGeometry' } ];
+	j.scene.materials = [ { uuid: 'mat1', type: 'MeshStandardMaterial', map: 'tex1' } ];
+	j.scene.textures = [ { uuid: 'tex1', image: 'img1' } ];
+	j.scene.images = [ { uuid: 'img1', url: 'data:image/png;base64,AAAA' } ];
+	for ( const k of o.children[ 0 ].children ) { k.geometry = 'geo1'; k.material = 'mat1'; k.matrix = [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ]; }
+	j.scene.materials.push( { uuid: 'mat-box', type: 'MeshStandardMaterial' } );
+	o.children.push( { uuid: 'box', type: 'Mesh', name: 'Box', geometry: 'geo-other', material: 'mat-box' } );
+	const s = o.children[ 0 ].userData.segmentation;
+	s.parts = { Duck_Beak: 2, Duck_Body: 1, Duck_Eye_Left: 1 };
+	if ( parents ) s.parents = { Duck_Beak: [ 0, 1 ], Duck_Body: [ 2 ], Duck_Eye_Left: [ 3 ] };
+	return j;
+
+}
+
+await test( 'P1 (the saved form): a plan record keeps the labels, classes and plan, and drops the source\'s geometry, material and texture', () => {
+
+	const j = canonicalForm( planJson() ), g = j.scene.object.children[ 0 ];
+	assert.deepStrictEqual( g.children.map( c => [ c.type, c.name, c.userData.customClasses ] ), [ [ 'Group', 'Duck_Beak', [ 'beak', 'orange' ] ], [ 'Group', 'Duck_Body', [ 'body', 'yellow' ] ], [ 'Group', 'Duck_Eye_Left', [ 'eye', 'left' ] ] ] );
+	assert.ok( g.children.every( c => ! c.geometry && ! c.material && c.uuid ) );
+	assert.deepStrictEqual( j.scene.geometries.map( x => x.uuid ), [ 'geo-other' ], 'only what an ordinary object still uses is kept' );
+	assert.deepStrictEqual( j.scene.materials.map( x => x.uuid ), [ 'mat-box' ] );
+	assert.ok( ! j.scene.textures && ! j.scene.images, 'the texture only the parts used is gone' );
+	assert.deepStrictEqual( validateRecordJson( j ), [] );
+	assert.ok( JSON.stringify( j ).length < JSON.stringify( canonicalForm( ( () => { const p = planJson(); p.scene.object.userData.record.packaging = 'pack'; return p; } )() ) ).length, 'smaller than the same record packed' );
+
+} );
+
+await test( 'P1: the saved form is a fixed point, and a placeholder that is not empty is refused', () => {
+
+	const j = canonicalForm( planJson() );
+	assert.deepStrictEqual( canonicalForm( clone( j ) ), j );
+	const bad = clone( j ); bad.scene.object.children[ 0 ].children[ 0 ].geometry = 'geo1';
+	assert.ok( validateRecordJson( bad ).length > 0, 'a part carrying geometry in a plan record is reported' );
+
+} );
+
+await test( 'P5: parents are left out of a saved record unless asked for, and a record that has them still validates', () => {
+
+	const j = planJson( { parents: true } );
+	assert.ok( ! ( 'parents' in seg( canonicalForm( j ) ) ), 'omitted by default' );
+	const asked = clone( j ); asked.scene.object.userData.record.parents = true;
+	assert.deepStrictEqual( seg( canonicalForm( asked ) ).parents, { Duck_Beak: [ 0, 1 ], Duck_Body: [ 2 ], Duck_Eye_Left: [ 3 ] }, 'kept on request' );
+	assert.deepStrictEqual( dropParents( j ).scene.object.children[ 0 ].userData.segmentation.parents, undefined );
+	assert.ok( 'parents' in seg( j ), 'the input is not changed' );
+
+} );
+
+await test( 'P6: a directional light\'s target (a uuid three.js makes up on every load) is pinned, so a save does not differ, and a target that is in the scene is left alone', () => {
+
+	const j = record(); const light = j.scene.object.children[ 1 ]; light.target = 'made-up-' + Math.random();
+	const again = clone( j ); again.scene.object.children[ 1 ].target = 'made-up-' + Math.random();
+	assert.deepStrictEqual( canonicalForm( j ), canonicalForm( again ) );
+	assert.strictEqual( canonicalForm( j ).scene.object.children[ 1 ].target, 'light-target' );
+	const inScene = clone( j ); inScene.scene.object.children[ 1 ].target = 'g';
+	assert.strictEqual( canonicalForm( inScene ).scene.object.children[ 1 ].target, 'g' );
+
+} );
+
+await test( 'P8: a null, empty or proprietary licence is reported before export, and a plain open one is not', () => {
+
+	assert.strictEqual( licenceLevel( 'SCEA Shared Source License 1.0' ).level, 'ok' );
+	assert.strictEqual( licenceLevel( 'CC-BY 4.0' ).level, 'ok' );
+	assert.strictEqual( licenceLevel( null ).level, 'missing' );
+	assert.strictEqual( licenceLevel( '' ).level, 'missing' );
+	assert.notStrictEqual( licenceLevel( 'Donated for glTF testing' ).level, 'ok' );
+	assert.strictEqual( licenceLevel( 'Poser Pro EULA' ).level, 'proprietary' );
+	const scene = { name: 'S', userData: {}, children: [ { name: 'Suzanne', userData: { segmentation: { from: 'm', source: { url: 'u', licence: null, attribution: 'Microsoft' } } }, children: [] } ] };
+	const w = exportWarnings( scene );
+	assert.strictEqual( w.length, 1 );
+	assert.ok( /Suzanne/.test( w[ 0 ] ) );
+	const ok = { name: 'S', userData: {}, children: [ { name: 'Duck', userData: { segmentation: { from: 'm', source: SOURCE } }, children: [] } ] };
+	assert.deepStrictEqual( exportWarnings( ok ), [] );
+
+} );
+
+await test( 'P7 (the notice): the licence, attribution and modifications are copied from the record, once per source', () => {
+
+	const dup = { name: 'S', userData: {}, children: [
+		{ name: 'A', userData: { segmentation: { from: 'm', source: SOURCE, modifications: [ 'cut into 3 parts' ], seg_version: '1.6.0' } }, children: [] },
+		{ name: 'B', userData: { segmentation: { from: 'm', source: SOURCE, modifications: [ 'cut into 3 parts' ], seg_version: '1.6.0' } }, children: [] } ] };
+	const n = exportNotice( dup );
+	assert.ok( n.copyright.includes( 'Copyright 2006 Sony Computer Entertainment Inc.' ) && n.copyright.includes( 'SCEA Shared Source License 1.0' ) );
+	assert.strictEqual( n.copyright.split( '\n' ).length, 1 );
+	assert.ok( ! /\.\./.test( n.copyright ), 'no doubled full stop' );
+	assert.strictEqual( n.extras.strata_source.length, 1 );
+	assert.deepStrictEqual( n.extras.strata_source[ 0 ].modifications, [ 'cut into 3 parts' ] );
+	assert.strictEqual( n.extras.strata_source[ 0 ].sha256, SOURCE.sha256 );
+	assert.strictEqual( exportNotice( { name: 'S', userData: {}, children: [] } ), null );
 
 } );
 

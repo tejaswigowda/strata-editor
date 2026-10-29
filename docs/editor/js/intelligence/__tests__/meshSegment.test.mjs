@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
-const { skinnedPlanProblem, islandsOf, kmeans, describeIslands, formatIslands, planParts, carveAttributes, triangleIndex, validateSource, buildRecord, compareDescribe, materialParts, planMaterialParts, parentProblems, SEG_VERSION,
+const { refusalOf, skinnedPlanProblem, islandsOf, kmeans, describeIslands, formatIslands, planParts, carveAttributes, triangleIndex, validateSource, buildRecord, compareDescribe, materialParts, planMaterialParts, parentProblems, SEG_VERSION,
 	componentsOf, describeComponents, formatComponents, grainOf, attachComponents, anchorParts, cutAssertions, SCENE, ASSERTIONS } = await import( pathToFileURL( path.join( here, '..', 'meshSegment.js' ) ).href );
 const { footprintColour } = await import( pathToFileURL( path.join( here, '..', 'textureColour.js' ) ).href );
 
@@ -172,6 +172,19 @@ test( 'integer attributes are rounded, not truncated, after subdividing', () => 
 
 const COMMIT_SHA = 'd7a3cc8e51d7c573771ae77a57f16b0662a905c6', FILE_SHA = '65bf938f54d6073e619e76e007820bbf980cdc3dc0daec0d94830ffc4ae54ab5';
 const SOURCE = { url: `https://raw.githubusercontent.com/example/models/${ COMMIT_SHA }/squares/squares.glb`, sha256: FILE_SHA, bytes: 120484, licence: 'CC0 1.0', attribution: 'Test Studio' };
+
+test( 'P9: a refusal has a reason a program can switch on, the original wording, and the rule that skinned is fine unless divided by colour is the one reported', () => {
+
+	const skinned = skinnedPlanProblem( { parts: [ { island: 0, name: 'Dye_Job', subdivide: 2, palette: [] } ] } );
+	assert.strictEqual( refusalOf( skinned ).reason, 'skinned-subdivide' );
+	assert.strictEqual( refusalOf( skinned ).detail, skinned );
+	assert.strictEqual( refusalOf( 'SEG: nothing matches "#Nope"' ).reason, 'no-selection' );
+	assert.strictEqual( refusalOf( 'SEG: Body has 3 materials. Cut it by material first' ).reason, 'multi-material' );
+	assert.strictEqual( refusalOf( 'SEG: every island must go to a part' ).reason, 'plan-coverage' );
+	assert.deepStrictEqual( refusalOf( 'something nobody anticipated' ), { reason: 'plan-invalid', detail: 'something nobody anticipated' } );
+	assert.strictEqual( skinnedPlanProblem( { parts: [ { island: 0, name: 'A' } ] } ), null, 'a skinned mesh cut by island is not refused' );
+
+} );
 
 test( 'skinned mesh: bone indices and weights survive the cut unchanged, and subdividing a skinned mesh is refused', () => {
 

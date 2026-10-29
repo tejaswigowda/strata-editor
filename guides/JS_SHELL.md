@@ -119,8 +119,12 @@ SEG.split('#Duck_mesh', { group, classes, source: window.src, parts: [ { island:
 SEG.components('#room')  /  SEG.attach('#room', anchors, opts)   // a scene: the pieces, and where the unnamed ones would go; SEG.split takes anchors: […]
 SEG.byMaterial('#mesh', { group, source })   // a mesh with several materials: one part per material
 SEG.replay('#mesh', record)                  // cut again from the plan the asset recorded
+SEG.wouldRefuse('#mesh', plan?)              // null, or { reason, detail, seg_version }: would SEG refuse this? changes nothing
 SEG.preview('#Duck')  /  SEG.restore()       // a flat colour per part, to check the cut, and back
 asRecord()  /  checkRecord()  /  recordView()   // keep the scene as a dataset record: saved without camera, controls, renderer settings or history; what CI would say
+asRecord(true, { packaging: 'plan', parents: true })   // plan: save the labels and the plan, regenerate the geometry from the hashed source on open; parents: keep them (off by default)
+recordStatus()                               // per segmented group: ready (from cache or network), or unavailable and why
+exportGLB({ acknowledged: true })            // a source with no licence, or a proprietary one, is refused until you say you know; the file carries the licence in asset.copyright
 ```
 
 A one-piece textured model becomes named, classed meshes in one group (one undo step); every island must go to exactly one part, and the asset keeps the plan, the report it was made from, and the source (the exact file, pinned to a commit and hashed), licence and modifications (`source` is required), and a verification block that starts `seeded`. Cuts skinned meshes too (every part keeps the original skeleton and its clips; `subdivide` is refused on them), and refuses several materials (use `SEG.byMaterial`) and morph targets. The Shell has no top-level `await`; a promise (like `SEG.source`'s) shows its result when it settles. Full reference, limits and examples in [MESH_SEGMENT.md](MESH_SEGMENT.md).

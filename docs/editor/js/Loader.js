@@ -68,7 +68,7 @@ function Loader( editor ) {
 	// Shared finish step for glTF/GLB imports: shows the import wizard (as-scene +
 	// optional geometry compression), applies compression when requested, then
 	// adds the result to the editor. Rejects when the user cancels the dialog.
-	this.finishGLTFImport = async function ( result, filename, release ) {
+	this.finishGLTFImport = async function ( result, filename, release, auto = false ) {
 
 		const scene = result.scene;
 		scene.name = filename;
@@ -91,8 +91,8 @@ function Loader( editor ) {
 		// The dialog is interactive, so the import progress bar must not linger behind it.
 		if ( release ) release();
 
-		const dialog = new GLTFImportDialog( editor.strings, scene );
-		const options = await dialog.show(); // throws if cancelled
+		// `auto` is a programmatic import (a record being regenerated from its source, export/regenerate.js): the wizard's defaults, no dialog
+		const options = auto ? { asScene: false } : await new GLTFImportDialog( editor.strings, scene ).show(); // throws if cancelled
 
 		if ( options.compress && options.compressionOptions ) {
 
@@ -158,9 +158,22 @@ function Loader( editor ) {
 
 			}
 
-			runImportPipeline( editor, scene, { log: editor.importLog } );
+			if ( auto ) await runImportPipeline( editor, scene, { log: editor.importLog } ); else runImportPipeline( editor, scene, { log: editor.importLog } );
 
 		}
+
+		return scene;
+
+	};
+
+	/**
+	 * Imports a .glb that is already in memory, with the wizard's defaults and no dialog, and resolves to the imported root once it is in the scene and the import
+	 * pipeline (normalize, descriptors) has run. Rejects when the file does not parse. Used to regenerate a record from its source (export/regenerate.js).
+	 */
+	this.loadGLBBytes = async function ( buffer, filename ) {
+
+		const loader = await createGLTFLoader();
+		return parseGLTF( loader, buffer, filename, null, true );
 
 	};
 
@@ -1217,7 +1230,7 @@ function Loader( editor ) {
 	// finished, was cancelled, or failed. A VRM gets the MToon material plugins so
 	// the file's toon parameters render (WebGPU node material) instead of being
 	// dropped for unlit MeshBasicMaterial — materials only, nothing rig-related.
-	async function parseGLTF( loader, data, filename, release ) {
+	async function parseGLTF( loader, data, filename, release, auto = false ) {
 
 		try {
 
@@ -1228,6 +1241,7 @@ function Loader( editor ) {
 			console.error( 'Loader: Failed to upgrade glTF 1.0 file "' + filename + '"', e );
 			loader.dracoLoader.dispose();
 			loader.ktx2Loader.dispose();
+			if ( auto ) throw e;
 			return;
 
 		}
@@ -1250,33 +1264,37 @@ function Loader( editor ) {
 
 		}
 
-		return new Promise( function ( resolve ) {
+		return new Promise( function ( resolve, reject ) {
 
 			loader.parse( data, '', async function ( result ) {
+
+				let imported = null;
 
 				try {
 
 					if ( toon ) toon.adoptLoadedToon( result.scene );
-					await scope.finishGLTFImport( result, filename, release );
+					imported = await scope.finishGLTFImport( result, filename, release, auto );
 
 				} catch ( e ) {
 
-					// Import cancelled
+					// Import cancelled (a programmatic import has no dialog to cancel, so there it is a failure)
+					if ( auto ) { loader.dracoLoader.dispose(); loader.ktx2Loader.dispose(); reject( e ); return; }
 
 				} finally {
 
 					loader.dracoLoader.dispose();
 					loader.ktx2Loader.dispose();
-					resolve();
 
 				}
+
+				resolve( imported );
 
 			}, function ( error ) {
 
 				console.error( 'Loader: Failed to parse "' + filename + '"', error );
 				loader.dracoLoader.dispose();
 				loader.ktx2Loader.dispose();
-				resolve();
+				if ( auto ) reject( error ); else resolve();
 
 			} );
 

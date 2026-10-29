@@ -18,6 +18,7 @@ import { withoutBakedTextures } from './scene/serialize.js';
 import { applyStoredTheme } from './Theme.js';
 import { settleBakedOutline } from './toon/bakedOutlines.js';
 import { isRecordScene, canonicalForm, framing, FRAMING } from './export/records.js';
+import { regenerateRecords } from './export/regenerate.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 
@@ -59,6 +60,9 @@ function Editor() {
 		snapChanged: new Signal(),
 		spaceChanged: new Signal(),
 		rendererCreated: new Signal(),
+
+		// a plan record's geometry was regenerated, or could not be (export/regenerate.js): ( group, { state: 'ready' | 'unavailable', from?, code?, message? } )
+		recordStatusChanged: new Signal(),
 		rendererUpdated: new Signal(),
 		rendererDetectKTX2Support: new Signal(),
 		rendererContextLost: new Signal(),
@@ -722,6 +726,8 @@ Editor.prototype = {
 
 		this.history.clear();
 		this.storage.clear();
+		this.recordStatus = new Map();
+		this.recordReady = null;
 
 		this.camera.copy( _DEFAULT_CAMERA );
 		this.signals.cameraResetted.dispatch();
@@ -869,6 +875,12 @@ Editor.prototype = {
 
 		// A record has no saved view: derive it from the scene, the same way every time.
 		if ( json.camera === undefined && isRecordScene( this.scene.userData ) ) this.frameRecord();
+
+		// A plan record (packaging "plan") holds its labels and its plan and no geometry: cut it again from its hashed source. The record is open and usable
+		// meanwhile, and stays open, marked geometry unavailable, if the source cannot be had. `await editor.recordReady` to wait for it.
+		this.recordStatus = new Map();
+		this.recordReady = null;
+		if ( isRecordScene( this.scene.userData ) && this.scene.userData.record.packaging === 'plan' ) this.recordReady = regenerateRecords( this );
 
 		// setScene() copies the scene's children but not its own animations array
 		// — EXCEPT the Universal Timeline clip, which setScene()'s syncTimeline()

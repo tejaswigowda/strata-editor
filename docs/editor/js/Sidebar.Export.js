@@ -3,6 +3,7 @@
 // live in the File → Export submenu (DRC, GLB, GLTF, OBJ, PLY, STL, USDZ).
 
 import { UIPanel } from './libs/ui.js';
+import { stampExport, confirmLicence } from './export/glbStamp.js';
 import { PropertyBinding, AnimationClip, AnimationMixer, Mesh, BufferGeometry, Skeleton, VectorKeyframeTrack, NumberKeyframeTrack } from 'three';
 import { GLTFImportDialog } from './GLTFImportDialog.js';
 import { optimizeObject, formatBytes, createProgressBanner } from './mesh/GeometryOptimizer.js';
@@ -347,6 +348,8 @@ function SidebarExport( editor ) {
 
 		}
 
+		if ( ! confirmLicence( scene ) ) return null;   // the source's licence is missing or proprietary: say so before the file lands in the downloads
+
 		// Always export a clone baked at the t=0 rest pose (see
 		// cloneSceneAtRestPose) rather than whatever the live scene happens to
 		// be scrubbed to, then lower any change() events onto that same clone.
@@ -373,7 +376,7 @@ function SidebarExport( editor ) {
 
 			return await new Promise( ( resolve, reject ) => {
 
-				exporter.parse( exportScene, resolve, reject, { binary: true, animations: optimizedAnimations } );
+				exporter.parse( exportScene, result => resolve( stampExport( scene, result ) ), reject, { binary: true, animations: optimizedAnimations } );
 
 			} );
 
@@ -415,6 +418,8 @@ function SidebarExport( editor ) {
 			ensureUniqueNames( scene );
 
 		}
+
+		if ( ! confirmLicence( scene ) ) return;
 
 		// Bake at the t=0 rest pose (see cloneSceneAtRestPose) rather than
 		// whatever the live scene happens to be scrubbed to. Uuids are
@@ -494,7 +499,7 @@ function SidebarExport( editor ) {
 		exporter.parse( clone, function ( result ) {
 
 			exportBanner.remove();
-			saveArrayBuffer( result, exportNameFor( editor, 'glb', { suffix: '.optimized' } ) );
+			saveArrayBuffer( stampExport( scene, result ), exportNameFor( editor, 'glb', { suffix: '.optimized' } ) );
 
 		}, function ( error ) {
 
@@ -518,6 +523,8 @@ function SidebarExport( editor ) {
 			ensureUniqueNames( scene );
 
 		}
+
+		if ( ! confirmLicence( scene ) ) return;
 
 		// Always export a clone baked at the t=0 rest pose (see
 		// cloneSceneAtRestPose) rather than whatever the live scene happens to
@@ -544,7 +551,7 @@ function SidebarExport( editor ) {
 		exporter.parse( exportScene, function ( result ) {
 
 			restoreCamera();
-			saveString( JSON.stringify( result, null, 2 ), exportNameFor( editor, 'gltf' ) );
+			saveString( JSON.stringify( stampExport( scene, result ), null, 2 ), exportNameFor( editor, 'gltf' ) );
 
 		}, function ( error ) {
 
