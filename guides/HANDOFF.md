@@ -13,15 +13,18 @@ What stays in Strata: the HLS ladder, the segments, the **audio rendition inside
 
 ## In the Render tab
 
+**Subtitles tab, any time: Dub .srt → audio.** Next to Export .srt: a Kokoro voice id (default `af_heart`) and the button. No render is needed. It speaks the scene's cues in dub.webcli.app, downloads the timed WAV (`<project>_narration.wav`) and says in one line what it made (voice, length, cues, collisions). The narration is kept for the session, and Publish uses it automatically if the cues have not changed since.
+
 After a render, in **Publish**:
 
-1. **Dub the subtitles** (Audio row; voice id beside it): the tool downloads the Kokoro model on first use (about 90 MB, then cached for that site), speaks the cues, and the WAV comes back. The row then says what made it. Prepare encodes that WAV into the HLS audio rendition, and the set gains `narration.wav`, so the audio can be traced to the tool, voice and model in `render.json` (`outputs.audio.source`).
+0. **Narration audio** box: **Upload a WAV** (the button, or drop a file on the box: a native file dialog never appears in some embedded browsers such as VS Code's built-in one, but a drop always works; the file is decoded at once, so one the browser cannot read is refused with the reason, and one longer than the film says how much is cut off), or generate one as below.
+1. **Generate with dub.webcli.app** (voice id above the button): the tool downloads the Kokoro model on first use (about 90 MB, then cached for that site), speaks the cues, and the WAV comes back. The row then says what made it. Prepare encodes that WAV into the HLS audio rendition, and the set gains `narration.wav`, so the audio can be traced to the tool, voice and model in `render.json` (`outputs.audio.source`).
 2. **Prepare publish** as before.
 3. **Add a single-file MP4**: pick which video it carries, then ffmpeg copies it (no re-encode), encodes the narration to AAC 128 kbps and adds the captions as a `mov_text` track the viewer can switch off. The set gains `<scene>.mp4` and `outputs.file` in `render.json`.
 
 The video choice is each rung of the ladder (an fMP4 rung is just `init.mp4` + the segments joined, which ffmpeg reads directly) or the master. The default is the best one that keeps the MP4 under 20 MB, the most jsDelivr serves, else the smallest. The master is the encoder's own high bitrate (37 MB for 80 s of `projectile` at 720p30), the 720p rung 17 MB; `render.json` says which one the MP4 carries (`outputs.file.video`).
 
-Both buttons must be pressed by hand: browsers block a popup that no click opened.
+Both buttons must be pressed by hand: browsers block a popup that no click opened. Serving Strata yourself? Start the server with `STRATA_NO_ISOLATION=1`: a cross-origin-isolated page (`Cross-Origin-Opener-Policy: same-origin`) cannot talk to the tool's window, and the button says so instead of hanging. `?dubUrl=http://localhost:<port>/` points the button at a local copy of the tool.
 
 A dub with collisions or errors is not sent silently: the dub window asks whether to send it anyway, and Strata shows the problem in the Audio row.
 

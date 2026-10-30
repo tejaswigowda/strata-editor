@@ -27,6 +27,13 @@
 	footer { margin-top: 18px; font-size: 11px; opacity: .55; }
 	footer a { color: inherit; }
 	[hidden] { display: none !important; }
+	/* present mode: only the video, filling the window (in a frame, or with present=true) */
+	body.present { display: block; min-height: 0; height: 100vh; overflow: hidden; background: #000; }
+	body.present main { max-width: none; padding: 0; height: 100%; }
+	body.present form, body.present .bar, body.present .meta, body.present .warn, body.present footer { display: none; }
+	body.present .stage { aspect-ratio: auto; width: 100%; height: 100%; border-radius: 0; }
+	body.present video { object-fit: contain; }
+	body.present .error { position: fixed; left: 0; right: 0; bottom: 56px; margin: 0; padding: 8px 12px; background: rgba(0, 0, 0, .75); font-size: 13px; }
 </style>
 </head>
 <body>

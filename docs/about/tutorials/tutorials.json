@@ -578,6 +578,7 @@
 		"href": "animate-a-character.html",
 		"group": "Characters",
 		"blurb": "Open a finished VRM that carries a baked body clip and a baked face clip, read what the file holds, start the body on cue and keep a camera on her as she walks. Character by portrait.webcli.app and look.webcli.app, rigged with rig.webcli.app.",
+		"thumb": "screenshots/thumbs/animate-a-character.jpg",
 		"desc": "Name the character, read its 118 bones, 124 face morph targets and two clips, sample the timeline with holdTimelineAt to see the body hold its first pose and the face freeze at 11.5 s, move the body event instead of adding a second one, and key the render camera onto the moving hips and measure how far off aim it is \u2014 with a note on the face edits that hung the tab. Credited to portrait.webcli.app, look.webcli.app and rig.webcli.app.",
 		"embed": "#repo=tejaswigowda/test1@543069a031abcea1ce4103a82710ee1845efa019&file=facebind.json&present=true",
 		"contributors": [

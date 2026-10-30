@@ -1,6 +1,6 @@
 // Run: node docs/player/__tests__/resolve.test.mjs
 import assert from 'node:assert';
-import { resolveBase, followsBranch, formatDuration } from '../resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode } from '../resolve.js';
 
 const B = 'https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/';
 let pass = 0, fail = 0;
@@ -18,6 +18,46 @@ test( 'any file in the set resolves to its folder', () => {
 	assert.strictEqual( resolveBase( B + 'master.m3u8?x=1#y' ).base, B );
 
 } );
+test( 'a branch address can be pinned to the commit it points at now, and a pinned one is not a branch', () => {
+
+	assert.deepStrictEqual( parseGh( B ), { owner: 'tejaswigowda', repo: 'test1', ref: 'main' } );
+	const sha = 'ae6df736259b2786e5ce40caa3069b4a1ac7d686';
+	assert.strictEqual( pinnedBase( B, sha ), `https://cdn.jsdelivr.net/gh/tejaswigowda/test1@${ sha }/renders/projectile/` );
+	assert.strictEqual( pinnedBase( 'https://cdn.jsdelivr.net/gh/o/r@latest/renders/a+b-cubed/', sha ), `https://cdn.jsdelivr.net/gh/o/r@${ sha }/renders/a+b-cubed/` );
+	assert.strictEqual( followsBranch( pinnedBase( B, sha ) ), false );
+	assert.strictEqual( parseGh( 'https://example.com/x/' ), null );
+
+} );
+test( 'a failed playback names the file and the HTTP answer, not just hls.js\u2019s code', () => {
+
+	const m = B + 'master.m3u8';
+	assert.strictEqual( describeFailure( { details: 'fragLoadError', frag: { url: B + '1080p60/seg00004.m4s' }, response: { code: 404 } }, m ), 'Playback failed (fragLoadError): 1080p60/seg00004.m4s gave HTTP 404.' );
+	assert.match( describeFailure( { details: 'fragLoadError', frag: { url: B + 'audio/seg00002.m4s' }, response: { code: 0 } }, m ), /audio\/seg00002\.m4s gave no HTTP answer/ );
+	assert.match( describeFailure( { details: 'manifestLoadError', context: { url: m }, response: { code: 404 } }, m ), /master\.m3u8 gave HTTP 404/ );
+	assert.match( describeFailure( { details: 'bufferAddCodecError' }, m ), /master\.m3u8 gave no response/ );
+
+} );
+
+test( 'present mode: in a frame, or present=true as a query or after the address; present=false wins', () => {
+
+	assert.strictEqual( presentMode( {} ), false );
+	assert.strictEqual( presentMode( { framed: true } ), true );
+	assert.strictEqual( presentMode( { search: '?present=true' } ), true );
+	assert.strictEqual( presentMode( { hash: '#' + B + '&present=true' } ), true );
+	assert.strictEqual( presentMode( { hash: '#present=true&' + B } ), true );
+	assert.strictEqual( presentMode( { search: '?present=false', framed: true } ), false );
+	assert.strictEqual( presentMode( { hash: '#' + B + '&present=0', framed: true } ), false );
+	assert.strictEqual( presentMode( { hash: '#' + B } ), false );
+
+} );
+test( '&present=true after the address is an option, not part of the address', () => {
+
+	assert.strictEqual( resolveBase( B + '&present=true' ).base, B );
+	assert.strictEqual( resolveBase( B + 'master.m3u8&present=true&x=1' ).base, B );
+	assert.strictEqual( resolveBase( 'https://cdn.jsdelivr.net/gh/o/r@main/renders/a%2Bb-cubed&present=true' ).base, 'https://cdn.jsdelivr.net/gh/o/r@main/renders/a+b-cubed/' );
+
+} );
+
 test( 'the GitHub page of the folder becomes the jsDelivr address', () => {
 
 	assert.strictEqual( resolveBase( 'https://github.com/tejaswigowda/test1/tree/main/renders/projectile' ).base, B );

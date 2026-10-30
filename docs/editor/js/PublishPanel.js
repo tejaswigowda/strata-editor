@@ -14,9 +14,10 @@ import { sceneHash } from './export/canonical.js';
 import { transcodeLadder } from './export/ladder.js';
 import { planLadder, assemblePublishSet, cuesToVtt, defaultPublishPath, stalenessLine } from './export/publishSet.js';
 import { formatBytes } from './export/renderJson.js';
-import { buildAudioRendition, aacSupport } from './export/audio.js';
+import { buildAudioRendition, aacSupport, probeAudio } from './export/audio.js';
 import { openTool, toolFor } from './export/handoff.js';
 import { cuesToSrt } from './intelligence/subtitles.js';
+import { dubCues } from './export/dubCues.js';
 import { publishSource, commitPublishToRepo, fetchRepoFile } from './Menubar.Git.js';
 
 const FIELD = 'display:flex;align-items:center;gap:6px;margin:4px 0;font-size:12px;';
@@ -78,31 +79,82 @@ export function createPublishPanel( editor ) {
 	let rungBoxes = [];
 
 	// ── narration (when the scene declares one) ──
-	const narrationRow = el( 'div', FIELD + 'flex-wrap:wrap;display:none;' );
-	const narrationText = el( 'span', 'flex:1;min-width:160px;' );
+	// Two ways to get one: upload a WAV (the button, or drop a file on the row: a native file dialog never appears in some embedded browsers, a drop always works),
+	// or have dub.webcli.app speak the subtitles.
+	const narrationRow = el( 'div', 'display:none;flex-direction:column;gap:6px;margin:6px 0;padding:6px 8px;border:1px solid rgba(128,128,128,0.35);border-radius:6px;font-size:12px;' );
+	const narrationText = el( 'div', 'min-height:16px;line-height:1.4;' );
 	const narrationFile = el( 'input' );
 	narrationFile.type = 'file';
 	narrationFile.accept = 'audio/*,.wav';
-	narrationFile.style.cssText = 'max-width:170px;font-size:11px;';
+	narrationFile.style.display = 'none';
+	const uploadButton = iconButton( 'upload', 'Upload a WAV' );
+	uploadButton.dom.title = 'Choose a WAV (or MP3 or M4A) as the narration, instead of the scene\u2019s.';
+	const dropHint = el( 'span', 'opacity:0.6;font-size:11px;', 'or drop a file here' );
 	const dubVoice = new UIInput( 'af_heart' );
 	dubVoice.dom.style.cssText = 'width:74px;font-size:11px;';
 	dubVoice.dom.title = 'A Kokoro voice id, e.g. af_heart, af_sarah, bf_emma';
-	const dubButton = iconButton( 'microphone', 'Dub the subtitles' );
+	const dubButton = iconButton( 'microphone', 'Generate with dub.webcli.app' );
 	dubButton.dom.title = 'Opens dub.webcli.app in a window. It speaks the subtitle cues with Kokoro in your browser and sends the timed WAV back; nothing is uploaded.';
-	narrationRow.append( el( 'span', LABEL, 'Audio' ), narrationText, narrationFile, dubVoice.dom, dubButton.dom );
+	const upRow = el( 'div', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;' );
+	upRow.append( uploadButton.dom, dropHint, narrationFile );
+	const dubRow = el( 'div', 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;' );
+	const voiceLine = el( 'div', 'display:flex;align-items:center;gap:6px;flex:1 1 100%;' );
+	voiceLine.append( el( 'span', 'opacity:0.7;font-size:11px;', 'Voice' ), dubVoice.dom );
+	dubRow.append( voiceLine, dubButton.dom );
+	narrationRow.append( el( 'div', 'font-weight:bold;', 'Narration audio' ), narrationText, upRow, dubRow );
 	root.appendChild( narrationRow );
+	uploadButton.onClick( () => narrationFile.click() );
 	let narrationOverride = null;     // bytes of a file the user chose, or dub.webcli.app made, instead of the repo's
 	let narrationSource = null;       // { tool, voice, model, summary } when dub.webcli.app made it
-	narrationFile.addEventListener( 'change', async () => {
+	/**
+	 * Takes a narration the person supplied: `read` resolves its bytes. It is decoded now, so a file the browser cannot read is refused here, with the reason,
+	 * not at Prepare. Two ways in, because the editor can run where a native file dialog never appears (VS Code's built-in browser): the Upload button,
+	 * and a file dropped on the narration box.
+	 */
+	async function useNarration( name, read ) {
+
+		narrationSource = null;
+		prepared = null; review.style.display = 'none';
+		narrationText.textContent = `Reading ${ name }\u2026`;
+		try {
+
+			const bytes = new Uint8Array( await read() );
+			const { seconds } = await probeAudio( bytes );
+			narrationOverride = bytes;
+			const film = info ? info.frames / info.fps : 0;
+			const length = film && seconds > film + 0.05 ? ` It is ${ ( seconds - film ).toFixed( 1 ) } s longer than the film (${ film.toFixed( 1 ) } s), so the end is cut off.` : '';
+			narrationText.textContent = `Using ${ name } (${ seconds.toFixed( 1 ) } s) instead of the repo\u2019s file.${ length } It is encoded when you press Prepare publish.`;
+
+		} catch ( e ) {
+
+			narrationOverride = null;
+			narrationFile.value = '';
+			narrationText.textContent = `${ name } was not used: ${ e && e.message ? e.message : e }.`;
+
+		}
+
+	}
+	narrationFile.addEventListener( 'change', () => {
 
 		const f = narrationFile.files && narrationFile.files[ 0 ];
-		narrationOverride = f ? new Uint8Array( await f.arrayBuffer() ) : null;
-		narrationSource = null;
-		narrationText.textContent = f ? `Using ${ f.name } instead of the repo\u2019s file.` : describeNarration();
-		prepared = null; review.style.display = 'none';
+		if ( ! f ) { narrationOverride = null; narrationSource = null; narrationText.textContent = describeNarration(); return; }
+		useNarration( f.name, () => f.arrayBuffer() );
 
 	} );
-	const describeNarration = () => narrationSource ? narrationSource.summary : info && info.audioRef ? `Narration: ${ info.audioRef.src } (${ info.audioRef.label || info.audioRef.language }), from the scene.` : 'No narration: the scene declares none (setRenderAudio), so the set is silent. Dub the subtitles, or choose a WAV.';
+	const takeFile = f => { narrationFile.value = ''; useNarration( f.name || 'the dropped file', () => f.arrayBuffer() ); };
+	narrationRow.addEventListener( 'dragover', e => { if ( e.dataTransfer && [ ...e.dataTransfer.types ].includes( 'Files' ) ) { e.preventDefault(); narrationRow.style.outline = '2px dashed #08f'; narrationRow.style.outlineOffset = '-2px'; } } );
+	narrationRow.addEventListener( 'dragleave', () => { narrationRow.style.outline = ''; } );
+	narrationRow.addEventListener( 'drop', e => {
+
+		narrationRow.style.outline = '';
+		const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[ 0 ];
+		if ( ! f ) return;
+		e.preventDefault();
+		e.stopPropagation();     // the editor imports anything dropped on the page: a narration is not a model
+		takeFile( f );
+
+	} );
+	const describeNarration = () => narrationSource ? narrationSource.summary : info && info.audioRef ? `Narration: ${ info.audioRef.src } (${ info.audioRef.label || info.audioRef.language }), from the scene.` : 'No narration: the scene declares none (setRenderAudio), so the set is silent. Upload a WAV, or generate one with dub.webcli.app.';
 
 	// ── prepare ──
 	const buttons = el( 'div', 'margin:6px 0;display:flex;gap:6px;flex-wrap:wrap;' );
@@ -265,23 +317,11 @@ export function createPublishPanel( editor ) {
 		setStatus( 'Dubbing in dub.webcli.app\u2026 the first run downloads the voice model.', 0 );
 		try {
 
-			const voice = dubVoice.getValue().trim() || 'af_heart';
-			const out = await handle.job( {
-				op: 'dub', args: { voice, tier: 'default', device: 'wasm', name: ( info.baseName || 'subtitles' ) + '.srt' },
-				files: { 'subtitles.srt': new TextEncoder().encode( cuesToSrt( info.cues ) ) },
-				onProgress: ( f, text ) => setStatus( 'dub.webcli.app: ' + text, f ),
-			} );
+			const r = await dubCues( info.cues, handle, { voice: dubVoice.getValue(), name: info.baseName || 'subtitles', onProgress: ( f, text ) => setStatus( 'dub.webcli.app: ' + text, f ) } );
 			handle.close();
-			const wav = out.files[ 'narration.wav' ];
-			if ( ! wav || wav.length < 100 ) throw new Error( 'dub.webcli.app sent no audio.' );
-			const rep = out.meta.report || {};
-			const m = rep.model || {};
-			narrationOverride = wav;
+			narrationOverride = r.wav;
 			narrationFile.value = '';
-			narrationSource = {
-				tool: 'dub.webcli.app', voice: out.meta.voice || voice, model: m.id ? `${ m.id }@${ m.revision } ${ m.dtype }/${ m.device }` : 'unknown',
-				summary: `Narration by dub.webcli.app: voice ${ out.meta.voice || voice }, ${ rep.duration_s } s, ${ rep.synthesized } cues, ${ rep.ok ? 'no collisions' : 'WITH PROBLEMS (' + ( rep.collisions || 0 ) + ' collisions)' }.`,
-			};
+			narrationSource = { tool: 'dub.webcli.app', voice: r.voice, model: r.model, summary: r.summary };
 			narrationText.textContent = narrationSource.summary;
 			prepared = null; review.style.display = 'none';
 			setStatus( 'The narration is ready. Press Prepare publish to encode it into the set.' );
@@ -407,7 +447,7 @@ export function createPublishPanel( editor ) {
 
 					try { bytes = await fetchRepoFile( info.audioRef.src ); } catch ( e ) {
 
-						throw new Error( `The scene's narration ${ info.audioRef.src } could not be read from the repo (${ e.message }). Commit that file, or choose it below.` );
+						throw new Error( `The scene's narration ${ info.audioRef.src } could not be read from the repo (${ e.message }). Commit that file, or upload one below.` );
 
 					}
 
@@ -518,7 +558,10 @@ export function createPublishPanel( editor ) {
 			narrationBytes = null;
 			build = null;
 			narrationFile.value = '';
-			narrationRow.style.display = '';
+			// the Subtitles tab's Dub .srt button already spoke these very cues: use that narration rather than make the person do it again
+			const d = editor.lastDub;
+			if ( d && d.srt === cuesToSrt( info.cues ) ) { narrationOverride = d.wav; narrationSource = { tool: 'dub.webcli.app', voice: d.voice, model: d.model, summary: d.summary + ' (made in the Subtitles tab)' }; }
+			narrationRow.style.display = 'flex';
 			narrationText.textContent = describeNarration();
 			setStatus( '' );
 			const src = publishSource();

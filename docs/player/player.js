@@ -2,13 +2,46 @@
 // (or of any file in it, or its GitHub page); see resolve.js. It reads render.json for the title, poster, captions and facts,
 // and plays master.m3u8: natively where the browser does HLS (Safari), through hls.js everywhere else.
 
-import { resolveBase, followsBranch, formatDuration } from './resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode } from './resolve.js';
 
 const $ = id => document.getElementById( id );
 const video = $( 'video' ), qualityLabel = $( 'qualityLabel' ), quality = $( 'quality' );
 let hls = null;
 
+// Present mode: just the video (see presentMode in resolve.js). Decided again on every hash change, since the hash can carry &present=true.
+function framed() { try { return window.self !== window.top; } catch ( e ) { return true; } }     // a cross-origin parent throws: that is a frame
+function applyPresent() { document.body.classList.toggle( 'present', presentMode( { search: location.search, hash: location.hash, framed: framed() } ) ); }
+applyPresent();
+
 function setError( text ) { $( 'error' ).textContent = text || ''; }
+
+/** After a failure on a branch address: look up the commit the branch is at now, and offer that exact address (jsDelivr caches a branch for hours). */
+async function offerPinned( base ) {
+
+	const gh = parseGh( base );
+	if ( ! gh || ! followsBranch( base ) ) return;
+	try {
+
+		const api = ref => fetch( `https://api.github.com/repos/${ gh.owner }/${ gh.repo }/commits/${ encodeURIComponent( ref ) }` );
+		let res = await api( gh.ref );
+		if ( ! res.ok && gh.ref === 'latest' ) {
+
+			const repo = await ( await fetch( `https://api.github.com/repos/${ gh.owner }/${ gh.repo }` ) ).json();
+			res = await api( repo.default_branch );
+
+		}
+		if ( ! res.ok ) return;
+		const sha = ( await res.json() ).sha;
+		const pinned = pinnedBase( base, sha );
+		if ( resolveBase( location.hash.slice( 1 ) ).base !== base ) return;     // the person has moved on to another render
+		const a = document.createElement( 'a' );
+		a.href = '#' + pinned;
+		a.textContent = 'Play this exact commit instead (' + sha.slice( 0, 7 ) + ')';
+		$( 'error' ).append( ' ', a );
+
+	} catch ( e ) { /* the lookup is a convenience; the message above already says what failed */ }
+
+}
 
 function teardown() {
 
@@ -101,7 +134,8 @@ async function play( input ) {
 		hls.on( window.Hls.Events.ERROR, ( e, data ) => {
 
 			if ( ! data.fatal ) return;
-			setError( `Playback failed (${ data.details }). Is ${ master } reachable, and has the render finished publishing?` );
+			setError( describeFailure( data, master ) + ' Is the render published, and has the CDN caught up?' );
+			offerPinned( base );
 			hls.destroy(); hls = null;
 
 		} );
@@ -125,7 +159,7 @@ $( 'form' ).addEventListener( 'submit', e => {
 	if ( location.hash.slice( 1 ) === r.base ) play( r.base ); else location.hash = r.base;   // the hash is the address
 
 } );
-addEventListener( 'hashchange', () => play( location.hash.slice( 1 ) ) );
+addEventListener( 'hashchange', () => { applyPresent(); play( location.hash.slice( 1 ) ); } );
 addEventListener( 'keydown', e => {
 
 	if ( e.target.matches( 'input, select, button' ) || e.metaKey || e.ctrlKey || e.altKey ) return;

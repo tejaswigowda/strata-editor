@@ -263,6 +263,20 @@ export async function decodeToStereo48k( bytes, length ) {
 
 }
 
+/** Is this a file the browser can decode as audio, and how long is it? Resolves { seconds }; rejects with a message that names the problem. */
+export async function probeAudio( bytes ) {
+
+	if ( ! bytes || bytes.length < 12 ) throw new Error( 'the file is empty or too short to be audio' );
+	let buffer;
+	try {
+
+		buffer = await new OfflineAudioContext( 1, 1, AUDIO.sampleRate ).decodeAudioData( bytes.buffer.slice( bytes.byteOffset, bytes.byteOffset + bytes.byteLength ) );
+
+	} catch ( e ) { throw new Error( 'this browser cannot decode it as audio (use a WAV, or an MP3 or M4A the browser plays)' ); }
+	return { seconds: buffer.duration };
+
+}
+
 async function encodeRaw( left, right, onProgress = () => {} ) {
 
 	const frames = [];

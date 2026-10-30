@@ -14,6 +14,8 @@ import { sourceFile } from './workState.js';
 import { applyCameraMove, clearCameraMove, MOVE_PRESETS } from './intelligence/cameraMoveEdit.js';
 import { Mp4Muxer } from './export/Mp4Muxer.js';
 import { createPublishPanel } from './PublishPanel.js';
+import { dubCues } from './export/dubCues.js';
+import { openTool, toolFor } from './export/handoff.js';
 import { sceneHash } from './export/canonical.js';
 import { publishSource } from './Menubar.Git.js';
 import {
@@ -1067,6 +1069,40 @@ function SidebarRender( editor ) {
 
 	} );
 	subsControls.appendChild( exportSrtButton.dom );
+
+	// .srt to audio, any time: no render needed. The narration is downloaded as a WAV, and kept so that Publish uses it if the cues are still these.
+	const dubVoiceInput = new UIInput( 'af_heart' );
+	dubVoiceInput.dom.style.cssText = 'width:74px;height:22px;font-size:11px;';
+	dubVoiceInput.dom.title = 'A Kokoro voice id, e.g. af_heart, af_sarah, bf_emma';
+	const dubSrtButton = new UIButton( 'Dub .srt \u2192 audio' );
+	dubSrtButton.dom.style.cssText = 'height:22px;padding:0 8px;border-radius:4px;font-size:11px;';
+	dubSrtButton.dom.title = 'Opens dub.webcli.app in a window. It speaks the subtitle cues with Kokoro in your browser and sends the timed WAV back; nothing is uploaded.';
+	dubSrtButton.onClick( function () {
+
+		const cues = getCues();
+		if ( cues.length === 0 ) { subsStatus.textContent = 'There are no cues to speak. Add some, or import an .srt.'; return; }
+		let handle;
+		try { handle = openTool( toolFor( 'dub' ) ); } catch ( e ) { subsStatus.textContent = e.message; return; }     // opened from the click, or the browser blocks the window
+		dubSrtButton.dom.disabled = true;
+		subsStatus.textContent = 'Dubbing in dub.webcli.app\u2026 the first run downloads the voice model.';
+		const name = renderBaseName( { template: '{project}_narration', project: projectForNames(), width: 0, height: 0 } );
+		dubCues( cues, handle, { voice: dubVoiceInput.getValue(), name, onProgress: ( f, text ) => { subsStatus.textContent = 'dub.webcli.app: ' + text; } } ).then( r => {
+
+			handle.close();
+			editor.lastDub = { ...r, srt: cuesToSrt( cues ) };
+			downloadBlob( new Blob( [ r.wav ], { type: 'audio/wav' } ), name + '.wav' );
+			subsStatus.textContent = r.summary + ' Downloaded ' + name + '.wav.';
+
+		} ).catch( e => {
+
+			handle.close();
+			subsStatus.textContent = 'Dub failed: ' + ( e && e.message ? e.message : e );
+
+		} ).finally( () => { dubSrtButton.dom.disabled = false; } );
+
+	} );
+	subsControls.appendChild( dubVoiceInput.dom );
+	subsControls.appendChild( dubSrtButton.dom );
 
 	flat.addSubtitleOptions();
 

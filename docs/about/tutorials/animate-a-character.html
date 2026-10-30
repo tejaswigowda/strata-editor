@@ -15,13 +15,13 @@
 <meta property="og:title" content="Animate a finished character: clips, a timeline and a camera">
 <meta property="og:description" content="Open a finished VRM that carries a baked body clip and a baked face clip, read what the file holds, start the body on cue and keep a camera on her as she walks. Character by portrait.webcli.app and look.webcli.app, rigged with rig.webcli.app.">
 <meta property="og:url" content="https://strataeditor.dev/about/tutorials/animate-a-character.html">
-<meta property="og:image" content="https://strataeditor.dev/demo.png">
-<meta property="og:image:width" content="800">
-<meta property="og:image:height" content="435">
+<meta property="og:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/animate-a-character.jpg">
+<meta property="og:image:width" content="640">
+<meta property="og:image:height" content="400">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Animate a finished character: clips, a timeline and a camera">
 <meta name="twitter:description" content="Open a finished VRM that carries a baked body clip and a baked face clip, read what the file holds, start the body on cue and keep a camera on her as she walks. Character by portrait.webcli.app and look.webcli.app, rigged with rig.webcli.app.">
-<meta name="twitter:image" content="https://strataeditor.dev/demo.png">
+<meta name="twitter:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/animate-a-character.jpg">
 <!-- social:end -->
 <!--
 	/about/tutorials/animate-a-character.html — a by-hand tutorial on one finished character.
@@ -69,6 +69,13 @@
 	}
 	table.cuts th { color: #f3f5f8; font-weight: 600; }
 	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	figure { margin: 1.2em 0; }
+	figure img { display: block; width: 100%; border-radius: 8px; border: 1px solid #2a2e36; }
+	figure figcaption { margin-top: 0.5em; font-size: 0.82rem; color: #7d8794; text-align: center; }
+	figure.pair { display: flex; gap: 1em; align-items: flex-start; }
+	figure.pair > div { flex: 1 1 0; min-width: 0; }
+	figure.pair.narrow > div { flex: 0 1 350px; }
+	figure.pair.narrow { justify-content: center; }
 	footer { margin-top: 3.5em; padding-top: 1.2em; border-top: 1px solid #2a2e36; color: #5b6470; font-size: 0.85rem; }
 </style>
 <script src="../brand.js" defer></script>
@@ -81,6 +88,11 @@
 	<div class="note"><strong>Where the character comes from, and the credit.</strong> The character is made outside Strata, with three browser tools from the Web-CLI family, all of which run on your device (their pages say nothing leaves it). <strong>Character creation:</strong> <a href="https://portrait.webcli.app/">portrait.webcli.app</a> (portrait-webCLI: a photo in, a VRM out whose face blendshapes are driven from the face it read; the shape and colour matching is described on its page as a rough nudge, not a likeness) and <a href="https://look.webcli.app/">look.webcli.app</a> (look-webCLI: a VRM in, an edited VRM out, with its textures, colours, materials, outfits and accessories changed). <strong>Animation rigging:</strong> <a href="https://rig.webcli.app/">rig.webcli.app</a> (bodyrig-webCLI: retargets BVH, FBX or GLB motion, and ARKit-52 face records, onto a skinned character and exports one GLB with every animation as its own named track). This page starts where they stop: with the finished file open in Strata.</div>
 
 	<div class="note"><strong>What you'll need.</strong> The scene, <a href="../../#repo=tejaswigowda/test1@543069a031abcea1ce4103a82710ee1845efa019&amp;file=facebind.json"><code>facebind.json</code></a> in <code>tejaswigowda/test1</code>, pinned to a commit (it opens without a token; it is a 21 MB scene with its geometry and textures beside it, so give it half a minute). Open the <strong>Shell</strong> tab and paste each block in order. Each Shell line is its own scope: a <code>const</code> on one line is gone on the next, so the blocks below repeat the selector instead of naming it.</div>
+
+	<figure>
+		<img src="screenshots/char-start.png" alt="The finished character, a young woman with silver hair in a white T-shirt and grey knee-length shorts, mid-gesture with one arm raised, in the Strata viewport at 6 seconds." loading="lazy">
+		<figcaption>The scene as it opens, held at 6 s with <code>holdTimelineAt(6)</code>: the body clip is playing, and the character is in the middle of the frame.</figcaption>
+	</figure>
 
 	<h2><span class="step">1</span> Give the character a name you can type</h2>
 	<p class="lede">The importer names the character's group after the file and derives a class from it, <code>.vroidv110femalev1132-tracksglb</code>. Add a short class and use that from now on:</p>
@@ -136,6 +148,11 @@
 	<pre><code>editor.timeline.moveEvent(editor.timeline.tracks[0].events[0].id, 0)</code></pre>
 	<pre><code>true</code></pre>
 	<p>(<code>tracks[0]</code> is the <code>#test</code> track here; the event is the purple block on that row of the <strong>Animations</strong> tab, which you can drag instead.) <strong>This edit is not on the Undo stack</strong> (checked: the undo count did not change, and <strong>Undo</strong> afterwards took back the <code>tagClass</code> of step 1 and left the event at 0), so reload the scene to get the original timing back. Sampling again, the arm is at its first pose at 0 s and has moved by 1 s and by 2 s, with no reset:</p>
+	<figure class="pair narrow">
+		<div><img src="screenshots/char-timeline-before.png" alt="The Animations tab before the move: the body block starts later than the face block." loading="lazy"><figcaption>Before</figcaption></div>
+		<div><img src="screenshots/char-timeline-after.png" alt="The Animations tab after the move: both blocks start at the left edge, and the duration readout has dropped to 33.099 seconds." loading="lazy"><figcaption>After <code>moveEvent(…, 0)</code>: both clips start at 0 and the readout is 00:33.099.</figcaption></div>
+	</figure>
+	<p><strong>The panel does not redraw by itself.</strong> A screenshot taken right after <code>moveEvent</code> still showed the block at 2 s and the old duration; zooming or pressing <strong>Fit</strong> redrew it. The move had happened (the arm samples in the table above are from after it), so redraw before you trust what you see. The duration is not a separate step: it fell from 35.099 s to 33.099 s because the timeline's length follows its last event.</p>
 	<table class="cuts">
 		<tr><th>t (s)</th><th>arm quaternion, body event at 0</th></tr>
 		<tr><td>0</td><td>0.027, 0.149, −0.306, 0.940</td></tr>
@@ -157,19 +174,23 @@
 	<div class="note"><strong>Do not paste face edits into this scene yet.</strong> They are not offered here as a recipe because they <strong>hung the browser tab</strong> on this character: of five attempts (<code>face.keyAt</code> twice on the long class and once on a short class, <code>face.idle({ seed: 7 })</code> twice), four froze the tab until the browser killed its renderer, and only the smile above finished. Camera and clip edits (steps 4 and 6) did not do this. The cause is not known; it may be specific to a character whose face morphs are driven by a baked clip. If you try it, save first and expect to lose the tab.</div>
 
 	<h2><span class="step">6</span> Keep her in frame</h2>
-	<p class="lede">The scene's camera, <code>cam-render</code>, sits at (−1.97, 0.80, 2.51) and has no keys of its own, but the hips travel about 1.3 m in <em>x</em> and 1.2 m in <em>z</em> in the sampled frames in step 3, so a camera that never turns loses her. A camera key arrives at a time with an aim point (<code>lookAt</code>). The first key of a camera needs a position (<code>keyAt: the first key of a camera needs a pos</code> is the error otherwise); later keys that name only <code>lookAt</code> turn the camera without moving it. Rather than type aim points, sample the hips with <code>holdTimelineAt</code> every 2.5 s and aim at them, at about chest height:</p>
+	<p class="lede">The scene's camera, <code>cam-render</code>, sits at (−1.97, 0.80, 2.51) and has no keys of its own, but the hips travel about 1.3 m in <em>x</em> and 1.2 m in <em>z</em> in the sampled frames in step 3, so a camera that never turns lets her drift to the edge of the frame (the first screenshot below). A camera key arrives at a time with an aim point (<code>lookAt</code>). The first key of a camera needs a position (<code>keyAt: the first key of a camera needs a pos</code> is the error otherwise); later keys that name only <code>lookAt</code> turn the camera without moving it. Rather than type aim points, sample the hips with <code>holdTimelineAt</code> every 2.5 s and aim at them, at about chest height:</p>
 	<pre><code>for (let t = 0; t &lt;= 35; t += 2.5) { holdTimelineAt(t); const p = scene.getObjectByName('J_Bip_C_Hips').getWorldPosition(new THREE.Vector3()); const aim = [+p.x.toFixed(2), 1.0, +p.z.toFixed(2)]; $S('#cam-render').keyAt(t, t === 0 ? { pos: [-1.97, 0.8, 2.51], lookAt: aim } : { lookAt: aim }) }</code></pre>
 	<pre><code>… a promise: its result is shown when it settles
 ✨ Scene updated — 15 commands executed</code></pre>
 	<p>Fifteen keys (the first lands at 0.001 s), one undo step each, and the camera never leaves its position. Check the aim the same way as the body: sample the scene, and measure the angle between the camera's forward direction and the direction from the camera to the hips at chest height:</p>
+	<figure class="pair">
+		<div><img src="screenshots/char-camera-static.png" alt="The viewport through the render camera at 17.5 seconds with no camera keys: the character is at the far right edge of the frame and the rest of the frame is empty." loading="lazy"><figcaption>17.5 s, before the loop: the camera has not moved, and she is at the right edge.</figcaption></div>
+		<div><img src="screenshots/char-camera-tracked.png" alt="The same moment after the camera keys: the character is in the middle of the frame." loading="lazy"><figcaption>17.5 s, after the fifteen keys: the same moment, with her in the middle.</figcaption></div>
+	</figure>
 	<pre><code>t (s)         0.5  1.25    2   3.75     6   8.75    13  16.25    20  26.25    28    33    35
 off aim (°)   0.6   1.5  2.3   2.1   1.8   1.2   0.4   12.5     0    1.2   1.5   1.3     0</code></pre>
 	<p>The camera is within 2.3° of her at twelve of the thirteen times, and 12.5° off at 16.25 s, between the keys at 15 and 17.5 s: the hips move faster there than a straight turn between two keys follows. Add a key (<code>$S('#cam-render').keyAt(16.25, { lookAt: [x, 1.0, z] })</code> with the hips at that time) or sample every second in the loop. <code>$S('#cam-render').keys()</code> lists the keys and <code>.smooth(true)</code> plays them as one curve; <a href="../../../guides/CAMERA_PATHS.md">Editing camera moves by hand</a> has the one-click moves.</p>
 
 	<h2><span class="step">7</span> Render it</h2>
-	<p class="lede">Open the <strong>Render</strong> tab. The scene's one shot (<code>cam-render</code> from 0 s) is in the Camera Sequence; pick the size and frame rate, and render. The length of the take is the timeline's duration, which the saved scene has as 35.1 s because the body started at 2 s: after step 4, check the duration in the Animations tab before you render, and trim it if the take should end with the body clip.</p>
+	<p class="lede">Open the <strong>Render</strong> tab. The scene's one shot (<code>cam-render</code> from 0 s) is in the Camera Sequence; pick the size and frame rate, and render. The length of the take is the timeline's duration, which the saved scene has as 35.1 s because the body starts at 2 s. After step 4 the readout in the Animations tab fell to 33.1 s (checked, once the panel was redrawn), so the take ends when the body clip does; look at it before you render.</p>
 
-	<div class="note"><strong>What was checked, and what was not.</strong> <em>Checked in the editor, on the pinned scene, with the Shell blocks as written:</em> steps 1 to 3 (their outputs are copied from the editor); the second event and the arm resetting at 2 s in step 4; <code>moveEvent</code>, the arm samples after it, and that it is not an undo step; the camera loop in step 6 and the thirteen aim measurements. The smile table in step 5 is from the single run that finished, with the long class <code>.vroidv110femalev1132-tracksglb</code> in place of a short one. <em>Not checked:</em> dragging the event in the Animations tab instead of calling <code>moveEvent</code>; the Render tab in step 7 (no render was made); any face edit after the first (they hung the tab); and the thumbnail and the "Open example" player for this page. Which of the three tools made which part of the file is as credited at the top; this page did not run those tools.</div>
+	<div class="note"><strong>What was checked, and what was not.</strong> <em>Checked in the editor, on the pinned scene, with the Shell blocks as written:</em> steps 1 to 3 (their outputs are copied from the editor); the second event and the arm resetting at 2 s in step 4; <code>moveEvent</code>, the arm samples after it, and that it is not an undo step; the camera loop in step 6 and the thirteen aim measurements. The smile table in step 5 is from the single run that finished, with the long class <code>.vroidv110femalev1132-tracksglb</code> in place of a short one. The screenshots and the thumbnail are of this scene in headless Chrome with software rendering, taken by the blocks above in that order (one run, the editor at its default size), so the look of the shading is not what a graphics card gives. <em>Not checked:</em> dragging the event in the Animations tab instead of calling <code>moveEvent</code>; the Render tab in step 7 (no render was made); any face edit after the first (they hung the tab); and the "Open example" player for this page. Which of the three tools made which part of the file is as credited at the top; this page did not run those tools.</div>
 
 	<!-- credits:start -->
 	<section class="credits" id="credits">
