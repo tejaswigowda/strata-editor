@@ -90,13 +90,16 @@ function snapshotCallcard( pxWidth, pxHeight ) {
 				.then( function () { return new Promise( function ( res ) { requestAnimationFrame( function () { requestAnimationFrame( res ); } ); } ); } )
 				.then( function () {
 
+					// what the page says that can change from one render to the next (the version stamp), read before it is rasterised
+					const stampEl = doc.getElementById( 'stamp' );
+					const stamp = stampEl ? stampEl.textContent.trim() : null;
 					return html2canvas( doc.body, {
 						width: pxWidth,
 						height: pxHeight,
 						backgroundColor: null,
 						scale: 1,
 						logging: false
-					} );
+					} ).then( function ( canvas ) { return { canvas, stamp }; } );
 
 				} )
 				.then( resolve )
@@ -140,7 +143,11 @@ export function keepCallcardAlpha( object ) {
 
 }
 
-/** Re-fetch the live card and bake it onto the mesh's material. Always re-fetches (never trusts a persisted bake) — returns a Promise so callers (render setup, hydration) can await it. */
+/**
+ * Re-fetch the live card and bake it onto the mesh's material. Always re-fetches (never trusts a persisted bake) — returns a Promise so callers (render setup,
+ * hydration) can await it. It resolves what was baked, { canvas, stamp, url, width, height } (the Render tab hashes the canvas and records the stamp, so the
+ * card is a pinned input of the render), or undefined when the refresh failed and the object keeps the texture it had.
+ */
 export function refreshCallcard( object ) {
 
 	keepCallcardAlpha( object );
@@ -173,14 +180,16 @@ export function refreshCallcard( object ) {
 	pxHeight = Math.round( pxHeight );
 
 	return snapshotCallcard( pxWidth, pxHeight )
-		.then( function ( canvas ) {
+		.then( function ( baked ) {
 
+			const canvas = baked.canvas;
 			const texture = new THREE.CanvasTexture( canvas );
 			texture.colorSpace = THREE.SRGBColorSpace;
 
 			if ( object.material.map ) object.material.map.dispose();
 			object.material.map = texture;
 			object.material.needsUpdate = true;
+			return { canvas, stamp: baked.stamp, url: callcardUrl(), width: canvas.width, height: canvas.height };
 
 		} )
 		.catch( function ( error ) {

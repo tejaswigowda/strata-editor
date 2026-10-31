@@ -1,5 +1,6 @@
 import { Command } from '../Command.js';
 import { normalizeCues } from '../intelligence/subtitles.js';
+import { fillIds } from '../export/captions.js';
 
 /**
  * Replace the scene's subtitle cues (scene.userData.renderSubtitles). The cues
@@ -24,7 +25,8 @@ class SetSubtitlesCommand extends Command {
 
 		const ud = editor.scene.userData || {};
 		this.prevCues = normalizeCues( ud.renderSubtitles );
-		this.nextCues = normalizeCues( nextCues );
+		// a cue that comes with only words and times keeps the id of the cue it is the edit of: an id is how a caption is addressed, so saving must not renumber it
+		this.nextCues = normalizeCues( fillIds( this.prevCues, nextCues ) );
 
 	}
 

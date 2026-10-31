@@ -121,6 +121,8 @@ SEG.byMaterial('#mesh', { group, source })   // a mesh with several materials: o
 SEG.replay('#mesh', record)                  // cut again from the plan the asset recorded
 SEG.wouldRefuse('#mesh', plan?)              // null, or { reason, detail, seg_version }: would SEG refuse this? changes nothing
 SEG.preview('#Duck')  /  SEG.restore()       // a flat colour per part, to check the cut, and back
+subtitles()  /  setSubtitles([{ id, start, end, text }])  /  importSrt(text)  /  exportSrt()   // the scene's cues; an import keeps the ids of the cues it is an edit of
+setCueId('cue-y0quet1', 'intro-question')  /  nameCues()   // a cue's id is its name in captions.vtt and in a player link (&cue=<id>): guides/CAPTIONS.md
 asRecord()  /  checkRecord()  /  recordView()   // keep the scene as a dataset record: saved without camera, controls, renderer settings or history; what CI would say
 asRecord(true, { packaging: 'plan', parents: true })   // plan: save the labels and the plan, regenerate the geometry from the hashed source on open; parents: keep them (off by default)
 recordStatus()                               // per segmented group: ready (from cache or network), or unavailable and why

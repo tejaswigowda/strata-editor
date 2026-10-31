@@ -161,6 +161,29 @@ function removeGhost( node ) {
 
 }
 
+// The material flags a label rests at are a function of the label, not of what was sampled before it. During a fade the label is made transparent and stops
+// writing depth; when the fade is over (or the timeline is before the first change) they go back to what the AUTHOR had, which is recorded once, before this
+// file first touches the material. Restoring only some of them (opacity and depthWrite, but not `transparent`) left a label that had ever faded drawn through
+// the transparent pass for the rest of the session, so the same timeline time gave different pixels depending on whether an earlier sample had been in a fade:
+// found by the shuffled-order test (guides/TIME_SOURCES.md), frames 36, 68, 74 ... of area-volume.json.
+const authoredTransparent = new WeakMap();
+function authoredFlag( material ) {
+
+	if ( ! authoredTransparent.has( material ) ) authoredTransparent.set( material, !! material.transparent );
+	return authoredTransparent.get( material );
+
+}
+
+/** A label that is not in a fade: opaque, writing depth, transparent only if the author made it so. A label whose opacity a recipe owns is left to the mixer. */
+function restLabel( node ) {
+
+	if ( node.material.userData && node.material.userData.__fadeManaged ) return;
+	node.material.opacity = 1;
+	node.material.depthWrite = true;
+	setTransparent( node.material, authoredFlag( node.material ) );
+
+}
+
 // A fade's incoming text gets its OWN hidden child mesh, rendered (at
 // near-zero opacity) for the ENTIRE fade window instead of being created and
 // shown on `node` itself right at the crossover. Building + first-rendering a
@@ -290,6 +313,8 @@ export function applyContentAt( editor, model, t ) {
 		const nodes = resolveTrackNodes( editor, track.target );
 		if ( nodes.length === 0 ) continue;
 
+		for ( const node of nodes ) if ( isTextMesh( node ) ) authoredFlag( node.material );     // before any branch below changes it
+
 		let activeIdx = - 1;
 		for ( let i = 0; i < changeEvents.length; i ++ ) {
 
@@ -305,7 +330,10 @@ export function applyContentAt( editor, model, t ) {
 				if ( ! isTextMesh( node ) ) continue;
 				removeGhost( node );
 				removeNextSlot( node );
+				// "leave the authored content as-is" means put it back: a label that an earlier sample had already changed would otherwise keep that string here
+				if ( authoredText.has( node ) ) regenerateText( node, authoredText.get( node ) );
 				node.material.opacity = 1;
+				if ( ! ( node.material.userData && node.material.userData.__fadeManaged ) ) { node.material.depthWrite = true; setTransparent( node.material, authoredFlag( node.material ) ); }
 				mixerOpacity.delete( node );
 				syncEmptyVisibility( node );
 
@@ -369,6 +397,7 @@ export function applyContentAt( editor, model, t ) {
 
 				} else {
 
+					regenerateText( node, changeEvents[ activeIdx - 1 ].args.text );     // invisible now, but never whatever an earlier sample left on it
 					node.material.opacity = 0;
 					nextSlot.material.opacity = ( fadeRatio - 0.5 ) / 0.5;
 
@@ -396,8 +425,7 @@ export function applyContentAt( editor, model, t ) {
 				// position). Only claim opacity when nothing else owns it.
 				if ( ! ( node.material.userData && node.material.userData.__fadeManaged ) ) {
 
-					node.material.opacity = 1;
-					node.material.depthWrite = true;
+					restLabel( node );
 
 				} else if ( mixerOpacity.has( node ) ) {
 

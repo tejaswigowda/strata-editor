@@ -8,8 +8,9 @@
 export const RENDERER_COPY = 'Preview draws with WebGPU; export draws with WebGL2 (a separate, dedicated renderer). On a real GPU the two agreed closely on the scene tested (mean difference under 1 level in 255; edges and text anti-aliasing differ), but they are different renderers: judge a render by rendering it.';
 
 export const DETERMINISM_COPY = {
-	temporal: 'Frame n always shows timeline time n / fps, so duration and frame count are exact, and two renders of one timeline match to the frame on any machine.',
-	sameDevice: 'On the same device, most frames repeat exactly but not all: in a repeat-render test, frames inside a camera crossfade and the end card differed between two renders. Trust a render to be exact in time, not to be byte-reproducible.',
+	temporal: 'Frame n always shows timeline time n / fps, so duration and frame count are exact.',
+	frames: 'Frames: frame n depends on n / fps and the pinned inputs and on nothing else, and that is checked, not assumed. Verify redraws the frames in a shuffled order and each must match the sequential render; render.json says frames: true only after every frame passed, and publishes the sha256 of every frame so anyone can check.',
+	bytes: 'Bytes: the encoded file repeats byte for byte only with the software encoder (and the same browser build). A hardware encoder is faster and its bytes are not promised; that is a property of the encoder and does not change the frames.',
 	crossDevice: 'Across different GPUs and drivers, pixels may differ in the last bit; that is not promised.',
 	offline: 'Render (offline): every frame is drawn and captured, takes as long as it takes, exact timeline.',
 	preview: 'Preview (realtime): plays at what this machine manages, may drop frames, not reproducible.',

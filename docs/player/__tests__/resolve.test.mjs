@@ -1,6 +1,6 @@
 // Run: node docs/player/__tests__/resolve.test.mjs
 import assert from 'node:assert';
-import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode } from '../resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode, cueParam, locateCue } from '../resolve.js';
 
 const B = 'https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/';
 let pass = 0, fail = 0;
@@ -58,6 +58,27 @@ test( '&present=true after the address is an option, not part of the address', (
 
 } );
 
+test( 'C8: a link can name a cue: &cue=<id> after the address, or ?cue=<id>, and is not part of the address', () => {
+
+	assert.strictEqual( cueParam( { hash: '#' + B + '&cue=intro-question' } ), 'intro-question' );
+	assert.strictEqual( cueParam( { search: '?cue=intro-question', hash: '#' + B } ), 'intro-question' );
+	assert.strictEqual( cueParam( { hash: '#' + B + '&present=true&cue=a%20b' } ), 'a b' );
+	assert.strictEqual( cueParam( { hash: '#' + B } ), null );
+	assert.strictEqual( cueParam( { hash: '#' + B + '&cue=' } ), null );
+	assert.strictEqual( resolveBase( B + '&cue=intro-question' ).base, B );
+	assert.strictEqual( resolveBase( B + 'master.m3u8&cue=x&present=true' ).base, B );
+
+} );
+test( 'C8: the cue is found by its id, and a missing one says what the render does have', () => {
+
+	const cues = [ { id: 'intro-question', start: 0.8, end: 4.2, text: 'Why?' }, { id: 'cut-the-sides', start: 5.4, end: 9.7, text: 'Cut.' } ];
+	assert.deepStrictEqual( locateCue( cues, 'cut-the-sides' ), { start: 5.4, end: 9.7, text: 'Cut.' } );
+	assert.match( locateCue( cues, 'nope' ).error, /No cue "nope" in this render's captions\. Its cues are: intro-question, cut-the-sides\./ );
+	assert.match( locateCue( [ { id: null, start: 1, end: 2, text: 'x' } ], 'a' ).error, /carry no cue ids.*tools\/captions\.mjs --fill/ );
+	assert.match( locateCue( [], 'a' ).error, /carry no cue ids/ );
+	assert.match( locateCue( [ { id: '1', start: 1, end: 2, text: 'x' }, { id: '2', start: 3, end: 4, text: 'y' } ], 'cue-x' ).error, /carry no cue ids/, 'positional numbers are not ids' );
+
+} );
 test( 'the GitHub page of the folder becomes the jsDelivr address', () => {
 
 	assert.strictEqual( resolveBase( 'https://github.com/tejaswigowda/test1/tree/main/renders/projectile' ).base, B );

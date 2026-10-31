@@ -2,7 +2,8 @@
 // (or of any file in it, or its GitHub page); see resolve.js. It reads render.json for the title, poster, captions and facts,
 // and plays master.m3u8: natively where the browser does HLS (Safari), through hls.js everywhere else.
 
-import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode } from './resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode, cueParam, locateCue } from './resolve.js';
+import { parseVtt } from '../editor/js/export/captions.js';
 
 const $ = id => document.getElementById( id );
 const video = $( 'video' ), qualityLabel = $( 'qualityLabel' ), quality = $( 'quality' );
@@ -63,7 +64,10 @@ function describe( rj ) {
 	const facts = [];
 	if ( r.width ) facts.push( `<b>${ r.width }×${ r.height }</b> at ${ r.fps } fps` );
 	if ( r.duration_s ) facts.push( `${ formatDuration( r.duration_s ) } (${ r.frames.toLocaleString( 'en-US' ) } frames)` );
-	facts.push( r.mode === 'offline' ? ( r.deterministic ? 'offline render, temporally deterministic' : 'offline render' ) : r.mode ? `${ r.mode } capture` : '' );
+	// render.json version 2 splits the claim: frames (verified) and bytes (the software encoder); version 1 had one boolean
+	const d = r.determinism;
+	const claim = d ? ( d.frames ? ( d.bytes ? 'frames verified, bytes reproducible' : 'frames verified' ) : 'frames not claimed deterministic' ) : r.deterministic ? 'temporally deterministic' : '';
+	facts.push( r.mode === 'offline' ? ( 'offline render' + ( claim ? ', ' + claim : '' ) ) : r.mode ? `${ r.mode } capture` : '' );
 	if ( s.file ) facts.push( `scene <b>${ s.file }</b>${ s.commit ? ' @ ' + s.commit.slice( 0, 7 ) : '' }` );
 	if ( r.exporter ) facts.push( r.exporter );
 	$( 'meta' ).innerHTML = facts.filter( Boolean ).join( ' · ' );
@@ -108,13 +112,35 @@ async function play( input ) {
 
 	const outputs = ( rj && rj.outputs ) || {};
 	video.poster = base + ( outputs.poster || 'poster.jpg' );
-	if ( outputs.captions ) {
+	// The captions: render.json lists every track (caption_tracks); older renders have just the one path. When the master carries a subtitle group the player lets
+	// the HLS engine show them (a <track> as well would draw every cue twice); otherwise each file is a <track> of its own.
+	const tracks = Array.isArray( outputs.caption_tracks ) && outputs.caption_tracks.length ? outputs.caption_tracks : ( outputs.captions ? [ { path: outputs.captions, language: 'en' } ] : [] );
+	if ( ! tracks.some( t => t.hls ) ) {
 
-		const t = document.createElement( 'track' );
-		t.kind = 'subtitles'; t.label = 'Captions'; t.srclang = 'en'; t.src = base + outputs.captions; t.default = true;
-		video.appendChild( t );
+		tracks.forEach( ( tr, i ) => {
+
+			const t = document.createElement( 'track' );
+			t.kind = 'subtitles'; t.label = tr.language === 'en' && tracks.length === 1 ? 'Captions' : tr.language; t.srclang = tr.language || 'en'; t.src = base + tr.path; t.default = i === 0;
+			video.appendChild( t );
+
+		} );
 
 	}
+	// A link can name a cue (&cue=<id>): go to where it begins. The cue is looked up in the render's own track, by its authored id.
+	let startAt = null;
+	const wantCue = cueParam( { search: location.search, hash: location.hash } );
+	if ( wantCue && tracks.length ) {
+
+		try {
+
+			const res = await fetch( base + tracks[ 0 ].path );
+			const found = res.ok ? locateCue( parseVtt( await res.text() ).cues, wantCue ) : { error: `The captions (${ tracks[ 0 ].path }) could not be fetched, so cue "${ wantCue }" cannot be found.` };
+			if ( found.error ) setError( found.error );
+			else { startAt = found.start; $( 'meta' ).innerHTML += ` \u00b7 cue <b>${ wantCue.replace( /[<>&"]/g, '' ) }</b> at ${ formatDuration( found.start ) }`; }
+
+		} catch ( e ) { setError( `The captions could not be read, so cue "${ wantCue }" cannot be found.` ); }
+
+	} else if ( wantCue ) setError( `This render has no captions, so there is no cue "${ wantCue }" to go to.` );
 
 	const master = base + ( outputs.master || 'master.m3u8' );
 	// Safari (and iOS, which has no Media Source) plays HLS natively. Elsewhere hls.js, even where the browser can now play HLS itself (recent Chrome),
@@ -125,11 +151,12 @@ async function play( input ) {
 	if ( ! useHls && native ) {
 
 		video.src = master;
+		if ( startAt !== null ) video.addEventListener( 'loadedmetadata', () => { video.currentTime = startAt; }, { once: true } );
 		video.addEventListener( 'error', () => setError( `The browser could not play ${ master }.` ), { once: true } );
 
 	} else if ( useHls ) {
 
-		hls = new window.Hls( { capLevelToPlayerSize: false } );
+		hls = new window.Hls( { capLevelToPlayerSize: false, ...( startAt !== null ? { startPosition: startAt } : {} ) } );
 		hls.on( window.Hls.Events.MANIFEST_PARSED, () => levelChoices( hls ) );
 		hls.on( window.Hls.Events.ERROR, ( e, data ) => {
 

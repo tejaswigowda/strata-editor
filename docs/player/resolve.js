@@ -34,6 +34,30 @@ export function followsBranch( base ) {
 }
 
 /**
+ * The cue a link names: `&cue=<id>` after the address in the hash (#<address>&cue=intro-question) or `?cue=<id>`. A cue id is authored and stable, so a link to
+ * it survives edits that move the cue in time, and (unlike a timestamp) says what is being pointed at. Returns the id, or null.
+ */
+export function cueParam( { search = '', hash = '' } = {} ) {
+
+	const find = text => { const m = /(?:^|[?&])cue=([^&#]*)/.exec( text ); if ( ! m ) return null; try { return decodeURIComponent( m[ 1 ] ) || null; } catch ( e ) { return m[ 1 ] || null; } };
+	return find( String( search ) ) ?? find( String( hash ).replace( /^#/, '' ) );
+
+}
+
+/** Where a cue is, and what to say when it is not there: { start } or { error }. `cues`: parseVtt's cues of the render's own caption track. */
+export function locateCue( cues, id ) {
+
+	const list = cues || [];
+	const hit = list.find( c => c.id === id );
+	if ( hit ) return { start: hit.start, end: hit.end, text: hit.text };
+	// a bare number is a position (what a caption file without authored ids has), not a name: it would point at a different line after an insertion
+	const ids = list.map( c => c.id ).filter( i => i && ! /^\d+$/.test( i ) );
+	if ( ids.length === 0 ) return { error: `This render's captions carry no cue ids, so there is no cue "${ id }" to go to. Export them again with tools/captions.mjs --fill.` };
+	return { error: `No cue "${ id }" in this render's captions. Its cues are: ${ ids.slice( 0, 8 ).join( ', ' ) }${ ids.length > 8 ? ', \u2026' : '' }.` };
+
+}
+
+/**
  * Present mode: the video alone, filling the window, with no address bar, title, facts or footer. On when the page is embedded in a frame, or when the address
  * says present=true (as a query, ?present=true, or after the address in the hash, #<address>&present=true); present=false turns it off even in a frame.
  */

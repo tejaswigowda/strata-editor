@@ -74,6 +74,15 @@ test( 'cuesEqual ignores ids and order, sees real changes', () => {
 
 } );
 
+test( 'cuesIdentical sees an id rename that cuesEqual does not', () => {
+
+	const a = [ { id: '1', start: 1, end: 2, text: 'x' } ];
+	assert.ok( S.cuesEqual( a, [ { id: 'renamed', start: 1, end: 2, text: 'x' } ] ) );
+	assert.ok( ! S.cuesIdentical( a, [ { id: 'renamed', start: 1, end: 2, text: 'x' } ] ) );
+	assert.ok( S.cuesIdentical( a, [ { id: '1', start: 1, end: 2, text: 'x' } ] ) );
+
+} );
+
 test( 'activeCueAt is start-inclusive, end-exclusive', () => {
 
 	const cues = [ { start: 1, end: 2, text: 'a' }, { start: 2, end: 3, text: 'b' } ];

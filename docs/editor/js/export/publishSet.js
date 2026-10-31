@@ -6,6 +6,7 @@
 //   renders/<scene>/1080p60/init.mp4  seg00001.m4s …  index.m3u8   (and 720p60, 480p60)
 
 import { masterPlaylist } from './fmp4.js';
+import { subtitlePlaylist, subtitlePlaylistPath, withSubtitles } from './captions.js';
 import { buildRenderJson, formatBytes, assessDeterminism, LIMITS } from './renderJson.js';
 
 /** The ladder, highest first: target heights and the bitrates the work order names. */
@@ -34,26 +35,7 @@ export function planLadder( { width, height, fps, keep = null } ) {
 
 }
 
-const pad = ( n, w = 2 ) => String( n ).padStart( w, '0' );
-
-/** Seconds -> 00:00:04.650 (WebVTT timestamp). */
-export function vttTime( seconds ) {
-
-	const ms = Math.round( seconds * 1000 );
-	return `${ pad( Math.floor( ms / 3600000 ) ) }:${ pad( Math.floor( ms / 60000 ) % 60 ) }:${ pad( Math.floor( ms / 1000 ) % 60 ) }.${ pad( ms % 1000, 3 ) }`;
-
-}
-
-/** The scene's subtitle cues ({ start, end, text } in output seconds) as WebVTT. Returns null when there are none. */
-export function cuesToVtt( cues ) {
-
-	const list = ( cues || [] ).filter( c => c && String( c.text ).trim() !== '' && c.end > c.start ).sort( ( a, b ) => a.start - b.start );
-	if ( list.length === 0 ) return null;
-	// a cue's text may not contain a blank line or "-->"
-	const clean = t => String( t ).replace( /\r/g, '' ).replace( /\n{2,}/g, '\n' ).replace( /-->/g, '\u2192' ).trim();
-	return 'WEBVTT\n\n' + list.map( ( c, i ) => `${ i + 1 }\n${ vttTime( c.start ) } --> ${ vttTime( c.end ) }\n${ clean( c.text ) }\n` ).join( '\n' );
-
-}
+export { vttTime } from './captions.js';
 
 /** renders/<scene-basename>/ for a scene file such as "piston.json". */
 export function defaultPublishPath( sceneFile ) {
@@ -73,21 +55,36 @@ const bytesOf = v => typeof v === 'string' ? enc.encode( v ) : v;
  *   render:      { mode, renderer, device, fps, frames, frameRange, width, height, renderedAt }
  *   rungs:       [{ rung: { name, width, height, kbps }, packaged: packageRendition() output }]
  *   poster:      Uint8Array
- *   captions:    string | null     (WebVTT; written whenever the scene has cues, burned in or not)
+ *   captionTracks: [{ path, language, default, text, record }]   from captions.js cueTrack(): the WebVTT files (written whenever the scene has cues, burned in or not), each with the
+ *                  record render.json keeps of it and an HLS subtitle playlist in master.m3u8
  *   audio:       null | { packaged: packageAudio(), name, language, source: { path, sha256, tool?, voice?, model? }, delaySamples, wavBytes? }
  *                (wavBytes: the narration WAV, written as narration.wav when dub.webcli.app made it, so the set holds what the audio came from)
  *   download:    null | { name, bytes, command, audio: boolean, captions: boolean, videoFrom: 'master' | rung name }   the single-file MP4 made by ffmpeg.webcli.app
- *   determinism: { mode, encoder, hasEndCard, playbackWasRunning }   (assessDeterminism's input)
+ *   determinism: { mode, encoder, hasEndCard, playbackWasRunning, verification }   (assessDeterminism's input)
+ *   frameHashes: null | { text, root, count }       the sidecar text (frame-hashes.txt) and its root hash: sha256 of every frame, before encoding
+ *   endCard:     null | { bytes (PNG), sha256, url, stamp, width, height }   the end card image the frames were composited from (endcard.png)
  * @returns {{ files: { path, bytes: Uint8Array }[], renderJson, total: number, errors: string[], warnings: string[], tree: { path, bytes }[] }}
  */
-export function assemblePublishSet( { path, scene, render, rungs, poster, captions, audio = null, download = null, determinism } ) {
+export function assemblePublishSet( { path, scene, render, rungs, poster, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null } ) {
 
 	const files = [];
 	const rel = ( ...p ) => path + '/' + p.join( '/' );
 	const add = ( relPath, data ) => files.push( { path: rel( relPath ), bytes: bytesOf( data ) } );
 
 	add( 'poster.jpg', poster );
-	if ( captions ) add( 'captions.vtt', captions );
+	// the captions: each file, its one-segment HLS subtitle playlist, and what render.json will say of it. The master gets the subtitle group below.
+	const hlsTracks = [], captionRecords = [];
+	for ( const t of captionTracks ) {
+
+		const uri = subtitlePlaylistPath( t.language );
+		add( t.path, t.text );
+		add( uri, subtitlePlaylist( { uri: '../../' + t.path, durationS: render.frames / render.fps } ) );
+		hlsTracks.push( { language: t.language, uri, default: !! t.default } );
+		captionRecords.push( { ...t.record, hls: uri } );
+
+	}
+	if ( frameHashes ) add( 'frame-hashes.txt', frameHashes.text );
+	if ( endCard ) add( 'endcard.png', endCard.bytes );
 
 	const renditions = [];
 	for ( const { rung, packaged } of rungs ) {
@@ -118,20 +115,22 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 	}
 
 	if ( download ) add( download.name, download.bytes );
-	add( 'master.m3u8', masterPlaylist( rungs.map( ( { rung, packaged } ) => ( {
+	add( 'master.m3u8', withSubtitles( masterPlaylist( rungs.map( ( { rung, packaged } ) => ( {
 		name: rung.name, width: rung.width, height: rung.height, playlist: `${ rung.name }/index.m3u8`,
 		codec: packaged.codec, bandwidth: packaged.bandwidth, averageBandwidth: packaged.averageBandwidth,
-	} ) ), render.fps, audio ? { groupId: 'aud', name: audio.name, language: audio.language, uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: audio.packaged.bandwidth, averageBandwidth: audio.packaged.averageBandwidth } : null ) );
+	} ) ), render.fps, audio ? { groupId: 'aud', name: audio.name, language: audio.language, uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: audio.packaged.bandwidth, averageBandwidth: audio.packaged.averageBandwidth } : null  ), hlsTracks ) );
 
 	const renderJson = buildRenderJson( {
-		scene, render, renditions, captions: captions ? 'captions.vtt' : null, audio: audioMeta, download,
-		determinism: assessDeterminism( determinism ),
+		scene, render, renditions, captions: captionRecords.length ? captionRecords[ 0 ].path : null, captionTracks: captionRecords, audio: audioMeta, download,
+		determinism: assessDeterminism( { ...determinism, frameHashes: frameHashes ? { count: frameHashes.count, root: frameHashes.root } : null, endCard } ),
+		frameHashes: frameHashes ? { path: 'frame-hashes.txt', count: frameHashes.count, root: frameHashes.root } : null,
+		endCard: endCard ? { path: 'endcard.png', sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height } : null,
 		files: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ),
 	} );
 	files.unshift( { path: rel( 'render.json' ), bytes: enc.encode( JSON.stringify( renderJson, null, 2 ) + '\n' ) } );
 
 	const total = files.reduce( ( n, f ) => n + f.bytes.length, 0 );
-	const { errors, warnings } = sizeReport( files, total, audioMeta ? [ ...renditions, { name: 'audio', maxSegmentBytes: audioMeta.maxSegmentBytes } ] : renditions, renderJson.render.deterministic, download );
+	const { errors, warnings } = sizeReport( files, total, audioMeta ? [ ...renditions, { name: 'audio', maxSegmentBytes: audioMeta.maxSegmentBytes } ] : renditions, renderJson.render.determinism, download );
 	return { files, renderJson, total, errors, warnings, tree: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ) };
 
 }
@@ -141,7 +140,7 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
  *   error:   a segment at or over 20 MB (jsDelivr's cap), any file at or over 100 MB (GitHub's hard limit)
  *   warning: always, the total and what git does with binaries; louder over 100 MB
  */
-export function sizeReport( files, total, renditions, deterministic, download = null ) {
+export function sizeReport( files, total, renditions, determinism, download = null ) {
 
 	const errors = [];
 	const warnings = [];
@@ -162,7 +161,7 @@ export function sizeReport( files, total, renditions, deterministic, download = 
 	if ( total > LIMITS.warnTotalBytes ) warning = `This commit is over 100 MB (${ formatBytes( total ) } in ${ files.length } files). ` + warning.replace( /^This commit adds [^.]*\.\s*/, '' );
 	warnings.push( warning );
 	warnings.push( 'To keep scene history light, publish to a separate "renders" branch (it can be squashed without touching the scene\u2019s history) or to a separate media repository.' );
-	if ( deterministic ) warnings.push( 'This render is temporally deterministic: it can be regenerated from the scene and render.json, so it is a build artifact and old renders can be pruned. (Pixels may still differ across GPUs.)' );
+	if ( determinism && determinism.frames ) warnings.push( 'The frames of this render are deterministic: the shuffled-order test passed on every frame, and frame-hashes.txt lets anyone check it. It can be regenerated from the scene, render.json and the pinned inputs, so it is a build artifact and old renders can be pruned.' + ( determinism.bytes ? ' The bytes repeat too (software encoder).' : ' The encoded bytes are not promised to repeat (hardware encoder), only the frames.' ) );
 	return { errors, warnings };
 
 }

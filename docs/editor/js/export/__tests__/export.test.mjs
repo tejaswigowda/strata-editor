@@ -79,19 +79,20 @@ test( 'the contract line states frames, an estimate when known, and the exact ra
 
 } );
 
-test( 'the determinism statement separates temporal, same-device and cross-device', () => {
+test( 'the determinism statement separates exact time, frames, bytes and cross-device pixels', () => {
 
 	assert.ok( /exact/.test( DETERMINISM_COPY.temporal ) );
-	assert.ok( /same device/.test( DETERMINISM_COPY.sameDevice ) );
-	assert.ok( /not all/.test( DETERMINISM_COPY.sameDevice ) && /crossfade/.test( DETERMINISM_COPY.sameDevice ) );
+	assert.ok( /shuffled order/.test( DETERMINISM_COPY.frames ) && /checked, not assumed/.test( DETERMINISM_COPY.frames ) && /every frame passed/.test( DETERMINISM_COPY.frames ) );
+	assert.ok( /software encoder/.test( DETERMINISM_COPY.bytes ) && /does not change the frames/.test( DETERMINISM_COPY.bytes ) );
 	assert.ok( /not promised/.test( DETERMINISM_COPY.crossDevice ) );
+	assert.ok( ! /most frames repeat exactly but not all/.test( Object.values( DETERMINISM_COPY ).join( ' ' ) ), 'the old hedge is gone' );
 
 } );
 
 test( 'E0: guides/TIME_SOURCES.md quotes the UI copy word for word', () => {
 
 	const doc = readFileSync( new URL( '../../../../../guides/TIME_SOURCES.md', import.meta.url ), 'utf8' );
-	for ( const key of [ 'temporal', 'sameDevice', 'crossDevice', 'offline', 'preview' ] ) assert.ok( doc.includes( DETERMINISM_COPY[ key ] ), key + ' is not in TIME_SOURCES.md verbatim' );
+	for ( const key of [ 'temporal', 'frames', 'bytes', 'crossDevice', 'offline', 'preview' ] ) assert.ok( doc.includes( DETERMINISM_COPY[ key ] ), key + ' is not in TIME_SOURCES.md verbatim' );
 
 } );
 

@@ -13,10 +13,11 @@ import {
 } from '../fmp4.js';
 import { canonicalText, canonicalScene, sceneHash } from '../canonical.js';
 import {
-	buildRenderJson, validateRenderJson, assessDeterminism, TIME_SOURCE_AUDIT, REPEAT_RENDER, LIMITS, formatBytes,
+	buildRenderJson, validateRenderJson, assessDeterminism, encoderRecord, TIME_SOURCE_AUDIT, LIMITS, formatBytes,
 } from '../renderJson.js';
 import { parseWav, toStereo, planAudioSegments, packageAudio, audioPlaylist, audioMediaSegment, audioInitSegment, AUDIO } from '../audio.js';
-import { planLadder, cuesToVtt, vttTime, defaultPublishPath, assemblePublishSet, sizeReport, stalenessLine } from '../publishSet.js';
+import { cueTrack, parseVtt } from '../captions.js';
+import { planLadder, vttTime, defaultPublishPath, assemblePublishSet, sizeReport, stalenessLine } from '../publishSet.js';
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
 let pass = 0, fail = 0, skipped = 0;
@@ -299,7 +300,11 @@ await test( 'the hash has the form sha256:<64 hex>', async () => {
 const sceneInfo = { repo: 'tejaswigowda/test1', file: 'piston.json', branch: 'main', commit: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', hash: 'sha256:' + 'ab'.repeat( 32 ) };
 const renderInfo = { mode: 'offline', renderer: 'WebGLRenderer', device: 'webgl2', encoder: 'software', fps: 60, frames: 6180, frameRange: [ 0, 6179 ], width: 1920, height: 1080, renderedAt: '2026-10-26T19:40:00Z' };
 const renditions = [ { name: '1080p60', width: 1920, height: 1080, bitrateKbps: 3500, playlist: '1080p60/index.m3u8', segments: 18, maxSegmentBytes: 3_100_000 } ];
-const build = ( over = {}, det = {} ) => buildRenderJson( { scene: sceneInfo, render: { ...renderInfo, ...over }, renditions, files: [ { path: 'a', bytes: 5 } ], determinism: assessDeterminism( { mode: over.mode || 'offline', encoder: over.encoder || renderInfo.encoder, repeat: { verified: true, reason: '' }, ...det } ) } );
+const CAPTION_TRACK = await cueTrack( { cues: [ { id: 'launch', start: 0.8, end: 4.65, text: 'Launch a ball at an angle.' }, { id: 'second', start: 6.77, end: 10.09, text: 'The short leg is 3 units long.' } ], scene: sceneInfo, exporter: 'strata-export/1.2.0' } );
+const HASHES = { count: 6180, root: 'sha256:' + 'cd'.repeat( 32 ) };
+const VERIFIED = { method: 'shuffled-order', every: 1, seed: 1, frames_checked: 6180, of: 6180, complete: true, passed: true, mismatched_frames: [], mismatched_count: 0 };
+// a render that has earned its claim: offline, hashed, verified on every frame, software encoder. `det` overrides what assessDeterminism is told.
+const build = ( over = {}, det = {} ) => buildRenderJson( { scene: sceneInfo, render: { ...renderInfo, ...over }, renditions, files: [ { path: 'a', bytes: 5 } ], frameHashes: det.frameHashes === null ? null : { path: 'frame-hashes.txt', ...HASHES }, determinism: assessDeterminism( { mode: over.mode || 'offline', encoder: over.encoder || renderInfo.encoder, frameHashes: HASHES, verification: VERIFIED, ...det } ) } );
 
 await test( 'a built render.json validates and says what it is', () => {
 
@@ -307,34 +312,76 @@ await test( 'a built render.json validates and says what it is', () => {
 	assert.deepStrictEqual( validateRenderJson( j ), [] );
 	assert.strictEqual( j.render.duration_s, 103 );
 	assert.strictEqual( j.render.frames, Math.round( j.render.duration_s * j.render.fps ), 'frames == round(duration_s * fps)' );
-	assert.strictEqual( j.render.exporter, 'strata-export/1.1.0' );
+	assert.strictEqual( j.render.exporter, 'strata-export/1.2.0' );
+	assert.strictEqual( j.version, 2 );
 	assert.deepStrictEqual( j.checks, { segments_under_20mb: true, files_under_100mb: true, frame_count_matches_duration: true } );
 	assert.strictEqual( j.outputs.master, 'master.m3u8' );
 
 } );
 
-await test( 'deterministic is derived: offline + software encoder + no live input; every reason is listed', () => {
+await test( 'D1: frames and bytes are separate claims, each derived, each with its own reasons', () => {
 
-	assert.strictEqual( build().render.deterministic, true );
-	assert.deepStrictEqual( build().render.not_deterministic_because, [] );
-	const why = ( det ) => assessDeterminism( { mode: 'offline', encoder: 'software', repeat: { verified: true, reason: '' }, ...det } ).reasons.join( ' | ' );
-	assert.match( why( { hasCrossfades: true } ), /crossfades/ );
-	assert.match( why( { encoder: 'hardware' } ), /hardware encoder/ );
-	assert.match( why( { hasEndCard: true } ), /live end card/ );
-	assert.match( why( { playbackWasRunning: true } ), /playback was running/ );
-	assert.match( assessDeterminism( { mode: 'realtime', encoder: 'software' } ).reasons.join(), /realtime/ );
-	// F3: until a repeat-render test passes, nothing may say it is byte-reproducible
-	assert.strictEqual( REPEAT_RENDER.verified, false );
-	const real = assessDeterminism( { mode: 'offline', encoder: 'software' } );
-	assert.strictEqual( real.deterministic, false );
-	assert.match( real.reasons.join(), /not byte-identical when tested/ );
-	assert.match( assessDeterminism( { mode: 'offline', encoder: 'software', audit: { passed: false } } ).reasons.join(), /audit did not pass/ );
-	const j = build( { encoder: 'hardware' }, { hasEndCard: true } );
-	assert.strictEqual( j.render.deterministic, false );
-	assert.strictEqual( j.render.not_deterministic_because.length, 2 );
+	const j = build();
+	assert.deepStrictEqual( [ j.render.determinism.frames, j.render.determinism.bytes ], [ true, true ] );
+	assert.deepStrictEqual( j.render.determinism.reasons, { frames: [], bytes: [] } );
+	assert.ok( ! ( 'deterministic' in j.render ) && ! ( 'not_deterministic_because' in j.render ), 'the single boolean is gone' );
+	const why = ( det ) => assessDeterminism( { mode: 'offline', encoder: 'software', frameHashes: HASHES, verification: VERIFIED, ...det } );
+	// a hardware encoder is a reason the BYTES are not promised, and not a reason against the frames
+	const hw = why( { encoder: 'hardware' } );
+	assert.deepStrictEqual( [ hw.frames, hw.bytes ], [ true, false ] );
+	assert.deepStrictEqual( hw.reasons.frames, [] );
+	assert.match( hw.reasons.bytes.join(), /hardware encoder was chosen.*a choice; the frames are unaffected/ );
+	// anything that breaks the frames breaks the bytes' claim too, and says so
+	const live = why( { playbackWasRunning: true } );
+	assert.deepStrictEqual( [ live.frames, live.bytes ], [ false, false ] );
+	assert.match( live.reasons.frames.join(), /playback was running/ );
+	assert.match( live.reasons.bytes.join(), /frames are not established/ );
+	assert.match( why( { hasEndCard: true } ).reasons.frames.join(), /end card.*not recorded: an input that is not pinned/ );
+	assert.deepStrictEqual( why( { hasEndCard: true, endCard: { sha256: 'ab'.repeat( 32 ) } } ).reasons.frames, [], 'a pinned, recorded end card is not a reason' );
+	assert.match( assessDeterminism( { mode: 'realtime', encoder: 'software' } ).reasons.frames.join(), /realtime/ );
+	assert.match( why( { audit: { passed: false } } ).reasons.frames.join(), /audit did not pass/ );
+	const mixed = build( { encoder: 'hardware' }, { playbackWasRunning: true } );
+	assert.deepStrictEqual( [ mixed.render.determinism.frames, mixed.render.determinism.bytes ], [ false, false ] );
+	assert.deepStrictEqual( validateRenderJson( mixed ), [] );
+
+} );
+
+await test( 'D2: frames is true only after a COMPLETE, passed shuffled-order test with every frame hashed; a subset, a failure and no test are each a reason', () => {
+
+	const base = { mode: 'offline', encoder: 'software', frameHashes: HASHES };
+	assert.match( assessDeterminism( { ...base, verification: null } ).reasons.frames.join(), /not verified: the shuffled-order test was not run/ );
+	assert.match( assessDeterminism( { ...base, verification: { ...VERIFIED, every: 17, frames_checked: 364, complete: false } } ).reasons.frames.join(), /verified on 364 of 6180 frames only.*a subset is evidence, not a claim/ );
+	const failed = assessDeterminism( { ...base, verification: { ...VERIFIED, passed: false, mismatched_frames: [ 240, 241, 242 ], mismatched_count: 3 } } );
+	assert.strictEqual( failed.frames, false );
+	assert.match( failed.reasons.frames.join(), /3 frames depend on more than n \/ fps \(240, 241, 242\)/ );
+	assert.match( assessDeterminism( { mode: 'offline', encoder: 'software', verification: VERIFIED } ).reasons.frames.join(), /no per-frame hashes/ );
+	assert.strictEqual( assessDeterminism( { ...base, verification: VERIFIED } ).frames, true );
+
+} );
+
+await test( 'D5: the manifest carries the frame-hash root and the encoder as a record', () => {
+
+	const j = build( { encoder: { kind: 'software', name: 'WebCodecs VideoEncoder (H.264)', version: 'Chrome 130', settings_hash: 'sha256:' + 'ef'.repeat( 32 ), threads: null, config: { codec: 'avc1.64002a' } } } );
 	assert.deepStrictEqual( validateRenderJson( j ), [] );
-	assert.deepStrictEqual( TIME_SOURCE_AUDIT.residuals.map( r => r.status ), [ 'accepted', 'live-when-present', 'live-when-present' ], 'each residual is classified, not counted' );
-	assert.deepStrictEqual( build().render.time_source_audit.residuals_accepted, [ 'shell-wall-clock-loops' ] );
+	assert.deepStrictEqual( j.outputs.frame_hashes, { path: 'frame-hashes.txt', count: 6180, algorithm: 'sha256', over: j.outputs.frame_hashes.over, root: HASHES.root } );
+	assert.match( j.outputs.frame_hashes.over, /raw RGB/ );
+	assert.deepStrictEqual( [ j.render.encoder.kind, j.render.encoder.version, j.render.encoder.threads ], [ 'software', 'Chrome 130', null ] );
+	assert.deepStrictEqual( encoderRecord( 'hardware' ), { kind: 'hardware', name: null, version: null, settings_hash: null, threads: null, config: null } );
+	assert.deepStrictEqual( j.render.determinism.verification, VERIFIED );
+
+} );
+
+await test( 'D3/D4: the audit says what it confirmed, not what it accepts; a pinned end card is an input with its own hash', () => {
+
+	assert.deepStrictEqual( TIME_SOURCE_AUDIT.confirmed.map( c => c.id ), [ 'no-clock-in-animated-quantities', 'no-delta-integration', 'no-previous-frame-reads', 'shell-wall-clock-loops' ] );
+	assert.ok( TIME_SOURCE_AUDIT.confirmed.every( c => c.how.length > 40 ), 'each confirmation says how' );
+	assert.deepStrictEqual( TIME_SOURCE_AUDIT.residuals.map( r => [ r.id, r.status ] ), [ [ 'playback-running', 'live-when-present' ] ] );
+	assert.deepStrictEqual( build().render.time_source_audit.live_when_present, [ 'playback-running' ] );
+	assert.strictEqual( build().inputs, undefined, 'no end card, no input' );
+	const withCard = buildRenderJson( { scene: sceneInfo, render: renderInfo, renditions, files: [ { path: 'a', bytes: 5 } ], frameHashes: { path: 'frame-hashes.txt', ...HASHES }, endCard: { path: 'endcard.png', sha256: 'ab'.repeat( 32 ), bytes: 1234, url: 'https://x/about/callcard/', stamp: 'Strata v0.1.0', width: 1024, height: 2048 }, determinism: assessDeterminism( { mode: 'offline', encoder: 'software', hasEndCard: true, endCard: { sha256: 'ab' }, frameHashes: HASHES, verification: VERIFIED } ) } );
+	assert.deepStrictEqual( withCard.inputs.end_card, { path: 'endcard.png', sha256: 'sha256:' + 'ab'.repeat( 32 ), bytes: 1234, source: 'https://x/about/callcard/', stamp: 'Strata v0.1.0', width: 1024, height: 2048 } );
+	assert.deepStrictEqual( validateRenderJson( withCard ), [] );
+	assert.strictEqual( withCard.render.determinism.frames, true );
 
 } );
 
@@ -342,19 +389,44 @@ await test( 'the validator refuses a lie', () => {
 
 	const j = build();
 	const bad = ( mutate ) => { const c = JSON.parse( JSON.stringify( j ) ); mutate( c ); return validateRenderJson( c ); };
-	assert.ok( bad( c => { c.render.mode = 'realtime'; } ).some( m => /deterministic is true only for mode offline/.test( m ) ) );
-	assert.ok( bad( c => { c.render.encoder = 'hardware'; } ).some( m => /only with the software encoder/.test( m ) ) );
-	assert.ok( bad( c => { c.render.not_deterministic_because = [ 'x' ]; } ).some( m => /no reasons against it/.test( m ) ) );
-	assert.ok( bad( c => { c.render.deterministic = false; } ).some( m => /says why/.test( m ) ) );
+	assert.ok( bad( c => { c.render.mode = 'realtime'; } ).some( m => /frames is true only for mode offline/.test( m ) ) );
+	assert.ok( bad( c => { c.render.encoder.kind = 'hardware'; } ).some( m => /bytes is true only with the software encoder/.test( m ) ) );
+	assert.ok( bad( c => { c.render.determinism.reasons.frames = [ 'x' ]; } ).some( m => /frames is true, so there are no reasons/.test( m ) ) );
+	assert.ok( bad( c => { c.render.determinism.frames = false; } ).some( m => /frames is false, so it says why/.test( m ) ) );
+	assert.ok( bad( c => { c.render.determinism.reasons.bytes = [ 'x' ]; } ).some( m => /bytes is true, so there are no reasons/.test( m ) ) );
+	assert.ok( bad( c => { c.render.determinism.verification.complete = false; } ).some( m => /only after a complete, passed shuffled-order test/.test( m ) ) );
+	assert.ok( bad( c => { c.render.determinism.verification = null; } ).some( m => /only after a complete, passed/.test( m ) ) );
+	assert.ok( bad( c => { delete c.outputs.frame_hashes; } ).some( m => /only with a frame hash for every frame/.test( m ) ) );
+	assert.ok( bad( c => { c.outputs.frame_hashes.count = 5; } ).some( m => /only with a frame hash for every frame/.test( m ) ) );
+	assert.ok( bad( c => { c.render.encoder.settings_hash = 'md5:x'; } ).some( m => /settings_hash/.test( m ) ) );
 	assert.ok( bad( c => { c.render.frames = 6000; c.render.frame_range = [ 0, 5999 ]; } ).some( m => /round\(duration_s \* fps\)/.test( m ) ) );
 	assert.ok( bad( c => { c.scene.hash = 'sha1:abc'; } ).some( m => /scene\.hash/.test( m ) ) );
 	assert.ok( bad( c => { c.render.frame_range = [ 0, 100 ]; } ).some( m => /frame_range/.test( m ) ) );
 	assert.ok( bad( c => { c.outputs.renditions = []; } ).some( m => /renditions/.test( m ) ) );
-	assert.ok( bad( c => { c.version = 2; } ).some( m => /version/.test( m ) ) );
+	assert.ok( bad( c => { c.version = 1; } ).some( m => /version/.test( m ) ) );
 	// a realtime capture is allowed to be variable rate: frames need not match, but it must say so
 	const rt = build( { mode: 'realtime', frames: 6000, frameRange: [ 0, 5999 ], durationS: 103 } );
 	assert.deepStrictEqual( validateRenderJson( rt ), [] );
 	assert.strictEqual( rt.checks.frame_count_matches_duration, false );
+
+} );
+
+await test( 'C7: the validator knows what a caption track must say: its source, the hash of its cues, and (for asr) which model and that it has no ids', () => {
+
+	const withTrack = ( over = {} ) => buildRenderJson( { scene: sceneInfo, render: renderInfo, renditions, files: [ { path: 'a', bytes: 5 } ], captions: 'captions.vtt', captionTracks: [ { ...CAPTION_TRACK.record, hls: 'subs/en/index.m3u8', ...over } ], determinism: assessDeterminism( { mode: 'offline', encoder: 'software', frameHashes: HASHES, verification: VERIFIED } ), frameHashes: { path: 'frame-hashes.txt', ...HASHES } } );
+	assert.deepStrictEqual( validateRenderJson( withTrack() ), [] );
+	assert.ok( validateRenderJson( withTrack( { source: 'whisper' } ) ).some( m => /source must be one of cues, asr, manual/.test( m ) ) );
+	assert.ok( validateRenderJson( withTrack( { cues_sha256: 'md5:x' } ) ).some( m => /cues_sha256 and structure_sha256/.test( m ) ) );
+	assert.ok( validateRenderJson( withTrack( { source: 'asr', addressable: true, asr: { model: 'base.en', version: null } } ) ).some( m => /asr track has no authored ids/.test( m ) ) );
+	assert.ok( validateRenderJson( withTrack( { source: 'asr', addressable: false } ) ).some( m => /says which model made it/.test( m ) ) );
+	assert.deepStrictEqual( validateRenderJson( withTrack( { source: 'asr', addressable: false, asr: { model: 'base.en', version: '20240930' } } ) ), [] );
+	assert.ok( validateRenderJson( withTrack( { translation_of: 'en', translated_from: undefined } ) ).some( m => /which cues it was made from/.test( m ) ) );
+	const j = withTrack(); j.outputs.captions = 'other.vtt';
+	assert.ok( validateRenderJson( j ).some( m => /first caption track/.test( m ) ) );
+	const dup = withTrack(); dup.outputs.caption_tracks.push( { ...dup.outputs.caption_tracks[ 0 ], path: 'captions.en2.vtt' } );
+	assert.ok( validateRenderJson( dup ).some( m => /one caption track per language/.test( m ) ) );
+	const gone = withTrack(); delete gone.outputs.caption_tracks;
+	assert.ok( validateRenderJson( gone ).some( m => /caption_tracks must be a list/.test( m ) ) );
 
 } );
 
@@ -384,13 +456,14 @@ await test( 'the ladder never upscales, keeps the aspect, and uses even sizes', 
 
 } );
 
-await test( 'captions: SRT-style cues become WebVTT with dotted millisecond times', () => {
+await test( 'captions: cues become WebVTT with dotted millisecond times, the cue id as the identifier, and a NOTE saying where they came from (detail: captions.test.mjs)', async () => {
 
 	assert.strictEqual( vttTime( 3723.5 ), '01:02:03.500' );
-	const vtt = cuesToVtt( [ { start: 6.77, end: 10.09, text: 'The short leg is 3 units long.' }, { start: 0.8, end: 4.65, text: 'Launch a ball at an angle,\nand it flies in a curve.' } ] );
-	assert.ok( vtt.startsWith( 'WEBVTT\n\n1\n00:00:00.800 --> 00:00:04.650\nLaunch a ball at an angle,\nand it flies in a curve.\n\n2\n00:00:06.770 --> 00:00:10.090\n' ) );
-	assert.strictEqual( cuesToVtt( [] ), null );
-	assert.ok( ! cuesToVtt( [ { start: 0, end: 1, text: 'a --> b' } ] ).includes( 'a -->' ) );
+	const t = await cueTrack( { cues: [ { id: 'second', start: 6.77, end: 10.09, text: 'The short leg is 3 units long.' }, { id: 'launch', start: 0.8, end: 4.65, text: 'Launch a ball at an angle,\nand it flies in a curve.' } ], scene: sceneInfo, exporter: 'strata-export/1.2.0' } );
+	assert.match( t.text, /\n\nlaunch\n00:00:00\.800 --> 00:00:04\.650\nLaunch a ball at an angle,\nand it flies in a curve\.\n\nsecond\n00:00:06\.770 --> 00:00:10\.090\n/ );
+	assert.match( t.text, /^WEBVTT\n\nNOTE\nscene\s+tejaswigowda\/test1@a1b2c3d piston\.json\n/ );
+	assert.strictEqual( await cueTrack( { cues: [] } ), null );
+	assert.ok( ! ( await cueTrack( { cues: [ { id: 'a', start: 0, end: 1, text: 'a --> b' } ] } ) ).text.includes( 'a -->' ) );
 
 } );
 
@@ -407,17 +480,28 @@ await test( 'the set holds every file in one list, render.json first, and the ch
 	const samples = fakeSamples( 400, 30 ).map( s => s.data );
 	const packaged = packageRendition( { width: 320, height: 180, fps: 30, avcC, samples, keyframes: Array.from( { length: 14 }, ( _, i ) => i * 30 ) } );
 	const rung = { name: '180p30', width: 320, height: 180, kbps: 300 };
-	const set = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ], width: 320, height: 180 }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1, 2, 3 ), captions: 'WEBVTT\n', determinism: { mode: 'offline', encoder: 'software' } } );
-	assert.deepStrictEqual( set.files.map( f => f.path ).slice( 0, 3 ), [ 'renders/x/render.json', 'renders/x/poster.jpg', 'renders/x/captions.vtt' ] );
+	const set = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ], width: 320, height: 180 }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1, 2, 3 ), captionTracks: [ CAPTION_TRACK ], determinism: { mode: 'offline', encoder: 'software' } } );
+	assert.deepStrictEqual( set.files.map( f => f.path ).slice( 0, 4 ), [ 'renders/x/render.json', 'renders/x/poster.jpg', 'renders/x/captions.vtt', 'renders/x/subs/en/index.m3u8' ] );
 	assert.ok( set.files.some( f => f.path === 'renders/x/master.m3u8' ) && set.files.some( f => f.path === 'renders/x/180p30/init.mp4' ) && set.files.some( f => f.path === 'renders/x/180p30/seg00003.m4s' ) );
 	assert.strictEqual( new Set( set.files.map( f => f.path ) ).size, set.files.length, 'no path twice' );
 	assert.deepStrictEqual( validateRenderJson( JSON.parse( new TextDecoder().decode( set.files[ 0 ].bytes ) ) ), [] );
 	assert.strictEqual( set.renderJson.outputs.captions, 'captions.vtt' );
+	// C7: every render records where its captions came from
+	assert.deepStrictEqual( set.renderJson.outputs.caption_tracks.map( t => [ t.path, t.language, t.source, t.addressable, t.hls ] ), [ [ 'captions.vtt', 'en', 'cues', true, 'subs/en/index.m3u8' ] ] );
+	assert.match( set.renderJson.outputs.caption_tracks[ 0 ].cues_sha256, /^sha256:[0-9a-f]{64}$/ );
+	// F: the HLS master carries the subtitle group, and the subtitle playlist points at the one caption file
+	const text = p => new TextDecoder().decode( set.files.find( f => f.path === 'renders/x/' + p ).bytes );
+	assert.match( text( 'master.m3u8' ), /#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",DEFAULT=YES,AUTOSELECT=YES,FORCED=NO,LANGUAGE="en",URI="subs\/en\/index\.m3u8"/ );
+	assert.match( text( 'master.m3u8' ), /#EXT-X-STREAM-INF:[^\n]*,SUBTITLES="subs"/ );
+	assert.match( text( 'subs/en/index.m3u8' ), /#EXTINF:13\.333333,\n\.\.\/\.\.\/captions\.vtt\n/ );
+	assert.deepStrictEqual( parseVtt( text( 'captions.vtt' ) ).cues.map( c => c.id ), [ 'launch', 'second' ] );
 	assert.strictEqual( set.errors.length, 0 );
 	assert.strictEqual( set.total, set.files.reduce( ( n, f ) => n + f.bytes.length, 0 ) );
-	const none = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ] }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1 ), captions: null, determinism: { mode: 'offline', encoder: 'software' } } );
+	const none = assemblePublishSet( { path: 'renders/x', scene: sceneInfo, render: { ...renderInfo, fps: 30, frames: 400, frameRange: [ 0, 399 ] }, rungs: [ { rung, packaged } ], poster: Uint8Array.of( 1 ), captionTracks: [], determinism: { mode: 'offline', encoder: 'software' } } );
 	assert.strictEqual( none.renderJson.outputs.captions, null );
-	assert.ok( ! none.files.some( f => f.path.endsWith( 'captions.vtt' ) ) );
+	assert.deepStrictEqual( none.renderJson.outputs.caption_tracks, [], 'a render with no captions says so: an empty list, not an absent field' );
+	assert.ok( ! none.files.some( f => f.path.endsWith( 'captions.vtt' ) || f.path.startsWith( 'renders/x/subs/' ) ) );
+	assert.ok( ! /SUBTITLES/.test( new TextDecoder().decode( none.files.find( f => f.path.endsWith( 'master.m3u8' ) ).bytes ) ) );
 
 } );
 
@@ -459,12 +543,13 @@ await test( 'size gates: a segment at 20 MB or a file at 100 MB blocks; the warn
 
 	const MB = 1024 * 1024;
 	const file = ( n ) => ( { path: 'f', bytes: { length: n } } );
-	const ok = sizeReport( [ file( 5 * MB ) ], 5 * MB, [ { name: 'a', maxSegmentBytes: 19 * MB } ], true );
+	const ok = sizeReport( [ file( 5 * MB ) ], 5 * MB, [ { name: 'a', maxSegmentBytes: 19 * MB } ], { frames: true, bytes: false } );
 	assert.deepStrictEqual( ok.errors, [] );
 	assert.match( ok.warnings[ 0 ], /adds 5\.0 MB in 1 files\. Git keeps every version of a binary forever: .* six full copies \(about 30 MB\)/ );
 	assert.ok( ok.warnings.some( w => /separate "renders" branch/.test( w ) && /separate media repository/.test( w ) ) );
 	assert.ok( ok.warnings.some( w => /build artifact/.test( w ) ) );
-	assert.ok( ! sizeReport( [ file( 5 * MB ) ], 5 * MB, [ { name: 'a', maxSegmentBytes: 5 * MB } ], false ).warnings.some( w => /build artifact/.test( w ) ), 'a realtime render is not called a build artifact' );
+	assert.ok( ! sizeReport( [ file( 5 * MB ) ], 5 * MB, [ { name: 'a', maxSegmentBytes: 5 * MB } ], { frames: false, bytes: false } ).warnings.some( w => /build artifact/.test( w ) ), 'a render whose frames are not established is not called a build artifact' );
+	assert.ok( ok.warnings.some( w => /bytes are not promised to repeat/.test( w ) ), 'and it says when only the frames are promised' );
 	assert.match( sizeReport( [ file( MB ) ], 20 * MB, [ { name: 'a', maxSegmentBytes: 20 * MB } ], true ).errors[ 0 ], /over the 20 MB limit/ );
 	assert.match( sizeReport( [ file( 100 * MB ) ], 100 * MB, [], true ).errors[ 0 ], /100 MB/ );
 	assert.match( sizeReport( [ file( 60 * MB ), file( 50 * MB ) ], 110 * MB, [], true ).warnings[ 0 ], /^This commit is over 100 MB \(110 MB in 2 files\)\. Git keeps every version/ );

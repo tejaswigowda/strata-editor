@@ -1,55 +1,85 @@
 // ── renderJson.js ──────────────────────────────────────────────────────────────
 // render.json: what a published render says about itself. Pure functions; the Render tab fills them in.
-// Four fields must not lie (docs: guides/PUBLISH.md):
-//   mode           'offline' (every frame drawn at n / fps) or 'realtime' (a wall-clock capture: variable frame rate)
-//   deterministic  true only for an offline render whose time-source audit passed. TEMPORAL determinism: frame n shows
-//                  timeline time n / fps and the duration is exact. It is NOT a claim about pixels: GPUs differ in the last bit.
-//   scene.hash     canonical hash of the scene at render time (canonical.js): the staleness check
-//   frames         frames == round(duration_s * fps), or the capture is variable-rate and mode says 'realtime'
+// Fields that must not lie (docs: guides/PUBLISH.md, guides/TIME_SOURCES.md):
+//   mode                'offline' (every frame drawn at n / fps) or 'realtime' (a wall-clock capture: variable frame rate)
+//   determinism.frames  frame n is a pure function of n / fps and the pinned inputs. It is true only when the shuffled-order test passed on EVERY frame:
+//                       the frames were drawn again in an order no sequential render uses, and each matched. Never a claim about pixels across GPUs.
+//   determinism.bytes   the encoded file repeats byte for byte: frames are deterministic AND the software encoder wrote it. A hardware encoder is a
+//                       reason the BYTES are not promised, a choice and not a defect, and says nothing about the frames.
+//   scene.hash          canonical hash of the scene at render time (canonical.js): the staleness check
+//   frames              frames == round(duration_s * fps), or the capture is variable-rate and mode says 'realtime'
+//   outputs.frame_hashes the sha256 of every frame (sidecar + root hash), so the claim can be checked by anyone, and a divergence is a diff of two lists
 
-export const RENDER_JSON_VERSION = 1;
-export const EXPORTER = 'strata-export/1.1.0';
+import { FRAME_HASH_OVER } from './frameHashes.js';
+import { CAPTION_SOURCES, LANGUAGE } from './captions.js';
+
+export const RENDER_JSON_VERSION = 2;     // 2: `deterministic` and `not_deterministic_because` became `determinism` { frames, bytes, reasons }; `encoder` became a record
+export const EXPORTER = 'strata-export/1.2.0';
 
 /**
- * The time-source audit (guides/TIME_SOURCES.md) leaves three residuals. They are classified, not counted:
- *   accepted           bounded and harmless for a published render: it never makes `deterministic` false by itself
- *   live-when-present  a real input the render reads while it runs: when it applies to THIS render, `deterministic` is false
+ * The time-source audit (guides/TIME_SOURCES.md). What it CONFIRMED, and what is still live. The confirmations are backed by a grep of the export path and by
+ * the shuffled-order test, not by an accepted exception: a standing exception would let a leak hide behind it.
+ *   confirmed      no animated quantity reads a wall clock, integrates a delta, or reads a previous frame's value (D3)
+ *   live-when-present  a real input the render reads while it runs: when it applies to THIS render, `determinism.frames` is false
  */
 export const TIME_SOURCE_AUDIT = Object.freeze( {
 	document: 'guides/TIME_SOURCES.md',
 	passed: true,
+	confirmed: Object.freeze( [
+		{ id: 'no-clock-in-animated-quantities', how: 'A grep of the export path (Date.now, performance.now, requestAnimationFrame, Math.random, Clock, getDelta, setInterval) finds none that feeds an animated quantity: what remains is ids, UI, the Preview loop, and measurements for the ETA.' },
+		{ id: 'no-delta-integration', how: 'Every animated quantity is set from an absolute time: holdTimelineAt sets each action\u2019s time and calls mixer.update(0); the crossfade weight is computed from the frame\u2019s own time.' },
+		{ id: 'no-previous-frame-reads', how: 'The shuffled-order test: frames drawn in an order no sequential render uses are identical to the sequential ones (the test names the frames when they are not).' },
+		{ id: 'shell-wall-clock-loops', how: 'A hand-written Shell timer lives in the page, not in the scene file, and no animated quantity of the scene reads it; a render from a freshly loaded scene cannot contain one.' },
+	] ),
 	residuals: Object.freeze( [
-		{ id: 'shell-wall-clock-loops', status: 'accepted', why: 'A hand-written Shell timer lives in the page, not in the scene file: a render from a freshly loaded scene cannot contain one.' },
-		{ id: 'end-card', status: 'live-when-present', why: 'The end card is a living web page, re-fetched and re-rasterised at the start of every render, so frames that show it are only as reproducible as that page.' },
 		{ id: 'playback-running', status: 'live-when-present', why: 'A render started while timeline playback was running differed by a few hundred pixels per frame from one started when idle (cause not found).' },
 	] ),
 } );
 
 /**
- * Why a render is, or is not, deterministic. `deterministic` means: frame n shows timeline time n / fps AND the same scene on the same device
- * gives byte-identical segments. It is never a claim about pixels across GPUs. Every reason below makes it false.
+ * The encoder as a record, whatever came in: a bare 'software' | 'hardware' (older callers, tests) or { kind, name, version, settings_hash, threads, config }.
+ * `settings_hash` is the sha256 of the exact configuration given to the encoder; `threads` is null because WebCodecs does not let a page choose.
  */
+export function encoderRecord( e ) {
+
+	const o = typeof e === 'string' ? { kind: e } : ( e || {} );
+	return {
+		kind: o.kind === 'software' ? 'software' : 'hardware',
+		name: o.name || null,
+		version: o.version || null,
+		settings_hash: o.settings_hash || null,
+		threads: o.threads === undefined ? null : o.threads,
+		config: o.config || null,
+	};
+
+}
+
 /**
- * The repeat-render test (guides/TIME_SOURCES.md, "Repeat-render test"): the same scene, rendered twice with the same settings, did NOT give
- * byte-identical segments on the machines tested. Until a repeat-render test passes, no render may say it is byte-reproducible; flip `verified`
- * only with that test's result.
+ * What a render can and cannot claim, as two properties with their own reasons (it used to be one boolean with four reasons under it, which made a fixable bug
+ * and an encoder choice look the same):
+ *   frames  frame n is a pure function of n / fps and the pinned inputs
+ *   bytes   the encoded file repeats byte for byte
+ * `verification` is the shuffled-order test (frameHashes.js verificationResult), or null when it was not run. frames is true only for a COMPLETE, passed one.
  */
-export const REPEAT_RENDER = Object.freeze( {
-	verified: false,
-	reason: 'repeat renders were not byte-identical when tested (frames inside camera crossfades and the end card differed between two renders; cause not found)',
-} );
+export function assessDeterminism( { mode, encoder, hasEndCard = false, endCard = null, playbackWasRunning = false, audit = TIME_SOURCE_AUDIT, frameHashes = null, verification = null } ) {
 
-export function assessDeterminism( { mode, encoder, hasEndCard = false, hasCrossfades = false, playbackWasRunning = false, audit = TIME_SOURCE_AUDIT, repeat = REPEAT_RENDER } ) {
+	const kind = encoderRecord( encoder ).kind;
+	const frames = [], bytes = [];
+	if ( mode !== 'offline' ) frames.push( 'a realtime capture: wall-clock timing' );
+	if ( audit.passed !== true ) frames.push( 'the time-source audit did not pass' );
+	if ( playbackWasRunning ) frames.push( 'playback was running when the render started (a few hundred pixels per frame differed when measured; cause not found)' );
+	if ( hasEndCard && ! endCard ) frames.push( 'the scene shows the end card, and its image was not recorded: an input that is not pinned' );
+	if ( mode === 'offline' ) {
 
-	const reasons = [];
-	if ( mode !== 'offline' ) reasons.push( 'a realtime capture: wall-clock timing' );
-	if ( audit.passed !== true ) reasons.push( 'the time-source audit did not pass' );
-	if ( encoder !== 'software' ) reasons.push( 'a hardware encoder: its bytes are not promised to repeat' );
-	if ( hasEndCard ) reasons.push( 'the scene shows the live end card (a web page rasterised at render time)' );
-	if ( hasCrossfades ) reasons.push( 'the shot sequence has camera crossfades: frames inside a transition depended on render history when measured' );
-	if ( playbackWasRunning ) reasons.push( 'playback was running when the render started' );
-	if ( repeat.verified !== true ) reasons.push( repeat.reason );
-	return { deterministic: reasons.length === 0, reasons };
+		if ( ! frameHashes ) frames.push( 'no per-frame hashes were made, so the claim cannot be checked' );
+		if ( ! verification ) frames.push( 'not verified: the shuffled-order test was not run (set Verify to all frames)' );
+		else if ( ! verification.passed ) frames.push( `the shuffled-order test failed: ${ verification.mismatched_count } frame${ verification.mismatched_count === 1 ? '' : 's' } depend on more than n / fps (${ verification.mismatched_frames.slice( 0, 12 ).join( ', ' ) }${ verification.mismatched_count > 12 ? ', …' : '' })` );
+		else if ( ! verification.complete ) frames.push( `verified on ${ verification.frames_checked } of ${ verification.of } frames only (every ${ verification.every }th): a subset is evidence, not a claim; verify all frames` );
+
+	}
+	if ( kind !== 'software' ) bytes.push( 'a hardware encoder was chosen: its bytes are not promised to repeat (a choice; the frames are unaffected)' );
+	if ( frames.length ) bytes.push( 'the frames are not established as deterministic' );
+	return { frames: frames.length === 0, bytes: bytes.length === 0, reasons: { frames, bytes }, verification: verification || null };
 
 }
 
@@ -71,10 +101,14 @@ export const formatBytes = n => n >= MB ? ( n / MB ).toFixed( n >= 10 * MB ? 0 :
  *   renditions: [{ name, width, height, bitrateKbps, playlist, segments, maxSegmentBytes }]
  *   audio:   null, or { name, language, bitrateKbps, sampleRate, channels, playlist, segments, maxSegmentBytes, durationS, source: { path, sha256, tool?, voice?, model? }, delaySamples }
  *   download: null, or { name, bytes (Uint8Array), command, audio, captions, videoFrom ('master' or a rung name) }: one MP4 with the video copied, AAC audio and a soft caption track
- *   determinism: assessDeterminism() output; render.encoder: 'software' | 'hardware'
+ *   determinism: assessDeterminism() output; render.encoder: encoderRecord()'s input ('software' | 'hardware', or the record)
+ *   captions:    the default caption track's path, or null (kept so anything that reads outputs.captions as a path still works)
+ *   captionTracks: [captions.js trackRecord() + hls]   every caption file: its language, where it came from (cues | asr | manual), the hash of the cues it holds, and whether its cues have ids
+ *   frameHashes: null, or { path, count, root }   the sidecar of per-frame sha256 hashes
+ *   endCard:     null, or { path, sha256, bytes, url, stamp, width, height }   the end card image the frames were composited from
  *   files:   [{ path, bytes }]  every file of the set, for the size checks
  */
-export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, audio = null, download = null, determinism, audit = TIME_SOURCE_AUDIT } ) {
+export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, audit = TIME_SOURCE_AUDIT } ) {
 
 	const durationS = render.durationS !== undefined ? render.durationS : render.frames / render.fps;
 	const out = {
@@ -82,8 +116,8 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 		scene: { repo: scene.repo, file: scene.file, branch: scene.branch, commit: scene.commit || null, hash: scene.hash },
 		render: {
 			mode: render.mode,
-			deterministic: determinism.deterministic,
-			encoder: render.encoder,
+			determinism: { frames: determinism.frames, bytes: determinism.bytes, reasons: determinism.reasons, verification: determinism.verification || null },
+			encoder: encoderRecord( render.encoder ),
 			renderer: render.renderer,
 			device: render.device,
 			fps: render.fps,
@@ -95,9 +129,9 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			seed: render.seed === undefined ? null : render.seed,
 			exporter: EXPORTER,
 			rendered_at: render.renderedAt,
-			time_source_audit: { document: audit.document, passed: audit.passed, residuals_accepted: audit.residuals.filter( r => r.status === 'accepted' ).map( r => r.id ) },
-			not_deterministic_because: determinism.reasons,
+			time_source_audit: { document: audit.document, passed: audit.passed, confirmed: audit.confirmed.map( c => c.id ), live_when_present: audit.residuals.filter( r => r.status === 'live-when-present' ).map( r => r.id ) },
 		},
+		...( endCard ? { inputs: { end_card: { path: endCard.path, sha256: 'sha256:' + endCard.sha256, bytes: endCard.bytes, source: endCard.url, stamp: endCard.stamp || null, width: endCard.width, height: endCard.height } } } : {} ),
 		outputs: {
 			master: 'master.m3u8',
 			renditions: renditions.map( r => ( {
@@ -106,6 +140,8 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			} ) ),
 			poster,
 			captions,
+			caption_tracks: captionTracks,
+			...( frameHashes ? { frame_hashes: { path: frameHashes.path, count: frameHashes.count, algorithm: 'sha256', over: FRAME_HASH_OVER, root: frameHashes.root } } : {} ),
 			audio: audio ? {
 				name: audio.name, language: audio.language, codec: 'mp4a.40.2', sample_rate: audio.sampleRate, channels: audio.channels, bitrate_kbps: audio.bitrateKbps,
 				playlist: audio.playlist, segments: audio.segments, max_segment_bytes: audio.maxSegmentBytes, duration_s: Math.round( audio.durationS * 1e6 ) / 1e6,
@@ -137,7 +173,7 @@ export function validateRenderJson( j ) {
 
 	const e = [];
 	const need = ( cond, msg ) => { if ( ! cond ) e.push( msg ); };
-	need( j && j.version === RENDER_JSON_VERSION, 'version must be 1' );
+	need( j && j.version === RENDER_JSON_VERSION, `version must be ${ RENDER_JSON_VERSION }` );
 	if ( ! j || typeof j !== 'object' ) return e;
 
 	const s = j.scene || {};
@@ -149,14 +185,24 @@ export function validateRenderJson( j ) {
 
 	const r = j.render || {};
 	need( r.mode === 'offline' || r.mode === 'realtime', 'render.mode must be offline or realtime' );
-	need( typeof r.deterministic === 'boolean', 'render.deterministic must be a boolean' );
-	need( ! r.deterministic || r.mode === 'offline', 'render.deterministic is true only for mode offline' );
-	need( r.encoder === 'software' || r.encoder === 'hardware', 'render.encoder must be software or hardware' );
-	need( ! r.deterministic || r.encoder === 'software', 'render.deterministic is true only with the software encoder' );
-	need( Array.isArray( r.not_deterministic_because ), 'render.not_deterministic_because must be a list' );
-	need( ! r.deterministic || ( Array.isArray( r.not_deterministic_because ) && r.not_deterministic_because.length === 0 ), 'a deterministic render has no reasons against it' );
-	need( r.deterministic || ( Array.isArray( r.not_deterministic_because ) && r.not_deterministic_because.length > 0 ), 'a render that is not deterministic says why' );
-	need( r.time_source_audit && Array.isArray( r.time_source_audit.residuals_accepted ), 'render.time_source_audit.residuals_accepted is required' );
+	const d = r.determinism || {};
+	need( r.determinism && typeof d.frames === 'boolean' && typeof d.bytes === 'boolean', 'render.determinism needs boolean frames and bytes' );
+	need( d.reasons && Array.isArray( d.reasons.frames ) && Array.isArray( d.reasons.bytes ), 'render.determinism.reasons needs a list for frames and one for bytes' );
+	const rf = ( d.reasons && d.reasons.frames ) || [], rb = ( d.reasons && d.reasons.bytes ) || [];
+	need( ! d.frames || rf.length === 0, 'frames is true, so there are no reasons against it' );
+	need( d.frames || rf.length > 0, 'frames is false, so it says why' );
+	need( ! d.bytes || rb.length === 0, 'bytes is true, so there are no reasons against it' );
+	need( d.bytes || rb.length > 0, 'bytes is false, so it says why' );
+	need( ! d.frames || r.mode === 'offline', 'determinism.frames is true only for mode offline' );
+	need( ! d.bytes || d.frames, 'determinism.bytes is true only when frames is' );
+	const enc = r.encoder || {};
+	need( enc.kind === 'software' || enc.kind === 'hardware', 'render.encoder.kind must be software or hardware' );
+	need( enc.settings_hash === null || /^sha256:[0-9a-f]{64}$/.test( enc.settings_hash || '' ), 'render.encoder.settings_hash must be sha256:<64 hex> or null' );
+	need( enc.threads === null || isInt( enc.threads ), 'render.encoder.threads must be an integer or null' );
+	need( ! d.bytes || enc.kind === 'software', 'determinism.bytes is true only with the software encoder' );
+	need( d.verification === null || d.verification === undefined || ( d.verification.method === 'shuffled-order' && typeof d.verification.passed === 'boolean' && typeof d.verification.complete === 'boolean' && isInt( d.verification.frames_checked ) ), 'determinism.verification must be a shuffled-order result or null' );
+	need( ! d.frames || ( d.verification && d.verification.passed === true && d.verification.complete === true ), 'determinism.frames is true only after a complete, passed shuffled-order test' );
+	need( r.time_source_audit && Array.isArray( r.time_source_audit.confirmed ) && Array.isArray( r.time_source_audit.live_when_present ), 'render.time_source_audit needs confirmed and live_when_present lists' );
 	need( isStr( r.renderer ) && isStr( r.device ) && isStr( r.exporter ), 'render.renderer, device and exporter are required' );
 	need( isPos( r.fps ), 'render.fps must be positive' );
 	need( isInt( r.frames ) && r.frames > 0, 'render.frames must be a positive integer' );
@@ -178,6 +224,26 @@ export function validateRenderJson( j ) {
 	}
 	need( isStr( o.poster ), 'outputs.poster is required' );
 	need( o.captions === null || isStr( o.captions ), 'outputs.captions must be a path or null' );
+	need( Array.isArray( o.caption_tracks ), 'outputs.caption_tracks must be a list (empty when there are no captions)' );
+	const tracks = Array.isArray( o.caption_tracks ) ? o.caption_tracks : [];
+	need( tracks.length === 0 ? o.captions === null : o.captions === tracks[ 0 ].path, 'outputs.captions is the first caption track\u2019s path, or null when there are none' );
+	need( new Set( tracks.map( t => t.language ) ).size === tracks.length, 'there is one caption track per language' );
+	for ( const t of tracks ) {
+
+		const who = `caption track ${ t && t.path }`;
+		need( t && isStr( t.path ) && LANGUAGE.test( t.language || '' ), `${ who }: path and a language code are required` );
+		need( t && CAPTION_SOURCES.includes( t.source ), `${ who }: source must be one of ${ CAPTION_SOURCES.join( ', ' ) }` );
+		need( t && /^sha256:[0-9a-f]{64}$/.test( t.cues_sha256 || '' ) && /^sha256:[0-9a-f]{64}$/.test( t.structure_sha256 || '' ), `${ who }: cues_sha256 and structure_sha256 are required` );
+		need( t && isInt( t.cue_count ) && t.cue_count > 0 && typeof t.addressable === 'boolean', `${ who }: cue_count and addressable are required` );
+		need( ! t || t.source !== 'asr' || ( t.asr && isStr( t.asr.model ) ), `${ who }: an asr track says which model made it` );
+		need( ! t || t.source !== 'asr' || t.addressable === false, `${ who }: an asr track has no authored ids, so it is not addressable` );
+		need( ! t || ! t.translation_of || /^sha256:[0-9a-f]{64}$/.test( t.translated_from || '' ), `${ who }: a translation says which cues it was made from (translated_from)` );
+
+	}
+	if ( o.frame_hashes !== undefined ) need( isStr( o.frame_hashes.path ) && isInt( o.frame_hashes.count ) && o.frame_hashes.algorithm === 'sha256' && /^sha256:[0-9a-f]{64}$/.test( o.frame_hashes.root || '' ), 'outputs.frame_hashes needs path, count, algorithm sha256 and a sha256 root' );
+	need( ! d.frames || ( o.frame_hashes && o.frame_hashes.count === r.frames ), 'determinism.frames is true only with a frame hash for every frame (outputs.frame_hashes.count == render.frames)' );
+	const ec = j.inputs && j.inputs.end_card;
+	if ( ec ) need( isStr( ec.path ) && /^sha256:[0-9a-f]{64}$/.test( ec.sha256 || '' ) && isInt( ec.bytes ) && ec.bytes > 0, 'inputs.end_card needs a path, a sha256 and its bytes' );
 	if ( o.audio !== null && o.audio !== undefined ) {
 
 		const a = o.audio;

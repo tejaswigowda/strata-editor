@@ -12,7 +12,9 @@
 import { UIButton, UICheckbox, UIInput, UISelect } from './libs/ui.js';
 import { sceneHash } from './export/canonical.js';
 import { transcodeLadder } from './export/ladder.js';
-import { planLadder, assemblePublishSet, cuesToVtt, defaultPublishPath, stalenessLine } from './export/publishSet.js';
+import { planLadder, assemblePublishSet, defaultPublishPath, stalenessLine } from './export/publishSet.js';
+import { cueTrack } from './export/captions.js';
+import { EXPORTER } from './export/renderJson.js';
 import { formatBytes } from './export/renderJson.js';
 import { buildAudioRendition, aacSupport, probeAudio } from './export/audio.js';
 import { openTool, toolFor } from './export/handoff.js';
@@ -104,6 +106,7 @@ export function createPublishPanel( editor ) {
 	narrationRow.append( el( 'div', 'font-weight:bold;', 'Narration audio' ), narrationText, upRow, dubRow );
 	root.appendChild( narrationRow );
 	uploadButton.onClick( () => narrationFile.click() );
+	let captionTracks = [];             // the cue-derived caption files of the set being prepared (captions.js)
 	let narrationOverride = null;     // bytes of a file the user chose, or dub.webcli.app made, instead of the repo's
 	let narrationSource = null;       // { tool, voice, model, summary } when dub.webcli.app made it
 	/**
@@ -267,10 +270,13 @@ export function createPublishPanel( editor ) {
 	function showSet( set ) {
 
 		prepared = set;
+		root.dispatchEvent( new CustomEvent( 'publish-prepared', { detail: set } ) );     // for tests and tools: the set as it will be committed
 		treeBox.textContent = set.tree.map( f => `${ formatBytes( f.bytes ).padStart( 8 ) }  ${ f.path }` ).join( '\n' ) + `\n${ formatBytes( set.total ).padStart( 8 ) }  total, ${ set.tree.length } files`;
 		errorsBox.textContent = set.errors.join( '\n' );
 		const notes = [];
-		if ( ! set.renderJson.render.deterministic ) notes.push( 'Not marked deterministic: ' + set.renderJson.render.not_deterministic_because.join('; ') + '. The frames and the duration are still exact (frame n shows n / fps); only the claim that a repeat render gives the same bytes is withheld.' );
+		const det = set.renderJson.render.determinism;
+		if ( ! det.frames ) notes.push( 'Frames not claimed deterministic: ' + det.reasons.frames.join( '; ' ) + '. The duration and frame count are still exact (frame n shows n / fps).' );
+		if ( ! det.bytes ) notes.push( 'Bytes not promised to repeat: ' + det.reasons.bytes.join( '; ' ) + '.' );
 		if ( info.height < 1080 || info.fps < 60 ) notes.push( `This master is ${ info.width }\u00d7${ info.height } at ${ info.fps } fps, so the ladder has ${ set.renderJson.outputs.renditions.length } rung(s). Render at 1920 \u00d7 1080 and 60 fps for the full ladder.` );
 		if ( info.burned ) notes.push( 'Subtitles are burned into the picture and captions.vtt is published as well: players that show the caption track will show the words twice.' );
 		if ( info.cues.length === 0 ) notes.push( 'The scene has no subtitle cues, so there is no captions.vtt.' );
@@ -362,7 +368,7 @@ export function createPublishPanel( editor ) {
 			if ( ! source ) throw new Error( 'There is no video to put in the MP4.' );
 			const files = { 'video.mp4': await source.load() };
 			if ( narrationBytes ) files[ 'audio.wav' ] = narrationBytes.slice();   // a copy: sending detaches the buffer
-			if ( info.cues.length ) files[ 'captions.vtt' ] = new TextEncoder().encode( cuesToVtt( info.cues ) );
+			if ( captionTracks.length ) files[ 'captions.vtt' ] = new TextEncoder().encode( captionTracks[ 0 ].text );     // the very file the set publishes: same ids, same NOTE
 			const out = await handle.job( { op: 'mux', args: { language: languageCode3(), audio_kbps: 128 }, files, onProgress: ( f, text ) => setStatus( 'ffmpeg.webcli.app: ' + text, f ) } );
 			handle.close();
 			const mp4 = out.files[ 'out.mp4' ];
@@ -469,15 +475,20 @@ export function createPublishPanel( editor ) {
 			}
 
 			const src = { ...( info.source || {} ), commit: commitSha };
+			const sceneRec = { repo: ( src && src.repo ) || t.repo, file: ( src && src.file ) || '', branch: ( src && src.branch ) || t.branch, commit: src && src.commit, hash: info.sceneHash };
+			// The captions are a projection of the scene's cue list, written with the cue ids as WebVTT identifiers and a NOTE saying what they were made from.
+			// A cue with a missing, malformed or duplicate id stops the publish here, with the cue named: nothing renumbers it.
+			captionTracks = info.cues.length ? [ await cueTrack( { cues: info.cues, language: ( info.audioRef && info.audioRef.language ) || 'en', scene: sceneRec, exporter: EXPORTER } ) ].filter( Boolean ) : [];
 			build = ( download ) => assemblePublishSet( {
 				path: t.path,
-				scene: { repo: ( src && src.repo ) || t.repo, file: ( src && src.file ) || '', branch: ( src && src.branch ) || t.branch, commit: src && src.commit, hash: info.sceneHash },
+				scene: sceneRec,
 				render: { mode: 'offline', renderer: info.renderer, device: info.device, encoder: info.encoder, fps: info.fps, frames: info.frames, frameRange: [ 0, info.frames - 1 ], width: info.width, height: info.height, renderedAt: info.renderedAt },
 				rungs: result.rungs, poster: result.poster,
 				// always written when there are cues: burning them in is an extra, never a way to skip the file (burned-in text cannot be switched off, styled, read aloud or translated)
-				captions: cuesToVtt( info.cues ),
+				captionTracks,
 				audio, download,
-				determinism: { mode: 'offline', encoder: info.encoder, hasEndCard: info.hasEndCard, hasCrossfades: info.hasCrossfades, playbackWasRunning: info.playbackWasRunning },
+				determinism: { mode: 'offline', encoder: info.encoder, hasEndCard: info.hasEndCard, playbackWasRunning: info.playbackWasRunning, verification: info.verification || null },
+				frameHashes: info.frameHashes || null, endCard: info.endCard || null,
 			} );
 			showSet( build( null ) );
 

@@ -11,6 +11,7 @@ import { SetMaterialCommand } from './commands/SetMaterialCommand.js';
 import { SetValueCommand } from './commands/SetValueCommand.js';
 import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 import { parseSrt, cuesToSrt, normalizeCues } from './intelligence/subtitles.js';
+import { reconcileIds, slugCueId, CUE_ID_PATTERN } from './export/captions.js';
 import { GroupObjectsCommand } from './commands/GroupObjectsCommand.js';
 import { UngroupObjectsCommand } from './commands/UngroupObjectsCommand.js';
 import { SetLabelCommand } from './commands/SetLabelCommand.js';
@@ -2243,7 +2244,9 @@ function Shell( editor ) {
 				// ── Subtitles — the same cues the Render tab shows, kept on the scene ──
 				// subtitles() → [{ id, start, end, text }] (output-video seconds)
 				// setSubtitles([{ start, end, text }, ...]) → replaces them (undoable, autosaved)
-				// importSrt(srtText) / exportSrt() → convert to / from .srt text
+				// importSrt(srtText) / exportSrt() → convert to / from .srt text (an import keeps the ids of the cues it is an edit of)
+				// setCueId('cue-y0quet1', 'intro-question') → name one cue; nameCues() → readable ids for the cues that still have an auto-made one. An id is the cue's name in
+				// captions.vtt and in a player link (&cue=<id>): author it once, and it does not move when cues are inserted
 				subtitles: () => normalizeCues( editor.scene.userData && editor.scene.userData.renderSubtitles ),
 				setSubtitles: ( cues, label ) => {
 
@@ -2254,13 +2257,33 @@ function Shell( editor ) {
 				},
 				importSrt: ( srtText ) => {
 
-					const cues = parseSrt( String( srtText ) );
+					const cues = reconcileIds( normalizeCues( editor.scene.userData && editor.scene.userData.renderSubtitles ), parseSrt( String( srtText ) ) );
 					if ( cues.length === 0 ) throw new Error( 'importSrt: no cues found in that text' );
 					editor.execute( new SetSubtitlesCommand( editor, cues, `Import subtitles (${ cues.length } cues)` ) );
 					return cues;
 
 				},
 				exportSrt: () => cuesToSrt( editor.scene.userData && editor.scene.userData.renderSubtitles ),
+				setCueId: ( from, to ) => {
+
+					const cues = normalizeCues( editor.scene.userData && editor.scene.userData.renderSubtitles );
+					if ( ! cues.some( c => c.id === from ) ) throw new Error( `setCueId: no cue has the id "${ from }" (they are: ${ cues.map( c => c.id ).join( ', ' ) })` );
+					if ( ! CUE_ID_PATTERN.test( String( to ) ) ) throw new Error( `setCueId: "${ to }" is not a valid cue id: letters, digits, "." "_" "~" "-", starting with a letter or digit, at most 64` );
+					if ( from !== to && cues.some( c => c.id === to ) ) throw new Error( `setCueId: another cue already has the id "${ to }"` );
+					editor.execute( new SetSubtitlesCommand( editor, cues.map( c => c.id === from ? { ...c, id: to } : c ), `Rename cue ${ from }` ) );
+					return normalizeCues( editor.scene.userData.renderSubtitles ).map( c => c.id );
+
+				},
+				nameCues: () => {
+
+					const cues = normalizeCues( editor.scene.userData && editor.scene.userData.renderSubtitles );
+					const auto = c => /^cue-[a-z0-9]{6,}$/.test( c.id );
+					const taken = new Set( cues.filter( c => ! auto( c ) ).map( c => c.id ) ), renamed = [];
+					const next = cues.map( c => { if ( ! auto( c ) ) return c; const id = slugCueId( c.text, taken ); taken.add( id ); renamed.push( `${ c.id } -> ${ id }` ); return { ...c, id }; } );
+					if ( renamed.length ) editor.execute( new SetSubtitlesCommand( editor, next, 'Name subtitle cues' ) );
+					return renamed;
+
+				},
 				// holdTimelineAt(t) / holdTimelineAt(editor, t) → jump the whole scene to t seconds
 				// (what scrubbing does), so you can read poses, bones and cameras at that moment
 				holdTimelineAt: ( a, b ) => holdTimelineAt( editor, typeof a === 'number' ? a : b ),

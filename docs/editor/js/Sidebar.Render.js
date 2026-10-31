@@ -6,7 +6,8 @@ import { findCallcards, refreshCallcard } from './Callcard.js';
 import { swapNodeMaterials } from './toon/WebGLFallback.js';
 import { RENDER_CLEAR_COLOR, LinearOutput, applyRenderSettings, webglEnvironment } from './toon/RenderPipeline.js';
 import { createEmptyHint } from './EmptyHint.js';
-import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesEqual, newCueId } from './intelligence/subtitles.js';
+import { parseSrt, cuesToSrt, activeCueAt, normalizeCues, cuesIdentical, newCueId } from './intelligence/subtitles.js';
+import { reconcileIds, CUE_ID_PATTERN, cueIdProblems } from './export/captions.js';
 import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { renderBaseName, DEFAULT_VIDEO_TEMPLATE, DEFAULT_SNAPSHOT_TEMPLATE } from './intelligence/renderFileName.js';
@@ -17,6 +18,9 @@ import { createPublishPanel } from './PublishPanel.js';
 import { dubCues } from './export/dubCues.js';
 import { openTool, toolFor } from './export/handoff.js';
 import { sceneHash } from './export/canonical.js';
+import { encoderInfo } from './export/encoderInfo.js';
+import { recordEndCard } from './export/endCard.js';
+import { hashFrame, sidecarText, rootHash, strideFrames, shuffledOrder, seedOf, verificationResult, frameRanges } from './export/frameHashes.js';
 import { publishSource } from './Menubar.Git.js';
 import {
 	DETERMINISM_COPY, RENDERER_COPY, totalFrames as frameCount, frameTimestampUs, frameDurationUs, resolveRange, frameTimes,
@@ -407,6 +411,17 @@ function SidebarRender( editor ) {
 		encoderRow.add( S.encoderSelect );
 		pane.add( encoderRow );
 
+		// Frames are always hashed (sha256 of each, before encoding; frame-hashes.txt in the publish set). This asks for the test that makes the
+		// claim: the frames are drawn again in a shuffled order and must match the sequential render, frame for frame (guides/TIME_SOURCES.md).
+		const verifyRow = new UIRow();
+		verifyRow.add( new UIText( 'Verify' ).setClass( 'Label' ) );
+		S.verifySelect = new UISelect().setWidth( '160px' );
+		S.verifySelect.setOptions( { off: 'Off (frames are hashed only)', sub: 'Every 17th frame (a draft check)', all: 'All frames (to claim determinism)' } );
+		S.verifySelect.setValue( 'off' );
+		S.verifySelect.dom.title = 'Before the render proper, draws the frames in a shuffled order from the scene exactly as it was loaded, then compares each with what the sequential render draws. Frame n must depend on n / fps and nothing else: a frame that does not is named. Every frame is needed before render.json may say frames: true.';
+		verifyRow.add( S.verifySelect );
+		pane.add( verifyRow );
+
 		// Frame range (offline only): inclusive, 0-based. Blank = the first / the last frame. A range render is
 		// splice-safe: frame n is the same picture whether it is rendered alone or inside a full render.
 		const rangeRow = new UIRow();
@@ -424,7 +439,7 @@ function SidebarRender( editor ) {
 		contractText.dom.style.cssText = 'display:block;font-size:11px;opacity:0.85;margin:-4px 0 8px 90px;';
 		pane.add( contractText );
 
-		const determinismHelp = new UIText( [ DETERMINISM_COPY.temporal, DETERMINISM_COPY.sameDevice, DETERMINISM_COPY.crossDevice ].join( ' ' ) );
+		const determinismHelp = new UIText( [ DETERMINISM_COPY.temporal, DETERMINISM_COPY.frames, DETERMINISM_COPY.bytes, DETERMINISM_COPY.crossDevice ].join( ' ' ) );
 		determinismHelp.dom.style.cssText = 'display:block;font-size:11px;opacity:0.6;margin:0 0 10px;line-height:1.4;';
 		pane.add( determinismHelp );
 
@@ -509,6 +524,7 @@ function SidebarRender( editor ) {
 			modeHelp.setValue( offline ? DETERMINISM_COPY.offline : DETERMINISM_COPY.preview );
 			rangeRow.dom.style.display = offline ? '' : 'none';
 			encoderRow.dom.style.display = offline ? '' : 'none';
+			verifyRow.dom.style.display = offline ? '' : 'none';
 			determinismHelp.dom.style.display = offline ? '' : 'none';
 			S.refreshContract();
 
@@ -937,7 +953,7 @@ function SidebarRender( editor ) {
 
 	function commitCues( next, label ) {
 
-		if ( cuesEqual( getCues(), next ) ) return;
+		if ( cuesIdentical( getCues(), next ) ) return;
 		editor.execute( new SetSubtitlesCommand( editor, next, label ) );
 
 	}
@@ -999,6 +1015,33 @@ function SidebarRender( editor ) {
 			delBtn.onClick( function () { commitCues( shown.filter( ( c, k ) => k !== i ), 'Delete subtitle cue' ); } );
 			row.appendChild( delBtn.dom );
 
+			// the cue's id: what the caption is called in captions.vtt, in a link (&cue=<id>) and in anything that cites it. Authored, so it does not move when cues are inserted.
+			const idRow = document.createElement( 'div' );
+			idRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin:-1px 0 3px 0;';
+			const idLabel = document.createElement( 'span' );
+			idLabel.textContent = 'id';
+			idLabel.style.cssText = 'font-size:9px;opacity:0.5;width:14px;';
+			const idInput = document.createElement( 'input' );
+			idInput.type = 'text'; idInput.value = cue.id; idInput.spellcheck = false;
+			idInput.title = 'The cue\u2019s id: its name in captions.vtt and in a player link (&cue=' + cue.id + '). Letters, digits, . _ ~ -';
+			idInput.style.cssText = 'flex:1;min-width:0;font:10px ui-monospace,Menlo,monospace;padding:1px 4px;height:16px;opacity:0.8;';
+			idInput.addEventListener( 'change', function () {
+
+				const wanted = idInput.value.trim();
+				const taken = shown.some( ( c, k ) => k !== i && c.id === wanted );
+				if ( ! CUE_ID_PATTERN.test( wanted ) || taken ) {
+
+					subsStatus.textContent = taken ? `The id "${ wanted }" is already used by another cue.` : `"${ wanted }" is not a valid cue id: letters, digits, "." "_" "~" "-", starting with a letter or digit.`;
+					idInput.value = cue.id;
+					return;
+
+				}
+				edit( 'id', wanted, 'Rename subtitle cue id' );
+
+			} );
+			idRow.append( idLabel, idInput );
+			subsList.appendChild( idRow );
+
 		} );
 
 	}
@@ -1043,7 +1086,8 @@ function SidebarRender( editor ) {
 		const reader = new FileReader();
 		reader.onload = function () {
 
-			const cues = parseSrt( String( reader.result ) );
+			// an .srt carries no ids: cues that are edits of the ones already here keep their ids, so links made to them keep working
+			const cues = reconcileIds( getCues(), parseSrt( String( reader.result ) ) );
 			if ( cues.length === 0 ) { subsStatus.textContent = 'No cues found in that file — nothing was changed.'; return; }
 			// replaces the scene's cues in one undoable, autosaved step; the list follows via subtitlesChanged
 			commitCues( cues, `Import subtitles (${ cues.length } cues)` );
@@ -1630,7 +1674,7 @@ function SidebarRender( editor ) {
 		const totalFrames = frameCount( renderLength, fps );
 
 		// Offline: pick an H.264 level this browser's encoder accepts, and the frame range, before anything is touched.
-		let avc = null, range = { start: 0, end: totalFrames - 1, count: totalFrames };
+		let avc = null, encoderRec = null, range = { start: 0, end: totalFrames - 1, count: totalFrames };
 		if ( offline ) {
 
 			if ( ! window.VideoEncoder || ! window.VideoFrame ) {
@@ -1671,6 +1715,9 @@ function SidebarRender( editor ) {
 
 			}
 
+			// What is about to write the bytes, recorded in render.json: byte determinism is a choice with a name, not a failure.
+			encoderRec = await encoderInfo( { kind: S.encoderSelect.getValue(), config: avc, extra: { keyEvery: fps * 2 }, userAgent: navigator.userAgent, brands: navigator.userAgentData && navigator.userAgentData.brands } );
+
 		}
 
 		// The staleness check of a publish: the scene as it is when this render starts, and the commit it was last synced to.
@@ -1679,7 +1726,6 @@ function SidebarRender( editor ) {
 		const renderSource = publishSource();
 		const playbackWasRunning = !! editor.timelinePlaying;       // read before the render pauses it: a live input (guides/TIME_SOURCES.md)
 		const hasEndCard = findCallcards( editor.scene ).length > 0;
-		const hasCrossfades = ( editor.scene.userData.renderShots || [] ).some( ( s, i ) => i > 0 && s.transition === 'fade' && ( s.transitionDur || 0 ) > 0 );
 		const sceneUncommitted = !! ( editor.work && editor.work.isDirty() );       // the commit below is only this scene's commit if nothing was changed since
 		const audioRef = editor.scene.userData && editor.scene.userData.renderAudio ? { ...editor.scene.userData.renderAudio } : null;
 		if ( offline && ! is360 ) {
@@ -1765,7 +1811,10 @@ function SidebarRender( editor ) {
 		outCanvas.width = width;
 		outCanvas.height = height;
 		outCanvas.style.cssText = 'width:100%;height:auto;display:block;';
-		const ctx = outCanvas.getContext( '2d' );
+		// An offline render reads every frame back (to hash it), and a browser moves a 2D canvas from the GPU to the CPU after enough readbacks, at a frame
+		// it picks: a crossfade (globalAlpha) rounds differently in the two, so which frames were drawn after the switch decided the pixels. Asking for the
+		// CPU canvas from the start makes every frame be blended the same way.
+		const ctx = outCanvas.getContext( '2d', offline && ! is360 ? { willReadFrequently: true } : undefined );
 		previewWrap.innerHTML = '';
 		previewWrap.appendChild( outCanvas );
 		previewWrap.style.display = '';
@@ -1951,11 +2000,15 @@ function SidebarRender( editor ) {
 		// Already-rendered mp4s are unaffected (their frames were baked at THEIR
 		// render time). Best-effort: a failed fetch just leaves whatever texture
 		// the object already had (logged via refreshCallcard's own console.warn).
+		let endCard = null;
 		const callcards = findCallcards( scene );
 		if ( callcards.length ) {
 
 			setProgress( 0, 'Refreshing call card\u2026' );
-			await Promise.all( callcards.map( refreshCallcard ) );
+			const baked = await Promise.all( callcards.map( refreshCallcard ) );
+			// The card is baked once, here, and every frame is composited from this image: record it (a PNG with its own sha256, and what the page said) so it is a
+			// pinned input. More than one card, or a refresh that failed, leaves it unrecorded, and render.json says so.
+			if ( offline && ! is360 && callcards.length === 1 ) endCard = await recordEndCard( baked[ 0 ] );
 
 		}
 
@@ -2067,11 +2120,41 @@ function SidebarRender( editor ) {
 		}
 
 		let muxer = null, encoder = null, encodeError = null;
+		// Per-frame evidence (flat offline renders): the hash of every frame as drawn, the sidecar text with its root hash, and the shuffled-order verdict.
+		const hashing = offline && ! is360;
+		const frameHashList = [];
+		const pendingHashes = [];
+		let frameHashes = null, verification = null;
+		const readFrame = () => ctx.getImageData( 0, 0, width, height ).data;
 		let renderError = null;
 
 		try {
 
 			// Inside the guarded block so a GPU failure here still restores the scene and the UI.
+			// The shuffled-order test comes FIRST, on the scene exactly as it was loaded, before the settle pass below has visited a single frame: that is the
+			// state a history-dependent quantity cannot hide in. Frames are drawn in an order no sequential render uses, each by absolute seek, and hashed; the
+			// sequential render that follows must produce the same hashes (its verdict is computed after it).
+			let shuffled = null;
+			if ( offline && hashing && S.verifySelect.getValue() !== 'off' ) {
+
+				const every = S.verifySelect.getValue() === 'all' ? 1 : 17;
+				const frames = strideFrames( range.start, range.end, every );
+				const seed = seedOf( `${ renderSceneHash || 'scene' }:${ range.start }-${ range.end }:${ every }` );
+				const order = shuffledOrder( frames, seed ), hashes = {};
+				for ( let i = 0; i < order.length; i ++ ) {
+
+					if ( cancelRequested ) break;
+					const n = order[ i ];
+					const { outT, t, shotT } = frameTimes( n, fps, skip, duration );
+					drawFrame( outT, t, shotT );
+					hashes[ n ] = await hashFrame( readFrame() );
+					if ( i % 10 === 0 ) { setProgress( i / order.length, `Checking frame order from a clean state: ${ i + 1 } / ${ order.length }` ); await yieldToEventLoop(); }
+
+				}
+				if ( ! cancelRequested ) shuffled = { frames, hashes, every, seed };
+
+			}
+
 			if ( offline ) {
 
 				// Settle the timeline: the sampler keeps some state between samples (what each text label last showed, its shadow and
@@ -2140,6 +2223,13 @@ function SidebarRender( editor ) {
 
 					const { outT, t, shotT } = frameTimes( n, fps, skip, duration );
 					drawFrame( outT, t, shotT );
+					if ( hashing ) {
+
+						const slot = n - range.start;
+						pendingHashes.push( hashFrame( readFrame() ).then( h => { frameHashList[ slot ] = h; } ) );
+						if ( pendingHashes.length >= 8 ) await Promise.all( pendingHashes.splice( 0 ) );
+
+					}
 
 					const frame = new VideoFrame( outCanvas, { timestamp: frameTimestampUs( n, fps ), duration: frameDurationUs( fps ) } );
 					container.dom.dispatchEvent( new CustomEvent( 'render-frame', { detail: { frame: n, time: t, canvas: outCanvas } } ) );
@@ -2163,6 +2253,27 @@ function SidebarRender( editor ) {
 					if ( encodeError ) throw encodeError;
 					if ( muxer.frameCount !== range.count ) throw new Error( `Encoder returned ${ muxer.frameCount } frames for ${ range.count } requested.` );
 					try { localStorage.setItem( MS_PER_FRAME_KEY, String( ( performance.now() - started ) / range.count ) ); } catch ( e ) { /* storage blocked */ }
+
+					if ( hashing ) {
+
+						await Promise.all( pendingHashes.splice( 0 ) );
+						const text = sidecarText( { hashes: frameHashList, first: range.start, width, height, fps } );
+						frameHashes = { text, root: await rootHash( text ), count: frameHashList.length, first: range.start, hashes: frameHashList.slice() };
+
+						// The verdict of the shuffled-order test, which ran first, from a clean state (below): each frame it drew must match the sequential render.
+						if ( shuffled && ! cancelRequested ) {
+
+							const sequential = {};
+							shuffled.frames.forEach( n => { sequential[ n ] = frameHashList[ n - range.start ]; } );
+							verification = verificationResult( { sequential, shuffled: shuffled.hashes, first: range.start, last: range.end, every: shuffled.every, seed: shuffled.seed } );
+							console.info( verification.passed ? `Shuffled-order check: ${ verification.frames_checked } of ${ verification.of } frames identical.` : `Shuffled-order check FAILED: frames ${ frameRanges( verification.mismatched_frames ) } differ from the sequential render.` );
+
+						}
+
+						editor.lastRender = { frameHashes, verification, range, width, height, fps, encoder: encoderRec, endCard: endCard && { sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height }, sceneHash: renderSceneHash };
+						container.dom.dispatchEvent( new CustomEvent( 'render-verified', { detail: editor.lastRender } ) );
+
+					}
 
 				}
 
@@ -2296,10 +2407,11 @@ function SidebarRender( editor ) {
 					width, height, fps, frames: range.count,
 					samples: muxer.samples, keyframes: muxer.keyframes.map( k => k - 1 ), avcC: muxer.avcC,
 					masterBlob: blob,   // for the single-file MP4 that ffmpeg.webcli.app can make
-					encoder: S.encoderSelect.getValue() === 'software' ? 'software' : 'hardware', playbackWasRunning, hasEndCard, hasCrossfades, audioRef, uncommitted: sceneUncommitted,
+					encoder: encoderRec || ( S.encoderSelect.getValue() === 'software' ? 'software' : 'hardware' ), playbackWasRunning, hasEndCard, audioRef, uncommitted: sceneUncommitted,
 					sceneHash: renderSceneHash, source: renderSource, renderer: ( rendererInfo && rendererInfo.renderer ) || 'WebGLRenderer', device: ( rendererInfo && rendererInfo.device ) || 'webgl2',
+					frameHashes, verification, endCard,
 					renderedAt: new Date().toISOString(), // metadata only: no frame time ever comes from a wall clock
-					cues: getCues().map( c => ( { start: c.start, end: c.end, text: c.text } ) ), burned: S.burnCheckbox.getValue(), baseName,
+					cues: getCues().map( c => ( { id: c.id, start: c.start, end: c.end, text: c.text } ) ), burned: S.burnCheckbox.getValue(), baseName,
 				} );
 
 			}

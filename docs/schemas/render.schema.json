@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://strataeditor.dev/schemas/render.schema.json",
-  "title": "render.json (Strata publish set, version 1)",
+  "title": "render.json (Strata publish set, version 2)",
   "type": "object",
   "required": [
     "version",
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "version": {
-      "const": 1
+      "const": 2
     },
     "scene": {
       "type": "object",
@@ -53,7 +53,6 @@
       "type": "object",
       "required": [
         "mode",
-        "deterministic",
         "renderer",
         "device",
         "fps",
@@ -66,8 +65,8 @@
         "exporter",
         "rendered_at",
         "encoder",
-        "not_deterministic_because",
-        "time_source_audit"
+        "time_source_audit",
+        "determinism"
       ],
       "properties": {
         "mode": {
@@ -75,10 +74,6 @@
             "offline",
             "realtime"
           ]
-        },
-        "deterministic": {
-          "type": "boolean",
-          "description": "True only when mode is offline, the software encoder wrote the segments, and nothing on not_deterministic_because applies: frame n shows timeline time n / fps and a repeat render on the same device gives byte-identical segments. Never a claim about pixels across GPUs."
         },
         "renderer": {
           "type": "string"
@@ -133,7 +128,8 @@
           "required": [
             "document",
             "passed",
-            "residuals_accepted"
+            "confirmed",
+            "live_when_present"
           ],
           "properties": {
             "document": {
@@ -142,28 +138,168 @@
             "passed": {
               "type": "boolean"
             },
-            "residuals_accepted": {
+            "confirmed": {
               "type": "array",
               "items": {
                 "type": "string"
               },
-              "description": "Residuals classified as bounded and harmless. The live ones (end card, playback running) are not listed here: when they apply they appear in not_deterministic_because."
+              "description": "What the audit confirmed (no clock, no delta integration, no previous-frame reads, no Shell timer read by an animated quantity), with how in guides/TIME_SOURCES.md."
+            },
+            "live_when_present": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Live inputs that, when they apply to this render, make frames false."
             }
           }
         },
         "encoder": {
-          "enum": [
-            "software",
-            "hardware"
+          "type": "object",
+          "required": [
+            "kind",
+            "name",
+            "version",
+            "settings_hash",
+            "threads",
+            "config"
           ],
-          "description": "Which H.264 encoder wrote the ladder. A hardware encoder's bytes are not promised to repeat."
+          "description": "What wrote the ladder, as a recorded choice. settings_hash is the sha256 of the configuration given to the encoder; threads is null because WebCodecs does not let a page choose.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "software",
+                "hardware"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "settings_hash": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "threads": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "config": {
+              "type": [
+                "object",
+                "null"
+              ]
+            }
+          }
         },
-        "not_deterministic_because": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Empty when deterministic; otherwise every reason."
+        "determinism": {
+          "type": "object",
+          "required": [
+            "frames",
+            "bytes",
+            "reasons",
+            "verification"
+          ],
+          "description": "Two claims, each with its own reasons. frames: frame n is a pure function of n / fps and the pinned inputs; true only after a complete, passed shuffled-order test (every frame redrawn in an order no sequential render uses, each identical to the sequential one). bytes: the encoded file repeats byte for byte; true only when frames is true and the software encoder wrote it. A hardware encoder is a reason the bytes are not promised and is not a reason against the frames.",
+          "properties": {
+            "frames": {
+              "type": "boolean"
+            },
+            "bytes": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "type": "object",
+              "required": [
+                "frames",
+                "bytes"
+              ],
+              "properties": {
+                "frames": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Empty when frames is true."
+                },
+                "bytes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Empty when bytes is true."
+                }
+              }
+            },
+            "verification": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "method",
+                    "every",
+                    "seed",
+                    "frames_checked",
+                    "of",
+                    "complete",
+                    "passed",
+                    "mismatched_frames",
+                    "mismatched_count"
+                  ],
+                  "properties": {
+                    "method": {
+                      "const": "shuffled-order"
+                    },
+                    "every": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "seed": {
+                      "type": "integer"
+                    },
+                    "frames_checked": {
+                      "type": "integer"
+                    },
+                    "of": {
+                      "type": "integer"
+                    },
+                    "complete": {
+                      "type": "boolean",
+                      "description": "True only when every frame was checked."
+                    },
+                    "passed": {
+                      "type": "boolean"
+                    },
+                    "mismatched_frames": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "mismatched_count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -174,7 +310,8 @@
         "renditions",
         "poster",
         "captions",
-        "audio"
+        "audio",
+        "caption_tracks"
       ],
       "properties": {
         "master": {
@@ -228,7 +365,8 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "The default caption track's path (the first of caption_tracks), or null. Kept so anything that reads it as a path still works."
         },
         "audio": {
           "type": [
@@ -353,6 +491,114 @@
               "type": "string"
             }
           }
+        },
+        "frame_hashes": {
+          "type": "object",
+          "required": [
+            "path",
+            "count",
+            "algorithm",
+            "root"
+          ],
+          "description": "The sha256 of every frame (raw RGB, before encoding): the sidecar and its root hash. Required for determinism.frames to be true.",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            },
+            "algorithm": {
+              "const": "sha256"
+            },
+            "over": {
+              "type": "string"
+            },
+            "root": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "caption_tracks": {
+          "type": "array",
+          "description": "Every caption file of the render: its language, where it came from, and the hash of the cues it holds. Empty when there are no captions. A cue-derived track (source \"cues\") is a projection of the scene's cue list and cannot drift against the narration; an asr track is inferred and has no authored ids.",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "language",
+              "source",
+              "cues_sha256",
+              "structure_sha256",
+              "cue_count",
+              "addressable"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              },
+              "source": {
+                "enum": [
+                  "cues",
+                  "asr",
+                  "manual"
+                ],
+                "description": "cues: generated from the scene's cue list (exact). asr: transcribed from the audio (approximate). manual: written or edited by a person."
+              },
+              "cues_sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "description": "Hash of the ids, times and words this file holds. For a cue-derived track it equals the hash of the scene's cues when the file was written."
+              },
+              "structure_sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "description": "Hash of the ids and times only: what a translation shares with the cues it translates."
+              },
+              "cue_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "addressable": {
+                "type": "boolean",
+                "description": "True when every cue carries an authored id (the WebVTT cue identifier), so a player can seek to it and a link can name it."
+              },
+              "translation_of": {
+                "type": "string",
+                "description": "The language this track translates."
+              },
+              "translated_from": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "description": "The cues_sha256 of the cue list this translation was made from: when the scene's differs, the translation is stale."
+              },
+              "asr": {
+                "type": "object",
+                "required": [
+                  "model"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "hls": {
+                "type": "string",
+                "description": "The track's subtitle playlist in master.m3u8, when the render has one."
+              }
+            }
+          }
         }
       }
     },
@@ -376,6 +622,51 @@
         "audio_duration_matches_video": {
           "type": "boolean",
           "description": "Present when there is audio."
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Inputs the frames were made from that are not the scene.",
+      "properties": {
+        "end_card": {
+          "type": "object",
+          "required": [
+            "path",
+            "sha256",
+            "bytes"
+          ],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "bytes": {
+              "type": "integer"
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "stamp": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "What the live page said when it was baked (its version stamp)."
+            },
+            "width": {
+              "type": "integer"
+            },
+            "height": {
+              "type": "integer"
+            }
+          }
         }
       }
     }

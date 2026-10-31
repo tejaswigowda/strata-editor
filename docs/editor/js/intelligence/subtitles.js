@@ -105,3 +105,11 @@ export function cuesEqual( a, b ) {
 	return x.length === y.length && x.every( ( v, i ) => v === y[ i ] );
 
 }
+
+/** Same cues AND same ids (cuesEqual does not look at ids: a rename is a real change to anything that links to a cue). */
+export function cuesIdentical( a, b ) {
+
+	const x = normalizeCues( a ), y = normalizeCues( b );
+	return cuesEqual( x, y ) && x.every( ( c, i ) => c.id === y[ i ].id );
+
+}
