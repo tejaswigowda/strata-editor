@@ -15,6 +15,7 @@ import { sourceFile } from './workState.js';
 import { applyCameraMove, clearCameraMove, MOVE_PRESETS } from './intelligence/cameraMoveEdit.js';
 import { Mp4Muxer } from './export/Mp4Muxer.js';
 import { createPublishPanel } from './PublishPanel.js';
+import { createReleasesPanel } from './ReleasesPanel.js';
 import { dubCues } from './export/dubCues.js';
 import { openTool, toolFor } from './export/handoff.js';
 import { sceneHash } from './export/canonical.js';
@@ -185,7 +186,7 @@ function SidebarRender( editor ) {
 	// Snapshot (a still), Video (the timeline to a video file), 360° (the same as an equirectangular video) and Subtitles
 	// (the cue list and the .srt). The progress bar, status, Cancel and preview sit below the panes and stay in view from any tab.
 
-	const SUBTABS = [ [ 'snapshot', 'Snapshot', 'camera' ], [ 'video', 'Video', 'video' ], [ 'pano', '360\u00b0', 'globe' ], [ 'subtitles', 'Subtitles', 'closed-captioning' ] ];
+	const SUBTABS = [ [ 'snapshot', 'Snapshot', 'camera' ], [ 'video', 'Video', 'video' ], [ 'pano', '360\u00b0', 'globe' ], [ 'subtitles', 'Subtitles', 'closed-captioning' ], [ 'releases', 'Releases', 'tag' ] ];
 	const SUBTAB_KEY = 'strata.render.tab';
 
 	// Same markup as the sidebar's own tabs (.Tabs > .Tab > .tab-icon + .tab-label, styled by the .TabbedPanel rules): an icon with its label below.
@@ -232,6 +233,7 @@ function SidebarRender( editor ) {
 
 		try { localStorage.setItem( SUBTAB_KEY, id ); } catch ( e ) { /* storage blocked */ }
 		refreshOutputVisibility();
+		if ( id === 'releases' && releasesPanel ) releasesPanel.refresh();
 
 	}
 
@@ -1154,8 +1156,14 @@ function SidebarRender( editor ) {
 	const buttonRow = new UIRow();
 	const renderButton = new UIButton( 'Render & Export' );
 	renderButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;';
+	renderButton.dom.title = 'A draft: renders and downloads the video. Nothing is published until you publish it (the Publish step below the render, or Render & publish).';
 	renderButton.onClick( function () { startRender( 'flat' ); } );
 	buttonRow.add( renderButton );
+	const publishButton = new UIButton( 'Render & publish' );
+	publishButton.dom.style.cssText = 'padding:6px 14px;border-radius:4px;font-weight:bold;margin-left:6px;';
+	publishButton.dom.title = 'Renders offline, then publishes the ladder as a new tagged version in the renders repository, only if every check passes. Needs a token and a scene repo in the Git tab.';
+	publishButton.onClick( function () { startRender( 'flat', { publish: true } ); } );
+	buttonRow.add( publishButton );
 	videoPane.add( buttonRow );
 
 	refreshSubsList();
@@ -1249,6 +1257,11 @@ function SidebarRender( editor ) {
 	// After a finished offline render: encode the ladder, review, and commit the publish set (see PublishPanel.js)
 	const publishPanel = createPublishPanel( editor );
 	outputArea.appendChild( publishPanel.dom );
+
+	// The Releases tab: what has been published, newest first, pinned links, staleness. Publishing refreshes it.
+	const releasesPanel = createReleasesPanel( editor, { localRender: () => editor.lastRender || null } );
+	panes.releases.dom.appendChild( releasesPanel.dom );
+	publishPanel.dom.addEventListener( 'release-published', () => { releasesPanel.refresh(); } );
 
 	function setProgress( fraction, message ) {
 
@@ -1640,7 +1653,7 @@ function SidebarRender( editor ) {
 
 	}
 
-	async function startRender( kind = 'flat' ) {
+	async function startRender( kind = 'flat', { publish = false } = {} ) {
 
 		if ( rendering ) return;
 		let rendererInfo = null;
@@ -1657,6 +1670,7 @@ function SidebarRender( editor ) {
 		}
 
 		const offline = S.modeSelect.getValue() === 'offline';
+		if ( publish && ! offline ) { setProgress( 0, 'Render & publish needs Mode: Offline. A realtime capture is not reproducible, so it is not published.' ); return; }
 		const mimes = offline ? [] : pickExportMimes( kind );
 		if ( ! offline && mimes.length === 0 ) {
 
@@ -1695,6 +1709,13 @@ function SidebarRender( editor ) {
 			if ( range.error ) {
 
 				setProgress( 0, range.error );
+				return;
+
+			}
+
+			if ( publish && ( range.start !== 0 || range.end !== totalFrames - 1 ) ) {
+
+				setProgress( 0, 'Render & publish publishes the whole film: clear the frame range, or use Render & Export for a partial render.' );
 				return;
 
 			}
@@ -2270,7 +2291,7 @@ function SidebarRender( editor ) {
 
 						}
 
-						editor.lastRender = { frameHashes, verification, range, width, height, fps, encoder: encoderRec, endCard: endCard && { sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height }, sceneHash: renderSceneHash };
+						editor.lastRender = { frameHashes, verification, range, width, height, fps, encoder: encoderRec, device: ( rendererInfo && rendererInfo.device ) || null, endCard: endCard && { sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height }, sceneHash: renderSceneHash };
 						container.dom.dispatchEvent( new CustomEvent( 'render-verified', { detail: editor.lastRender } ) );
 
 					}
@@ -2413,6 +2434,12 @@ function SidebarRender( editor ) {
 					renderedAt: new Date().toISOString(), // metadata only: no frame time ever comes from a wall clock
 					cues: getCues().map( c => ( { id: c.id, start: c.start, end: c.end, text: c.text } ) ), burned: S.burnCheckbox.getValue(), baseName,
 				} );
+				if ( publish && ! cancelRequested ) {
+
+					setProgress( 1, 'Rendered. Publishing\u2026' );
+					publishPanel.publishNow().then( r => { if ( ! r.published ) setProgress( 1, 'Rendered, but not published. ' + ( r.reason || '' ) ); } );
+
+				}
 
 			}
 

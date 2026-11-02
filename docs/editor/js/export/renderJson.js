@@ -106,9 +106,10 @@ export const formatBytes = n => n >= MB ? ( n / MB ).toFixed( n >= 10 * MB ? 0 :
  *   captionTracks: [captions.js trackRecord() + hls]   every caption file: its language, where it came from (cues | asr | manual), the hash of the cues it holds, and whether its cues have ids
  *   frameHashes: null, or { path, count, root }   the sidecar of per-frame sha256 hashes
  *   endCard:     null, or { path, sha256, bytes, url, stamp, width, height }   the end card image the frames were composited from
+ *   publication: null, or releases.js publicationBlock(): where the render lives (storage, repo, path, tag, url, size_bytes)
  *   files:   [{ path, bytes }]  every file of the set, for the size checks
  */
-export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, audit = TIME_SOURCE_AUDIT } ) {
+export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, publication = null, audit = TIME_SOURCE_AUDIT } ) {
 
 	const durationS = render.durationS !== undefined ? render.durationS : render.frames / render.fps;
 	const out = {
@@ -159,6 +160,7 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			frame_count_matches_duration: render.frames === Math.round( durationS * render.fps ),
 			...( audio ? { audio_duration_matches_video: Math.abs( audio.durationS - durationS ) < 0.05 } : {} ),
 		},
+		...( publication ? { publication } : {} ),
 	};
 	return out;
 

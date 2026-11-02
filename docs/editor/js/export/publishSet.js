@@ -8,6 +8,7 @@
 import { masterPlaylist } from './fmp4.js';
 import { subtitlePlaylist, subtitlePlaylistPath, withSubtitles } from './captions.js';
 import { buildRenderJson, formatBytes, assessDeterminism, LIMITS } from './renderJson.js';
+import { publicationBlock } from './releases.js';
 
 /** The ladder, highest first: target heights and the bitrates the work order names. */
 export const RUNGS = Object.freeze( [
@@ -63,9 +64,10 @@ const bytesOf = v => typeof v === 'string' ? enc.encode( v ) : v;
  *   determinism: { mode, encoder, hasEndCard, playbackWasRunning, verification }   (assessDeterminism's input)
  *   frameHashes: null | { text, root, count }       the sidecar text (frame-hashes.txt) and its root hash: sha256 of every frame, before encoding
  *   endCard:     null | { bytes (PNG), sha256, url, stamp, width, height }   the end card image the frames were composited from (endcard.png)
+ *   publication: null | { storage, repo, tag }   where this set will live (releases.js); render.json records it with the folder and the size of every other file
  * @returns {{ files: { path, bytes: Uint8Array }[], renderJson, total: number, errors: string[], warnings: string[], tree: { path, bytes }[] }}
  */
-export function assemblePublishSet( { path, scene, render, rungs, poster, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null } ) {
+export function assemblePublishSet( { path, scene, render, rungs, poster, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, publication = null } ) {
 
 	const files = [];
 	const rel = ( ...p ) => path + '/' + p.join( '/' );
@@ -126,11 +128,19 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 		frameHashes: frameHashes ? { path: 'frame-hashes.txt', count: frameHashes.count, root: frameHashes.root } : null,
 		endCard: endCard ? { path: 'endcard.png', sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height } : null,
 		files: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ),
+		publication: publication ? publicationBlock( { storage: publication.storage, repo: publication.repo, path, tag: publication.tag || null, sizeBytes: files.reduce( ( n, f ) => n + f.bytes.length, 0 ) } ) : null,
 	} );
 	files.unshift( { path: rel( 'render.json' ), bytes: enc.encode( JSON.stringify( renderJson, null, 2 ) + '\n' ) } );
 
 	const total = files.reduce( ( n, f ) => n + f.bytes.length, 0 );
 	const { errors, warnings } = sizeReport( files, total, audioMeta ? [ ...renditions, { name: 'audio', maxSegmentBytes: audioMeta.maxSegmentBytes } ] : renditions, renderJson.render.determinism, download );
+	if ( publication && publication.storage === 'renders-repo' ) {
+
+		// the advice about a separate branch or repository is what this publish already does
+		const i = warnings.findIndex( w => w.startsWith( 'To keep scene history light' ) );
+		if ( i >= 0 ) warnings[ i ] = `This goes to ${ publication.repo }, a repository of its own, so the scene repository stays small. It is published as the new tag ${ publication.tag }: a tag never moves, and this render is a version, not a replacement.`;
+
+	}
 	return { files, renderJson, total, errors, warnings, tree: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ) };
 
 }

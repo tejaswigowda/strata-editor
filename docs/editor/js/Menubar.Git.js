@@ -873,6 +873,30 @@ export function publishSource() {
 
 }
 
+/** The GitHub API for export/releases.js: reads work without a token on public repos, writes need the Git tab's token and ride out GitHub's secondary rate limit. */
+export function githubApi( { onWait = null } = {} ) {
+
+	const token = loadSettings().pat || null;
+	return {
+		get: path => ghGet( path, token ),
+		send: ( method, path, body ) => {
+
+			if ( ! token ) throw new Error( 'A token is required to publish: add one in the Git tab.' );
+			return withRateLimitRetry( () => ghSend( method, path, body, token ), onWait );
+
+		},
+	};
+
+}
+
+/** Where new renders go by default: <owner of the scene repo>/renders, a repository of their own, so the scene repo stays small. */
+export function defaultRendersRepo() {
+
+	const parsed = parseRepo( loadSettings().repoUrl || '' );
+	return parsed ? `${ parsed.owner }/renders` : '';
+
+}
+
 // Commits a publish set (renders/<scene>/…) as ONE commit: every blob is uploaded first, then a single tree, a single commit and
 // one ref move, so a failure part-way leaves no partial publish on the branch. `target`: { repo?: 'owner/name' (default: the
 // scene's repo), branch, createFrom? } (createFrom: make the branch from that one if it does not exist yet).

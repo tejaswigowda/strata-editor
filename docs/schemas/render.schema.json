@@ -625,6 +625,57 @@
         }
       }
     },
+    "publication": {
+      "type": "object",
+      "description": "Where this render lives. Optional: a render.json without it was published into the scene repo (renders/<scene>/) before renders had a repository of their own, and is read as storage source-repo, pinned by the commit it is found at.",
+      "required": [
+        "storage",
+        "repo",
+        "path",
+        "tag",
+        "url",
+        "size_bytes"
+      ],
+      "properties": {
+        "storage": {
+          "enum": [
+            "renders-repo",
+            "source-repo"
+          ],
+          "description": "renders-repo: a repository of its own, one folder per scene, one immutable tag per version. source-repo: the legacy layout in the scene's repository."
+        },
+        "repo": {
+          "type": "string",
+          "pattern": "^[^/\\s]+/[^/\\s]+$",
+          "description": "owner/name of the repository holding these files."
+        },
+        "path": {
+          "type": "string",
+          "description": "The folder in that repository: the scene's slug (renders-repo) or renders/<scene> (source-repo)."
+        },
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "<path>/v<N>. Never moved once published; a re-render is the next version. Null for source-repo."
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The pinned base address of this render (jsDelivr, @<tag>). Never @latest or a branch. Null for source-repo, whose address is pinned by commit."
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Every file of the folder except render.json itself."
+        }
+      }
+    },
     "inputs": {
       "type": "object",
       "description": "Inputs the frames were made from that are not the scene.",

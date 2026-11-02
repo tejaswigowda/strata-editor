@@ -13,6 +13,7 @@ import { UIButton, UICheckbox, UIInput, UISelect } from './libs/ui.js';
 import { sceneHash } from './export/canonical.js';
 import { transcodeLadder } from './export/ladder.js';
 import { planLadder, assemblePublishSet, defaultPublishPath, stalenessLine } from './export/publishSet.js';
+import { sceneSlug, planRelease, commitRelease, gateRelease, releaseBase, pinnedUrl, playerLink, ReleaseError, STORAGE } from './export/releases.js';
 import { cueTrack } from './export/captions.js';
 import { EXPORTER } from './export/renderJson.js';
 import { formatBytes } from './export/renderJson.js';
@@ -20,7 +21,7 @@ import { buildAudioRendition, aacSupport, probeAudio } from './export/audio.js';
 import { openTool, toolFor } from './export/handoff.js';
 import { cuesToSrt } from './intelligence/subtitles.js';
 import { dubCues } from './export/dubCues.js';
-import { publishSource, commitPublishToRepo, fetchRepoFile } from './Menubar.Git.js';
+import { publishSource, commitPublishToRepo, fetchRepoFile, githubApi, defaultRendersRepo } from './Menubar.Git.js';
 
 const FIELD = 'display:flex;align-items:center;gap:6px;margin:4px 0;font-size:12px;';
 const LABEL = 'width:64px;flex:none;opacity:0.8;';
@@ -52,27 +53,37 @@ export function createPublishPanel( editor ) {
 	const heading = el( 'div', 'font-weight:bold;margin-bottom:4px;' );
 	heading.innerHTML = '<i class="fa-solid fa-cloud-arrow-up btn-icon" aria-hidden="true"></i>Publish this render';
 	root.appendChild( heading );
-	root.appendChild( el( 'div', NOTE + 'opacity:0.8;', 'Encodes a 1080 / 720 / 480 ladder as fragmented MP4 segments with HLS playlists, a poster, captions and render.json, then commits all of it to your repo in one commit.' ) );
+	root.appendChild( el( 'div', NOTE + 'opacity:0.8;', 'Encodes a 1080 / 720 / 480 ladder as fragmented MP4 segments with HLS playlists, a poster, captions and render.json, then publishes all of it as one new version (a tag that never moves) in your renders repository.' ) );
+	const stateChip = el( 'div', NOTE + 'font-weight:bold;' );
+	root.appendChild( stateChip );
+	const setState = ( text, color ) => { stateChip.textContent = text; stateChip.style.color = color || ''; };
 
 	const stale = el( 'div', NOTE + 'font-weight:bold;' );
 	root.appendChild( stale );
 
 	// ── where ──
+	// Two layouts. The renders repository is the default: scenes stay small and clonable, every render is a new immutable tag. The scene's own repo (renders/<scene>/,
+	// untagged, pinned by commit) is the legacy layout: it stays available, and it is an explicit choice.
 	const where = el( 'div' );
+	const modeSelect = new UISelect().setOptions( { renders: 'Renders repository (recommended)', source: 'Scene\u2019s repo, legacy layout (no tag)' } ).setValue( 'renders' );
+	modeSelect.dom.style.flex = '1';
 	const repoInput = new UIInput( '' );
-	repoInput.dom.placeholder = 'owner/name (blank: the scene\u2019s repo)';
 	repoInput.dom.style.flex = '1';
 	const branchSelect = new UISelect().setOptions( { same: 'Scene\u2019s branch', renders: 'A separate "renders" branch' } ).setValue( 'same' );
 	const pathInput = new UIInput( '' );
 	pathInput.dom.style.flex = '1';
-	for ( const [ label, control ] of [ [ 'Repo', repoInput ], [ 'Branch', branchSelect ], [ 'Path', pathInput ] ] ) {
+	const rows = {};
+	for ( const [ key, label, control ] of [ [ 'mode', 'Publish to', modeSelect ], [ 'repo', 'Repo', repoInput ], [ 'branch', 'Branch', branchSelect ], [ 'path', 'Folder', pathInput ] ] ) {
 
 		const row = el( 'div', FIELD );
 		row.appendChild( el( 'span', LABEL, label ) );
 		row.appendChild( control.dom );
 		where.appendChild( row );
+		rows[ key ] = row;
 
 	}
+	const planLine = el( 'div', NOTE + 'font-weight:bold;' );
+	where.appendChild( planLine );
 	root.appendChild( where );
 
 	// ── ladder ──
@@ -203,6 +214,7 @@ export function createPublishPanel( editor ) {
 	let mp4Sources = [];          // what the single-file MP4 can carry: each rung of the ladder, or the master
 	let busy = false;
 	let cancelRequested = false;
+	let currentPlan = null;       // planRelease()'s answer for the set being prepared: which tag it will be published as
 
 	const setStatus = ( text, fraction ) => {
 
@@ -213,12 +225,34 @@ export function createPublishPanel( editor ) {
 
 	};
 
+	const isRenders = () => modeSelect.getValue() === 'renders';
+
 	function target() {
 
 		const src = info && info.source;
+		if ( isRenders() ) {
+
+			// the renders repository: its default branch, and the folder is the scene's slug (the tag namespace)
+			return { storage: STORAGE.renders, repo: repoInput.getValue().trim() || defaultRendersRepo(), branch: 'main', createFrom: null, path: sceneSlug( ( src && src.file ) || 'scene.json' ) };
+
+		}
 		const repo = repoInput.getValue().trim() || ( src && src.repo ) || '';
 		const branchName = branchSelect.getValue() === 'renders' ? 'renders' : ( src && src.branch ) || 'main';
-		return { repo, branch: branchName, createFrom: branchSelect.getValue() === 'renders' ? ( ( src && src.branch ) || 'main' ) : null, path: pathInput.getValue().trim().replace( /^\/+|\/+$/g, '' ) };
+		return { storage: STORAGE.source, repo, branch: branchName, createFrom: branchSelect.getValue() === 'renders' ? ( ( src && src.branch ) || 'main' ) : null, path: pathInput.getValue().trim().replace( /^\/+|\/+$/g, '' ) };
+
+	}
+
+	/** Shows the fields of the layout in use: the renders repo has no branch or folder to choose. */
+	function layoutChanged() {
+
+		const renders = isRenders();
+		rows.branch.style.display = renders ? 'none' : '';
+		pathInput.dom.disabled = renders;
+		const src = info && info.source;
+		if ( renders ) { repoInput.dom.placeholder = defaultRendersRepo() || 'owner/renders'; pathInput.setValue( sceneSlug( ( src && src.file ) || 'scene.json' ) ); }
+		else { repoInput.dom.placeholder = 'owner/name (blank: the scene\u2019s repo)'; pathInput.setValue( defaultPublishPath( ( src && src.file ) || 'scene.json' ) ); }
+		prepared = null; currentPlan = null; review.style.display = 'none'; planLine.textContent = '';
+		refreshCommit();
 
 	}
 
@@ -238,13 +272,14 @@ export function createPublishPanel( editor ) {
 
 		const src = publishSource();
 		const t = target();
-		const errors = prepared ? prepared.errors : [];
+		const errors = prepared ? prepared.gate.failures : [];
 		const noToken = ! ( src && src.hasToken );
 		const isStale = info && stalenessLine( info.sceneHash, currentHash ).stale;
 		commitButton.dom.disabled = ! prepared || errors.length > 0 || noToken || busy;
-		commitButton.dom.innerHTML = '<i class="fa-solid fa-code-commit btn-icon" aria-hidden="true"></i>' + ( isStale ? 'Publish this stale render anyway' : 'Commit to ' ) ;
-		if ( ! isStale ) commitButton.dom.append( document.createTextNode( `${ t.repo || '?' }@${ t.branch }` ) );
-		if ( prepared && noToken ) errorsBox.textContent = [ ...errors, 'A token is required to commit: add one in the Git tab.' ].join( '\n' );
+		const what = isRenders() ? ( currentPlan ? `Publish as ${ currentPlan.tag }` : 'Publish' ) : `Commit to ${ t.repo || '?' }@${ t.branch }`;
+		commitButton.dom.innerHTML = '<i class="fa-solid fa-code-commit btn-icon" aria-hidden="true"></i>';
+		commitButton.dom.append( document.createTextNode( isStale ? 'Publish this stale render anyway' : what ) );
+		if ( prepared && noToken ) errorsBox.textContent = [ ...errors, 'A token is required to publish: add one in the Git tab.' ].join( '\n' );
 
 	}
 
@@ -272,7 +307,9 @@ export function createPublishPanel( editor ) {
 		prepared = set;
 		root.dispatchEvent( new CustomEvent( 'publish-prepared', { detail: set } ) );     // for tests and tools: the set as it will be committed
 		treeBox.textContent = set.tree.map( f => `${ formatBytes( f.bytes ).padStart( 8 ) }  ${ f.path }` ).join( '\n' ) + `\n${ formatBytes( set.total ).padStart( 8 ) }  total, ${ set.tree.length } files`;
-		errorsBox.textContent = set.errors.join( '\n' );
+		// R6: a failed check blocks the publish. It is not a warning.
+		set.gate = gateRelease( { renderJson: set.renderJson, errors: set.errors } );
+		errorsBox.textContent = set.gate.failures.join( '\n' );
 		const notes = [];
 		const det = set.renderJson.render.determinism;
 		if ( ! det.frames ) notes.push( 'Frames not claimed deterministic: ' + det.reasons.frames.join( '; ' ) + '. The duration and frame count are still exact (frame n shows n / fps).' );
@@ -283,7 +320,7 @@ export function createPublishPanel( editor ) {
 		warningsBox.textContent = [ ...set.warnings, ...notes ].join( '\n\n' );
 		review.style.display = '';
 		resultBox.textContent = '';
-		setStatus( set.errors.length ? 'The set is ready, but it cannot be published as it is.' : `Ready: ${ set.tree.length } files, ${ formatBytes( set.total ) }. Nothing has been uploaded yet.` );
+		setStatus( ! set.gate.ok ? 'REFUSED: this render fails a check, so it cannot be published as it is.' : `Ready: ${ set.tree.length } files, ${ formatBytes( set.total ) }. Nothing has been uploaded yet.` );
 		mp4Row.style.display = narrationBytes || info.cues.length ? '' : 'none';
 		if ( mp4Source.dom.options.length !== mp4Sources.length ) {
 
@@ -397,7 +434,7 @@ export function createPublishPanel( editor ) {
 		const chosen = rungBoxes.filter( r => r.box.getValue() ).map( r => r.rung );
 		if ( chosen.length === 0 ) { setStatus( 'Keep at least one rung of the ladder.' ); return; }
 		const t = target();
-		if ( ! /^[^/\s]+\/[^/\s]+$/.test( t.repo ) ) { setStatus( 'Set a repository: in the Git tab, or here as owner/name.' ); return; }
+		if ( ! /^[^/\s]+\/[^/\s]+$/.test( t.repo ) ) { setStatus( isRenders() ? 'Set the renders repository as owner/name (the default is <owner of the scene repo>/renders, which needs a scene repo set in the Git tab).' : 'Set a repository: in the Git tab, or here as owner/name.' ); return; }
 		if ( ! t.path ) { setStatus( 'Set a path to publish under.' ); return; }
 
 		busy = true;
@@ -474,6 +511,25 @@ export function createPublishPanel( editor ) {
 
 			}
 
+			// Which tag this will be, and that it is free: read before the ladder is built, because render.json records it. Nothing is written.
+			currentPlan = null;
+			if ( t.storage === STORAGE.renders ) {
+
+				setStatus( 'Checking the renders repository\u2026' );
+				try {
+
+					currentPlan = await planRelease( githubApi(), { repo: t.repo, slug: t.path, branch: t.branch, sceneRepo: ( info.source && info.source.repo ) || null } );
+
+				} catch ( e ) {
+
+					setStatus( e instanceof ReleaseError ? e.message : /404/.test( e.message ) ? `The repository ${ t.repo } was not found (or is private and no token is set). Create it on GitHub (public, one commit is enough), then press Prepare publish again.` : 'Could not read the renders repository: ' + e.message );
+					return;
+
+				}
+				planLine.textContent = `This will be published as ${ currentPlan.tag }` + ( currentPlan.version > 1 ? ` (the next version after v${ currentPlan.version - 1 })` : ' (the first version)' ) + '.';
+
+			} else planLine.textContent = 'Legacy layout: committed to the scene repo with no tag, pinned by the commit it lands in.';
+
 			const src = { ...( info.source || {} ), commit: commitSha };
 			const sceneRec = { repo: ( src && src.repo ) || t.repo, file: ( src && src.file ) || '', branch: ( src && src.branch ) || t.branch, commit: src && src.commit, hash: info.sceneHash };
 			// The captions are a projection of the scene's cue list, written with the cue ids as WebVTT identifiers and a NOTE saying what they were made from.
@@ -489,6 +545,7 @@ export function createPublishPanel( editor ) {
 				audio, download,
 				determinism: { mode: 'offline', encoder: info.encoder, hasEndCard: info.hasEndCard, playbackWasRunning: info.playbackWasRunning, verification: info.verification || null },
 				frameHashes: info.frameHashes || null, endCard: info.endCard || null,
+				publication: { storage: t.storage, repo: t.repo, tag: currentPlan ? currentPlan.tag : null },
 			} );
 			showSet( build( null ) );
 
@@ -511,28 +568,40 @@ export function createPublishPanel( editor ) {
 	async function commit() {
 
 		if ( ! prepared || busy ) return;
+		if ( ! prepared.gate.ok ) { setStatus( 'REFUSED: ' + prepared.gate.failures[ 0 ] ); return; }     // belt and braces: the button is disabled too
 		busy = true;
 		commitButton.dom.disabled = true;
 		const t = target();
 		const set = prepared;
+		let published = null;
 		try {
 
 			const message = `Publish render of ${ ( info.source && info.source.file ) || 'scene' }: ${ info.frames } frames at ${ info.fps } fps, ${ set.renderJson.outputs.renditions.map( r => r.name ).join( ', ' ) }`;
-			const out = await commitPublishToRepo( set.files, message, { repo: t.repo, branch: t.branch, createFrom: t.createFrom }, { onProgress: ( f, text ) => setStatus( text, f ) } );
-			const sha = out.commit && out.commit.sha;
-			resultBox.innerHTML = '';
-			resultBox.append( document.createTextNode( `\u2713 Committed ${ set.tree.length } files in one commit${ sha ? ' (' + sha.slice( 0, 7 ) + ')' : '' }: ` ) );
-			const a = el( 'a', 'color:inherit;text-decoration:underline;', `${ out.repo }@${ out.branch }/${ t.path }` );
-			a.href = `https://github.com/${ out.repo }/tree/${ out.branch }/${ t.path }`;
-			a.target = '_blank';
-			a.rel = 'noopener';
-			resultBox.appendChild( a );
+			const onProgress = ( f, text ) => setStatus( text, f );
+			if ( t.storage === STORAGE.renders ) {
+
+				// planned again with the tag the set was built for: if that tag exists by now the publish is refused and nothing is written
+				const api = githubApi( { onWait: seconds => setStatus( `GitHub rate limit \u2014 retrying in ${ seconds }s\u2026` ) } );
+				const plan = await planRelease( api, { repo: t.repo, slug: t.path, branch: t.branch, sceneRepo: ( info.source && info.source.repo ) || null, version: currentPlan.version } );
+				const out = await commitRelease( api, plan, { files: set.files, message: `${ plan.tag }: ${ message }`, onProgress } );
+				published = { storage: t.storage, repo: t.repo, tag: out.tag, commit: out.commit.sha, base: out.base };
+
+			} else {
+
+				const out = await commitPublishToRepo( set.files, message, { repo: t.repo, branch: t.branch, createFrom: t.createFrom }, { onProgress } );
+				const sha = out.commit && out.commit.sha;
+				published = { storage: t.storage, repo: out.repo, tag: null, commit: sha, base: sha ? pinnedUrl( { repo: out.repo, ref: sha, path: t.path + '/' } ) : null, branch: out.branch, path: t.path };
+
+			}
+			showPublished( published, set );
 			setStatus( '' );
+			root.dispatchEvent( new CustomEvent( 'release-published', { bubbles: true, detail: published } ) );
 
 		} catch ( e ) {
 
 			console.error( 'Publish commit failed', e );
-			setStatus( 'Commit failed, nothing was published: ' + ( e && e.message ? e.message : e ) );
+			if ( e instanceof ReleaseError && e.code === 'tag-exists' ) { prepared = null; review.style.display = 'none'; currentPlan = null; setStatus( e.message + ' Press Prepare publish again.' ); }
+			else setStatus( 'Publish failed, nothing was published: ' + ( e && e.message ? e.message : e ) );
 
 		} finally {
 
@@ -543,14 +612,43 @@ export function createPublishPanel( editor ) {
 
 	}
 
+	/** The result: the pinned share link is the primary action. The link is to a tag or a commit, never to a branch or @latest. */
+	function showPublished( p, set ) {
+
+		resultBox.innerHTML = '';
+		const head = el( 'div', 'font-weight:bold;color:#2ea44f;' );
+		head.textContent = p.tag ? `\u2713 Published ${ p.tag }` : `\u2713 Committed ${ set.tree.length } files to ${ p.repo }@${ p.branch }/${ p.path } (legacy layout, not tagged)`;
+		resultBox.appendChild( head );
+		setState( p.tag ? `Published as ${ p.tag }` : `Committed (legacy layout) at ${ ( p.commit || '' ).slice( 0, 7 ) }`, '#2ea44f' );
+		if ( ! p.base ) return;
+		const share = playerLink( new URL( 'player/', location.href ).href, p.base );
+		const line = el( 'div', 'margin:4px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center;' );
+		const copy = iconButton( 'link', 'Copy share link' );
+		copy.dom.title = 'A link that plays exactly this render. Pinned to ' + ( p.tag || ( p.commit || '' ).slice( 0, 7 ) ) + '.';
+		copy.onClick( async () => { try { await navigator.clipboard.writeText( share ); copy.dom.lastChild.textContent = 'Copied'; } catch ( e ) { window.prompt( 'Copy this pinned link:', share ); } } );
+		const a = el( 'a', 'color:inherit;text-decoration:underline;font-size:11px;word-break:break-all;', share );
+		a.href = share; a.target = '_blank'; a.rel = 'noopener';
+		line.append( copy.dom, a );
+		resultBox.appendChild( line );
+		const where = el( 'div', NOTE + 'opacity:0.85;' );
+		where.append( 'Files: ' );
+		const g = el( 'a', 'color:inherit;text-decoration:underline;', p.tag ? `${ p.repo } @ ${ p.tag }` : `${ p.repo }@${ ( p.commit || '' ).slice( 0, 7 ) }` );
+		g.href = p.tag ? `https://github.com/${ p.repo }/tree/${ p.tag }` : `https://github.com/${ p.repo }/commit/${ p.commit }`;
+		g.target = '_blank'; g.rel = 'noopener';
+		where.append( g, p.tag ? '. The tag is permanent: a re-render will be the next version, never a replacement.' : '.' );
+		resultBox.appendChild( where );
+
+	}
+
 	prepareButton.onClick( prepare );
 	dubButton.onClick( dubSubtitles );
 	mp4Button.onClick( muxMp4 );
 	cancelButton.onClick( () => { cancelRequested = true; } );
 	checkButton.onClick( refreshStaleness );
 	commitButton.onClick( commit );
-	for ( const c of [ repoInput, pathInput ] ) c.dom.addEventListener( 'input', () => { prepared = null; review.style.display = 'none'; refreshCommit(); } );
-	branchSelect.onChange( () => { refreshCommit(); } );
+	for ( const c of [ repoInput, pathInput ] ) c.dom.addEventListener( 'input', () => { prepared = null; currentPlan = null; planLine.textContent = ''; review.style.display = 'none'; refreshCommit(); } );
+	branchSelect.onChange( () => { prepared = null; review.style.display = 'none'; refreshCommit(); } );
+	modeSelect.onChange( layoutChanged );
 
 	return {
 		dom: root,
@@ -562,7 +660,10 @@ export function createPublishPanel( editor ) {
 			review.style.display = 'none';
 			resultBox.textContent = '';
 			root.style.display = '';
-			pathInput.setValue( defaultPublishPath( ( info.source && info.source.file ) || 'scene.json' ) );
+			currentPlan = null;
+			planLine.textContent = '';
+			setState( 'Draft: not published. This render exists only in this browser until you publish it.', '#e0a000' );
+			layoutChanged();
 			renderLadderChoices();
 			narrationOverride = null;
 			narrationSource = null;
@@ -584,7 +685,20 @@ export function createPublishPanel( editor ) {
 
 			info = null;
 			prepared = null;
+			currentPlan = null;
 			root.style.display = 'none';
+
+		},
+		/** Render & publish: prepare, then publish if (and only if) every check passes. A failed check stops here with the reason; it does not warn and continue. */
+		async publishNow() {
+
+			await prepare();
+			if ( ! prepared ) return { published: false, reason: status.textContent };
+			if ( ! prepared.gate.ok ) return { published: false, reason: 'REFUSED: ' + prepared.gate.failures.join( '; ' ) };
+			const src = publishSource();
+			if ( ! ( src && src.hasToken ) ) { setStatus( 'Prepared, but a token is required to publish: add one in the Git tab, then press Publish.' ); return { published: false, reason: 'no token' }; }
+			await commit();
+			return { published: !! resultBox.textContent && /Published|Committed/.test( resultBox.textContent ), reason: status.textContent };
 
 		},
 		/** For tests: the prepared set. */
