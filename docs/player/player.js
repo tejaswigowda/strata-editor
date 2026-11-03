@@ -4,6 +4,7 @@
 
 import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, alternateBases, presentMode, cueParam, locateCue } from './resolve.js';
 import { parseVtt } from '../editor/js/export/captions.js';
+import { parseMaster, parseMediaPlaylist, audioFor, mergeFmp4, estimateBytes, formatBytes, downloadName } from './download.js';
 
 const $ = id => document.getElementById( id );
 const video = $( 'video' ), qualityLabel = $( 'qualityLabel' ), quality = $( 'quality' );
@@ -13,6 +14,13 @@ let hls = null;
 function framed() { try { return window.self !== window.top; } catch ( e ) { return true; } }     // a cross-origin parent throws: that is a frame
 function applyPresent() { document.body.classList.toggle( 'present', presentMode( { search: location.search, hash: location.hash, framed: framed() } ) ); }
 applyPresent();
+
+// The height that is really visible. On a phone 100vh is the page with the browser's own bars away, so a layout sized to it has its bottom (the controls, the
+// footer) under them; the visual viewport is what is on screen, and it changes as the bars come and go. index.html sizes to --app-h, with 100dvh as its fallback.
+function fit() { document.documentElement.style.setProperty( '--app-h', Math.round( window.visualViewport ? window.visualViewport.height : innerHeight ) + 'px' ); }
+fit();
+addEventListener( 'resize', fit ); addEventListener( 'orientationchange', fit );
+if ( window.visualViewport ) window.visualViewport.addEventListener( 'resize', fit );
 
 function setError( text ) { $( 'error' ).textContent = text || ''; }
 
@@ -47,6 +55,8 @@ async function offerPinned( base ) {
 function teardown() {
 
 	if ( hls ) { hls.destroy(); hls = null; }
+	if ( job ) job.abort();
+	ctx = null; $( 'dl' ).hidden = true; $( 'dlFiles' ).innerHTML = ''; $( 'dlNote' ).textContent = '';
 	video.removeAttribute( 'src' );
 	video.querySelectorAll( 'track' ).forEach( t => t.remove() );
 	video.removeAttribute( 'poster' );
@@ -155,10 +165,11 @@ async function play( input ) {
 	// from where it had got to, and says so; only when every host has failed is it an error.
 	const hosts = [ base, ...alternateBases( base ) ];
 	const tried = [];
+	ctx = { hosts, good: 0, masterName, scene: sceneName, rj, outputs, tracks };
 	function start( at, from ) {
 
 		const origin = hosts[ tried.length ], master = origin + masterName;
-		tried.push( new URL( origin ).host );
+		tried.push( new URL( origin ).host ); ctx.good = tried.length - 1;
 		if ( tried.length > 1 ) { const w = $( 'warn' ), note = `${ from } answered 404 or nothing for a file of this render, which is published: playing it from ${ tried[ tried.length - 1 ] } instead.`; w.textContent = ( w.hidden ? '' : w.textContent + ' ' ) + note; w.hidden = false; }
 		const resume = at !== null && at !== undefined && at > 0 ? at : null;
 		const failed = ( detail ) => {
@@ -197,8 +208,120 @@ async function play( input ) {
 
 	}
 	start( startAt, '' );
+	loadDownloads();
 
 }
+
+// ── download ────────────────────────────────────────────────────────────────────────────────────────────────────────
+// One file from the ladder: the chosen rung's video, and the render's audio if it has any, merged into a single MP4 in the browser (download.js). Every request goes
+// through fetchRender, which tries the same hosts as playback, because a CDN that 404s a segment for the player will 404 it for a download too.
+
+let ctx = null, job = null;
+const dlNote = text => { $( 'dlNote' ).textContent = text || ''; };
+
+async function fetchRender( path, signal ) {
+
+	let last = null;
+	for ( let k = 0; k < ctx.hosts.length; k ++ ) {
+
+		const i = ( ctx.good + k ) % ctx.hosts.length, host = new URL( ctx.hosts[ i ] ).host;
+		try {
+
+			const res = await fetch( ctx.hosts[ i ] + path, { signal } );
+			if ( res.ok ) { ctx.good = i; return res; }
+			last = new Error( `${ path }: HTTP ${ res.status } from ${ host }` );
+
+		} catch ( e ) { if ( e.name === 'AbortError' ) throw e; last = new Error( `${ path }: ${ e.message } (${ host })` ); }
+
+	}
+	throw last;
+
+}
+
+function saveBlob( blob, name ) {
+
+	const url = URL.createObjectURL( blob ), a = document.createElement( 'a' );
+	a.href = url; a.download = name; document.body.append( a ); a.click(); a.remove();
+	setTimeout( () => URL.revokeObjectURL( url ), 60000 );
+
+}
+
+async function saveFile( path, name, type ) {
+
+	const my = ctx;
+	try { dlNote( 'Fetching ' + name + '…' ); saveBlob( new Blob( [ await ( await fetchRender( path ) ).arrayBuffer() ], { type } ), name ); if ( ctx === my ) dlNote( 'Saved ' + name ); }
+	catch ( e ) { if ( ctx === my ) dlNote( 'Could not fetch ' + path + ': ' + e.message ); }
+
+}
+
+/** Offer what this render has: the video at each of its rungs, and its small files. Never an error to the person: with no master there is just nothing to offer. */
+async function loadDownloads() {
+
+	const my = ctx;
+	try {
+
+		const master = parseMaster( await ( await fetchRender( my.masterName ) ).text() );
+		if ( ctx !== my || ! master.renditions.length ) return;
+		const film = parseMediaPlaylist( await ( await fetchRender( master.renditions[ 0 ].uri ) ).text() );
+		if ( ctx !== my ) return;
+		my.master = master; my.seconds = film.duration;
+		const sel = $( 'dlQuality' );
+		sel.innerHTML = '';
+		master.renditions.forEach( ( r, i ) => sel.add( new Option( `${ r.name } · ${ r.width }×${ r.height }${ estimateBytes( r, film.duration ) ? ' · ≈ ' + formatBytes( estimateBytes( r, film.duration ) ) : '' }`, String( i ) ) ) );
+		sel.hidden = master.renditions.length < 2;
+
+		const files = $( 'dlFiles' );
+		files.innerHTML = '';
+		const add = ( label, path, name, type ) => { const b = document.createElement( 'button' ); b.type = 'button'; b.textContent = label; b.addEventListener( 'click', () => saveFile( path, name, type ) ); files.append( b ); };
+		for ( const t of my.tracks ) add( my.tracks.length > 1 ? `Captions (${ t.language })` : 'Captions', t.path, downloadName( my.scene, my.tracks.length > 1 ? t.language : '', 'vtt' ), 'text/vtt' );
+		add( 'Poster', ( my.outputs.poster || 'poster.jpg' ), downloadName( my.scene, 'poster', 'jpg' ), 'image/jpeg' );
+		if ( my.rj ) add( 'render.json', 'render.json', downloadName( my.scene, 'render', 'json' ), 'application/json' );
+		$( 'dl' ).hidden = false;
+
+	} catch ( e ) { /* the player still plays; there is just nothing to offer */ }
+
+}
+
+async function downloadVideo() {
+
+	const button = $( 'dlVideo' );
+	if ( job ) { job.abort(); return; }                                    // a second tap cancels
+	const my = ctx, rung = my && my.master && my.master.renditions[ Number( $( 'dlQuality' ).value ) ];
+	if ( ! rung ) return;
+	const ac = job = new AbortController(), label = button.textContent;
+	button.textContent = 'Cancel';
+	try {
+
+		dlNote( 'Reading the playlists…' );
+		const plan = async path => { const pl = parseMediaPlaylist( await ( await fetchRender( path, ac.signal ) ).text() ); if ( ! pl.init || ! pl.segments.length ) throw new Error( path + ' lists no segments' ); return { dir: path.replace( /[^/]*$/, '' ), pl }; };
+		const video = await plan( rung.uri ), audioRef = audioFor( my.master, rung ), audio = audioRef ? await plan( audioRef.uri ) : null;
+		const runs = [ video, ...( audio ? [ audio ] : [] ) ];
+		const total = runs.reduce( ( n, r ) => n + 1 + r.pl.segments.length, 0);
+		let done = 0, bytes = 0;
+		const grab = async path => { const buf = new Uint8Array( await ( await fetchRender( path, ac.signal ) ).arrayBuffer() ); done ++; bytes += buf.length; dlNote( `Downloading ${ done } of ${ total } · ${ formatBytes( bytes ) }${ audio ? ' (video and audio)' : '' }` ); return buf; };
+		const fetchRun = async r => {
+
+			const init = await grab( r.dir + r.pl.init ), segments = new Array( r.pl.segments.length );
+			let next = 0;
+			await Promise.all( Array.from( { length: 4 }, async () => { while ( next < segments.length ) { const i = next ++; segments[ i ] = await grab( r.dir + r.pl.segments[ i ].uri ); } } ) );
+			return { init, segments };
+
+		};
+		const [ v, a ] = [ await fetchRun( video ), audio ? await fetchRun( audio ) : null ];
+		dlNote( 'Putting it together…' );
+		const merged = mergeFmp4( v, a );
+		const name = downloadName( my.scene, rung.name, 'mp4' );
+		saveBlob( new Blob( merged.parts, { type: 'video/mp4' } ), name );
+		dlNote( `Saved ${ name } (${ formatBytes( merged.bytes ) }${ a ? ', with its audio' : audioRef === null ? ', no audio track: this render is silent' : '' })` );
+
+	} catch ( e ) {
+
+		dlNote( e.name === 'AbortError' ? 'Cancelled.' : 'Could not download: ' + e.message );
+
+	} finally { job = null; button.textContent = label; }
+
+}
+$( 'dlVideo' ).addEventListener( 'click', downloadVideo );
 
 quality.addEventListener( 'change', () => { if ( hls ) hls.currentLevel = Number( quality.value ); } );
 $( 'form' ).addEventListener( 'submit', e => {
