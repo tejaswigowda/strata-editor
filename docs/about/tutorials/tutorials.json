@@ -303,6 +303,60 @@
 		"tools": []
 	},
 	{
+		"title": "Name every part of a street-corner diorama",
+		"href": "segment-a-diorama.html",
+		"group": "Scenes",
+		"blurb": "SEG on a 71-mesh street-corner diorama whose biggest mesh has 3,297 texture islands: too many to anchor by hand. You name 22 regions by looking at it, cut nine meshes into 124 named, classed parts, name the 62 meshes that were already separate, and select one object across all its materials with a class. Says where SEG's own warning caught a second post box. Built with the JS Shell.",
+		"thumb": "screenshots/thumbs/segment-a-diorama.jpg",
+		"desc": "Import a CC Attribution diorama, pin and hash the source, read the components SEG finds, place named regions on the model from orthographic views, cut each textured mesh into parts by region with SEG.split, read the post-cut warning and fix the plan, preview and isolate the result, name and class the meshes that were already separate and the skeleton nodes, check with lint(), and select whole objects (the tram, the cat, the post boxes) by class \u2014 with a log of how many parts were cut and named.",
+		"embed": "#repo=tejaswigowda/test1@3c4520491a63c23ac02366bfe2b79da2cab41cb8&file=littletokyo.json&present=true",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Glen Fox (glenatron)",
+				"role": "asset",
+				"url": "https://sketchfab.com/glenatron"
+			}
+		],
+		"assets": [
+			{
+				"name": "LittlestTokyo.glb",
+				"source": "https://github.com/mrdoob/three.js/blob/f405199a0ce26134efbf2d654a634efa5655b756/examples/models/gltf/LittlestTokyo.glb",
+				"licence": "CC BY 4.0",
+				"attribution": "Littlest Tokyo by Glen Fox (glenatron), https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042 (the file's own metadata; the three.js example credits https://artstation.com/artwork/1AGwX). Changes made: the model is cut into named parts and its meshes are renamed and classed; textures are not edited. The screenshots and card thumbnail on this page show this model. No endorsement by the artist is implied"
+			},
+			{
+				"name": "Littlest Tokyo (Sketchfab page)",
+				"source": "https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042",
+				"licence": "CC BY 4.0",
+				"attribution": "Glen Fox (glenatron) on Sketchfab, the page the file's own metadata names. Attribution is required, and applies to the LittlestTokyo.glb above and to everything made from it"
+			},
+			{
+				"name": "littletokyo.json (the segmented scene)",
+				"source": "https://github.com/tejaswigowda/test1/blob/3c4520491a63c23ac02366bfe2b79da2cab41cb8/littletokyo.json",
+				"licence": "CC BY 4.0 (a derivative of LittlestTokyo.glb: keep the credit above)",
+				"attribution": "Model by Glen Fox (glenatron); segmentation, names and classes by Tejaswi Gowda"
+			}
+		],
+		"tools": [
+			{
+				"name": "three.js",
+				"licence": "MIT",
+				"url": "https://threejs.org/",
+				"note": "Strata is built on it; LittlestTokyo.glb is loaded from its examples directory at a pinned commit"
+			}
+		]
+	},
+	{
 		"title": "Cut an avocado into named parts, building the tool by hand",
 		"href": "segment-a-mesh.html",
 		"group": "Scenes",

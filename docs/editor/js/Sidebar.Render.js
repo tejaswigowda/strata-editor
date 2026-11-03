@@ -1454,7 +1454,6 @@ function SidebarRender( editor ) {
 			glCanvas.height = height;
 
 			const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true } );
-			rendererInfo = { renderer: 'WebGLRenderer', device: renderer.capabilities.isWebGL2 ? 'webgl2' : 'webgl' };       // what drew these frames (the live view is WebGPU; the export is not)
 			restores.push( () => renderer.dispose() );
 			const output = new LinearOutput( renderer );
 			restores.push( () => output.dispose() );
@@ -1841,6 +1840,7 @@ function SidebarRender( editor ) {
 		previewWrap.style.display = '';
 
 		const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, preserveDrawingBuffer: true } );
+		rendererInfo = { renderer: 'WebGLRenderer', device: renderer.capabilities.isWebGL2 ? 'webgl2' : 'webgl' };       // what drew these frames (the live view is WebGPU; the export is not)
 		const output = new LinearOutput( renderer );
 		renderer.setPixelRatio( 1 );
 		renderer.setSize( width, height, false );

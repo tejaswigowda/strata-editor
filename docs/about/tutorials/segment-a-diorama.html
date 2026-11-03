@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Name every part of a street-corner diorama — Strata tutorials</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="highlight.css">
+<script src="highlight.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Step-by-step tutorial: use the Strata Shell's SEG tool on a 71-mesh street-corner diorama whose biggest mesh has 3,297 texture islands. Name 22 regions by looking at the model, cut nine meshes into 124 named, classed parts, name the 62 meshes that were already separate, and select one object across all its materials with a class.">
+<!-- social:start (generated from tutorials.json by hand; node scripts/tutorial-policy.cjs lint checks it) -->
+<link rel="canonical" href="https://strataeditor.dev/about/tutorials/segment-a-diorama.html">
+<meta property="og:site_name" content="Strata">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Name every part of a street-corner diorama">
+<meta property="og:description" content="SEG on a 71-mesh street-corner diorama whose biggest mesh has 3,297 texture islands: too many to anchor by hand. You name 22 regions by looking at it, cut nine meshes into 124 named, classed parts, name the 62 meshes that were already separate, and select one object across all its materials with a class. Says where SEG's own warning caught a second post box. Built with the JS Shell.">
+<meta property="og:url" content="https://strataeditor.dev/about/tutorials/segment-a-diorama.html">
+<meta property="og:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/segment-a-diorama.jpg">
+<meta property="og:image:width" content="640">
+<meta property="og:image:height" content="400">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Name every part of a street-corner diorama">
+<meta name="twitter:description" content="SEG on a 71-mesh street-corner diorama whose biggest mesh has 3,297 texture islands: too many to anchor by hand. You name 22 regions by looking at it, cut nine meshes into 124 named, classed parts, name the 62 meshes that were already separate, and select one object across all its materials with a class. Says where SEG's own warning caught a second post box. Built with the JS Shell.">
+<meta name="twitter:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/segment-a-diorama.jpg">
+<!-- social:end -->
+<!--
+	/about/tutorials/segment-a-diorama.html — the "many objects in few meshes" case of the SEG tutorials.
+	Every snippet is real Strata surface (the SEG global of the JS Shell, documented in
+	guides/MESH_SEGMENT.md, plus $S(), isolate(), tagClass(), listSelectors() and lint()). Paste each block
+	into the Shell tab in order; each Shell line is its own scope, so state is kept on window.
+	The segmented scene is public (CC Attribution model): it is committed as littletokyo.json in
+	tejaswigowda/test1 and the index card opens it. Static page, no build step, no third-party calls.
+-->
+<style>
+	:root { color-scheme: dark; }
+	html, body {
+		margin: 0;
+		background: #14161a;
+		color: #d9dde3;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		line-height: 1.65;
+	}
+	main {
+		max-width: 760px;
+		margin: 0 auto;
+		padding: 8vh 24px 14vh;
+	}
+	h1 {
+		margin: 0 0 0.2em;
+		font-size: 1.9rem;
+		font-weight: 700;
+		color: #f3f5f8;
+	}
+	.tagline {
+		margin: 0 0 2.4em;
+		color: #9aa4b2;
+		font-size: 1.05rem;
+	}
+	h2 {
+		margin: 2.6em 0 0.3em;
+		font-size: 1.2rem;
+		color: #f3f5f8;
+		display: flex;
+		align-items: baseline;
+		gap: 0.5em;
+	}
+	h2 .step {
+		color: #7db2ff;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+	h2 + p.lede {
+		margin-top: 0.2em;
+		color: #c3c9d1;
+	}
+	p { color: #c3c9d1; }
+	a { color: #7db2ff; text-decoration: none; }
+	a:hover { text-decoration: underline; }
+	code { background: #1e2127; border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.92em; }
+	pre {
+		background: #1a1d23;
+		border: 1px solid #2a2e36;
+		border-radius: 8px;
+		padding: 14px 16px;
+		overflow-x: auto;
+		font-size: 0.86rem;
+		line-height: 1.55;
+	}
+	pre code { background: none; padding: 0; }
+	.note {
+		border-left: 3px solid #3a4152;
+		background: #1a1d23;
+		padding: 0.8em 1em;
+		border-radius: 0 6px 6px 0;
+		color: #a9b1bd;
+		font-size: 0.92rem;
+		margin: 1em 0;
+	}
+	.note strong { color: #d9dde3; }
+	ol.steps { padding-left: 1.2em; }
+	ol.steps li { margin-bottom: 0.4em; }
+	table.cuts {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+		margin: 1em 0;
+	}
+	table.cuts th, table.cuts td {
+		text-align: left;
+		padding: 0.4em 0.7em;
+		border-bottom: 1px solid #2a2e36;
+		color: #c3c9d1;
+		vertical-align: top;
+	}
+	table.cuts th { color: #f3f5f8; font-weight: 600; }
+	table.cuts td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; color: #7db2ff; }
+	table.cuts tr.total td { color: #f3f5f8; font-weight: 600; border-top: 1px solid #3a4152; }
+	figure { margin: 1.2em 0; }
+	figure img { display: block; width: 100%; border-radius: 8px; border: 1px solid #2a2e36; }
+	figure figcaption { margin-top: 0.5em; font-size: 0.82rem; color: #7d8794; text-align: center; }
+	.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+	.pair figure { margin: 0.6em 0; }
+	@media (max-width: 640px) { .pair { grid-template-columns: 1fr; } }
+	footer {
+		margin-top: 3.5em;
+		padding-top: 1.2em;
+		border-top: 1px solid #2a2e36;
+		color: #5b6470;
+		font-size: 0.85rem;
+	}
+</style>
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main>
+	<h1>Name every part of a street-corner diorama</h1>
+
+	<p class="tagline">A furnished room was one mesh with 538 islands and 14 things worth naming. This model is the opposite problem: <strong>71 meshes, 141,802 triangles</strong>, and the one mesh that holds the city block has <strong>3,297 islands in 2,841 components</strong>. Naming an anchor for each is out of the question. What works is to <strong>look at the model, write down the regions you can see, and let each component go to the region that holds it</strong>, once per material. Every one of the 186 pieces that come out has a name, a class, and a place in the record. Built with the JS Shell.</p>
+
+	<div class="note"><strong>Start with the other two SEG tutorials.</strong> This page uses <code>SEG.describe</code>, <code>SEG.split</code>, <code>SEG.preview</code> and the plan from <a href="segment-any-mesh.html">Cut any textured mesh into named parts</a>, and components from <a href="segment-a-scene.html">Cut a scene into named parts</a>. The reference is <a href="../../../guides/MESH_SEGMENT.md">guides/MESH_SEGMENT.md</a>. What is new here is the plan: <strong>parts given by component, with the components chosen by where they are</strong>, and one class that selects the same object across every material it is made of.</div>
+
+	<figure>
+		<img src="screenshots/lt-whole.png" alt="A street-corner diorama seen from the front right: a pink-tiled shop with a giant white lucky cat on its roof, a taller cream building to its left, a dark building behind, a yellow and green tram on the right, a red post box, orange traffic cones and overhead wires." loading="lazy">
+		<figcaption>Littlest Tokyo by Glen Fox, imported and untouched. Every part you can see in this picture ends up with a name.</figcaption>
+	</figure>
+
+	<h2><span class="step">1</span> The model, its licence, and what changed</h2>
+	<p class="lede"><strong>Littlest Tokyo</strong> by <strong>Glen Fox</strong> (<a href="https://sketchfab.com/glenatron">glenatron</a>), licensed <strong>Creative Commons Attribution 4.0</strong>. The file's own metadata says so, and names the Sketchfab page (<a href="https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042">sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042</a>); the three.js example that ships the file credits the same artist ("CC Attribution") and links <a href="https://artstation.com/artwork/1AGwX">ArtStation</a>. This page loads the file from the three.js repository, at a pinned commit:</p>
+	<pre><code>https://github.com/mrdoob/three.js/blob/f405199a0ce26134efbf2d654a634efa5655b756/examples/models/gltf/LittlestTokyo.glb
+sha256  8375c2aa6808e28ad1cb9c0d43e1513f57ffd7865244bf66bbbd5bb0e907e06d   4,133,072 bytes</code></pre>
+	<div class="note"><strong>Changes made, as the licence asks.</strong> The model is cut into named parts, its meshes are renamed and given classes, and the skeleton nodes are named and classed. The geometry is only divided, never edited: the triangle count is 141,802 before and after. Textures are not changed. The artist has not endorsed this page or the segmented scene. The segmented scene is public as <code>littletokyo.json</code> in <a href="https://github.com/tejaswigowda/test1/blob/3c4520491a63c23ac02366bfe2b79da2cab41cb8/littletokyo.json">tejaswigowda/test1</a> under the same licence, with the same credit; the example link on the index card opens it.</div>
+
+	<h2><span class="step">2</span> Import it, and count what you have</h2>
+	<p class="lede">Start from an empty scene (File, New). Download the <code>.glb</code> from the address above and drop it on the editor, or use File, Import. Accept the dialog's defaults. The Shell logs:</p>
+	<pre><code>↳ Normalized "LittlestTokyo.glb": scaled ×0.00362, centered &amp; grounded (reversible — undo to restore).
+ℹ Imported "LittlestTokyo.glb" with 71 separable parts.
+ℹ 67 part(s) are textured: setting a color will TINT the texture (map × color), not replace it.</code></pre>
+	<p>The importer has made one mesh per material per node, so 71 is a count of mesh nodes, not of objects. Ask for the shape of it:</p>
+	<pre><code>(() => { const rows = []; scene.traverse(o => { if (o.isMesh) rows.push([o.name, Math.round((o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3)]); }); rows.sort((a, b) => b[1] - a[1]); return { meshes: rows.length, triangles: rows.reduce((s, r) => s + r[1], 0), biggest: rows.slice(0, 7).map(r => r.join(': ')) }; })()</code></pre>
+	<pre><code>{
+  "meshes": 71,
+  "triangles": 141802,
+  "biggest": [
+    "Object674_outline_0: 40734",
+    "Object649_normal_0: 29276",
+    "Object649_metalmat_0: 17350",
+    "Object649_Plastic_Soft_0: 16935",
+    "Object649_paintmat_0: 9438",
+    "Object674_outline_0_1: 9124",
+    "Object675_outline_0: 2966"
+  ]
+}</code></pre>
+	<p>Read it as a map of where the work is. <code>Object649_*</code> is the whole city block, which looks like one baked object split by material into eleven meshes. The three <code>_outline_</code> meshes are Blender-style inverted hulls that draw the black outline (the two big ones alone are 49,858 of the 141,802 triangles, 35%; they have no UVs and nothing to cut, so they are named whole). <code>Object675_*</code> is the tram. The other fifty-odd meshes are small, already separate objects: birds, cables, lanterns. So the job has two halves: <strong>cut the meshes that hold many objects</strong>, and <strong>name the meshes that are already one object</strong>.</p>
+
+	<h2><span class="step">3</span> Fix the names a selector cannot reach</h2>
+	<p class="lede">Seven meshes came in with a <code>#</code> in the name (<code>Object649_Material_#5511_0</code>). In a selector <code>#</code> means "id", so <code>SEG.components('#Object649_Material_#5511_0')</code> cannot reach it. Rename them:</p>
+	<pre><code>scene.traverse(o => { if (o.isMesh &amp;&amp; o.name.includes('#')) o.name = o.name.replace(/#/g, '') })</code></pre>
+	<pre><code>[ "Object649_Material_#5511_0 -> Object649_Material_5511_0",
+  "Object649_Material_#5512_0 -> Object649_Material_5512_0",
+  "Object705_Material_#5516_0 -> Object705_Material_5516_0",
+  "Object706_Material_#5518_0 -> Object706_Material_5518_0", … ]</code></pre>
+
+	<h2><span class="step">4</span> Pin and hash the source</h2>
+	<p class="lede"><code>SEG.split</code> will not cut without a source it can name exactly: the licence, the credit, and the hash of the file. <code>SEG.source</code> fetches the file and computes them; keep the result on <code>window</code>, because each Shell line is its own scope.</p>
+	<pre><code>SEG.source('https://raw.githubusercontent.com/mrdoob/three.js/f405199a0ce26134efbf2d654a634efa5655b756/examples/models/gltf/LittlestTokyo.glb', { licence: 'CC-BY-4.0', attribution: 'Littlest Tokyo by Glen Fox (glenatron), https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042' }).then(s => { window.src = s })</code></pre>
+	<pre><code>JSON.stringify(window.src, null, 1)
+{ "url": "https://raw.githubusercontent.com/mrdoob/three.js/f405199a…/examples/models/gltf/LittlestTokyo.glb",
+  "page": "https://github.com/mrdoob/three.js/blob/f405199a…/examples/models/gltf/LittlestTokyo.glb",
+  "commit": "f405199a0ce26134efbf2d654a634efa5655b756",
+  "sha256": "8375c2aa6808e28ad1cb9c0d43e1513f57ffd7865244bf66bbbd5bb0e907e06d",
+  "bytes": 4133072,
+  "licence": "CC-BY-4.0",
+  "attribution": "Littlest Tokyo by Glen Fox (glenatron), https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042" }</code></pre>
+	<p>The URL has to be the <code>raw.githubusercontent.com</code> form with a full commit, not the <code>github.com/…/blob/…</code> page and not a branch name: SEG refuses both and prints the address to use. The hash and size match the file in step 1, which is how anyone can check that the record describes the file they have.</p>
+
+	<h2><span class="step">5</span> Why anchors do not work here</h2>
+	<p class="lede">In the room tutorial you named 14 components and SEG placed the other 268 on the nearest. Count what that would take here:</p>
+	<table class="cuts">
+		<tr><th>Mesh</th><th>Islands</th><th>Components</th><th>Triangles</th></tr>
+		<tr><td>Object649_normal_0</td><td>3,297</td><td>2,841</td><td>29,276</td></tr>
+		<tr><td>Object649_metalmat_0</td><td>655</td><td>407</td><td>17,350</td></tr>
+		<tr><td>Object649_Plastic_Soft_0</td><td>465</td><td>244</td><td>16,935</td></tr>
+		<tr><td>Object705_Material_5516_0</td><td>207</td><td>193</td><td>1,527</td></tr>
+		<tr><td>Object649_paintmat_0</td><td>267</td><td>178</td><td>9,438</td></tr>
+	</table>
+	<p>In <code>Object649_normal_0</code> the 1,291 largest components hold only 80% of the triangles: the long tail is tiles, leaves, sign lettering and cracks, thousands of pieces of a few triangles each. No component is "the building", and an anchor is a component you can justify naming. There is no short list of them to name.</p>
+	<p>But the evidence SEG gives for a scene still holds: every component has a <strong>centre in the world frame</strong> and a size. A pole, a tram and a cat are all <em>somewhere</em>, and the same somewhere in all eleven material meshes, because they share one set of coordinates. So name the <em>places</em> instead.</p>
+
+	<h2><span class="step">6</span> Look at it, then write down the regions</h2>
+	<p class="lede">The importer scaled the model to about 2 units across, centred and grounded: <code>x</code> runs −1 to 1 left to right, <code>z</code> −1 (back) to 1 (front), <code>y</code> up from 0 to 1.57. Look at it square-on with a grid. These two views are drawn with an orthographic camera and a grid every 0.25, so a pixel is a coordinate:</p>
+	<div class="pair">
+		<figure><img src="screenshots/lt-grid-front.png" alt="The diorama seen straight on from the front with a 0.25 grid labelled in world units along the sides." loading="lazy"><figcaption>From the front: <code>x</code> across, <code>y</code> up.</figcaption></figure>
+		<figure><img src="screenshots/lt-grid-top.png" alt="The diorama seen straight down with the same grid, showing the street, the three buildings and the tram at the top." loading="lazy"><figcaption>From above: <code>x</code> across, <code>z</code> down (the front is at the bottom).</figcaption></figure>
+	</div>
+	<p>From the two views, and a third and fourth from the back and the left, I wrote down 22 regions: the objects that stand out (the tram, the cat, two rooftop billboards, two post boxes, the cones, the poles, the panda signs), the three buildings plus the teal one cut into shopfront, upper floors and roof by height, the sidewalk with its benches, and the street. Each region is a box, a name and the classes it will carry. One is a rule instead of a box: a component at least 0.45 long and at most 0.03 thick on its second axis is a wire.</p>
+	<pre><code>window.REGIONS = [
+  // name, classes, box: [x0, x1,  y0, y1,  z0, z1] in world units; the first region that holds a component's centre takes it
+  { name: 'Overhead_Wires', rule: 'wire', classes: ['wire', 'utility'] },
+  { name: 'Traffic_Cones', classes: ['cone', 'street-furniture'], box: [0.15, 0.98,  0.0, 0.14,  0.8, 1.05] },
+  { name: 'Post_Box_Front', classes: ['post-box', 'street-furniture'], box: [0.58, 0.74,  0.0, 0.32,  0.66, 0.86] },
+  { name: 'Post_Box_Back_Left', classes: ['post-box', 'street-furniture'], box: [-0.52, -0.33,  0.0, 0.32,  -0.26, -0.04] },
+  { name: 'Pole_Front', classes: ['pole', 'utility', 'street-furniture'], box: [0.72, 0.95,  0.0, 1.3,  0.68, 0.98] },
+  { name: 'Pole_Back', classes: ['pole', 'utility', 'street-furniture'], box: [0.72, 0.95,  0.0, 1.3,  -1.0, -0.82] },
+  { name: 'Tram_Car', classes: ['tram', 'vehicle'], box: [0.22, 0.98,  0.0, 0.95,  -1.03, -0.58] },
+  { name: 'Billboard_Purple_Screen', classes: ['billboard', 'sign', 'rooftop'], box: [-0.15, 0.35,  1.0, 1.5,  -0.55, -0.25] },
+  { name: 'Billboard_Pink_Roof', classes: ['billboard', 'sign', 'rooftop'], box: [0.3, 0.62,  1.15, 1.55,  0.28, 0.42] },
+  { name: 'Cat_Statue', classes: ['cat', 'statue', 'rooftop'], box: [0.27, 0.72,  1.12, 1.8,  0.3, 0.8] },
+  { name: 'Panda_Signs', classes: ['panda', 'sign'], box: [-0.65, -0.03,  0.52, 1.3,  -0.62, -0.08] },
+  { name: 'Building_B_Roof', classes: ['building', 'building-b', 'roof'], box: [0.25, 0.8,  1.12, 1.4,  0.2, 0.8] },
+  { name: 'Building_B_Upper_Floors', classes: ['building', 'building-b', 'upper-floors'], box: [0.25, 0.8,  0.5, 1.12,  0.2, 0.8] },
+  { name: 'Building_B_Shopfront', classes: ['building', 'building-b', 'shopfront'], box: [0.25, 0.8,  0.0, 0.5,  0.2, 0.8] },
+  { name: 'Building_A_Roof', classes: ['building', 'building-a', 'roof'], box: [-0.55, 0.07,  1.05, 1.6,  -0.02, 0.8] },
+  { name: 'Building_A_Upper_Floors', classes: ['building', 'building-a', 'upper-floors'], box: [-0.55, 0.07,  0.5, 1.05,  -0.02, 0.8] },
+  { name: 'Building_A_Shopfront', classes: ['building', 'building-a', 'shopfront'], box: [-0.55, 0.07,  0.0, 0.5,  -0.02, 0.8] },
+  { name: 'Building_C_Upper_Floors', classes: ['building', 'building-c', 'upper-floors'], box: [0.2, 0.8,  0.5, 1.3,  -0.62, 0.2] },
+  { name: 'Building_C_Shopfront', classes: ['building', 'building-c', 'shopfront'], box: [0.2, 0.8,  0.0, 0.5,  -0.62, 0.2] },
+  { name: 'Teal_Building_Upper_Floors', classes: ['building', 'teal-building', 'upper-floors'], box: [-0.5, 0.3,  0.5, 1.3,  -0.62, -0.02] },
+  { name: 'Teal_Building_Shopfront', classes: ['building', 'teal-building', 'shopfront'], box: [-0.5, 0.3,  0.0, 0.5,  -0.62, -0.02] },
+  { name: 'Sidewalk_Benches', classes: ['sidewalk', 'bench', 'street-furniture'], box: [-1.0, -0.55,  0.0, 0.35,  -0.8, -0.2] },
+  { name: 'Street_Ground', classes: ['street', 'ground'], box: [-1.2, 1.2,  -0.2, 0.09,  -1.2, 1.2] },
+]</code></pre>
+	<p>The order matters: small, specific regions come first so that a post box is a post box before it is "the street". A component whose centre is in no box goes to the nearest box, so nothing is left over (SEG would refuse a plan that leaves a component out). The numbers are what I read off the grid; they are coarse on purpose, and step 9 shows where.</p>
+
+	<h2><span class="step">7</span> The helper, and the first cut</h2>
+	<p class="lede">Two functions turn the plan into a <code>SEG.split</code> call. <code>regionOf</code> is the rule above. <code>cutMesh</code> asks SEG for the components of one mesh, sorts their numbers into regions, and makes one part per region, named <code>Region_Material</code> and carrying the region's classes plus the material's, so the same region in two meshes gets two parts with the same classes.</p>
+	<pre><code>window.regionOf = c => {
+  const p = c.centre;
+  for (const r of REGIONS) {
+    if (r.rule === 'wire') { const s = [...c.size].sort((a, b) => a - b); if (s[2] >= 0.45 &amp;&amp; s[1] &lt;= 0.03) return r; continue; }
+    const b = r.box;
+    if (p[0] >= b[0] &amp;&amp; p[0] &lt;= b[1] &amp;&amp; p[1] >= b[2] &amp;&amp; p[1] &lt;= b[3] &amp;&amp; p[2] >= b[4] &amp;&amp; p[2] &lt;= b[5]) return r;
+  }
+  const d = r => { let t = 0; for (let i = 0; i &lt; 3; i++) { const v = p[i], lo = r.box[2*i], hi = r.box[2*i+1]; if (v &lt; lo) t += (lo - v) ** 2; else if (v > hi) t += (v - hi) ** 2; } return t; };
+  return REGIONS.filter(r => r.box).sort((a, b) => d(a) - d(b))[0];     // in no box: the nearest one
+}
+window.cutMesh = (mesh, suffix, group) => {
+  const by = {};
+  for (const c of SEG.components('#' + mesh)) { const r = regionOf(c); (by[r.name] = by[r.name] || { r, ids: [] }).ids.push(c.component); }
+  const parts = Object.values(by).map(({ r, ids }) => ({ component: ids, name: r.name + '_' + suffix, classes: [...r.classes, suffix.toLowerCase()] }));
+  return SEG.split('#' + mesh, { group, source: window.src, parts });
+}</code></pre>
+	<p>Start with the smallest of the big meshes, the paint (178 components), and read the components first:</p>
+	<pre><code>SEG.describe('#Object649_paintmat_0')</code></pre>
+	<pre><code>component 0: 406 triangles (1 island: 0), size 0.094,0.210,0.097, centre 0.650,0.162,0.746, at 0.83,0.08,0.88, colours rgb(222,91,87) 75%  rgb(173,63,58) 24%  rgb(250,146,142) 1%
+component 1: 406 triangles (1 island: 1), size 0.096,0.210,0.096, centre -0.408,0.162,-0.140, at 0.27,0.08,0.43, colours rgb(222,91,87) 75%  rgb(173,63,58) 24%  rgb(250,146,142) 1%
+component 2: 198 triangles (4 islands: 16,17,246,262), size 0.258,0.292,0.591, centre -0.353,0.267,0.273, at 0.30,0.16,0.64, colours rgb(32,23,22) 84%  …
+…
+(267 islands joined into 178 components where they touch in space; world frame, y up. …)</code></pre>
+	<p>Look at components 0 and 1: the same 406 triangles, the same size to a millimetre, the same red. <strong>Two identical red objects, one at the front right and one at the back left.</strong> They are post boxes. In my first plan only the front one had a region. The first cut:</p>
+	<pre><code>cutMesh('Object649_paintmat_0', 'Paint', 'Paint_Parts')</code></pre>
+	<pre><code>Post_Box_Paint: 836 triangles | Teal_Building_Shopfront_Paint: 808 triangles | Building_A_Shopfront_Paint: 1030 triangles | Building_B_Shopfront_Paint: 1827 triangles | … 
+⚠ absorbed: Teal_Building_Shopfront_Paint: it is assembled from 8 components and 95% of its texture is one colour (#d3504c): it has probably absorbed a run of similar pieces
+✨ Scene updated — 1 command executed</code></pre>
+	<p>The cut worked and every triangle was kept, and SEG still said something was wrong with it. <code>absorbed</code> fires when a part is made of many components and nearly all one colour: a run of similar things that were swallowed by a neighbour. Eight red components in the teal building's volume, 95% one red: the <em>second</em> post box had been given to the teal building because no region claimed it. <code>SEG.split</code> made the whole cut as one undo step, so <code>editor.undo()</code> took it back. Add the second post box to the plan (it is in the list above as <code>Post_Box_Back_Left</code>), and cut again:</p>
+	<pre><code>Post_Box_Front_Paint: 836 triangles | Post_Box_Back_Left_Paint: 660 triangles | Building_A_Shopfront_Paint: 1030 triangles | … | Teal_Building_Shopfront_Paint: 148 triangles | …
+✨ Scene updated — 1 command executed</code></pre>
+	<p>The warning is gone, and the teal building's paint went from 808 triangles to 148: the 660 that left it are the back post box, now its own part.</p>
+
+	<h2><span class="step">8</span> Cut the other eight</h2>
+	<pre><code>cutMesh('Object649_normal_0', 'Surface', 'Surface_Parts')
+cutMesh('Object649_metalmat_0', 'Metal', 'Metal_Parts')
+cutMesh('Object649_Plastic_Soft_0', 'SoftPlastic', 'SoftPlastic_Parts')
+cutMesh('Object649_Material_5511_0', 'Mat5511', 'Mat5511_Parts')
+cutMesh('Object649_Material_5512_0', 'Mat5512', 'Mat5512_Parts')
+cutMesh('Object649_alpha_glass_0', 'AlphaGlass', 'AlphaGlass_Parts')
+cutMesh('Object649_glassmat_0', 'Glass', 'Glass_Parts')
+cutMesh('Object705_Material_5516_0', 'Mat5516', 'Mat5516_Parts')</code></pre>
+	<p>Paste them one at a time. Each call is its own undo step, and in my runs, in a browser with software rendering, each finished within the 20 seconds I allowed (the largest mesh, with 2,841 components, is the slow one). The suffix is the glTF material's own name (<code>normal</code>, <code>metalmat</code>, <code>Plastic_Soft</code>, <code>paintmat</code>) in a readable form, or its number for the three that have only a number (<code>Mat5511</code>): I do not know what those materials are meant to be, so I did not guess. The metal cut printed two warnings, <code>absorbed: Pole_Front_Metal</code> (14 components, 96% one dark grey) and <code>absorbed: Sidewalk_Benches_Metal</code> (9 components, 94% one blue-grey). Both are what they say: the poles and the benches really are runs of the same metal, so I left them, as the room tutorial leaves its warning. The other eight cuts printed none.</p>
+
+	<h2><span class="step">9</span> Check the cut</h2>
+	<p class="lede"><code>SEG.preview</code> paints each part of one group a flat colour, in one undoable step, and <code>SEG.restore()</code> puts the textures back (it printed <code>textured materials restored</code>).</p>
+	<pre><code>SEG.preview('#Paint_Parts')</code></pre>
+	<figure>
+		<img src="screenshots/lt-preview-paint.png" alt="The diorama with the paint parts painted flat colours, among them two red post boxes, a lime guard rail and patches of blue, green, magenta and orange, while everything else keeps its texture." loading="lazy">
+		<figcaption><code>SEG.preview('#Paint_Parts')</code>: each of the 17 paint parts a flat colour, the rest of the model still textured. Both post boxes are parts of their own now.</figcaption>
+	</figure>
+	<p>One group at a time shows one material. To see <em>all</em> the regions at once I drew every cut part in a colour taken from its region name, so the same region is one colour in all nine meshes, from the front and from above. (This figure is a throwaway offscreen render, not a Strata command; grey parts are the ones that were never cut.)</p>
+	<div class="pair">
+		<figure><img src="screenshots/lt-volumes-front.png" alt="The diorama from the front with every cut part in a flat colour by region, with a legend of 22 region names." loading="lazy"><figcaption>From the front, by region.</figcaption></figure>
+		<figure><img src="screenshots/lt-volumes-top.png" alt="The diorama from above with every cut part in a flat colour by region." loading="lazy"><figcaption>From above, by region.</figcaption></figure>
+	</div>
+	<div class="note"><strong>Where the volumes are rough.</strong> A component belongs to the region that holds its <em>centre</em>, so a long thing that crosses a boundary goes wholly to one side. The street is cut by boxes, so the pavement in front of building A is <code>Building_A_Shopfront</code> and the road is <code>Street_Ground</code>. The cat's region includes the red bamboo stand under it. The "post box" regions include the plant and the signpost standing beside them. And a region is a box, not an object: the panda signs' box also holds a little of the teal facade behind them. The parts are <em>regions of the model, by material</em>, not outlines of individual objects; for an object-by-object cut you would need anchors, and the room tutorial shows how.</div>
+
+	<h2><span class="step">10</span> Name what was already separate</h2>
+	<p class="lede">The 62 meshes that are one object each need no cutting, only a name an author would choose and a class. <code>tagClass(node, 'bird')</code> is the same undoable class call the Shell uses everywhere. I read each name off the mesh's position and size in the report and the views above; where I could only say what it looks like, the name says that (<code>Round_Fixture_Back_Left</code>, <code>Thin_Strip_Roof_A</code>), and the A and B of a pair mean only "one of two".</p>
+	<table class="cuts">
+		<tr><th>Group</th><th>Meshes</th><th>Names</th><th>What the evidence was</th></tr>
+		<tr><td>Tram</td><td>6</td><td><code>Tram_Body_Metal</code>, <code>_Paint</code>, <code>Tram_Windows_Glass</code>, <code>Tram_Outline_Hull</code>, <code>Tram_Wheel_Set_A</code>, <code>_B</code></td><td>one node (<code>Object675</code>) split by material; the two wheel sets are 7 cm wide and 24 cm long, low, under it</td></tr>
+		<tr><td>Birds</td><td>18</td><td><code>Bird_1</code> … <code>Bird_6</code>, each with <code>_Wing_A</code> and <code>_Wing_B</code></td><td>six skinned 96-triangle meshes at the height of the wires, each with two 30-triangle planes at the same place</td></tr>
+		<tr><td>Cables</td><td>6</td><td><code>Cable_1</code> … <code>Cable_6</code></td><td>long, thin, at wire height</td></tr>
+		<tr><td>Sprout figure</td><td>6</td><td><code>Sprout_Body</code>, <code>_Hand_A</code>, <code>_Hand_B</code>, <code>_Foot_A</code>, <code>_Foot_B</code>, <code>_Leaf</code></td><td>the model's own names (<code>body</code>, <code>hand1</code>, <code>leaf</code>…) on one small figure by the cones</td></tr>
+		<tr><td>Trees</td><td>4</td><td><code>Tree_Front_Center</code>, <code>Tree_Front_Left</code>, <code>Tree_Left_Side</code>, <code>Hedge_Left_Side</code></td><td>three identical alpha-leaf meshes at three places, and one long low one</td></tr>
+		<tr><td>Lanterns, signs, fixtures</td><td>17</td><td><code>Paper_Lantern_1</code>…<code>3</code>, <code>Sunburst_Sign_Face</code>/<code>_Back</code>, <code>Rooftop_Fan_Metal</code>/<code>_Paint</code>, <code>Wall_Aircon_Plastic</code>/<code>_Metal</code>, <code>Cat_Paw_Raised</code>, <code>Round_Fixture_Back_Left</code>, <code>Small_Skinned_Figure_Surface</code>/<code>_Metal</code>, <code>Thin_Strip_Front_A</code>/<code>_B</code>/<code>Roof_A</code>/<code>_B</code></td><td>identical copies at one height (lanterns), a round disc with an eye (sunburst), a fan on a roof, a box with a fan on a wall, a raised paw on the cat, and shapes I can only describe</td></tr>
+		<tr><td>Outline hulls and the block's leftovers</td><td>5</td><td><code>Outline_Hull_Block</code>, <code>Outline_Hull_Details</code>, <code>Alpha_Cutouts</code>, <code>Tinted_Glass_Panels</code>, <code>Interior_Fittings</code></td><td>no UVs and a hull's shape; the three small <code>Object649_*</code> meshes that were not worth cutting (56, 52 and 40 triangles)</td></tr>
+	</table>
+	<p>The names are a map from the old name to a new name and its classes, applied in one pass. This is the whole map:</p>
+	<pre><code>window.RENAMES = {
+  Object675_metalmat_0: ['Tram_Body_Metal', 'tram vehicle metal'],
+  Object675_paintmat_0: ['Tram_Body_Paint', 'tram vehicle paint'],
+  Object675_glassmat_0: ['Tram_Windows_Glass', 'tram vehicle glass'],
+  Object675_outline_0: ['Tram_Outline_Hull', 'tram vehicle outline'],
+  Object680_metalmat_0: ['Tram_Wheel_Set_A', 'tram vehicle wheel metal'],
+  Object681_metalmat_0: ['Tram_Wheel_Set_B', 'tram vehicle wheel metal'],
+  Object674_outline_0: ['Outline_Hull_Block', 'outline hull'],
+  Object674_outline_0_1: ['Outline_Hull_Details', 'outline hull'],
+  Object649_alpha_0: ['Alpha_Cutouts', 'alpha cutout'],
+  Object649_glass_transp_0: ['Tinted_Glass_Panels', 'glass tinted'],
+  Object649_interiors_0: ['Interior_Fittings', 'interior'],
+  Object687_normal_0: ['Bird_1', 'bird animal skinned'],
+  Plane001_normal_0: ['Bird_1_Wing_A', 'bird animal wing'],
+  Plane003_normal_0: ['Bird_1_Wing_B', 'bird animal wing'],
+  Object688_normal_0: ['Bird_2', 'bird animal skinned'],
+  Plane104_normal_0: ['Bird_2_Wing_A', 'bird animal wing'],
+  Plane103_normal_0: ['Bird_2_Wing_B', 'bird animal wing'],
+  Object697_normal_0: ['Bird_3', 'bird animal skinned'],
+  Plane105_normal_0: ['Bird_3_Wing_A', 'bird animal wing'],
+  Plane106_normal_0: ['Bird_3_Wing_B', 'bird animal wing'],
+  Object698_normal_0: ['Bird_4', 'bird animal skinned'],
+  Plane108_normal_0: ['Bird_4_Wing_A', 'bird animal wing'],
+  Plane107_normal_0: ['Bird_4_Wing_B', 'bird animal wing'],
+  Object699_normal_0: ['Bird_5', 'bird animal skinned'],
+  Plane109_normal_0: ['Bird_5_Wing_A', 'bird animal wing'],
+  Plane110_normal_0: ['Bird_5_Wing_B', 'bird animal wing'],
+  Object700_normal_0: ['Bird_6', 'bird animal skinned'],
+  Plane111_normal_0: ['Bird_6_Wing_A', 'bird animal wing'],
+  Plane112_normal_0: ['Bird_6_Wing_B', 'bird animal wing'],
+  wire1_Plastic_Soft_0: ['Cable_1', 'wire cable utility'],
+  wire2_Plastic_Soft_0: ['Cable_2', 'wire cable utility'],
+  wire3_normal_0: ['Cable_3', 'wire cable utility'],
+  wire4_normal_0: ['Cable_4', 'wire cable utility'],
+  wire5_normal_0: ['Cable_5', 'wire cable utility'],
+  wire7_normal_0: ['Cable_6', 'wire cable utility'],
+  body_normal_0: ['Sprout_Body', 'sprout character'],
+  hand1_normal_0: ['Sprout_Hand_A', 'sprout character'],
+  hand2_normal_0: ['Sprout_Hand_B', 'sprout character'],
+  foot1_normal_0: ['Sprout_Foot_A', 'sprout character'],
+  foot2_normal_0: ['Sprout_Foot_B', 'sprout character'],
+  leaf_normal_0: ['Sprout_Leaf', 'sprout character'],
+  Object224_normal_0: ['Small_Skinned_Figure_Surface', 'figure skinned'],
+  Object224_metalmat_0: ['Small_Skinned_Figure_Metal', 'figure skinned metal'],
+  Object078_Plastic_Soft_0: ['Cat_Paw_Raised', 'cat statue paw'],
+  Object608_metalmat_0: ['Rooftop_Fan_Metal', 'aircon rooftop metal'],
+  Object608_paintmat_0: ['Rooftop_Fan_Paint', 'aircon rooftop paint'],
+  Object704_Plastic_Soft_0: ['Wall_Aircon_Plastic', 'aircon plastic'],
+  Object704_metalmat_0: ['Wall_Aircon_Metal', 'aircon metal'],
+  Object081_normal_0: ['Paper_Lantern_1', 'lantern light'],
+  Object332_normal_0: ['Paper_Lantern_2', 'lantern light'],
+  Object682_normal_0: ['Paper_Lantern_3', 'lantern light'],
+  Object532_normal_0: ['Sunburst_Sign_Face', 'sign sunburst'],
+  Object531_normal_0: ['Sunburst_Sign_Back', 'sign sunburst'],
+  Object689_metalmat_0: ['Round_Fixture_Back_Left', 'fixture metal'],
+  Object619_alpha_0: ['Tree_Front_Center', 'tree foliage plant'],
+  Object620_alpha_0: ['Tree_Front_Left', 'tree foliage plant'],
+  Object621_alpha_0: ['Tree_Left_Side', 'tree foliage plant'],
+  Object622_alpha_0: ['Hedge_Left_Side', 'hedge foliage plant'],
+  Object706_Material_5518_0: ['Thin_Strip_Front_A', 'fixture thin'],
+  Object707_Material_5518_0: ['Thin_Strip_Front_B', 'fixture thin'],
+  Object708_Material_5518_0: ['Thin_Strip_Roof_A', 'fixture thin'],
+  Object709_Material_5518_0: ['Thin_Strip_Roof_B', 'fixture thin'],
+}</code></pre>
+	<pre><code>(() => { let n = 0, missing = []; for (const [old, [nu, cls]] of Object.entries(RENAMES)) { const o = scene.getObjectByName(old); if (!o) { missing.push(old); continue; } o.name = nu; cls.split(' ').forEach(c => tagClass(o, c)); n++; } return { renamed: n, missing }; })()
+{ "renamed": 62, "missing": [] }</code></pre>
+	<p><code>tagClass</code> prints one line per class (<code>Tagged "Tram_Body_Metal" .tram</code>), so this call is noisy: 62 meshes with two to four classes each.</p>
+
+	<h2><span class="step">11</span> The skeleton, and lint</h2>
+	<p class="lede">The birds, the sprout and the small figure are skinned, so the model carries a skeleton: wrapper nodes (<code>RootNode_(gltf_orientation_matrix)</code>) and bones (<code>_rootJoint</code>, <code>tail1_00</code>). They are not parts, but the labelling gate wants every node to have a name and a class, so, as the skinned-mesh section of the guide says, give them the class <code>rig</code>. Some are unnamed; those get a name. Skip the nine groups SEG made: they already carry the class <code>segmented</code>, and are not part of a skeleton.</p>
+	<pre><code>(() => { const root = scene.getObjectByName('LittlestTokyo.glb'); let i = 0, tagged = 0;
+  root.traverse(o => { if (o.isMesh || (o.userData &amp;&amp; o.userData.segmentation)) return; if (!o.name) o.name = 'Rig_Node_' + (++i); tagClass(o, o === root ? 'model' : 'rig'); tagged++; });
+  return { tagged, named: i }; })()</code></pre>
+	<p>That tags 144 nodes, the model root as <code>model</code> and 143 others as <code>rig</code>, and names the 52 that had no name.</p>
+	<pre><code>lint()</code></pre>
+	<p><code>lint()</code> prints nothing when every node has a name an author chose and at least one class. Before this step it listed the wrapper and bone nodes and ended "… and 156 more". Now it is silent, and <code>requireLabels(true)</code> would pass.</p>
+	<div class="note"><strong>A mistake worth reading.</strong> I first ran this step without the <code>segmentation</code> test, so it also tagged the nine SEG groups <code>rig</code>. <code>lint()</code> cannot see that, because a wrongly classed node is still classed. I found it by reading the saved file, and fixed it with <code>untagClass</code> and a new commit. A clean lint says every node is labelled, not that every label is right.</div>
+
+	<h2><span class="step">12</span> Select an object, not a material</h2>
+	<p class="lede">This is what the regions buy. The tram is in four meshes by material and the cat in five, and no mesh is "the cat". But every part from a region carries that region's classes, so one selector reaches all of them.</p>
+	<pre><code>['.tram', '.cat', '.post-box', '.bird', '.building-a', '.shopfront', '.sign', '.wire', '.tree'].map(s => s + ' ' + $S(s).length).join(' | ')
+.tram 12 | .cat 6 | .post-box 9 | .bird 18 | .building-a 22 | .shopfront 32 | .sign 16 | .wire 13 | .tree 3</code></pre>
+	<p><code>listSelectors()</code> prints every class with its count (<code>.building (×67)</code>, <code>.street-furniture (×25)</code>, <code>.rooftop (×14)</code>, …). Look at three of them from the right side:</p>
+	<pre><code>isolate('.tram')</code></pre>
+	<figure>
+		<img src="screenshots/lt-isolate-tram.png" alt="Only the tram: a yellow-and-green tram car with a roof pantograph, two long poles, a hanging lantern, and a few dark manhole and drain pieces on the ground." loading="lazy">
+		<figcaption><code>isolate('.tram')</code>: twelve parts: six of the tram's own meshes and six cut parts from its region. The long poles and the dark squares on the ground are in the tram's volume too.</figcaption>
+	</figure>
+	<div class="pair">
+		<figure><img src="screenshots/lt-isolate-cat.png" alt="Only the lucky cat: a white statue with a pink collar and a red bell holding a gold coin, standing on a frame of red bamboo poles." loading="lazy"><figcaption><code>isolate('.cat')</code>: six parts. The red bamboo stand is in the cat's region.</figcaption></figure>
+		<figure><img src="screenshots/lt-isolate-postbox.png" alt="Only the post boxes: two red pillar boxes, the back one beside a small potted plant and a thin pole, the front one beside a wooden post and a sign." loading="lazy"><figcaption><code>isolate('.post-box')</code>: nine parts, two boxes and what stands beside them.</figcaption></figure>
+	</div>
+	<pre><code>isolate('.building-a')</code></pre>
+	<figure>
+		<img src="screenshots/lt-isolate-building-a.png" alt="Only building A: a cream three-storey corner shop with a balcony, a round green sign, a red vertical sign, green banners and shrubs, and a curved strip of road and pavement in front of it." loading="lazy">
+		<figcaption><code>isolate('.building-a')</code>: 22 parts. The strip of pavement in front is in the shopfront's box, as step 9 warned.</figcaption>
+	</figure>
+	<p><code>showAll()</code> brings everything back. Selectors combine: <code>$S('.building-a.shopfront')</code> is the ground floor of building A in all its materials, and <code>$S('.sign')</code> is every panda sign and billboard.</p>
+
+	<h2><span class="step">13</span> Save it</h2>
+	<p class="lede">File, Save writes the scene as JSON (112 MB here, because the geometry is inline), and the Git tab's commit writes it the way a repository wants it: the scene as a small manifest and parts, and the geometry as content-addressed asset files. The committed scene is <code>littletokyo.json</code> in <a href="https://github.com/tejaswigowda/test1/blob/3c4520491a63c23ac02366bfe2b79da2cab41cb8/littletokyo.json">tejaswigowda/test1</a>, and it opens from a link: <a href="../../#repo=tejaswigowda/test1@3c4520491a63c23ac02366bfe2b79da2cab41cb8&amp;file=littletokyo.json">open it in the editor</a>. Each of the nine groups keeps the record of its cut in <code>userData.segmentation</code>: the plan, the report it was made from, the pinned source and its licence. The commit path rounds animation values slightly and deterministically; the geometry is not touched.</p>
+	<pre><code>$S('#Surface_Parts').nodes[0].userData.segmentation.source     // the url, commit, sha256, bytes, licence and attribution of step 4</code></pre>
+
+	<h2><span class="step">14</span> The log: what was segmented and what was named</h2>
+	<p class="lede">Read back from the committed scene, not from memory: it was opened from GitHub in a fresh editor and counted.</p>
+	<table class="cuts">
+		<tr><th>Mesh cut by SEG</th><th>Part group</th><th>Islands</th><th>Components</th><th>Parts</th><th>Triangles</th></tr>
+		<tr><td>Object649_normal_0</td><td>Surface_Parts</td><td>3,297</td><td>2,841</td><td>19</td><td>29,276</td></tr>
+		<tr><td>Object649_metalmat_0</td><td>Metal_Parts</td><td>655</td><td>407</td><td>21</td><td>17,350</td></tr>
+		<tr><td>Object649_Plastic_Soft_0</td><td>SoftPlastic_Parts</td><td>465</td><td>244</td><td>19</td><td>16,935</td></tr>
+		<tr><td>Object649_paintmat_0</td><td>Paint_Parts</td><td>267</td><td>178</td><td>17</td><td>9,438</td></tr>
+		<tr><td>Object705_Material_5516_0</td><td>Mat5516_Parts</td><td>207</td><td>193</td><td>17</td><td>1,527</td></tr>
+		<tr><td>Object649_Material_5511_0</td><td>Mat5511_Parts</td><td>40</td><td>23</td><td>6</td><td>1,582</td></tr>
+		<tr><td>Object649_Material_5512_0</td><td>Mat5512_Parts</td><td>49</td><td>35</td><td>13</td><td>148</td></tr>
+		<tr><td>Object649_alpha_glass_0</td><td>AlphaGlass_Parts</td><td>33</td><td>15</td><td>3</td><td>319</td></tr>
+		<tr><td>Object649_glassmat_0</td><td>Glass_Parts</td><td>33</td><td>28</td><td>9</td><td>232</td></tr>
+		<tr class="total"><td>9 meshes</td><td>9 groups</td><td>5,046</td><td>3,964</td><td>124</td><td>76,807</td></tr>
+	</table>
+	<table class="cuts">
+		<tr><th>Result</th><th>Count</th></tr>
+		<tr><td>Parts made by SEG (each with a name, a region class, a material class and a record)</td><td>124 meshes, 76,807 triangles</td></tr>
+		<tr><td>Meshes named and classed by hand (step 10)</td><td>62 meshes, 64,995 triangles</td></tr>
+		<tr><td>All meshes in the scene</td><td>186, with 186 different names; 141,802 triangles, as imported</td></tr>
+		<tr><td>Regions in the plan</td><td>22 (21 boxes and a wire rule); 22 distinct region names on the parts</td></tr>
+		<tr><td>Skeleton and wrapper nodes classed <code>rig</code></td><td>143, of which 52 were unnamed and are now <code>Rig_Node_1</code>…<code>52</code>; the model root is <code>model</code></td></tr>
+		<tr><td>SEG groups</td><td>9, each classed <code>segmented</code>, each with a record pinned to the source hash</td></tr>
+		<tr><td><code>lint()</code></td><td>silent: every node has an author's name and a class</td></tr>
+		<tr><td>SEG warnings left standing</td><td>2 (<code>Pole_Front_Metal</code>, <code>Sidewalk_Benches_Metal</code>), read and kept</td></tr>
+	</table>
+	<p>186 = 124 + 62. The 5,046 islands became 3,964 components, and 3,964 components became 124 parts.</p>
+
+	<h2><span class="step">15</span> Your own model</h2>
+	<ol class="steps">
+		<li>Import it, then count: how many meshes, and which few hold most of the triangles. Rename anything with a <code>#</code> in its name.</li>
+		<li><code>SEG.source(...)</code> with a raw URL pinned to a commit, and your licence and credit. If the licence does not allow republishing, do not commit the cut.</li>
+		<li><code>SEG.describe('#mesh')</code> on the biggest. If it reports hundreds of components and no short list is worth naming, use regions. If a few dozen are, use <a href="segment-a-scene.html">anchors</a>.</li>
+		<li>Look at it from four sides with a grid, write the regions, objects first, then buildings by height. Give each its classes.</li>
+		<li>Cut the smallest textured mesh first. Read every <code>⚠</code>: it is usually a region you forgot.</li>
+		<li>Cut the rest, <code>SEG.preview</code> one group, then look at all the regions together from above and the front.</li>
+		<li>Name the meshes that are already one object, give the skeleton a class, run <code>lint()</code>, and read the names back; lint cannot tell you they are right.</li>
+	</ol>
+
+	<div class="note"><strong>What was checked, and what was not.</strong> Every step on this page was run in the editor served from this repository, in Chrome with software rendering, on a fresh import of the pinned file: the import log and the inventory, the rename, <code>SEG.source</code>, <code>SEG.describe</code> on the paint mesh, the first cut with its warning, the undo, the corrected cut, the other eight cuts, <code>SEG.preview</code> and <code>SEG.restore</code>, the 62 renames, the rig step (the version in step 11 is the corrected one; see the note there), <code>lint()</code>, <code>listSelectors()</code> and the four <code>isolate</code> calls. The scene was committed with the editor's own commit and opened again from GitHub: 186 meshes, 186 different names, 141,802 triangles, nine records. The volumes figure was made by a separate offscreen render. Not checked: any browser but Chrome, a machine with a GPU (the screenshots were taken with software rendering), <code>SEG.replay</code> on these cuts, or any model but this one. The 22 regions are one person's reading of four views, and the thresholds in the wire rule and the 0.45 length were chosen by eye. The names are my reading of position and size, not measurements: the plan states no <code>basis</code> for any of them, so read "Round_Fixture_Back_Left" as "a round metal thing at the back left". The material names <code>Mat5511</code>, <code>Mat5512</code> and <code>Mat5516</code> say only which glTF material the part came from.</div>
+	<div class="note"><strong>What a record cannot do.</strong> It cannot prove that the licence or attribution you give is right (SEG only refuses to run without them), and it cannot say that the names are correct, only what they were made from.</div>
+	<div class="note" id="sources"><strong>The model.</strong> <a href="https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042">Littlest Tokyo</a> by Glen Fox (<a href="https://sketchfab.com/glenatron">glenatron</a>), Creative Commons Attribution 4.0. File: <a href="https://github.com/mrdoob/three.js/blob/f405199a0ce26134efbf2d654a634efa5655b756/examples/models/gltf/LittlestTokyo.glb">LittlestTokyo.glb</a> in the three.js examples, at a pinned commit. The screenshots and the card thumbnail on this page show it.</div>
+
+	<!-- credits:start -->
+	<section class="credits" id="credits">
+		<style>.credits{margin:2.2em 0 1em;padding-top:1em;border-top:1px solid rgba(127,127,127,.35);font-size:.9em}.credits h2{margin:0 0 .5em;font-size:1.05em}.credits h3{margin:.9em 0 .2em;font-size:.95em;opacity:.8}.credits ul{margin:.2em 0;padding-left:1.2em}.credits li{margin:.25em 0}.credits .lic{opacity:.8}</style>
+		<h2>Credits and licences</h2>
+		<h3>People</h3>
+		<ul>
+			<li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script, scene)</span></li>
+			<li><a href="https://sketchfab.com/glenatron">Glen Fox (glenatron)</a> <span class="lic">(asset)</span></li>
+		</ul>
+		<h3>Assets</h3>
+		<ul>
+			<li><a href="https://github.com/mrdoob/three.js/blob/f405199a0ce26134efbf2d654a634efa5655b756/examples/models/gltf/LittlestTokyo.glb">LittlestTokyo.glb</a>: Littlest Tokyo by Glen Fox (glenatron), https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042 (the file's own metadata; the three.js example credits https://artstation.com/artwork/1AGwX). Changes made: the model is cut into named parts and its meshes are renamed and classed; textures are not edited. The screenshots and card thumbnail on this page show this model. No endorsement by the artist is implied <span class="lic">Licence: CC BY 4.0.</span></li>
+			<li><a href="https://sketchfab.com/models/94b24a60dc1b48248de50bf087c0f042">Littlest Tokyo (Sketchfab page)</a>: Glen Fox (glenatron) on Sketchfab, the page the file's own metadata names. Attribution is required, and applies to the LittlestTokyo.glb above and to everything made from it <span class="lic">Licence: CC BY 4.0.</span></li>
+			<li><a href="https://github.com/tejaswigowda/test1/blob/3c4520491a63c23ac02366bfe2b79da2cab41cb8/littletokyo.json">littletokyo.json (the segmented scene)</a>: Model by Glen Fox (glenatron); segmentation, names and classes by Tejaswi Gowda <span class="lic">Licence: CC BY 4.0 (a derivative of LittlestTokyo.glb: keep the credit above).</span></li>
+		</ul>
+		<h3>Tools</h3>
+		<ul>
+			<li><a href="https://threejs.org/">three.js</a> <span class="lic">(MIT)</span> Strata is built on it; LittlestTokyo.glb is loaded from its examples directory at a pinned commit</li>
+		</ul>
+	</section>
+	<!-- credits:end -->
+
+	<footer>
+		<a href="./">← All tutorials</a> · <a href="../">About</a>
+	</footer>
+</main>
+</body>
+</html>
