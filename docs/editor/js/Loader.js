@@ -143,7 +143,9 @@ function Loader( editor ) {
 
 		} else {
 
-			editor.execute( new AddObjectCommand( editor, scene ) );
+			// what the file brought (its names, its hierarchy) is the file's, not a decision of whoever imported it (export/oplog.js origin)
+			const addImported = () => editor.execute( new AddObjectCommand( editor, scene ) );
+			if ( editor.oplog ) editor.oplog.withOrigin( { kind: 'import', file: filename }, addImported ); else addImported();
 
 			// Imported as a child (not the root scene) — scene.animations would
 			// otherwise be stranded on this subtree, invisible to the Animations

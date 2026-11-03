@@ -61,6 +61,7 @@ This README is the landing page and the thesis. The reference material is split 
 | [**JS Shell**](guides/JS_SHELL.md) | The primary editing surface: Monaco integration, core globals, object lookup, spatial helpers, modeling ops, Edit Mode, and `fetchAPI`. |
 | [**Lasso tool**](guides/LASSO_TOOL_GUIDE.md) | Freehand-boundary selection in the viewport: how it draws, samples objects and multi-selects. |
 | [**Mesh segmentation (`SEG`)**](guides/MESH_SEGMENT.md) | Cut a one-piece textured model into named, classed parts from its UV islands and painted colours, in one undo step; what it refuses and what it cannot decide. For a whole scene (one mesh, hundreds of islands) it joins the islands that touch into components, measures them in the world frame, places everything you did not name on the nearest anchor you did, and checks the cut. Tutorials: [Cut any textured mesh into named parts](docs/about/tutorials/segment-any-mesh.html), [Cut a scene into named parts](docs/about/tutorials/segment-a-scene.html). |
+| [**Attribution**](guides/ATTRIBUTION.md) | Who drove each operation (GUI, Shell, agent) and whose decisions are present in the finished work: the operation log, attribution by survival weighted by consequence, `tools/attribution.mjs`, the diorama measurement and its limits. Authorship as a property of a record, kept apart from the scene. |
 | [**Scene intelligence**](guides/SCENE_INTELLIGENCE.md) | Descriptor-derived classes, symmetry pairs, texture-color naming, and `findByDescription`. No vision model. |
 
 ### Animation, camera and render

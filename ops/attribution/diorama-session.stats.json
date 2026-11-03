@@ -1,0 +1,190 @@
+{
+ "tool": "strata-session-stats/1",
+ "source": "events.jsonl",
+ "windows": {
+  "segmentation": {
+   "events": 1969,
+   "from": "2026-11-02T21:31:27.263Z",
+   "to": "2026-11-03T00:28:30.758Z",
+   "duration_seconds": 10623,
+   "active_seconds": 6736,
+   "idle_threshold_seconds": 300,
+   "model": {
+    "calls": 135,
+    "input_tokens": 60731633,
+    "output_tokens": 119762,
+    "cache_read_tokens": 57867733,
+    "reasoning_tokens": 60245,
+    "cost_units": 135,
+    "by_model": {
+     "claude-sonnet-5.5": 135
+    },
+    "model_seconds": 1409
+   },
+   "tools": {
+    "calls": 151,
+    "by_tool": {
+     "bash": 76,
+     "view": 21,
+     "tool_search_tool": 2,
+     "runPlaywrightCode": 2,
+     "create": 47,
+     "edit": 3
+    },
+    "failed": 3
+   },
+   "editor": {
+    "calls_that_reached_the_editor": 45,
+    "driver_script_calls": 43
+   },
+   "retries": {
+    "heuristic": true,
+    "failed_tool_calls": 3,
+    "calls_whose_output_shows_a_reload_or_crash": 4,
+    "visible_total": 7
+   },
+   "human": {
+    "user_messages": 1,
+    "interventions_after_the_first": 0
+   }
+  },
+  "save_and_commit": {
+   "events": 373,
+   "from": "2026-11-03T00:28:30.829Z",
+   "to": "2026-11-03T00:50:49.120Z",
+   "duration_seconds": 1338,
+   "active_seconds": 950,
+   "idle_threshold_seconds": 300,
+   "model": {
+    "calls": 27,
+    "input_tokens": 15424931,
+    "output_tokens": 13668,
+    "cache_read_tokens": 14827172,
+    "reasoning_tokens": 4204,
+    "cost_units": 27,
+    "by_model": {
+     "claude-sonnet-5.5": 27
+    },
+    "model_seconds": 280
+   },
+   "tools": {
+    "calls": 27,
+    "by_tool": {
+     "bash": 15,
+     "view": 2,
+     "create": 6,
+     "read_bash": 2,
+     "edit": 1,
+     "ask_user": 1
+    },
+    "failed": 1
+   },
+   "editor": {
+    "calls_that_reached_the_editor": 6,
+    "driver_script_calls": 6
+   },
+   "retries": {
+    "heuristic": true,
+    "failed_tool_calls": 1,
+    "calls_whose_output_shows_a_reload_or_crash": 0,
+    "visible_total": 1
+   },
+   "human": {
+    "user_messages": 3,
+    "interventions_after_the_first": 2
+   }
+  },
+  "tutorial": {
+   "events": 762,
+   "from": "2026-11-03T00:50:49.122Z",
+   "to": "2026-11-03T01:34:10.933Z",
+   "duration_seconds": 2602,
+   "active_seconds": 1904,
+   "idle_threshold_seconds": 300,
+   "model": {
+    "calls": 53,
+    "input_tokens": 32675773,
+    "output_tokens": 69343,
+    "cache_read_tokens": 31910102,
+    "reasoning_tokens": 21892,
+    "cost_units": 53,
+    "by_model": {
+     "claude-sonnet-5.5": 53
+    },
+    "model_seconds": 833
+   },
+   "tools": {
+    "calls": 61,
+    "by_tool": {
+     "bash": 35,
+     "view": 18,
+     "create": 5,
+     "edit": 3
+    },
+    "failed": 0
+   },
+   "editor": {
+    "calls_that_reached_the_editor": 0,
+    "driver_script_calls": 0
+   },
+   "retries": {
+    "heuristic": true,
+    "failed_tool_calls": 0,
+    "calls_whose_output_shows_a_reload_or_crash": 0,
+    "visible_total": 0
+   },
+   "human": {
+    "user_messages": 1,
+    "interventions_after_the_first": 0
+   }
+  },
+  "whole_request": {
+   "events": 3104,
+   "from": "2026-11-02T21:31:27.263Z",
+   "to": "2026-11-03T01:34:10.933Z",
+   "duration_seconds": 14564,
+   "active_seconds": 9590,
+   "idle_threshold_seconds": 300,
+   "model": {
+    "calls": 215,
+    "input_tokens": 108832337,
+    "output_tokens": 202773,
+    "cache_read_tokens": 104605007,
+    "reasoning_tokens": 86341,
+    "cost_units": 215,
+    "by_model": {
+     "claude-sonnet-5.5": 215
+    },
+    "model_seconds": 2521
+   },
+   "tools": {
+    "calls": 239,
+    "by_tool": {
+     "bash": 126,
+     "view": 41,
+     "tool_search_tool": 2,
+     "runPlaywrightCode": 2,
+     "create": 58,
+     "edit": 7,
+     "read_bash": 2,
+     "ask_user": 1
+    },
+    "failed": 4
+   },
+   "editor": {
+    "calls_that_reached_the_editor": 51,
+    "driver_script_calls": 49
+   },
+   "retries": {
+    "heuristic": true,
+    "failed_tool_calls": 4,
+    "calls_whose_output_shows_a_reload_or_crash": 4,
+    "visible_total": 8
+   },
+   "human": {
+    "user_messages": 5,
+    "interventions_after_the_first": 4
+   }
+  }
+ }
+}

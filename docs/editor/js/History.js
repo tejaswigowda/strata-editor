@@ -44,17 +44,21 @@ class History {
 			lastCmd.script === cmd.script &&
 			lastCmd.attributeName === cmd.attributeName;
 
+		let merged = false;
+
 		if ( isUpdatableCmd && cmd.type === 'SetScriptValueCommand' ) {
 
 			// When the cmd.type is "SetScriptValueCommand" the timeDifference is ignored
 
 			lastCmd.update( cmd );
 			cmd = lastCmd;
+			merged = true;
 
 		} else if ( isUpdatableCmd && timeDifference < 500 ) {
 
 			lastCmd.update( cmd );
 			cmd = lastCmd;
+			merged = true;
 
 		} else {
 
@@ -80,7 +84,15 @@ class History {
 		// clearing all the redo-commands
 
 		this.redos = [];
+		this._log( log => log.recordExecute( cmd, { merge: merged } ) );
 		this.editor.signals.historyChanged.dispatch( cmd );
+
+	}
+
+	// The operation log (export/oplog.js) is a record beside the history, never part of how a command runs: whatever it does, it must not break an edit.
+	_log( fn ) {
+
+		try { const log = this.editor.oplog; if ( log ) fn( log ); } catch ( e ) { console.warn( 'oplog:', e.message ); }
 
 	}
 
@@ -111,6 +123,7 @@ class History {
 
 			cmd.undo();
 			this.redos.push( cmd );
+			this._log( log => log.recordHistory( 'undo', cmd ) );
 			this.editor.signals.historyChanged.dispatch( cmd );
 
 		}
@@ -146,6 +159,7 @@ class History {
 
 			cmd.execute();
 			this.undos.push( cmd );
+			this._log( log => log.recordHistory( 'redo', cmd ) );
 			this.editor.signals.historyChanged.dispatch( cmd );
 
 		}
@@ -233,6 +247,7 @@ class History {
 		this.redos = [];
 		this.idCounter = 0;
 
+		this._log( log => log.note( 'barrier' ) );
 		this.editor.signals.historyChanged.dispatch();
 
 	}

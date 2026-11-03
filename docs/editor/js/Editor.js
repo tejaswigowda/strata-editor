@@ -19,6 +19,8 @@ import { applyStoredTheme } from './Theme.js';
 import { settleBakedOutline } from './toon/bakedOutlines.js';
 import { isRecordScene, canonicalForm, framing, FRAMING } from './export/records.js';
 import { regenerateRecords } from './export/regenerate.js';
+import { snapshotState, flatState } from './export/oplog.js';
+import { openOpLog, declareActor } from './export/oplogStore.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
 
@@ -165,6 +167,9 @@ function Editor() {
 	this.signals.objectChanged.add( function ( object ) { invalidateRestState( object ); } );
 
 	this.config = new Config();
+	// Who drove each operation, kept beside the history and out of the scene (export/oplog.js, guides/ATTRIBUTION.md).
+	this.oplog = openOpLog();
+	this.oplog.witness = () => flatState( this.scene );   // lets the Shell's direct changes be seen (export/oplog.js, diffState)
 	this.history = new _History( this );
 	this.selector = new Selector( this );
 	this.storage = new _Storage();
@@ -725,6 +730,7 @@ Editor.prototype = {
 	clear: function () {
 
 		this.history.clear();
+		if ( this.oplog ) this.oplog.note( 'reset' );   // File, New: what was done before is not in the scene any more
 		this.storage.clear();
 		this.recordStatus = new Map();
 		this.recordReady = null;
@@ -807,6 +813,7 @@ Editor.prototype = {
 		this.signals.cameraResetted.dispatch();
 
 		this.history.fromJSON( json.history );
+		if ( this.oplog ) this.oplog.note( 'load' );   // what a loaded scene holds was not written in this log
 		this.scripts = json.scripts;
 
 		const scene = await loader.parseAsync( json.scene );
@@ -1006,6 +1013,20 @@ Editor.prototype = {
 	execute: function ( cmd, optionalName ) {
 
 		this.history.execute( cmd, optionalName );
+
+	},
+
+	/** Say who is driving this tab: { id, kind: 'user' | 'agent' }. Self-reported and unauthenticated; an agent that does not say so is logged as the user. */
+	setActor: function ( actor ) {
+
+		return declareActor( this.oplog, actor );
+
+	},
+
+	/** The two artifacts attribution is computed from, separate from the scene: the operation log, and the final state it is checked against. */
+	attributionArtifacts: function () {
+
+		return { oplog: this.oplog.toJSON(), state: snapshotState( this.scene, { timeline: this.timeline && this.timeline.toJSON ? this.timeline.toJSON() : null } ) };
 
 	},
 

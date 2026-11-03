@@ -563,7 +563,7 @@ function Shell( editor ) {
 		{ w: 'relabelAsset', k: 'fn' }, { w: 'verifyImport', k: 'fn' },
 
 		// ── Labels / classes ──
-		{ w: 'relabel', k: 'fn' }, { w: 'tagClass', k: 'fn' }, { w: 'untagClass', k: 'fn' },
+		{ w: 'relabel', k: 'fn' }, { w: 'setActor', k: 'fn' }, { w: 'saveAttribution', k: 'fn' }, { w: 'tagClass', k: 'fn' }, { w: 'untagClass', k: 'fn' },
 
 		// ── Selectors ──
 		{ w: '$S', k: 'fn' }, { w: '$M', k: 'fn' }, { w: 'SEG', k: 'var' }, { w: 'Pick', k: 'fn' }, { w: 'pick', k: 'fn' },
@@ -2048,6 +2048,25 @@ function Shell( editor ) {
 
 				// tagClass(obj?, 'wheel') / untagClass(obj?, 'wheel') — add/remove a
 				// semantic class (→ .wheel). obj defaults to the selection.
+				// setActor('name', 'agent') — say who is driving this tab (kind: 'agent' or 'user'). Self-reported: the operation log (guides/ATTRIBUTION.md) records
+				// it beside the channel, and an agent that does not say so is logged as the user.
+				setActor: ( id, kind = 'agent' ) => {
+
+					const a = editor.setActor( { id: String( id ), kind } );
+					appendOutput( `Operations from this tab are logged as ${ a.kind } "${ a.id }".`, 'result' );
+					return { id: a.id, kind: a.kind };
+
+				},
+				// saveAttribution(name?) — download the two artifacts attribution is computed from, apart from the scene: <name>.oplog.json and <name>.state.json
+				saveAttribution: ( name = 'scene' ) => {
+
+					const { oplog, state } = editor.attributionArtifacts();
+					const base = String( name ).replace( /[^\w.+-]+/g, '_' );
+					editor.utils.saveString( JSON.stringify( oplog ), base + '.oplog.json' );
+					editor.utils.saveString( JSON.stringify( state ), base + '.state.json' );
+					return { operations: oplog.ops.length, objects: state.counts.objects, files: [ base + '.oplog.json', base + '.state.json' ] };
+
+				},
 				tagClass: ( obj, cls ) => {
 
 					if ( cls === undefined && typeof obj === 'string' ) { cls = obj; obj = undefined; }
@@ -3054,7 +3073,8 @@ function Shell( editor ) {
 			}
 			const __vals = __keys.map( k => scope[ k ] );
 			const __fn   = new Function( ...__keys, '__shell_src__', 'return eval(__shell_src__)' );
-			const result = __fn.call( null, ...__vals, code );
+			// the operations this line makes are the Shell's (and a declared agent's), numbered as one pass: export/oplog.js
+			const result = editor.oplog ? editor.oplog.runShell( code, () => __fn.call( null, ...__vals, code ) ) : __fn.call( null, ...__vals, code );
 
 			// Check if scene changed after execution
 			const childrenCountAfter = editor.scene.children.length;
@@ -3418,13 +3438,13 @@ function Shell( editor ) {
 			let lastCode = '';
 			const streamCode = async ( msgs ) => { lastCode = await streamToOutput( msgs ); return lastCode; };
 
-			const res = await runAgentic( {
+			const res = await editor.oplog.within( { actor: { id: 'strata-ai:' + ( aiEngine.modelId || 'local' ), kind: 'agent' } }, () => runAgentic( {
 				editor, messages, intent: prompt, maxRetries: 3, tokenBudget: aiTokenBudget(),
 				deps: { streamCode, execute, appendOutput,
 					validateCode, snapshotScene, sceneDiff, confirmChange, diffSummary, inspectScene,
 					historyLen: () => editor.history.undos.length,
 					rollbackTo: ( len ) => { while ( editor.history.undos.length > len ) editor.history.undo(); } },
-			} );
+			} ) );
 
 			const execOk = !! ( res && res.ok );
 			const objects = [];

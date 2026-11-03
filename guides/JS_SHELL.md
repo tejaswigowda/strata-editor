@@ -94,6 +94,8 @@ $S('.rims').recolor('#111')         // chainable op set ($S, op, ops). Aliases: 
 $S('.chair').scale(0.5)             // "Chair 1", "Chair 2", … all share .chair
 op({type:'scale', selector:'.cab', factor:1.5})
 relabel('wheel')  tagClass('wheel')  untagClass(node,'rims')  verifyImport()
+setActor('my-agent', 'agent')       // say who is driving this tab: logged beside the channel (ATTRIBUTION.md); an agent that does not say so is logged as the user
+saveAttribution('scene')            // download scene.oplog.json and scene.state.json, apart from the scene, for tools/attribution.mjs
 ```
 
 The full selector reference (grammar, the `$S()` query/traversal API, class & id authoring, lasso, and guards) lives in [LANGUAGE.md](LANGUAGE.md).
