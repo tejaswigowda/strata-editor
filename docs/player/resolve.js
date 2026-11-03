@@ -28,8 +28,9 @@ export function resolveBase( input ) {
 /** True when the address follows a branch (…@main/…) rather than a commit, so a CDN may serve an older render for a while. */
 export function followsBranch( base ) {
 
-	const m = /@([^/]+)\//.exec( base );
-	return !! m && ! /^[0-9a-f]{7,40}$/i.test( m[ 1 ] );
+	// a commit is pinned; so is a tag of the renders repository's own form, <scene>/v<N> (a tag can contain "/", which the ref pattern must not stop at)
+	const m = /@([^/]+)(\/v\d+)?\//.exec( base );
+	return !! m && ! /^[0-9a-f]{7,40}$/i.test( m[ 1 ] ) && ! m[ 2 ];
 
 }
 
@@ -86,13 +87,32 @@ export function pinnedBase( base, sha ) {
 
 }
 
+/**
+ * Other places the same folder is served from, in the order to try them. A published tag never changes, but a CDN serves a freshly published one unevenly: an
+ * edge can answer 404 for a file that exists and keep that answer for longer than any retry waits (seen on cafe/v1: the same URL, 404 from one edge and 200
+ * from another, and hls.js gave up after its six retries). jsDelivr's other hostnames reach other edges, and raw.githubusercontent.com is the origin itself.
+ * Only a jsDelivr GitHub address has alternates; nothing can be assumed about any other host.
+ */
+export function alternateBases( base ) {
+
+	const m = /^https:\/\/(cdn|fastly|gcore)\.jsdelivr\.net\/gh\/([^/@]+)\/([^/@]+)@(.+)$/.exec( String( base ) );
+	if ( ! m ) return [];
+	const [ , host, owner, repo, rest ] = m;                       // rest is <ref>/<folder>/, and a tag may contain "/" (cafe/v1)
+	return [
+		...[ 'cdn', 'fastly', 'gcore' ].filter( h => h !== host ).map( h => `https://${ h }.jsdelivr.net/gh/${ owner }/${ repo }@${ rest }` ),
+		`https://raw.githubusercontent.com/${ owner }/${ repo }/${ rest }`
+	];
+
+}
+
 /** What a failed playback says: which request failed and how, from hls.js's error data. `code` 0 means no HTTP answer at all (offline, blocked, or a CDN reset). */
 export function describeFailure( data, master ) {
 
 	const url = ( data.frag && data.frag.url ) || ( data.context && data.context.url ) || data.url || master;
 	const code = data.response && data.response.code !== undefined ? data.response.code : null;
 	const what = code === null ? 'no response' : code === 0 ? 'no HTTP answer (the network, a blocker or the CDN cut it off)' : 'HTTP ' + code;
-	const file = String( url ).replace( /^.*\/renders\/[^/]+\//, '' );
+	const folder = String( master ).replace( /[^/]*$/, '' );
+	const file = String( url ).startsWith( folder ) ? String( url ).slice( folder.length ) : String( url ).replace( /^.*\/renders\/[^/]+\//, '' );
 	return `Playback failed (${ data.details }): ${ file } gave ${ what }.`;
 
 }

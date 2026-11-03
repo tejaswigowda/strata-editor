@@ -2,7 +2,7 @@
 // (or of any file in it, or its GitHub page); see resolve.js. It reads render.json for the title, poster, captions and facts,
 // and plays master.m3u8: natively where the browser does HLS (Safari), through hls.js everywhere else.
 
-import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode, cueParam, locateCue } from './resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, alternateBases, presentMode, cueParam, locateCue } from './resolve.js';
 import { parseVtt } from '../editor/js/export/captions.js';
 
 const $ = id => document.getElementById( id );
@@ -142,38 +142,61 @@ async function play( input ) {
 
 	} else if ( wantCue ) setError( `This render has no captions, so there is no cue "${ wantCue }" to go to.` );
 
-	const master = base + ( outputs.master || 'master.m3u8' );
+	const masterName = outputs.master || 'master.m3u8';
 	// Safari (and iOS, which has no Media Source) plays HLS natively. Elsewhere hls.js, even where the browser can now play HLS itself (recent Chrome),
 	// because only hls.js gives the quality choice.
 	const native = !! video.canPlayType( 'application/vnd.apple.mpegurl' );
 	const safari = /^((?!chrome|chromium|android).)*safari/i.test( navigator.userAgent );
 	const useHls = !! ( window.Hls && window.Hls.isSupported() ) && ! ( native && safari );
-	if ( ! useHls && native ) {
+	if ( ! useHls && ! native ) { setError( 'This browser can play neither native HLS nor hls.js (it needs Media Source Extensions).' ); return; }
 
-		video.src = master;
-		if ( startAt !== null ) video.addEventListener( 'loadedmetadata', () => { video.currentTime = startAt; }, { once: true } );
-		video.addEventListener( 'error', () => setError( `The browser could not play ${ master }.` ), { once: true } );
+	// A CDN serving a freshly published tag can answer 404 for a file that exists, from one edge and not another, and hold that answer longer than hls.js retries
+	// (six times, about 30 s). A 404 or no answer therefore moves playback to the next host that serves the same immutable folder (resolve.js alternateBases),
+	// from where it had got to, and says so; only when every host has failed is it an error.
+	const hosts = [ base, ...alternateBases( base ) ];
+	const tried = [];
+	function start( at, from ) {
 
-	} else if ( useHls ) {
+		const origin = hosts[ tried.length ], master = origin + masterName;
+		tried.push( new URL( origin ).host );
+		if ( tried.length > 1 ) { const w = $( 'warn' ), note = `${ from } answered 404 or nothing for a file of this render, which is published: playing it from ${ tried[ tried.length - 1 ] } instead.`; w.textContent = ( w.hidden ? '' : w.textContent + ' ' ) + note; w.hidden = false; }
+		const resume = at !== null && at !== undefined && at > 0 ? at : null;
+		const failed = ( detail ) => {
 
-		hls = new window.Hls( { capLevelToPlayerSize: false, ...( startAt !== null ? { startPosition: startAt } : {} ) } );
-		hls.on( window.Hls.Events.MANIFEST_PARSED, () => levelChoices( hls ) );
+			if ( tried.length < hosts.length ) { start( video.currentTime > 0 ? video.currentTime : resume, tried[ tried.length - 1 ] ); return; }
+			setError( detail + ` Is the render published, and has the CDN caught up? (tried ${ tried.join( ', ' ) })` );
+			offerPinned( base );
+
+		};
+		if ( ! useHls ) {
+
+			video.src = master;
+			if ( resume !== null ) video.addEventListener( 'loadedmetadata', () => { video.currentTime = resume; }, { once: true } );
+			video.addEventListener( 'error', () => failed( `The browser could not play ${ master }.` ), { once: true } );
+			return;
+
+		}
+		// while another host is left, give up on this one quickly (two short retries); the last host keeps hls.js's full patience
+		const D = window.Hls.DefaultConfig || {}, quick = p => ( p && p.default && p.default.errorRetry ? { ...p, default: { ...p.default, errorRetry: { ...p.default.errorRetry, maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 } } } : p );
+		const patience = tried.length < hosts.length ? Object.fromEntries( [ 'fragLoadPolicy', 'playlistLoadPolicy', 'manifestLoadPolicy' ].filter( k => D[ k ] ).map( k => [ k, quick( D[ k ] ) ] ) ) : {};
+		hls = new window.Hls( { capLevelToPlayerSize: false, ...patience, ...( resume !== null ? { startPosition: resume } : {} ) } );
+		const mine = hls;
+		hls.on( window.Hls.Events.MANIFEST_PARSED, () => levelChoices( mine ) );
 		hls.on( window.Hls.Events.ERROR, ( e, data ) => {
 
 			if ( ! data.fatal ) return;
-			setError( describeFailure( data, master ) + ' Is the render published, and has the CDN caught up?' );
-			offerPinned( base );
-			hls.destroy(); hls = null;
+			const code = data.response && data.response.code !== undefined ? data.response.code : null;
+			const detail = describeFailure( data, master );
+			mine.destroy(); if ( hls === mine ) hls = null;
+			// only a missing answer moves on: a 403 or a decode error would be the same from every host
+			if ( code === 404 || code === 0 || code === null ) failed( detail ); else { setError( detail + ' Is the render published, and has the CDN caught up?' ); offerPinned( base ); }
 
 		} );
 		hls.loadSource( master );
 		hls.attachMedia( video );
 
-	} else {
-
-		setError( 'This browser can play neither native HLS nor hls.js (it needs Media Source Extensions).' );
-
 	}
+	start( startAt, '' );
 
 }
 

@@ -1,6 +1,6 @@
 // Run: node docs/player/__tests__/resolve.test.mjs
 import assert from 'node:assert';
-import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode, cueParam, locateCue } from '../resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, alternateBases, presentMode, cueParam, locateCue } from '../resolve.js';
 
 const B = 'https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/';
 let pass = 0, fail = 0;
@@ -106,6 +106,36 @@ test( 'a branch address is flagged, a commit address is not', () => {
 
 } );
 test( 'durations are m:ss', () => { assert.strictEqual( formatDuration( 80.7 ), '1:21' ); assert.strictEqual( formatDuration( 5 ), '0:05' ); } );
+
+await test( 'a tag of the renders repository (<scene>/v<N>) is pinned, a branch is not', () => {
+
+	assert.strictEqual( followsBranch( 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/' ), false );
+	assert.strictEqual( followsBranch( 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a+b-cubed/v12/a+b-cubed/' ), false );
+	assert.strictEqual( followsBranch( 'https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/' ), true );
+	assert.strictEqual( followsBranch( 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@cafe/latest/cafe/' ), true );
+
+} );
+
+await test( 'alternate places to serve the same immutable folder: other jsDelivr hosts, then the origin; none for any other address', () => {
+
+	assert.deepStrictEqual( alternateBases( 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/' ), [
+		'https://fastly.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/', 'https://gcore.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/', 'https://raw.githubusercontent.com/tejaswigowda/renders/cafe/v1/cafe/' ] );
+	assert.deepStrictEqual( alternateBases( 'https://fastly.jsdelivr.net/gh/a/b@main/renders/x/' ), [
+		'https://cdn.jsdelivr.net/gh/a/b@main/renders/x/', 'https://gcore.jsdelivr.net/gh/a/b@main/renders/x/', 'https://raw.githubusercontent.com/a/b/main/renders/x/' ] );
+	assert.deepStrictEqual( alternateBases( 'https://example.com/renders/x/' ), [] );
+	assert.deepStrictEqual( alternateBases( 'https://raw.githubusercontent.com/a/b/main/x/' ), [], 'the origin has nowhere else to go' );
+	assert.deepStrictEqual( alternateBases( '' ), [] );
+
+} );
+
+await test( 'a failure names the file inside the render\'s folder whichever host failed', () => {
+
+	const m = 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/master.m3u8';
+	const raw = { details: 'fragLoadError', frag: { url: 'https://raw.githubusercontent.com/tejaswigowda/renders/cafe/v1/cafe/480p60/seg00015.m4s' }, response: { code: 404 } };
+	assert.strictEqual( describeFailure( { ...raw, frag: { url: 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/480p60/seg00015.m4s' } }, m ), 'Playback failed (fragLoadError): 480p60/seg00015.m4s gave HTTP 404.' );
+	assert.strictEqual( describeFailure( raw, 'https://raw.githubusercontent.com/tejaswigowda/renders/cafe/v1/cafe/master.m3u8' ), 'Playback failed (fragLoadError): 480p60/seg00015.m4s gave HTTP 404.' );
+
+} );
 
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );
