@@ -151,8 +151,8 @@ test( 'G4: the canonical address resolves from a pasted file, a short form and a
 } );
 test( 'G4: a canonical address with no render.json read yet has the conventional mirrors, in order: the repository at its tag, then the archive', () => {
 
-	assert.deepStrictEqual( mirrorsFromCanonical( 'https://strataeditor.dev/video/a+b-cubed/v2/' ), [
-		'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a+b-cubed/v2/a+b-cubed/', 'https://archive.org/download/strata-a-b-cubed-v2/' ] );
+	// the archive is only claimed once it exists (DELIVERY.archive); today the repository's folder at the tag is the one mirror
+	assert.deepStrictEqual( mirrorsFromCanonical( 'https://strataeditor.dev/video/a+b-cubed/v2/' ), [ 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a+b-cubed/v2/a+b-cubed/' ] );
 	assert.deepStrictEqual( mirrorsFromCanonical( B ), [] );
 	assert.deepStrictEqual( mirrorsFromCanonical( 'https://strataeditor.dev/video/cafe/' ), [] );
 

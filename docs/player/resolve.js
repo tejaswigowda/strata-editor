@@ -7,7 +7,7 @@
 //   gh/tejaswigowda/test1@main/renders/projectile                                       the jsDelivr path without the host
 // Returns { base } (ends with "/"), or { error }.
 
-import { archiveBase, CANONICAL_ORIGIN } from '../editor/js/export/releases.js';
+import { archiveBase, CANONICAL_ORIGIN, DELIVERY } from '../editor/js/export/releases.js';
 
 const CDN = 'https://cdn.jsdelivr.net/';
 /** Where the renders repository is, for a canonical address whose render.json cannot be read (the host is down, so there is no `publication.mirrors` to consult). */
@@ -114,14 +114,14 @@ export function alternateBases( base ) {
 
 /**
  * The mirrors of a canonical address (…/video/<slug>/v<N>/) when nothing better is known: the renders repository's folder at that tag, and the archive item. The
- * convention is the whole of it: a render's own `publication.mirrors` replaces it as soon as render.json has been read. Anything else has none.
+ * convention is the whole of it (the archive only once DELIVERY.archive says it exists): a render's own `publication.mirrors` replaces it as soon as render.json has been read. Anything else has none.
  */
 export function mirrorsFromCanonical( base, repo = RENDERS_REPO ) {
 
 	const m = /^https?:\/\/[^/]+\/video\/(.+)\/(v[1-9]\d*)\/$/.exec( String( base ) );
 	if ( ! m ) return [];
 	const [ , slug, v ] = m, tag = `${ slug }/${ v }`;
-	return [ `${ CDN }gh/${ repo }@${ tag }/${ slug }/`, archiveBase( tag ) ];
+	return [ `${ CDN }gh/${ repo }@${ tag }/${ slug }/`, ...( DELIVERY.archive ? [ archiveBase( tag ) ] : [] ) ];
 
 }
 

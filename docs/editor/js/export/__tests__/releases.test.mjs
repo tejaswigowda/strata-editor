@@ -10,7 +10,7 @@ import { webcrypto } from 'node:crypto';
 if ( ! globalThis.crypto ) globalThis.crypto = webcrypto;
 import {
 	ReleaseError, sceneSlug, tagFor, parseTag, nextVersion, releaseTags, isPinnedRef, pinnedUrl, releaseBase, playerLink, locationOf, publicationBlock, validatePublication,
-	publicationOf, archiveItem, canonicalBase, gateRelease, assessStaleness, verifyPlan, verifyOutcome, releaseSummary, planRelease, commitRelease, listReleaseTags, STORAGE,
+	publicationOf, archiveItem, canonicalBase, shareBase, DELIVERY, gateRelease, assessStaleness, verifyPlan, verifyOutcome, releaseSummary, planRelease, commitRelease, listReleaseTags, STORAGE,
 } from '../releases.js';
 import { buildRenderJson, assessDeterminism, validateRenderJson } from '../renderJson.js';
 import { sidecarText } from '../frameHashes.js';
@@ -119,7 +119,7 @@ await test( 'assemblePublishSet records publication, with the folder and the siz
 	assert.deepStrictEqual( p, {
 		canonical: 'https://strataeditor.dev/video/a+b-cubed/v1/',
 		source: { repo: 'o/renders', tag: 'a+b-cubed/v1', path: 'a+b-cubed' },
-		mirrors: [ 'https://cdn.jsdelivr.net/gh/o/renders@a+b-cubed/v1/a+b-cubed/', 'https://archive.org/download/strata-a-b-cubed-v1/' ],
+		mirrors: [ 'https://cdn.jsdelivr.net/gh/o/renders@a+b-cubed/v1/a+b-cubed/' ],     // no archive mirror is claimed until DELIVERY.archive
 		target: 'generic', constraints: { max_file_bytes: 20971520, target_segment_s: 6 }, size_bytes: set.total - set.files[ 0 ].bytes.length,
 	} );
 	assert.deepStrictEqual( validatePublication( p ), [] );
@@ -139,7 +139,7 @@ await test( 'G2/G3/G8: a canonical publication names no provider outside its mir
 	const n = publicationOf( mk( {}, {}, { publication: pub } ) );
 	assert.deepStrictEqual( [ n.storage, n.repo, n.path, n.tag, n.canonical, n.url ], [ STORAGE.renders, 'o/renders', 'cafe', 'cafe/v1', pub.canonical, pub.canonical ] );
 	assert.deepStrictEqual( n.mirrors, pub.mirrors );
-	assert.deepStrictEqual( locationOf( n ), { ref: 'cafe/v1', base: 'https://strataeditor.dev/video/cafe/v1/' } );
+	assert.deepStrictEqual( locationOf( n ), { ref: 'cafe/v1', base: 'https://cdn.jsdelivr.net/gh/o/renders@cafe/v1/cafe/' }, 'routing is off: shared at the first mirror' );
 	const bad = ( change, re ) => assert.ok( validatePublication( { ...pub, ...change } ).some( m => re.test( m ) ), JSON.stringify( change ) );
 	bad( { canonical: 'https://strataeditor.dev/video/cafe/v2/' }, /canonical must/ );
 	bad( { canonical: 'http://strataeditor.dev/video/cafe/v1/' }, /canonical must/ );
@@ -157,6 +157,23 @@ await test( 'G2/G3/G8: a canonical publication names no provider outside its mir
 	assert.throws( () => playerLink( 'https://x/player/', 'https://strataeditor.dev/video/cafe/' ), e => e.code === 'bad-input' );
 	assert.strictEqual( archiveItem( 'a+b-cubed/v12' ), 'strata-a-b-cubed-v12' );
 	assert.strictEqual( canonicalBase( { tag: 'cafe/v1' } ), 'https://strataeditor.dev/video/cafe/v1/' );
+
+} );
+
+await test( 'DELIVERY: with routing off the share link is the first mirror and the canonical address is only recorded; the switches change nothing in render.json', () => {
+
+	assert.deepStrictEqual( { ...DELIVERY }, { canonicalLive: false, archive: false }, 'today: jsDelivr only' );
+	const pub = publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'cafe', tag: 'cafe/v1' } );
+	const n = publicationOf( mk( {}, {}, { publication: pub } ) );
+	assert.strictEqual( shareBase( n ), 'https://cdn.jsdelivr.net/gh/o/renders@cafe/v1/cafe/' );
+	assert.strictEqual( n.canonical, 'https://strataeditor.dev/video/cafe/v1/', 'recorded either way' );
+	// routing live: the same render.json now shares at the canonical address, and nothing was edited
+	assert.strictEqual( shareBase( n, { delivery: { canonicalLive: true } } ), n.canonical );
+	// a render with no canonical address (legacy) shares at its one location whatever the switch says
+	const old = publicationOf( mk( {}, {}, { publication: publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'cafe', tag: 'cafe/v1', canonical: false } ) } ) );
+	assert.strictEqual( shareBase( old, { delivery: { canonicalLive: true } } ), old.mirrors[ 0 ] );
+	// the archive is listed only when it exists
+	assert.deepStrictEqual( publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'cafe', tag: 'cafe/v1', archive: true } ).mirrors[ 1 ], 'https://archive.org/download/strata-cafe-v1/' );
 
 } );
 

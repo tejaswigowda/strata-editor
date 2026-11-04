@@ -14,7 +14,7 @@ async function test( name, fn ) { try { await fn(); console.log( '  \u2713 ' + n
 
 const enc = s => new TextEncoder().encode( s );
 const sha = async b => createHash( 'sha256' ).update( b ).digest( 'hex' );
-const pub = publicationBlock( { storage: 'renders-repo', repo: 'o/renders', path: 'cafe', tag: 'cafe/v1', sizeBytes: 1 } );
+const pub = publicationBlock( { storage: 'renders-repo', repo: 'o/renders', path: 'cafe', tag: 'cafe/v1', sizeBytes: 1, archive: true } );
 const [ CANON, JS, ARCH ] = [ pub.canonical, ...pub.mirrors ];
 
 async function folder() {
