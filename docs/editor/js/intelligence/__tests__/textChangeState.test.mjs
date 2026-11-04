@@ -102,5 +102,22 @@ test( 'every sampling order gives the same label at every time (the shuffled-ord
 
 } );
 
+test( 'a later track that has not reached its first change does not undo what an earlier track set (class-level blank, then per-label text)', () => {
+
+	const mesh = new THREE.Mesh( new FakeText( 'DEFAULT', { size: 1 } ), new THREE.MeshStandardMaterial() );
+	const root = new THREE.Scene();
+	root.add( mesh );
+	const model = { tracks: [
+		{ target: mesh.uuid, events: [ { op: 'change', at: 0, dur: 0, args: { text: '' } } ] },
+		{ target: mesh.uuid, events: [ { op: 'change', at: 4, dur: 0, args: { text: 'X' } } ] },
+	] };
+	const editor = { scene: root };
+	const text = () => mesh.geometry.parameters.options.text;
+	applyContentAt( editor, model, 2 ); assert.strictEqual( text(), '' );
+	applyContentAt( editor, model, 5 ); assert.strictEqual( text(), 'X' );
+	applyContentAt( editor, model, 1 ); assert.strictEqual( text(), '' );
+
+} );
+
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );

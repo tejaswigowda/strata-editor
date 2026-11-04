@@ -1,0 +1,10 @@
+name = "strata-video"
+main = "video-worker.js"
+compatibility_date = "2026-11-01"
+
+# Only /video/* is routed to this Worker. Every other path on the zone is not matched by a route and is answered by the origin (GitHub Pages), unchanged.
+routes = [ { pattern = "strataeditor.dev/video/*", zone_name = "strataeditor.dev" } ]
+
+[[r2_buckets]]
+binding = "VIDEO"
+bucket_name = "strata-video"

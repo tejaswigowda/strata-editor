@@ -1,26 +1,33 @@
 // resolve.js — turns whatever was pasted into the player's address into the folder of a published render.
+//   https://strataeditor.dev/video/cafe/v1/                                             the canonical address (nothing in it names a provider)
+//   video/cafe/v1                                                                       the same, short
 //   https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/            the folder
 //   https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/master.m3u8  any file inside it
 //   https://github.com/tejaswigowda/test1/tree/main/renders/projectile                  the GitHub page of the folder
 //   gh/tejaswigowda/test1@main/renders/projectile                                       the jsDelivr path without the host
 // Returns { base } (ends with "/"), or { error }.
 
-const CDN = 'https://cdn.jsdelivr.net/';
+import { archiveBase, CANONICAL_ORIGIN } from '../editor/js/export/releases.js';
 
-export function resolveBase( input ) {
+const CDN = 'https://cdn.jsdelivr.net/';
+/** Where the renders repository is, for a canonical address whose render.json cannot be read (the host is down, so there is no `publication.mirrors` to consult). */
+export const RENDERS_REPO = 'tejaswigowda/renders';
+
+export function resolveBase( input, { origin = CANONICAL_ORIGIN } = {} ) {
 
 	let s = String( input || '' ).trim();
 	try { s = decodeURIComponent( s ); } catch ( e ) { /* keep it as typed */ }
-	if ( ! s ) return { error: 'Paste the jsDelivr address of a published render.' };
+	if ( ! s ) return { error: 'Paste the address of a published render.' };
 	s = s.replace( /[?#].*$/, '' ).replace( /&[a-z_]+=[^&]*/gi, '' );     // "&present=true" after the address is an option, not part of it
 
 	const gh = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:tree|blob)\/([^/]+)\/(.+)$/i.exec( s );
 	if ( gh ) s = `${ CDN }gh/${ gh[ 1 ] }/${ gh[ 2 ] }@${ gh[ 3 ] }/${ gh[ 4 ] }`;
 	else if ( /^gh\//.test( s ) ) s = CDN + s;
 	else if ( /^cdn\.jsdelivr\.net\//.test( s ) ) s = 'https://' + s;
+	else if ( /^\/?video\/[^/]+(?:\/|$)/.test( s ) ) s = origin.replace( /\/+$/, '' ) + '/' + s.replace( /^\/+/, '' );
 
-	if ( ! /^https?:\/\//i.test( s ) ) return { error: 'That is not an address I can play: use a jsDelivr URL (https://cdn.jsdelivr.net/gh/owner/repo@ref/renders/name/).' };
-	s = s.replace( /\/(?:master\.m3u8|render\.json|poster\.jpg|captions\.vtt)$/i, '' ).replace( /\/+$/, '' );
+	if ( ! /^https?:\/\//i.test( s ) ) return { error: 'That is not an address I can play: use a render address (https://strataeditor.dev/video/<name>/v1/), or a jsDelivr one (https://cdn.jsdelivr.net/gh/owner/repo@ref/renders/name/).' };
+	s = s.replace( /\/(?:master\.m3u8|render\.json|poster\.jpg|captions\.vtt|files\.sha256)$/i, '' ).replace( /\/+$/, '' );
 	return { base: s + '/' };
 
 }
@@ -102,6 +109,35 @@ export function alternateBases( base ) {
 		...[ 'cdn', 'fastly', 'gcore' ].filter( h => h !== host ).map( h => `https://${ h }.jsdelivr.net/gh/${ owner }/${ repo }@${ rest }` ),
 		`https://raw.githubusercontent.com/${ owner }/${ repo }/${ rest }`
 	];
+
+}
+
+/**
+ * The mirrors of a canonical address (…/video/<slug>/v<N>/) when nothing better is known: the renders repository's folder at that tag, and the archive item. The
+ * convention is the whole of it: a render's own `publication.mirrors` replaces it as soon as render.json has been read. Anything else has none.
+ */
+export function mirrorsFromCanonical( base, repo = RENDERS_REPO ) {
+
+	const m = /^https?:\/\/[^/]+\/video\/(.+)\/(v[1-9]\d*)\/$/.exec( String( base ) );
+	if ( ! m ) return [];
+	const [ , slug, v ] = m, tag = `${ slug }/${ v }`;
+	return [ `${ CDN }gh/${ repo }@${ tag }/${ slug }/`, archiveBase( tag ) ];
+
+}
+
+/**
+ * Every folder to try for a render, in order, without repeats: the address it was opened at, then (from render.json's publication, or by convention before it has been
+ * read) the canonical address and the mirrors in the order the render lists them, then the other hostnames of each jsDelivr folder. A legacy publication has no
+ * canonical address and no list, so it gets only its alternates, exactly as before.
+ */
+export function candidateBases( base, publication = null, { repo = RENDERS_REPO } = {} ) {
+
+	const out = [];
+	const add = u => { if ( typeof u === 'string' && u && ! out.includes( u ) ) out.push( u.replace( /\/*$/, '/' ) ); };
+	add( base );
+	if ( publication && publication.canonical ) { add( publication.canonical ); for ( const m of publication.mirrors || [] ) add( m ); } else if ( ! publication ) for ( const m of mirrorsFromCanonical( base, repo ) ) add( m );
+	for ( const b of [ ...out ] ) for ( const a of alternateBases( b ) ) add( a );
+	return out;
 
 }
 

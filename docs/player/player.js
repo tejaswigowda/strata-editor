@@ -1,11 +1,12 @@
-// player.js — a simple player for a published Strata render. The page's hash is the jsDelivr address of the render's folder
-// (or of any file in it, or its GitHub page); see resolve.js. It reads render.json for the title, poster, captions and facts,
+// player.js — a simple player for a published Strata render. The page's hash is the address of the render's folder (https://strataeditor.dev/video/<name>/v<N>/,
+// or a jsDelivr one, or any file in it, or its GitHub page); see resolve.js. It reads render.json for the title, poster, captions and facts,
 // and plays master.m3u8: natively where the browser does HLS (Safari), through hls.js everywhere else.
 
-import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, alternateBases, presentMode, cueParam, locateCue } from './resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, presentMode, cueParam, locateCue, candidateBases } from './resolve.js';
 import { parseVtt } from '../editor/js/export/captions.js';
 import { parseMaster, parseMediaPlaylist, audioFor, mergeFmp4, estimateBytes, formatBytes, downloadName } from './download.js';
 
+const FETCH_TIMEOUT_MS = 6000, TTFB_MS = 6000, NATIVE_START_MS = 10000;
 const $ = id => document.getElementById( id );
 const video = $( 'video' ), qualityLabel = $( 'qualityLabel' ), quality = $( 'quality' );
 let hls = null;
@@ -98,22 +99,30 @@ async function play( input ) {
 	teardown();
 	const resolved = resolveBase( input );
 	if ( resolved.error ) { document.title = 'Strata render player'; if ( input ) setError( resolved.error ); return; }
-	const base = resolved.base;
-	$( 'address' ).value = base;
+	const requested = resolved.base;
+	let base = requested;
+	$( 'address' ).value = requested;
 
+	// render.json is read from the address asked for, and when that does not answer, from the next place that holds the same folder (its own publication.mirrors
+	// are not known yet, so the convention stands in): a canonical address that is down must not take the page's title, poster and captions with it.
 	let rj = null;
-	try {
+	for ( const g of candidateBases( requested ).slice( 0, 3 ) ) {
 
-		const res = await fetch( base + 'render.json' );
-		if ( res.ok ) rj = await res.json();
+		try {
 
-	} catch ( e ) { /* no render.json: it still plays */ }
+			const res = await fetch( g + 'render.json', { signal: AbortSignal.timeout( FETCH_TIMEOUT_MS ) } );
+			if ( res.ok ) { rj = await res.json(); base = g; break; }     // a 404 moves on too: an edge can 404 a file that exists
+
+		} catch ( e ) { /* no answer from this one: the next */ }
+
+	}
 
 	const sceneName = rj && rj.scene && rj.scene.file ? rj.scene.file.replace( /\.[^.]+$/, '' ) : base.replace( /\/$/, '' ).split( '/' ).pop();
 	$( 'title' ).textContent = sceneName;
 	document.title = sceneName + ' — Strata render player';
+	if ( base !== requested ) { const w = $( 'warn' ); w.textContent = `${ new URL( requested ).host } does not serve this render, which is published: reading it from ${ new URL( base ).host } instead.`; w.hidden = false; }
 	if ( rj ) describe( rj ); else $( 'meta' ).textContent = 'No render.json beside the playlist: playing it without the facts.';
-	if ( followsBranch( base ) ) {
+	if ( followsBranch( requested ) ) {
 
 		$( 'warn' ).textContent = 'This address follows a branch, so a CDN may keep serving an older render for a while after a new publish. Use a commit address (…@<sha>/…) to pin this exact render.';
 		$( 'warn' ).hidden = false;
@@ -161,9 +170,9 @@ async function play( input ) {
 	if ( ! useHls && ! native ) { setError( 'This browser can play neither native HLS nor hls.js (it needs Media Source Extensions).' ); return; }
 
 	// A CDN serving a freshly published tag can answer 404 for a file that exists, from one edge and not another, and hold that answer longer than hls.js retries
-	// (six times, about 30 s). A 404 or no answer therefore moves playback to the next host that serves the same immutable folder (resolve.js alternateBases),
+	// (six times, about 30 s). A 404 or no answer therefore moves playback to the next host that serves the same immutable folder (resolve.js candidateBases: the canonical address, the render's mirrors, the other jsDelivr hostnames),
 	// from where it had got to, and says so; only when every host has failed is it an error.
-	const hosts = [ base, ...alternateBases( base ) ];
+	const hosts = candidateBases( base, rj && rj.publication );
 	const tried = [];
 	ctx = { hosts, good: 0, masterName, scene: sceneName, rj, outputs, tracks };
 	function start( at, from ) {
@@ -181,14 +190,22 @@ async function play( input ) {
 		};
 		if ( ! useHls ) {
 
+			// native HLS has no retry policy to tune, so a host that neither plays nor errors is given up on after a timeout
+			let moved = false;
+			const move = detail => { if ( moved ) return; moved = true; clearTimeout( timer ); failed( detail ); };
+			const timer = setTimeout( () => { if ( video.readyState === 0 ) move( `${ master } did not start in time.` ); }, tried.length < hosts.length ? NATIVE_START_MS : NATIVE_START_MS * 3 );
 			video.src = master;
 			if ( resume !== null ) video.addEventListener( 'loadedmetadata', () => { video.currentTime = resume; }, { once: true } );
-			video.addEventListener( 'error', () => failed( `The browser could not play ${ master }.` ), { once: true } );
+			video.addEventListener( 'loadedmetadata', () => { moved = true; clearTimeout( timer ); }, { once: true } );
+			video.addEventListener( 'error', () => move( `The browser could not play ${ master }.` ), { once: true } );
 			return;
 
 		}
 		// while another host is left, give up on this one quickly (two short retries); the last host keeps hls.js's full patience
-		const D = window.Hls.DefaultConfig || {}, quick = p => ( p && p.default && p.default.errorRetry ? { ...p, default: { ...p.default, errorRetry: { ...p.default.errorRetry, maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 } } } : p );
+		// and a host that does not start answering within a few seconds counts as down, so a dead canonical address costs seconds and not minutes
+		const D = window.Hls.DefaultConfig || {}, quick = p => ( p && p.default ? { ...p, default: { ...p.default, maxTimeToFirstByteMs: TTFB_MS,
+			...( p.default.errorRetry ? { errorRetry: { ...p.default.errorRetry, maxNumRetry: 2, retryDelayMs: 500, maxRetryDelayMs: 2000 } } : {} ),
+			...( p.default.timeoutRetry ? { timeoutRetry: { ...p.default.timeoutRetry, maxNumRetry: 1, retryDelayMs: 0 } } : {} ) } } : p );
 		const patience = tried.length < hosts.length ? Object.fromEntries( [ 'fragLoadPolicy', 'playlistLoadPolicy', 'manifestLoadPolicy' ].filter( k => D[ k ] ).map( k => [ k, quick( D[ k ] ) ] ) ) : {};
 		hls = new window.Hls( { capLevelToPlayerSize: false, ...patience, ...( resume !== null ? { startPosition: resume } : {} ) } );
 		const mine = hls;
@@ -219,6 +236,15 @@ async function play( input ) {
 let ctx = null, job = null;
 const dlNote = text => { $( 'dlNote' ).textContent = text || ''; };
 
+// a file that has a next host to fall back to is given a while, not forever (a segment is under 20 MB); the last host is waited for
+const DOWNLOAD_FILE_TIMEOUT_MS = 60000;
+function withTimeout( signal, ms ) {
+
+	const t = AbortSignal.timeout( ms );
+	return signal && AbortSignal.any ? AbortSignal.any( [ signal, t ] ) : t;
+
+}
+
 async function fetchRender( path, signal ) {
 
 	let last = null;
@@ -227,7 +253,7 @@ async function fetchRender( path, signal ) {
 		const i = ( ctx.good + k ) % ctx.hosts.length, host = new URL( ctx.hosts[ i ] ).host;
 		try {
 
-			const res = await fetch( ctx.hosts[ i ] + path, { signal } );
+			const res = await fetch( ctx.hosts[ i ] + path, { signal: k < ctx.hosts.length - 1 ? withTimeout( signal, DOWNLOAD_FILE_TIMEOUT_MS ) : signal } );
 			if ( res.ok ) { ctx.good = i; return res; }
 			last = new Error( `${ path }: HTTP ${ res.status } from ${ host }` );
 

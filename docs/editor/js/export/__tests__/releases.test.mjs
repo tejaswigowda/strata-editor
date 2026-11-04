@@ -5,11 +5,12 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { addManifest, verifyBase } from '../filesManifest.js';
 import { webcrypto } from 'node:crypto';
 if ( ! globalThis.crypto ) globalThis.crypto = webcrypto;
 import {
 	ReleaseError, sceneSlug, tagFor, parseTag, nextVersion, releaseTags, isPinnedRef, pinnedUrl, releaseBase, playerLink, locationOf, publicationBlock, validatePublication,
-	publicationOf, gateRelease, assessStaleness, verifyPlan, verifyOutcome, releaseSummary, planRelease, commitRelease, listReleaseTags, STORAGE,
+	publicationOf, archiveItem, canonicalBase, gateRelease, assessStaleness, verifyPlan, verifyOutcome, releaseSummary, planRelease, commitRelease, listReleaseTags, STORAGE,
 } from '../releases.js';
 import { buildRenderJson, assessDeterminism, validateRenderJson } from '../renderJson.js';
 import { sidecarText } from '../frameHashes.js';
@@ -86,7 +87,7 @@ await test( 'R8: a legacy render (no publication block) is inferred as source-re
 	const at = locationOf( p, { commit: 'fdb3a56' } );
 	assert.strictEqual( at.base, 'https://cdn.jsdelivr.net/gh/tejaswigowda/test1@fdb3a56/renders/a+b-cubed/' );
 	assert.strictEqual( locationOf( p ).base, null, 'with no commit there is no pinned address to hand out' );
-	const pub = publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'a+b-cubed', tag: 'a+b-cubed/v1', sizeBytes: 1234 } );
+	const pub = publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'a+b-cubed', tag: 'a+b-cubed/v1', sizeBytes: 1234, canonical: false } );
 	assert.deepStrictEqual( validatePublication( pub ), [] );
 	assert.strictEqual( locationOf( { ...pub } ).base, pub.url );
 	assert.ok( validatePublication( { ...pub, tag: 'latest' } ).some( m => /tag must be/.test( m ) ) );
@@ -109,16 +110,61 @@ await test( 'R8: the list reads a version-1 render.json already published (one b
 
 await test( 'assemblePublishSet records publication, with the folder and the size of every other file', () => {
 
-	const set = assemblePublishSet( {
+	const input = {
 		path: 'a+b-cubed', scene: SCENE, render: { ...RENDER, frames: 240 }, rungs: [ { rung: { name: '360p24', width: 640, height: 360, kbps: 800 }, packaged: { init: Uint8Array.of( 1 ), segments: [ { name: 'seg00001.m4s', data: new Uint8Array( 50 ) } ], playlist: '#EXTM3U', maxSegmentBytes: 50, codec: 'avc1.64001f', bandwidth: 1, averageBandwidth: 1 } } ],
-		poster: new Uint8Array( 10 ), determinism: { mode: 'offline', encoder: 'software' }, publication: { storage: STORAGE.renders, repo: 'o/renders', tag: 'a+b-cubed/v1' },
-	} );
+		poster: new Uint8Array( 10 ), determinism: { mode: 'offline', encoder: 'software' },
+	};
+	const set = assemblePublishSet( { ...input, publication: { storage: STORAGE.renders, repo: 'o/renders', tag: 'a+b-cubed/v1' } } );
 	const p = set.renderJson.publication;
-	assert.deepStrictEqual( [ p.storage, p.repo, p.path, p.tag ], [ 'renders-repo', 'o/renders', 'a+b-cubed', 'a+b-cubed/v1' ] );
-	assert.strictEqual( p.url, 'https://cdn.jsdelivr.net/gh/o/renders@a+b-cubed/v1/a+b-cubed/' );
-	assert.strictEqual( p.size_bytes, set.total - set.files[ 0 ].bytes.length );
+	assert.deepStrictEqual( p, {
+		canonical: 'https://strataeditor.dev/video/a+b-cubed/v1/',
+		source: { repo: 'o/renders', tag: 'a+b-cubed/v1', path: 'a+b-cubed' },
+		mirrors: [ 'https://cdn.jsdelivr.net/gh/o/renders@a+b-cubed/v1/a+b-cubed/', 'https://archive.org/download/strata-a-b-cubed-v1/' ],
+		target: 'generic', constraints: { max_file_bytes: 20971520, target_segment_s: 6 }, size_bytes: set.total - set.files[ 0 ].bytes.length,
+	} );
 	assert.deepStrictEqual( validatePublication( p ), [] );
+	assert.deepStrictEqual( set.renderJson.outputs.manifest, { path: 'files.sha256', algorithm: 'sha256' } );
 	assert.ok( set.files.every( f => f.path.startsWith( 'a+b-cubed/' ) ) );
+	// canonical:false is the legacy block, with the jsDelivr url
+	const legacy = assemblePublishSet( { ...input, publication: { storage: STORAGE.renders, repo: 'o/renders', tag: 'a+b-cubed/v1', canonical: false } } );
+	assert.strictEqual( legacy.renderJson.publication.url, 'https://cdn.jsdelivr.net/gh/o/renders@a+b-cubed/v1/a+b-cubed/' );
+
+} );
+
+await test( 'G2/G3/G8: a canonical publication names no provider outside its mirrors, normalises like a legacy one, and is refused when malformed', () => {
+
+	const pub = publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'cafe', tag: 'cafe/v1', sizeBytes: 5 } );
+	const { mirrors, ...rest } = pub;
+	assert.ok( ! /jsdelivr|githubusercontent|archive\.org|github\.com/.test( JSON.stringify( rest ) ), 'only mirrors may name a provider' );
+	const n = publicationOf( mk( {}, {}, { publication: pub } ) );
+	assert.deepStrictEqual( [ n.storage, n.repo, n.path, n.tag, n.canonical, n.url ], [ STORAGE.renders, 'o/renders', 'cafe', 'cafe/v1', pub.canonical, pub.canonical ] );
+	assert.deepStrictEqual( n.mirrors, pub.mirrors );
+	assert.deepStrictEqual( locationOf( n ), { ref: 'cafe/v1', base: 'https://strataeditor.dev/video/cafe/v1/' } );
+	const bad = ( change, re ) => assert.ok( validatePublication( { ...pub, ...change } ).some( m => re.test( m ) ), JSON.stringify( change ) );
+	bad( { canonical: 'https://strataeditor.dev/video/cafe/v2/' }, /canonical must/ );
+	bad( { canonical: 'http://strataeditor.dev/video/cafe/v1/' }, /canonical must/ );
+	bad( { mirrors: 'x' }, /mirrors must be an array/ );
+	bad( { mirrors: [ 'https://a/b' ] }, /folder URL/ );
+	bad( { mirrors: [ pub.canonical ] }, /repeat/ );
+	bad( { source: { ...pub.source, tag: 'main' } }, /source\.tag/ );
+	bad( { constraints: { max_file_bytes: 0 } }, /constraints/ );
+	bad( { target: '' }, /target/ );
+	// a legacy render's one location is its mirror, so the manifest says where the bytes are
+	const old = publicationOf( mk( {}, {}, { publication: publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'cafe', tag: 'cafe/v1', canonical: false } ) } ) );
+	assert.deepStrictEqual( [ old.canonical, old.mirrors ], [ null, [ 'https://cdn.jsdelivr.net/gh/o/renders@cafe/v1/cafe/' ] ] );
+	// the player link accepts both kinds of pinned base, and refuses an unpinned one
+	assert.match( playerLink( 'https://x/player/', pub.canonical ), /player\/#https:\/\/strataeditor\.dev\/video\/cafe\/v1\/$/ );
+	assert.throws( () => playerLink( 'https://x/player/', 'https://strataeditor.dev/video/cafe/' ), e => e.code === 'bad-input' );
+	assert.strictEqual( archiveItem( 'a+b-cubed/v12' ), 'strata-a-b-cubed-v12' );
+	assert.strictEqual( canonicalBase( { tag: 'cafe/v1' } ), 'https://strataeditor.dev/video/cafe/v1/' );
+
+} );
+
+await test( 'the gate refuses a set that declares files.sha256 and does not hold it', () => {
+
+	const j = mk(); j.outputs.manifest = { path: 'files.sha256', algorithm: 'sha256' };
+	assert.ok( gateRelease( { renderJson: j, files: [ { path: 'x/render.json' } ] } ).failures.some( m => /files\.sha256 is declared/.test( m ) ) );
+	assert.ok( gateRelease( { renderJson: j, files: [ { path: 'x/files.sha256' } ] } ).ok );
 
 } );
 
@@ -218,11 +264,11 @@ await test( 'the list shows tag, date, duration, fps, ladder, size, source commi
 
 	const pub = publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'a+b-cubed', tag: 'a+b-cubed/v2', sizeBytes: 4_200_000 } );
 	const j = mk( {}, {}, { publication: pub } );
-	const s = releaseSummary( j, { ref: 'a+b-cubed/v2', base: pub.url, repo: 'o/renders' } );
+	const s = releaseSummary( j, { ref: 'a+b-cubed/v2', base: pub.canonical, repo: 'o/renders' } );
 	assert.deepStrictEqual( [ s.tag, s.durationS, s.fps, s.ladder, s.sizeBytes, s.frames, s.bytes, s.date ], [ 'a+b-cubed/v2', 10, 24, [ '360p24' ], 4_200_000, true, true, '2026-11-02T10:00:00Z' ] );
 	assert.strictEqual( s.sourceUrl, 'https://github.com/tejaswigowda/test1/commit/' + SCENE.commit );
-	assert.strictEqual( s.links.renderJson, pub.url + 'render.json' );
-	assert.strictEqual( s.links.poster, pub.url + 'poster.jpg' );
+	assert.strictEqual( s.links.renderJson, pub.canonical + 'render.json' );
+	assert.strictEqual( s.links.poster, pub.canonical + 'poster.jpg' );
 
 } );
 
@@ -241,6 +287,24 @@ await test( 'R2: the scene repository is refused as a renders target unless that
 	await commitRelease( gh.api, plan, { files: set( 'x', [ 'render.json' ] ) } );
 	assert.ok( ! gh.calls.some( c => c.path.startsWith( '/repos/o/scenes' ) && c.method !== 'GET' ), 'the scene repo gets no write' );
 	assert.deepStrictEqual( ( await planRelease( gh.api, { repo: 'o/scenes', slug: 'x', sceneRepo: 'o/scenes', allowSceneRepo: true } ) ).tag, 'x/v1', 'the legacy layout is an explicit opt-in' );
+
+} );
+
+await test( 'G5: what is committed to the renders repository is exactly what files.sha256 lists, and a verifier reading the tag finds every file', async () => {
+
+	const gh = fakeGithub( { repos: { 'o/renders': { empty: true } } } );
+	const plan = await planRelease( gh.api, { repo: 'o/renders', slug: 'cafe', sceneRepo: 'o/test1' } );
+	const built = await addManifest( { files: set( 'cafe', [ 'render.json', 'master.m3u8', '480p60/seg00001.m4s' ], 'v1' ), tree: [], total: 0 }, 'cafe' );
+	const j = mk(); j.outputs.manifest = { path: 'files.sha256', algorithm: 'sha256' };
+	assert.ok( gateRelease( { renderJson: j, files: built.files } ).ok );
+	const out = await commitRelease( gh.api, plan, { files: built.files, message: 'cafe/v1' } );
+	const commit = await gh.api.get( `/repos/o/renders/git/commits/${ out.commit.sha }` );
+	const tree = ( await gh.api.get( `/repos/o/renders/git/trees/${ commit.tree.sha }?recursive=1` ) ).tree.filter( t => t.type === 'blob' );
+	const blobs = gh.state[ 'o/renders' ].blobs;
+	const served = new Map( tree.map( t => [ 'https://x.example/video/' + t.path, Buffer.from( blobs[ t.sha ], 'base64' ) ] ) );
+	const r = await verifyBase( 'https://x.example/video/cafe/', { fetchBytes: async u => { if ( ! served.has( u ) ) throw new Error( 'HTTP 404' ); return new Uint8Array( served.get( u ) ); } } );
+	assert.deepStrictEqual( [ r.ok, r.checked ], [ true, 3 ] );
+	assert.ok( tree.some( t => t.path === 'cafe/files.sha256' ), 'the manifest is committed with the render' );
 
 } );
 

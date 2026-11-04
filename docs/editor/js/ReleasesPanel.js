@@ -11,7 +11,7 @@ import { UIButton, UIInput } from './libs/ui.js';
 import { sceneHash } from './export/canonical.js';
 import { formatBytes } from './export/renderJson.js';
 import {
-	sceneSlug, listReleaseTags, releaseBase, pinnedUrl, playerLink, releaseSummary, publicationOf, assessStaleness, verifyPlan, verifyOutcome, STORAGE,
+	sceneSlug, listReleaseTags, releaseBase, pinnedUrl, playerLink, releaseSummary, publicationOf, shareBase, assessStaleness, verifyPlan, verifyOutcome, STORAGE,
 } from './export/releases.js';
 import { publishSource, githubApi, defaultRendersRepo } from './Menubar.Git.js';
 
@@ -55,11 +55,24 @@ async function fetchJson( url ) {
 
 }
 
-/** render.json at a pinned ref: the CDN first, then GitHub's own raw host (a tag only just created may not be on the CDN yet). */
+/** render.json at a pinned ref: from the repository itself (the source of truth, which has a tag the moment it is created), then from the CDN mirror. */
 async function fetchRenderJson( { repo, ref, path } ) {
 
-	try { return await fetchJson( pinnedUrl( { repo, ref, path: path + '/render.json' } ) ); } catch ( e ) { /* fall back */ }
-	return fetchJson( `https://raw.githubusercontent.com/${ repo }/${ ref }/${ path }/render.json` );
+	try { return await fetchJson( `https://raw.githubusercontent.com/${ repo }/${ ref }/${ path }/render.json` ); } catch ( e ) { /* fall back */ }
+	return fetchJson( pinnedUrl( { repo, ref, path: path + '/render.json' } ) );
+
+}
+
+/** The first of `bases` that serves `file`: the canonical address, then the mirrors in order. */
+async function fetchFromBases( bases, file ) {
+
+	let last = null;
+	for ( const b of bases ) {
+
+		try { const res = await fetch( b + file, { cache: 'no-store', signal: AbortSignal.timeout( 15000 ) } ); if ( res.ok ) return res; last = new Error( `HTTP ${ res.status } from ${ new URL( b ).host }` ); } catch ( e ) { last = e; }
+
+	}
+	throw last || new Error( 'no address to fetch from' );
 
 }
 
@@ -139,7 +152,7 @@ export function createReleasesPanel( editor, deps = {} ) {
 				try {
 
 					const json = await fetchRenderJson( { repo: rendersRepo, ref: t.tag, path: slug } );
-					entries.push( { summary: releaseSummary( json, { ref: t.tag, base: releaseBase( { repo: rendersRepo, tag: t.tag, slug } ), repo: rendersRepo } ), json, version: t.version } );
+					entries.push( { summary: releaseSummary( json, { ref: t.tag, base: shareBase( publicationOf( json ) ) || releaseBase( { repo: rendersRepo, tag: t.tag, slug } ), repo: rendersRepo } ), json, version: t.version } );
 
 				} catch ( e ) { entries.push( { error: `${ t.tag }: render.json could not be read (${ e.message })`, version: t.version } ); }
 
@@ -267,8 +280,8 @@ export function createReleasesPanel( editor, deps = {} ) {
 			if ( local.sceneHash !== set.sceneHash ) { show( { result: 'cannot-verify', summary: 'The last render made here was of a different state of the scene than this release. Render again, then press Verify.' } ); return; }
 			if ( local.width !== set.width || local.height !== set.height || local.fps !== set.fps || local.range.start !== set.range[ 0 ] || local.range.end !== set.range[ 1 ] ) { show( { result: 'cannot-verify', summary: `The last render made here used other settings than this release. Render with ${ want }, then press Verify.` } ); return; }
 			out.textContent = 'Fetching the published frame hashes\u2026';
-			const res = await fetch( entry.summary.base + set.sidecar, { cache: 'no-store' } );
-			if ( ! res.ok ) throw new Error( `the published frame hashes could not be fetched (HTTP ${ res.status })` );
+			let res;
+			try { res = await fetchFromBases( [ entry.summary.base, ...( entry.summary.mirrors || [] ) ], set.sidecar ); } catch ( e ) { throw new Error( `the published frame hashes could not be fetched (${ e.message })` ); }
 			const o = verifyOutcome( { plan, published: await res.text(), rebuilt: { first: local.frameHashes.first, hashes: local.frameHashes.hashes }, sameDevice: local.device ? local.device === set.device : null } );
 			show( o );
 			root.dispatchEvent( new CustomEvent( 'release-verified', { detail: { ref: entry.summary.ref, ...o } } ) );

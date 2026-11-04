@@ -7,12 +7,27 @@
 //   - A release is a tag `<slug>/v<N>`. Tags are created, never moved or deleted by this code; a re-render is v<N+1>.
 //   - Every address this module produces is pinned (a tag or a commit sha). There is no function here that returns @latest or a branch.
 //   - Renders already published into the scene repo (renders/<slug>/) keep working untouched; they are `storage: source-repo` and pinned by commit sha.
+//   - The address a render is SHARED at names no provider: https://strataeditor.dev/video/<slug>/v<N>/ (guides/CDN_INDEPENDENCE.md). The renders repository stays the
+//     source of truth; where the bytes are served from is a routing rule, and every other place that holds them is listed in `publication.mirrors`.
 
 import { diffHashes, frameRanges, parseSidecar } from './frameHashes.js';
 import { validateRenderJson } from './renderJson.js';
 
 export const RENDERS_REPO_NAME = 'renders';
 export const CDN = 'https://cdn.jsdelivr.net/gh';
+export const CANONICAL_ORIGIN = 'https://strataeditor.dev';
+export const CANONICAL_PREFIX = '/video/';
+export const ARCHIVE_ORIGIN = 'https://archive.org/download';
+/**
+ * What is live today. The ONE place to change when routing or the archive go live (guides/CDN_INDEPENDENCE.md): every publication records the canonical address either
+ * way, so flipping a switch edits no published artifact and no page; it changes which address the editor hands out and which mirrors a new publication claims.
+ *   canonicalLive: https://strataeditor.dev/video/ is routed to storage. Off: share links use the first mirror (jsDelivr), and the canonical address is only recorded.
+ *   archive:       the Internet Archive upload exists. Off: a new publication does not list an archive mirror it does not have.
+ */
+export const DELIVERY = { canonicalLive: false, archive: false };
+
+/** The limits this deployment was designed under, recorded in every publication so a ladder's shape is a decision on file and not a fact about HLS. */
+export const DEPLOY_CONSTRAINTS = Object.freeze( { max_file_bytes: 20 * 1024 * 1024, target_segment_s: 6 } );
 export const STORAGE = Object.freeze( { renders: 'renders-repo', source: 'source-repo' } );
 
 export class ReleaseError extends Error {
@@ -88,10 +103,25 @@ export function pinnedUrl( { repo, ref, path = '' } ) {
 /** The folder of a release, with a trailing slash: the base the player is given. */
 export const releaseBase = ( { repo, tag, slug } ) => pinnedUrl( { repo, ref: tag, path: slug + '/' } );
 
+/** The address a release is shared at, with a trailing slash. The path is the tag, so it is pinned by construction: a tag never moves. */
+export const canonicalBase = ( { tag, origin = CANONICAL_ORIGIN } ) => `${ origin }${ CANONICAL_PREFIX }${ tag }/`;
+
+/** The Internet Archive item a release is deposited as: letters, digits, "_", "-" and "." only ("a+b-cubed/v1" -> "strata-a-b-cubed-v1"). */
+export const archiveItem = tag => 'strata-' + String( tag ).replace( /\/v(?=\d+$)/, '-v' ).replace( /[^A-Za-z0-9._-]+/g, '-' );
+
+export const archiveBase = tag => `${ ARCHIVE_ORIGIN }/${ archiveItem( tag ) }/`;
+
+/** True for an address that names one immutable folder: a jsDelivr-style @<tag or sha>/ address, or a canonical /video/<slug>/v<N>/ one. */
+export function isPinnedBase( base ) {
+
+	return /@(?:[0-9a-f]{7,40}|.+\/v[1-9]\d*)\//.test( base ) || /^https:\/\/[^/]+\/video\/.+\/v[1-9]\d*\/$/.test( base );
+
+}
+
 /** The player link for a pinned base. `playerRoot` is the player page's address (docs/player/), `cue` an optional authored cue id. */
 export function playerLink( playerRoot, base, { cue = null } = {} ) {
 
-	if ( ! /@(?:[0-9a-f]{7,40}|.+\/v[1-9]\d*)\//.test( base ) ) throw new ReleaseError( 'bad-input', 'The player link must point at a pinned base.' );
+	if ( ! isPinnedBase( base ) ) throw new ReleaseError( 'bad-input', 'The player link must point at a pinned base.' );
 	return `${ playerRoot }#${ base }${ cue ? '&cue=' + encodeURIComponent( cue ) : '' }`;
 
 }
@@ -99,6 +129,7 @@ export function playerLink( playerRoot, base, { cue = null } = {} ) {
 /** Where a release's files are: the tag of a renders-repo render, or the commit a legacy render was found at. */
 export function locationOf( pub, { commit = null } = {} ) {
 
+	if ( pub.canonical ) return { ref: pub.tag, base: shareBase( pub ) };
 	if ( pub.storage === STORAGE.renders ) return { ref: pub.tag, base: releaseBase( { repo: pub.repo, tag: pub.tag, slug: pub.path } ) };
 	if ( ! commit ) return { ref: null, base: null };
 	return { ref: commit, base: pinnedUrl( { repo: pub.repo, ref: commit, path: pub.path + '/' } ) };
@@ -108,15 +139,65 @@ export function locationOf( pub, { commit = null } = {} ) {
 // ── render.json's `publication` ─────────────────────────────────────────────
 
 /**
- * Where a render lives, recorded in render.json so both layouts coexist without ambiguity.
- *   storage: 'renders-repo' | 'source-repo'; repo: 'owner/name' of the repository holding the files; path: the folder in it;
- *   tag: the release tag (renders-repo; null for a legacy render, which has none); url: the pinned base (renders-repo; a legacy one is pinned by the commit it is found at, which is not known until it is committed);
- *   size_bytes: every file of the folder except render.json itself.
+ * Where a render lives, recorded in render.json. Two shapes, and a render.json carries one of them:
+ *
+ * v2 (a renders-repo render, canonical on, the default): nothing durable names a provider.
+ *   { canonical: 'https://strataeditor.dev/video/<slug>/v<N>/',         the address it is shared at; the first place a player looks
+ *     source:    { repo, tag, path },                                  the source of truth: the folder <path>/ of <repo> at <tag>
+ *     mirrors:   [ <folder URL>, ... ],                                 every other place that holds the same bytes, in the order to try them
+ *     target:    'generic',                                            what the ladder was shaped for
+ *     constraints: { max_file_bytes, target_segment_s },               the limits that shaped it: a deployment decision on file, so it is not mistaken for a fact about HLS
+ *     size_bytes }                                                      every file of the folder except render.json and files.sha256
+ * legacy (published before this, and still served where it is): { storage, repo, path, tag, url, size_bytes }; `url` is the pinned jsDelivr folder, which publicationOf
+ * lists as the one mirror so a manifest is honest about where the bytes are. A legacy render is migrated only when it is re-rendered.
  */
-export function publicationBlock( { storage, repo, path, tag = null, sizeBytes = null } ) {
+export function publicationBlock( { storage, repo, path, tag = null, sizeBytes = null, canonical = true, mirrors = null, archive = DELIVERY.archive } ) {
 
+	if ( canonical && storage === STORAGE.renders && tag ) {
+
+		return {
+			canonical: canonicalBase( { tag } ),
+			source: { repo, tag, path },
+			mirrors: mirrors || [ releaseBase( { repo, tag, slug: path } ), ...( archive ? [ archiveBase( tag ) ] : [] ) ],
+			target: 'generic',
+			constraints: { ...DEPLOY_CONSTRAINTS },
+			size_bytes: sizeBytes,
+		};
+
+	}
 	const url = storage === STORAGE.renders && tag ? releaseBase( { repo, tag, slug: path } ) : null;
 	return { storage, repo, path, tag, url, size_bytes: sizeBytes };
+
+}
+
+const isFolderUrl = u => typeof u === 'string' && /^https:\/\/[^/\s]+\/\S*\/$/.test( u );
+
+function validatePublicationV2( p ) {
+
+	const e = [];
+	const need = ( c, m ) => { if ( ! c ) e.push( m ); };
+	const src = p.source;
+	need( src && typeof src === 'object', 'publication.source must be { repo, tag, path }' );
+	if ( src && typeof src === 'object' ) {
+
+		need( /^[^/\s]+\/[^/\s]+$/.test( src.repo || '' ), 'publication.source.repo must be owner/name' );
+		need( typeof src.path === 'string' && src.path.length > 0, 'publication.source.path is required' );
+		need( parseTag( src.tag, src.path ) !== null, 'publication.source.tag must be <path>/v<N>' );
+		need( isFolderUrl( p.canonical ) && p.canonical.endsWith( `/video/${ src.tag }/` ), 'publication.canonical must be an https folder URL ending /video/<source.tag>/' );
+
+	}
+	need( Array.isArray( p.mirrors ), 'publication.mirrors must be an array' );
+	if ( Array.isArray( p.mirrors ) ) {
+
+		need( p.mirrors.every( isFolderUrl ), 'every publication.mirrors entry must be an https folder URL ending in /' );
+		need( new Set( p.mirrors ).size === p.mirrors.length && ! p.mirrors.includes( p.canonical ), 'publication.mirrors must not repeat itself or the canonical address' );
+
+	}
+	need( typeof p.target === 'string' && p.target.length > 0, 'publication.target is required' );
+	const c = p.constraints;
+	need( c && Number.isInteger( c.max_file_bytes ) && c.max_file_bytes > 0 && typeof c.target_segment_s === 'number' && c.target_segment_s > 0, 'publication.constraints must be { max_file_bytes, target_segment_s }' );
+	need( p.size_bytes === null || ( Number.isInteger( p.size_bytes ) && p.size_bytes >= 0 ), 'publication.size_bytes must be a non-negative integer or null' );
+	return e;
 
 }
 
@@ -127,6 +208,7 @@ export function validatePublication( p ) {
 	const e = [];
 	const need = ( c, m ) => { if ( ! c ) e.push( m ); };
 	if ( ! p || typeof p !== 'object' ) return [ 'publication must be an object' ];
+	if ( 'canonical' in p || 'source' in p ) return validatePublicationV2( p );
 	need( p.storage === STORAGE.renders || p.storage === STORAGE.source, 'publication.storage must be renders-repo or source-repo' );
 	need( /^[^/\s]+\/[^/\s]+$/.test( p.repo || '' ), 'publication.repo must be owner/name' );
 	need( typeof p.path === 'string' && p.path.length > 0, 'publication.path is required' );
@@ -146,11 +228,31 @@ export function validatePublication( p ) {
 
 }
 
-/** What a render.json says about where it lives, with the legacy case inferred: { storage, repo, path, tag, inferred }. */
+/**
+ * What a render.json says about where it lives, either shape normalised to one: { storage, repo, path, tag, canonical, mirrors, url, size_bytes, inferred }.
+ * `canonical` is null for a render published before the canonical address existed; its one pinned location is then listed in `mirrors` and `url`.
+ */
 export function publicationOf( renderJson, { repo = null, path = null } = {} ) {
 
-	if ( renderJson && renderJson.publication ) return { ...renderJson.publication, inferred: false };
-	return { storage: STORAGE.source, repo: repo || ( renderJson && renderJson.scene && renderJson.scene.repo ), path, tag: null, url: null, size_bytes: null, inferred: true };
+	const p = renderJson && renderJson.publication;
+	if ( p && p.source ) {
+
+		return { storage: STORAGE.renders, repo: p.source.repo, path: p.source.path, tag: p.source.tag, canonical: p.canonical, mirrors: p.mirrors || [], url: p.canonical, target: p.target, constraints: p.constraints, size_bytes: p.size_bytes, inferred: false };
+
+	}
+	if ( p ) return { ...p, canonical: null, mirrors: p.url ? [ p.url ] : [], inferred: false };
+	return { storage: STORAGE.source, repo: repo || ( renderJson && renderJson.scene && renderJson.scene.repo ), path, tag: null, url: null, canonical: null, mirrors: [], size_bytes: null, inferred: true };
+
+}
+
+/**
+ * The folder a release is SHARED at: the canonical address once it is routed (DELIVERY.canonicalLive), until then the render's first mirror. `pub` is publicationOf()'s
+ * result. Returns null when there is nowhere to point (a legacy render found without a commit).
+ */
+export function shareBase( pub, { delivery = DELIVERY } = {} ) {
+
+	if ( delivery.canonicalLive && pub.canonical ) return pub.canonical;
+	return pub.mirrors && pub.mirrors[ 0 ] ? pub.mirrors[ 0 ] : pub.canonical || null;
 
 }
 
@@ -160,19 +262,22 @@ export function publicationOf( renderJson, { repo = null, path = null } = {} ) {
  * A publish is refused, not warned about, when anything is wrong: a size error, a render.json that does not validate, or a manifest check that is false.
  * Returns { ok, failures: string[] }.
  */
-export function gateRelease( { renderJson, errors = [] } ) {
+export function gateRelease( { renderJson, errors = [], files = null } ) {
 
 	const failures = [ ...errors ];
 	for ( const p of validateRenderJson( renderJson ) ) failures.push( 'render.json: ' + p );
 	for ( const p of validatePublication( renderJson && renderJson.publication ) ) failures.push( 'render.json: ' + p );
 	const checks = ( renderJson && renderJson.checks ) || {};
 	const text = {
-		segments_under_20mb: 'a segment is 20 MB or more (jsDelivr will not serve it)',
+		segments_under_20mb: 'a segment is 20 MB or more (over publication.constraints.max_file_bytes; a mirror such as jsDelivr will not serve it)',
 		files_under_100mb: 'a file is 100 MB or more (GitHub refuses it)',
 		frame_count_matches_duration: 'the frame count does not match the duration',
 		audio_duration_matches_video: 'the narration audio is not the same length as the video',
 	};
 	for ( const [ k, v ] of Object.entries( checks ) ) if ( v !== true ) failures.push( `check failed: ${ text[ k ] || k }` );
+	// a render.json that declares a manifest is refused when the set does not hold it: a mirror could not be checked against it
+	const manifest = renderJson && renderJson.outputs && renderJson.outputs.manifest;
+	if ( manifest && files && ! files.some( f => f.path.endsWith( '/' + manifest.path ) ) ) failures.push( `${ manifest.path } is declared by render.json and missing from the set` );
 	return { ok: failures.length === 0, failures };
 
 }
@@ -273,7 +378,7 @@ export function releaseSummary( renderJson, { ref, base, repo, date = null } ) {
 	const r = renderJson.render, o = renderJson.outputs, s = renderJson.scene;
 	const pub = publicationOf( renderJson, { repo } );
 	return {
-		ref, base, storage: pub.storage, tag: pub.tag, repo: pub.repo, date: date || r.rendered_at,
+		ref, base, mirrors: pub.mirrors.filter( m => m !== base ), canonical: pub.canonical, storage: pub.storage, tag: pub.tag, repo: pub.repo, date: date || r.rendered_at,
 		durationS: r.duration_s, fps: r.fps, width: r.width, height: r.height,
 		ladder: ( o.renditions || [] ).map( x => x.name ),
 		sizeBytes: pub.size_bytes,

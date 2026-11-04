@@ -1,0 +1,50 @@
+# Goes in the RENDERS repository (tejaswigowda/renders) as .github/workflows/sync-render.yml, with infra/renders-repo/sync.sh copied to .github/sync.sh.
+# On every release tag (<slug>/v<N>) it copies the render to storage and checks the result against files.sha256, so the tag is the whole publish action: the editor
+# commits and tags, and this does the rest. No credential is in the browser or in the editor repository.
+#
+# Secrets (repository settings): R2_BUCKET, R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and for the archive IA_ACCESS_KEY, IA_SECRET_KEY.
+name: sync-render
+on:
+  push:
+    tags: [ '*/v*' ]
+  workflow_dispatch:
+    inputs:
+      tag: { description: 'tag to (re)sync, e.g. cafe/v1', required: true }
+
+jobs:
+  storage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.tag || github.ref_name }}' }
+      - name: Copy to storage and verify against files.sha256
+        env:
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: bash .github/sync.sh "${{ inputs.tag || github.ref_name }}"
+
+  # The copy that outlives the DNS, the providers and the funding: the Internet Archive, on infrastructure this project neither pays for nor controls.
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.tag || github.ref_name }}' }
+      - run: pip install internetarchive
+      - name: Upload the ladder as one item
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"; slug="${tag%/v*}"
+          item="strata-$(echo "$tag" | sed -E 's|/v([0-9]+)$|-v\1|; s|[^A-Za-z0-9._-]+|-|g')"   # the same rule as releases.js archiveItem()
+          mkdir -p ~/.config/internetarchive
+          printf '[s3]\naccess = %s\nsecret = %s\n' "$IA_ACCESS_KEY" "$IA_SECRET_KEY" > ~/.config/internetarchive/ia.ini
+          cd "$slug"
+          ia upload "$item" ./* --no-derive --retries 5 \
+            --metadata="mediatype:movies" --metadata="collection:opensource_movies" \
+            --metadata="title:Strata render $tag" --metadata="creator:Strata" \
+            --metadata="description:HLS ladder published by the Strata editor (https://strataeditor.dev). files.sha256 lists the SHA-256 of every file."
+          echo "https://archive.org/download/$item/"

@@ -63,7 +63,7 @@
 <body>
 <main>
 	<form id="form">
-		<input type="text" id="address" placeholder="https://cdn.jsdelivr.net/gh/owner/repo@ref/renders/name/" aria-label="jsDelivr address of a published render" spellcheck="false" autocomplete="off">
+		<input type="text" id="address" placeholder="https://strataeditor.dev/video/name/v1/" aria-label="Address of a published render" spellcheck="false" autocomplete="off">
 		<button type="submit">Play</button>
 	</form>
 	<div class="stage"><video id="video" controls playsinline crossorigin="anonymous" preload="metadata"></video></div>
@@ -80,7 +80,7 @@
 	</div>
 	<div class="warn" id="warn" hidden></div>
 	<div class="error" id="error" role="alert"></div>
-	<footer>Plays the HLS set that Strata's Render tab publishes (<code>master.m3u8</code>, fragmented MP4 segments, <code>render.json</code>). Safari plays it natively; elsewhere <a href="https://github.com/video-dev/hls.js">hls.js</a> (Apache-2.0) does. The address is the page's hash: <code>/player/#https://cdn.jsdelivr.net/gh/…</code>.</footer>
+	<footer>Plays the HLS set that Strata's Render tab publishes (<code>master.m3u8</code>, fragmented MP4 segments, <code>render.json</code>). Safari plays it natively; elsewhere <a href="https://github.com/video-dev/hls.js">hls.js</a> (Apache-2.0) does. The address is the page's hash: <code>/player/#https://strataeditor.dev/video/&lt;name&gt;/v1/</code>. If that host does not answer, the render's listed mirrors are tried in order.</footer>
 </main>
 <script src="hls.min.js"></script>
 <script type="module" src="player.js"></script>

@@ -13,7 +13,8 @@ import { UIButton, UICheckbox, UIInput, UISelect } from './libs/ui.js';
 import { sceneHash } from './export/canonical.js';
 import { transcodeLadder } from './export/ladder.js';
 import { planLadder, assemblePublishSet, defaultPublishPath, stalenessLine } from './export/publishSet.js';
-import { sceneSlug, planRelease, commitRelease, gateRelease, releaseBase, pinnedUrl, playerLink, ReleaseError, STORAGE } from './export/releases.js';
+import { sceneSlug, planRelease, commitRelease, gateRelease, releaseBase, pinnedUrl, playerLink, shareBase, publicationOf, DELIVERY, ReleaseError, STORAGE } from './export/releases.js';
+import { addManifest, MANIFEST_NAME } from './export/filesManifest.js';
 import { cueTrack } from './export/captions.js';
 import { EXPORTER } from './export/renderJson.js';
 import { formatBytes } from './export/renderJson.js';
@@ -209,7 +210,7 @@ export function createPublishPanel( editor ) {
 	let info = null;          // the render being published
 	let prepared = null;      // the set built by Prepare
 	let currentHash = null;
-	let build = null;         // ( download | null ) => the set; lets the MP4 be added without redoing the ladder
+	let build = null;         // async ( download | null ) => the set, with files.sha256; lets the MP4 be added without redoing the ladder
 	let narrationBytes = null;    // the WAV the prepared set was built from
 	let mp4Sources = [];          // what the single-file MP4 can carry: each rung of the ladder, or the master
 	let busy = false;
@@ -308,7 +309,7 @@ export function createPublishPanel( editor ) {
 		root.dispatchEvent( new CustomEvent( 'publish-prepared', { detail: set } ) );     // for tests and tools: the set as it will be committed
 		treeBox.textContent = set.tree.map( f => `${ formatBytes( f.bytes ).padStart( 8 ) }  ${ f.path }` ).join( '\n' ) + `\n${ formatBytes( set.total ).padStart( 8 ) }  total, ${ set.tree.length } files`;
 		// R6: a failed check blocks the publish. It is not a warning.
-		set.gate = gateRelease( { renderJson: set.renderJson, errors: set.errors } );
+		set.gate = gateRelease( { renderJson: set.renderJson, errors: set.errors, files: set.files } );
 		errorsBox.textContent = set.gate.failures.join( '\n' );
 		const notes = [];
 		const det = set.renderJson.render.determinism;
@@ -411,7 +412,7 @@ export function createPublishPanel( editor ) {
 			const mp4 = out.files[ 'out.mp4' ];
 			if ( ! mp4 || mp4.length < 1000 || String.fromCharCode( ...mp4.slice( 4, 8 ) ) !== 'ftyp' ) throw new Error( 'ffmpeg.webcli.app did not send a valid MP4.' );
 			const name = ( target().path.split( '/' ).pop() || 'render' ) + '.mp4';
-			showSet( build( { name, bytes: mp4, command: out.meta.command || '', audio: !! narrationBytes, captions: info.cues.length > 0, videoFrom: source.key } ) );
+			showSet( await build( { name, bytes: mp4, command: out.meta.command || '', audio: !! narrationBytes, captions: info.cues.length > 0, videoFrom: source.key } ) );
 
 		} catch ( e ) {
 
@@ -535,7 +536,7 @@ export function createPublishPanel( editor ) {
 			// The captions are a projection of the scene's cue list, written with the cue ids as WebVTT identifiers and a NOTE saying what they were made from.
 			// A cue with a missing, malformed or duplicate id stops the publish here, with the cue named: nothing renumbers it.
 			captionTracks = info.cues.length ? [ await cueTrack( { cues: info.cues, language: ( info.audioRef && info.audioRef.language ) || 'en', scene: sceneRec, exporter: EXPORTER } ) ].filter( Boolean ) : [];
-			build = ( download ) => assemblePublishSet( {
+			build = async ( download ) => addManifest( assemblePublishSet( {
 				path: t.path,
 				scene: sceneRec,
 				render: { mode: 'offline', renderer: info.renderer, device: info.device, encoder: info.encoder, fps: info.fps, frames: info.frames, frameRange: [ 0, info.frames - 1 ], width: info.width, height: info.height, renderedAt: info.renderedAt },
@@ -546,8 +547,8 @@ export function createPublishPanel( editor ) {
 				determinism: { mode: 'offline', encoder: info.encoder, hasEndCard: info.hasEndCard, playbackWasRunning: info.playbackWasRunning, verification: info.verification || null },
 				frameHashes: info.frameHashes || null, endCard: info.endCard || null,
 				publication: { storage: t.storage, repo: t.repo, tag: currentPlan ? currentPlan.tag : null },
-			} );
-			showSet( build( null ) );
+			} ), t.path );
+			showSet( await build( null ) );
 
 		} catch ( e ) {
 
@@ -584,7 +585,10 @@ export function createPublishPanel( editor ) {
 				const api = githubApi( { onWait: seconds => setStatus( `GitHub rate limit \u2014 retrying in ${ seconds }s\u2026` ) } );
 				const plan = await planRelease( api, { repo: t.repo, slug: t.path, branch: t.branch, sceneRepo: ( info.source && info.source.repo ) || null, version: currentPlan.version } );
 				const out = await commitRelease( api, plan, { files: set.files, message: `${ plan.tag }: ${ message }`, onProgress } );
-				published = { storage: t.storage, repo: t.repo, tag: out.tag, commit: out.commit.sha, base: out.base };
+				// the address it is shared at names no provider; the renders repository is where the bytes are committed, and storage serves them from there (guides/CDN_INDEPENDENCE.md)
+				const pub = publicationOf( set.renderJson );
+				const base = shareBase( pub ) || out.base;
+				published = { storage: t.storage, repo: t.repo, tag: out.tag, commit: out.commit.sha, base, mirrors: pub.mirrors.filter( m => m !== base ), canonical: pub.canonical };
 
 			} else {
 
@@ -637,6 +641,25 @@ export function createPublishPanel( editor ) {
 		g.target = '_blank'; g.rel = 'noopener';
 		where.append( g, p.tag ? '. The tag is permanent: a re-render will be the next version, never a replacement.' : '.' );
 		resultBox.appendChild( where );
+		if ( p.canonical && p.base !== p.canonical ) {
+
+			const note = el( 'div', NOTE + 'opacity:0.85;', `Served from ${ new URL( p.base ).host } for now. The permanent address ${ p.canonical } is recorded in render.json and is not routed yet (DELIVERY.canonicalLive in export/releases.js); when it is, links made now keep working.` );
+			resultBox.appendChild( note );
+
+		}
+		if ( DELIVERY.canonicalLive && p.canonical && p.base === p.canonical ) {
+
+			// the canonical address is only as good as the sync behind it: say whether it answers now, and what happens if it does not
+			const host = new URL( p.base ).host, live = el( 'div', NOTE + 'opacity:0.85;', `Checking that ${ host } serves this render\u2026` );
+			resultBox.appendChild( live );
+			fetch( p.base + MANIFEST_NAME, { cache: 'no-store', signal: AbortSignal.timeout( 10000 ) } ).then( r => {
+
+				live.textContent = r.ok ? `\u2713 ${ host } serves it. Mirrors: ${ p.mirrors.map( m => new URL( m ).host ).join( ', ' ) }.`
+					: `${ host } does not serve it yet (HTTP ${ r.status }): the copy to storage runs when the tag lands, and has not finished. The link already plays, because the player falls back to the mirrors (${ p.mirrors.map( m => new URL( m ).host ).join( ', ' ) }).`;
+
+			} ).catch( () => { live.textContent = `${ host } could not be reached from here. The link plays through the mirrors until it can.`; } );
+
+		}
 
 	}
 

@@ -305,6 +305,11 @@ export function applyContentAt( editor, model, t ) {
 
 	if ( ! model ) return;
 
+	// A label can be targeted by several tracks (a class track such as `.term` that blanks every term at 0, then a
+	// per-id track that sets one later). A track still before its first change must not undo what an earlier
+	// track already set on that label at this time, or the class-level blank is overwritten by the authored text.
+	const driven = new Set();
+
 	for ( const track of model.tracks ) {
 
 		const changeEvents = changeEventsOf( track );
@@ -327,7 +332,7 @@ export function applyContentAt( editor, model, t ) {
 			// Before the first keyed change — leave the authored content as-is.
 			for ( const node of nodes ) {
 
-				if ( ! isTextMesh( node ) ) continue;
+				if ( ! isTextMesh( node ) || driven.has( node ) ) continue;
 				removeGhost( node );
 				removeNextSlot( node );
 				// "leave the authored content as-is" means put it back: a label that an earlier sample had already changed would otherwise keep that string here
@@ -344,6 +349,7 @@ export function applyContentAt( editor, model, t ) {
 		}
 
 		const active = changeEvents[ activeIdx ];
+		for ( const node of nodes ) driven.add( node );
 		const isFade = active.args.transition === 'fade' && active.dur > 0;
 		const fadeRatio = isFade ? Math.min( 1, Math.max( 0, ( t - active.at ) / active.dur ) ) : 1;
 		const fading = isFade && fadeRatio < 1 && activeIdx > 0;

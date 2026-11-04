@@ -64,7 +64,9 @@ const bytesOf = v => typeof v === 'string' ? enc.encode( v ) : v;
  *   determinism: { mode, encoder, hasEndCard, playbackWasRunning, verification }   (assessDeterminism's input)
  *   frameHashes: null | { text, root, count }       the sidecar text (frame-hashes.txt) and its root hash: sha256 of every frame, before encoding
  *   endCard:     null | { bytes (PNG), sha256, url, stamp, width, height }   the end card image the frames were composited from (endcard.png)
- *   publication: null | { storage, repo, tag }   where this set will live (releases.js); render.json records it with the folder and the size of every other file
+ *   publication: null | { storage, repo, tag, canonical? }   where this set will live (releases.js); render.json records it with the folder and the size of every other file.
+ *                canonical: false writes the legacy block (a jsDelivr url) instead of the canonical address and its mirrors
+ *   files.sha256 is added by filesManifest.js addManifest() (async, it hashes every file); render.json declares it in outputs.manifest
  * @returns {{ files: { path, bytes: Uint8Array }[], renderJson, total: number, errors: string[], warnings: string[], tree: { path, bytes }[] }}
  */
 export function assemblePublishSet( { path, scene, render, rungs, poster, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, publication = null } ) {
@@ -128,7 +130,7 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 		frameHashes: frameHashes ? { path: 'frame-hashes.txt', count: frameHashes.count, root: frameHashes.root } : null,
 		endCard: endCard ? { path: 'endcard.png', sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height } : null,
 		files: files.map( f => ( { path: f.path, bytes: f.bytes.length } ) ),
-		publication: publication ? publicationBlock( { storage: publication.storage, repo: publication.repo, path, tag: publication.tag || null, sizeBytes: files.reduce( ( n, f ) => n + f.bytes.length, 0 ) } ) : null,
+		publication: publication ? publicationBlock( { storage: publication.storage, repo: publication.repo, path, tag: publication.tag || null, canonical: publication.canonical !== false, sizeBytes: files.reduce( ( n, f ) => n + f.bytes.length, 0 ) } ) : null,
 	} );
 	files.unshift( { path: rel( 'render.json' ), bytes: enc.encode( JSON.stringify( renderJson, null, 2 ) + '\n' ) } );
 
@@ -156,7 +158,7 @@ export function sizeReport( files, total, renditions, determinism, download = nu
 	const warnings = [];
 	for ( const r of renditions ) {
 
-		if ( r.maxSegmentBytes >= LIMITS.segmentBytes ) errors.push( `${ r.name }: a segment is ${ formatBytes( r.maxSegmentBytes ) }, over the 20 MB limit jsDelivr serves. Drop this rung or lower its bitrate.` );
+		if ( r.maxSegmentBytes >= LIMITS.segmentBytes ) errors.push( `${ r.name }: a segment is ${ formatBytes( r.maxSegmentBytes ) }, over the 20 MB per-file limit this ladder is built for (publication.constraints; jsDelivr, a mirror, serves no more). Drop this rung or lower its bitrate.` );
 
 	}
 	for ( const f of files ) {

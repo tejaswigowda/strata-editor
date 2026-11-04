@@ -1,0 +1,348 @@
+{
+ "origin": "https://strataeditor.dev",
+ "taken_at": "2026-11-04T03:33:25.670Z",
+ "records": [
+  {
+   "url": "https://strataeditor.dev/",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 11129,
+   "sha256": "69093d0b7d7718c588d082a94a6bb60ab248df8b4274d539b04c218e1b53ea85",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 4772,
+   "sha256": "8fd5929035843f912cfd85f5c6c29b19af828dbd02006a2d076f02175bad50fc",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 25036,
+   "sha256": "da94fd64517190e1bc996cd46966741c111bae19c41ff3633417e7c8bfe1d16f",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/player/",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 6416,
+   "sha256": "00c79daa93cddd7ef5852ffa49a6311446a515bdcbab099c6c76aff070d50928",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/player/player.js",
+   "status": 200,
+   "type": "application/javascript",
+   "bytes": 18693,
+   "sha256": "8d9c0e1b2f97d99df9ffab5e3b31b19e6c197423250a857a5a523a8daea72230",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/player/resolve.js",
+   "status": 200,
+   "type": "application/javascript",
+   "bytes": 6986,
+   "sha256": "e7cab5ed67e9504572a827be482b5c38f61a748efdab40ee9c6957f002e4ed75",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/editor/js/Editor.js",
+   "status": 200,
+   "type": "application/javascript",
+   "bytes": 29328,
+   "sha256": "3cc9c92939b9b7acb7011244ec09b32f4a399f2b0b5b74bc2d5341a3bcecd2c4",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/editor/js/export/releases.js",
+   "status": 200,
+   "type": "application/javascript",
+   "bytes": 24639,
+   "sha256": "1bea91b24f187591740f450fede4eecf1577a1bf3aa5e995b21f24efc0fa0679",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/build/three.core.js",
+   "status": 200,
+   "type": "application/javascript",
+   "bytes": 1440471,
+   "sha256": "47566dd2286b6a1e74501fb611c8d377411c29575d2e732f2757cdef425d695d",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/favicon.svg",
+   "status": 200,
+   "type": "image/svg+xml",
+   "bytes": 298,
+   "sha256": "62a4812563627dbece3ad5270a43f66f93d288dfea2c2a404479fc49eb669ff5",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/robots.txt",
+   "status": 200,
+   "type": "text/plain",
+   "bytes": 70,
+   "sha256": "34243ac2a85cfbb344b8775ea691cf94d295a77ea2791b0cd270724f6a90ac43",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/sitemap.xml",
+   "status": 200,
+   "type": "application/xml",
+   "bytes": 3411,
+   "sha256": "63d0ef7a8558d3b963b2d7d3498c3ef8151aa26cd072a9ee5fdc0ec1ec2e4864",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/makeshort.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 57283,
+   "sha256": "757a761d122f36c0323db2294af647e66d1b4a117b5fa9e0f5f07e56aaf7f825",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/a-plus-b-cubed.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 45045,
+   "sha256": "6a043173c4ab0da5974b1038b8d21ccb202266a2c0f5d762914342e22fb02c81",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/hardy-weinberg.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 62860,
+   "sha256": "0a59abce6a0754ce0a8b2eb7395f6b21fe5bbc9de3ee8b3d5c9d202cbd237472",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/area-volume.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 44971,
+   "sha256": "273b74ac3c7c6be238dca325fc83939131bca3f8c15f79ef2bdf36451e2f9bfa",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/projectile.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 53645,
+   "sha256": "19f82488503deb4b1c11de280b156e2e793f2054553d9952551e7e03f1990a96",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/piston.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 48162,
+   "sha256": "c843e8f5e60b7027d8363bfd483a76f316b10e49583ad762f3a057603abb8484",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/molecule-shapes.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 53184,
+   "sha256": "5992fe6f7453f8327605ae1a817184af3e40bff4cec2b673ebfe794ae3c7fb21",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/segment-any-mesh.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 55832,
+   "sha256": "1f403a023f44d136fca2f25c25f9f153863e01fcf34df03d38ebb4d6393efdc0",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/segment-a-scene.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 29961,
+   "sha256": "40af7a08e701f292f20ce518edad22c0ee9b31f3b540947d8f5c12a0269b3165",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/segment-a-diorama.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 56266,
+   "sha256": "e5ca2788ccf3d639a9f7d3fbb9a11605f596c8056d8f18da4f5736540f0c1f88",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/segment-a-mesh.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 33245,
+   "sha256": "8f0ef296a5ea0ec821e693a1b7bd4938ae5edfa3e179d71561791043d1a291e1",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/build-a-scene.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 17063,
+   "sha256": "8393910c34f741118c14cd1f7bbf122c3865ec3c12093cd408ec7f5f77b39293",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/render-camera-sequence.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 10881,
+   "sha256": "99e2d9091ae7156fa6732c6c9aa3548ab6da7dfc49d8cee976e059c7930ee2ac",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/paddle-table-view.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 17584,
+   "sha256": "4c1b8ee7e78354c6bbc9f9e1534f46ad0ef2ce2a55d63a6825f9c3e36bcc01bf",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/bubble-shooter-scene.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 15323,
+   "sha256": "124398a76f0b13be3df0cc8c84df44efda6570ec7fdfa91527a5db2bc85c2494",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/fight-arena-scene.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 20598,
+   "sha256": "59adb27bb6e0c971dd9f9b8f44bd5c21059de851683626c7d2799fc9ec9f8f9f",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/wizard-hat-sculpt.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 22162,
+   "sha256": "5f323134a9a377aa102ed010225faa439327ea8118bb09b3101a7f67851aec22",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/racing-circuit-scene.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 35013,
+   "sha256": "baf2b13c19e97ac395c3ccf0de709f3285bfe18b4f03f11074d20b65d0b6f2be",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/make-your-own-metahuman.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 18813,
+   "sha256": "ea75a134fdac24660271156fe09cdf6aad9a5e9492d6e2c9ef0e6966209f4686",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/two-character-dance.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 23914,
+   "sha256": "f6428939c299ff59ca7c8e25625b606a0171aaba171fd1e20aade296d0a9ef01",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/vrm-restyle-explorer.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 21227,
+   "sha256": "b9b488c889bb03f17ea076af5236de1d26107d996f00adc4f3715a4f2725c31b",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/animate-a-character.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 23944,
+   "sha256": "0069356f24000f4f205b34e66f201c86134db2db1f8dbb8ff0dbda83517745c5",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/martial-arts-dojo.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 66466,
+   "sha256": "96cd0e2917cbeae2e2beb3fe06151c6ed9c424ee97a36e6fab02098b7cefd141",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/edit-captured-motion.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 12627,
+   "sha256": "e489b1448fcded79c3aa27f0e328fdb81e6fa00423e4d7b74f6e597bf9bb8f72",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/author-a-face.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 10677,
+   "sha256": "afa4baf9aa8a2f2dc568c37c53a77bede80ee01dfca722cbfffbd1125c9271d9",
+   "via": "github-pages",
+   "location": null
+  },
+  {
+   "url": "https://strataeditor.dev/about/tutorials/sparring-from-mocap.html",
+   "status": 200,
+   "type": "text/html",
+   "bytes": 24296,
+   "sha256": "59d4d81a775a4792ed41fbc056c3f4edede2098c6a6de947e966f708b066f13b",
+   "via": "github-pages",
+   "location": null
+  }
+ ]
+}

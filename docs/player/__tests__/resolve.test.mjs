@@ -1,6 +1,6 @@
 // Run: node docs/player/__tests__/resolve.test.mjs
 import assert from 'node:assert';
-import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, alternateBases, presentMode, cueParam, locateCue } from '../resolve.js';
+import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, alternateBases, presentMode, cueParam, locateCue, mirrorsFromCanonical, candidateBases } from '../resolve.js';
 
 const B = 'https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/';
 let pass = 0, fail = 0;
@@ -137,5 +137,40 @@ await test( 'a failure names the file inside the render\'s folder whichever host
 
 } );
 
+test( 'G4: the canonical address resolves from a pasted file, a short form and a path, and keeps a "+" in a name', () => {
+
+	const C = 'https://strataeditor.dev/video/a+b-cubed/v2/';
+	assert.strictEqual( resolveBase( C ).base, C );
+	assert.strictEqual( resolveBase( C + 'master.m3u8' ).base, C );
+	assert.strictEqual( resolveBase( C + 'files.sha256' ).base, C );
+	assert.strictEqual( resolveBase( 'video/a+b-cubed/v2' ).base, C );
+	assert.strictEqual( resolveBase( '/video/a+b-cubed/v2/render.json' ).base, C );
+	assert.strictEqual( resolveBase( 'video/cafe/v1', { origin: 'http://localhost:5503/' } ).base, 'http://localhost:5503/video/cafe/v1/' );
+	assert.strictEqual( followsBranch( C ), false, 'a canonical address is a tag: it never follows a branch' );
+
+} );
+test( 'G4: a canonical address with no render.json read yet has the conventional mirrors, in order: the repository at its tag, then the archive', () => {
+
+	assert.deepStrictEqual( mirrorsFromCanonical( 'https://strataeditor.dev/video/a+b-cubed/v2/' ), [
+		'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a+b-cubed/v2/a+b-cubed/', 'https://archive.org/download/strata-a-b-cubed-v2/' ] );
+	assert.deepStrictEqual( mirrorsFromCanonical( B ), [] );
+	assert.deepStrictEqual( mirrorsFromCanonical( 'https://strataeditor.dev/video/cafe/' ), [] );
+
+} );
+test( 'G4: candidates are the address, the render\'s own list in its order, then the other jsDelivr hostnames; nothing twice', () => {
+
+	const C = 'https://strataeditor.dev/video/cafe/v1/', J = 'https://cdn.jsdelivr.net/gh/o/renders@cafe/v1/cafe/', A = 'https://archive.org/download/strata-cafe-v1/';
+	const c = candidateBases( C, { canonical: C, mirrors: [ J, A ] } );
+	assert.deepStrictEqual( c.slice( 0, 3 ), [ C, J, A ] );
+	assert.deepStrictEqual( c.slice( 3 ), [ 'https://fastly.jsdelivr.net/gh/o/renders@cafe/v1/cafe/', 'https://gcore.jsdelivr.net/gh/o/renders@cafe/v1/cafe/', 'https://raw.githubusercontent.com/o/renders/cafe/v1/cafe/' ] );
+	assert.strictEqual( new Set( c ).size, c.length );
+	// opened at a mirror, the address comes first and the canonical one is still tried
+	assert.deepStrictEqual( candidateBases( J, { canonical: C, mirrors: [ J, A ] } ).slice( 0, 3 ), [ J, C, A ] );
+	// before render.json is read the convention stands in; a legacy publication (no canonical) adds nothing, exactly as before
+	assert.strictEqual( candidateBases( C )[ 1 ], 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/' );
+	assert.deepStrictEqual( candidateBases( B, { storage: 'renders-repo', url: B } ), [ B, ...alternateBases( B ) ] );
+	assert.deepStrictEqual( candidateBases( 'https://example.com/x/' ), [ 'https://example.com/x/' ] );
+
+} );
 console.log( `\n${ pass } passed, ${ fail } failed` );
 process.exit( fail ? 1 : 0 );

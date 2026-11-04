@@ -142,6 +142,7 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			poster,
 			captions,
 			caption_tracks: captionTracks,
+			manifest: { path: 'files.sha256', algorithm: 'sha256' },
 			...( frameHashes ? { frame_hashes: { path: frameHashes.path, count: frameHashes.count, algorithm: 'sha256', over: FRAME_HASH_OVER, root: frameHashes.root } } : {} ),
 			audio: audio ? {
 				name: audio.name, language: audio.language, codec: 'mp4a.40.2', sample_rate: audio.sampleRate, channels: audio.channels, bitrate_kbps: audio.bitrateKbps,

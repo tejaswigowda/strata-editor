@@ -550,7 +550,7 @@ await test( 'size gates: a segment at 20 MB or a file at 100 MB blocks; the warn
 	assert.ok( ok.warnings.some( w => /build artifact/.test( w ) ) );
 	assert.ok( ! sizeReport( [ file( 5 * MB ) ], 5 * MB, [ { name: 'a', maxSegmentBytes: 5 * MB } ], { frames: false, bytes: false } ).warnings.some( w => /build artifact/.test( w ) ), 'a render whose frames are not established is not called a build artifact' );
 	assert.ok( ok.warnings.some( w => /bytes are not promised to repeat/.test( w ) ), 'and it says when only the frames are promised' );
-	assert.match( sizeReport( [ file( MB ) ], 20 * MB, [ { name: 'a', maxSegmentBytes: 20 * MB } ], true ).errors[ 0 ], /over the 20 MB limit/ );
+	assert.match( sizeReport( [ file( MB ) ], 20 * MB, [ { name: 'a', maxSegmentBytes: 20 * MB } ], true ).errors[ 0 ], /over the 20 MB per-file limit/ );
 	assert.match( sizeReport( [ file( 100 * MB ) ], 100 * MB, [], true ).errors[ 0 ], /100 MB/ );
 	assert.match( sizeReport( [ file( 60 * MB ), file( 50 * MB ) ], 110 * MB, [], true ).warnings[ 0 ], /^This commit is over 100 MB \(110 MB in 2 files\)\. Git keeps every version/ );
 	assert.strictEqual( LIMITS.segmentBytes, 20 * MB );
