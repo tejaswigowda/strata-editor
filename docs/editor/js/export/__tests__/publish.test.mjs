@@ -13,7 +13,7 @@ import {
 } from '../fmp4.js';
 import { canonicalText, canonicalScene, sceneHash } from '../canonical.js';
 import {
-	buildRenderJson, validateRenderJson, assessDeterminism, encoderRecord, TIME_SOURCE_AUDIT, LIMITS, formatBytes,
+	buildRenderJson, validateRenderJson, assessDeterminism, encoderRecord, TIME_SOURCE_AUDIT, LIMITS, formatBytes, masterAudioProblems, encoderMatchesRendition,
 } from '../renderJson.js';
 import { parseWav, toStereo, planAudioSegments, packageAudio, audioPlaylist, audioMediaSegment, audioInitSegment, AUDIO } from '../audio.js';
 import { cueTrack, parseVtt } from '../captions.js';
@@ -299,7 +299,8 @@ await test( 'the hash has the form sha256:<64 hex>', async () => {
 
 const sceneInfo = { repo: 'tejaswigowda/test1', file: 'piston.json', branch: 'main', commit: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', hash: 'sha256:' + 'ab'.repeat( 32 ) };
 const renderInfo = { mode: 'offline', renderer: 'WebGLRenderer', device: 'webgl2', encoder: 'software', fps: 60, frames: 6180, frameRange: [ 0, 6179 ], width: 1920, height: 1080, renderedAt: '2026-10-26T19:40:00Z' };
-const renditions = [ { name: '1080p60', width: 1920, height: 1080, bitrateKbps: 3500, playlist: '1080p60/index.m3u8', segments: 18, maxSegmentBytes: 3_100_000 } ];
+const encFor = ( w, h, kbps, fps ) => ( { kind: 'software', name: 'WebCodecs VideoEncoder (H.264)', version: 'Chrome 159', settings_hash: 'sha256:' + 'ab'.repeat( 32 ), threads: null, config: { codec: 'avc1.64001f', width: w, height: h, bitrate: kbps * 1000, framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality', hardwareAcceleration: 'prefer-software', keyEvery: fps * 2 }, stage: 'ladder', input: 'master' } );
+const renditions = [ { name: '1080p60', width: 1920, height: 1080, bitrateKbps: 3500, playlist: '1080p60/index.m3u8', segments: 18, maxSegmentBytes: 3_100_000, encoder: encFor( 1920, 1080, 3500, 60 ) } ];
 const CAPTION_TRACK = await cueTrack( { cues: [ { id: 'launch', start: 0.8, end: 4.65, text: 'Launch a ball at an angle.' }, { id: 'second', start: 6.77, end: 10.09, text: 'The short leg is 3 units long.' } ], scene: sceneInfo, exporter: 'strata-export/1.2.0' } );
 const HASHES = { count: 6180, root: 'sha256:' + 'cd'.repeat( 32 ) };
 const VERIFIED = { method: 'shuffled-order', every: 1, seed: 1, frames_checked: 6180, of: 6180, complete: true, passed: true, mismatched_frames: [], mismatched_count: 0 };
@@ -314,8 +315,58 @@ await test( 'a built render.json validates and says what it is', () => {
 	assert.strictEqual( j.render.frames, Math.round( j.render.duration_s * j.render.fps ), 'frames == round(duration_s * fps)' );
 	assert.strictEqual( j.render.exporter, 'strata-export/1.2.0' );
 	assert.strictEqual( j.version, 2 );
-	assert.deepStrictEqual( j.checks, { segments_under_20mb: true, files_under_100mb: true, frame_count_matches_duration: true } );
+	assert.deepStrictEqual( j.checks, { segments_under_20mb: true, files_under_100mb: true, frame_count_matches_duration: true, encoder_recorded_per_rendition: true } );
 	assert.strictEqual( j.outputs.master, 'master.m3u8' );
+
+} );
+
+await test( 'T4: the recorded encoder of each rendition is the one that produced it, and a record that does not match is a failed check, not a note', () => {
+
+	const j = build();
+	const r = j.outputs.renditions[ 0 ];
+	assert.deepStrictEqual( [ r.encoder.stage, r.encoder.input, r.encoder.config.bitrate, j.render.encoder.stage ], [ 'ladder', 'master', 3_500_000, 'master' ], 'the master and the ladder are separate stages' );
+	assert.notStrictEqual( r.encoder.config.bitrate, j.render.encoder.config && j.render.encoder.config.bitrate, 'the rendition\u2019s settings are its own, not the master\u2019s' );
+	assert.strictEqual( j.checks.encoder_recorded_per_rendition, true );
+	// the failure that was found in the first published render: the master's 18.7 Mbps recorded, a 3.5 Mbps rendition shipped
+	const master = { ...renditions[ 0 ], encoder: { ...renditions[ 0 ].encoder, config: { ...renditions[ 0 ].encoder.config, bitrate: 18_662_400 } } };
+	assert.strictEqual( encoderMatchesRendition( master, 60 ), false );
+	assert.strictEqual( buildRenderJson( { ...build.args, scene: sceneInfo, render: renderInfo, renditions: [ master ], files: [ { path: 'a', bytes: 5 } ], determinism: assessDeterminism( { mode: 'offline', encoder: 'software' } ) } ).checks.encoder_recorded_per_rendition, false );
+	const none = { ...renditions[ 0 ], encoder: null };
+	assert.strictEqual( encoderMatchesRendition( none, 60 ), false, 'no record is also a failure' );
+	for ( const [ what, change ] of [ [ 'bitrate', c => { c.bitrate = 18_662_400; } ], [ 'size', c => { c.width = 1280; } ], [ 'frame rate', c => { c.framerate = 30; } ] ] ) {
+
+		const bad = structuredClone( build() ); change( bad.outputs.renditions[ 0 ].encoder.config );
+		assert.ok( validateRenderJson( bad ).some( m => /not the ones that produced it/.test( m ) ), what );
+
+	}
+
+} );
+
+await test( 'T5: audio: null is recorded as a choice, and the master must agree with it either way', () => {
+
+	const j = build();
+	assert.deepStrictEqual( [ j.outputs.audio, j.outputs.audio_present ], [ null, false ] );
+	assert.match( j.outputs.audio_absence, /no narration/ );
+	assert.ok( ! ( 'audio_duration_matches_video' in j.checks ), 'the audio-length check is absent because there is no audio, and the absence is stated, not silent' );
+	const silent = masterPlaylist( [ { name: '1080p60', width: 1920, height: 1080, playlist: '1080p60/index.m3u8', codec: 'avc1.64002a', bandwidth: 4_000_000, averageBandwidth: 3_000_000 } ], 60 );
+	assert.deepStrictEqual( masterAudioProblems( silent, false ), [] );
+	// each way a master can disagree with "no audio"
+	assert.ok( masterAudioProblems( silent.replace( '#EXT-X-INDEPENDENT-SEGMENTS', '#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="en",URI="audio/index.m3u8"' ), false ).some( m => /declares an audio group/.test( m ) ) );
+	assert.ok( masterAudioProblems( silent.replace( 'avc1.64002a', 'avc1.64002a,mp4a.40.2' ), false ).some( m => /mp4a/.test( m ) ) );
+	assert.ok( masterAudioProblems( silent.replace( 'FRAME-RATE', 'AUDIO="aud",FRAME-RATE' ), false ).some( m => /does not exist/.test( m ) ) );
+	assert.ok( masterAudioProblems( '#EXTM3U\n', false ).some( m => /no variant/.test( m ) ) );
+	// and with audio: the group, the codec and the reference must all be there
+	const audio = { groupId: 'aud', name: 'en', language: 'en', uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: 128_000, averageBandwidth: 128_000 };
+	const voiced = masterPlaylist( [ { name: '1080p60', width: 1920, height: 1080, playlist: '1080p60/index.m3u8', codec: 'avc1.64002a', bandwidth: 4_000_000, averageBandwidth: 3_000_000 } ], 60, audio );
+	assert.deepStrictEqual( masterAudioProblems( voiced, true ), [] );
+	assert.ok( masterAudioProblems( silent, true ).some( m => /no audio group/.test( m ) ) );
+	assert.ok( masterAudioProblems( voiced.replace( ',mp4a.40.2', '' ), true ).some( m => /mp4a\.40\.2/.test( m ) ) );
+	assert.ok( masterAudioProblems( voiced.replace( ',AUDIO="aud"', '' ), true ).some( m => /reference the audio group/.test( m ) ) );
+	// the validator holds the record to the same story
+	const lie = build(); lie.outputs.audio_present = true;
+	assert.ok( validateRenderJson( lie ).some( m => /audio_present must say/.test( m ) ) );
+	const mute = build(); delete mute.outputs.audio_absence;
+	assert.ok( validateRenderJson( mute ).some( m => /says so deliberately/.test( m ) ) );
 
 } );
 

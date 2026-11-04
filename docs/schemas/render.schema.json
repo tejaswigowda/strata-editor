@@ -164,7 +164,7 @@
             "threads",
             "config"
           ],
-          "description": "What wrote the ladder, as a recorded choice. settings_hash is the sha256 of the configuration given to the encoder; threads is null because WebCodecs does not let a page choose.",
+          "description": "The encoder of the MASTER: the mezzanine the ladder is transcoded from. It is not the encoder of the renditions (their bitrates are lower and their settings their own): each rendition records that in outputs.renditions[].encoder.",
           "properties": {
             "kind": {
               "enum": [
@@ -202,6 +202,9 @@
                 "object",
                 "null"
               ]
+            },
+            "stage": {
+              "const": "master"
             }
           }
         },
@@ -354,6 +357,34 @@
               "max_segment_bytes": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "encoder": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "What the encoder that produced THIS rendition was given (size, bitrate, frame rate, keyframe interval), and that it was transcoded from the master. A recorded setting that does not match the rendition is refused at publish (checks.encoder_recorded_per_rendition).",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "software",
+                      "hardware"
+                    ]
+                  },
+                  "stage": {
+                    "const": "ladder"
+                  },
+                  "input": {
+                    "const": "master"
+                  },
+                  "settings_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "config": {
+                    "type": "object"
+                  }
+                }
               }
             }
           }
@@ -615,6 +646,14 @@
               "const": "sha256"
             }
           }
+        },
+        "audio_present": {
+          "type": "boolean",
+          "description": "Whether the render has audio. false is a recorded fact: the master declares no audio group and no audio codec (checks.master_matches_audio)."
+        },
+        "audio_absence": {
+          "type": "string",
+          "description": "Present when audio_present is false: why."
         }
       }
     },
@@ -638,6 +677,14 @@
         "audio_duration_matches_video": {
           "type": "boolean",
           "description": "Present when there is audio."
+        },
+        "encoder_recorded_per_rendition": {
+          "type": "boolean",
+          "description": "Every rendition records an encoder whose size, bitrate and frame rate are the rendition's own."
+        },
+        "master_matches_audio": {
+          "type": "boolean",
+          "description": "The master playlist agrees with whether the render has audio: no audio group or mp4a codec without audio, and the group, the codec and the reference all present with it."
         }
       }
     },

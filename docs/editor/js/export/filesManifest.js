@@ -61,38 +61,57 @@ export async function addManifest( set, folder, sha256 = sha256Hex ) {
 /**
  * Checks a folder served at `base` against its own files.sha256.
  *   fetchBytes( url ) -> Uint8Array, throwing an Error with .status on an HTTP failure
- * @returns {{ ok, checked, missing: string[], mismatched: string[], errors: string[], manifest: boolean }}
- *   `missing`: listed and not served (a half-synced mirror shows here); `mismatched`: served with other bytes.
+ * @returns {{ ok, checked, missing: string[], mismatched: string[], flaky: { path, attempts }[], errors: string[], manifest: boolean }}
+ *   `missing`: listed and not served after every attempt (a half-synced mirror shows here); `mismatched`: served with other bytes (never retried: a wrong answer is not transient);
+ *   `flaky`: served only on a later attempt. A CDN edge can answer 404 or nothing for a file that exists (seen on jsDelivr, run to run), so one failure is not "missing"; a file that needs
+ *   a retry is reported, because it is how a mirror's reliability shows.
  */
-export async function verifyBase( base, { fetchBytes, sha256 = sha256Hex, concurrency = 6, onProgress = () => {}, only = null } ) {
+export async function verifyBase( base, { fetchBytes, sha256 = sha256Hex, concurrency = 6, onProgress = () => {}, only = null, attempts = 4, delayMs = 1000, sleep = ms => new Promise( r => setTimeout( r, ms ) ) } ) {
 
 	const root = base.replace( /\/*$/, '/' );
-	let text;
-	try { text = new TextDecoder().decode( await fetchBytes( root + MANIFEST_NAME ) ); } catch ( e ) {
+	let text = null, lastError = null;
+	for ( let t = 0; t < attempts && text === null; t ++ ) {
 
-		return { ok: false, checked: 0, missing: [], mismatched: [], errors: [ `${ MANIFEST_NAME } is not served at ${ root } (${ e.message })` ], manifest: false };
+		if ( t > 0 ) await sleep( delayMs * 2 ** ( t - 1 ) );
+		try { text = new TextDecoder().decode( await fetchBytes( root + MANIFEST_NAME ) ); } catch ( e ) { lastError = e; }
+
+	}
+	if ( text === null ) {
+
+		const e = lastError;
+		return { ok: false, checked: 0, missing: [], mismatched: [], flaky: [], errors: [ `${ MANIFEST_NAME } is not served at ${ root } (${ e.message })` ], manifest: false };
 
 	}
 	const { entries, errors } = parseManifest( text );
 	const paths = [ ...entries.keys() ].filter( p => ! only || only( p ) );
-	const missing = [], mismatched = [];
+	const missing = [], mismatched = [], flaky = [];
 	let next = 0, checked = 0;
 	await Promise.all( Array.from( { length: Math.min( concurrency, paths.length ) }, async () => {
 
 		while ( next < paths.length ) {
 
 			const p = paths[ next ++ ];
-			try {
+			const url = root + p.split( '/' ).map( encodeURIComponent ).join( '/' ).replace( /%2B/g, '+' );
+			let bytes = null, tries = 0;
+			while ( bytes === null && tries < attempts ) {
 
-				if ( await sha256( await fetchBytes( root + p.split( '/' ).map( encodeURIComponent ).join( '/' ).replace( /%2B/g, '+' ) ) ) !== entries.get( p ) ) mismatched.push( p );
+				if ( tries ++ > 0 ) await sleep( delayMs * 2 ** ( tries - 2 ) );
+				try { bytes = await fetchBytes( url ); } catch ( e ) { /* try again */ }
 
-			} catch ( e ) { missing.push( p ); }
+			}
+			if ( bytes === null ) missing.push( p );
+			else {
+
+				if ( tries > 1 ) flaky.push( { path: p, attempts: tries } );
+				if ( await sha256( bytes ) !== entries.get( p ) ) mismatched.push( p );
+
+			}
 			onProgress( ++ checked, paths.length );
 
 		}
 
 	} ) );
-	missing.sort(); mismatched.sort();
-	return { ok: errors.length === 0 && missing.length === 0 && mismatched.length === 0, checked, missing, mismatched, errors, manifest: true };
+	missing.sort(); mismatched.sort(); flaky.sort( ( a, b ) => byPath( a.path, b.path ) );
+	return { ok: errors.length === 0 && missing.length === 0 && mismatched.length === 0, checked, missing, mismatched, flaky, errors, manifest: true };
 
 }

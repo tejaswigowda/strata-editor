@@ -22,7 +22,7 @@ export async function nodeFetchBytes( url, { timeoutMs = 60000 } = {} ) {
 /**
  * @returns {{ locations: { base, verdict: 'verified'|'unverifiable'|'incomplete'|'different', detail, result }[], verified: number, ok: boolean }}
  */
-export async function verifyPublication( base, { fetchBytes = nodeFetchBytes, require = null, onProgress = () => {} } = {} ) {
+export async function verifyPublication( base, { fetchBytes = nodeFetchBytes, require = null, onProgress = () => {}, ...retry } = {} ) {
 
 	const root = base.replace( /\/*$/, '/' );
 	let json = null, bases = [ root ];
@@ -38,7 +38,7 @@ export async function verifyPublication( base, { fetchBytes = nodeFetchBytes, re
 	const locations = [];
 	for ( const b of bases ) {
 
-		const result = await verifyBase( b, { fetchBytes, onProgress: ( n, total ) => onProgress( b, n, total ) } );
+		const result = await verifyBase( b, { fetchBytes, ...retry, onProgress: ( n, total ) => onProgress( b, n, total ) } );
 		let manifestText = null;
 		if ( result.manifest ) try { manifestText = new TextDecoder().decode( await fetchBytes( b + MANIFEST_NAME ) ); } catch ( e ) { /* just read it a moment ago */ }
 		let verdict, detail;
@@ -47,7 +47,7 @@ export async function verifyPublication( base, { fetchBytes = nodeFetchBytes, re
 			verdict = result.mismatched.length ? 'different' : 'incomplete';
 			detail = [ result.missing.length ? `${ result.missing.length } missing (${ result.missing.slice( 0, 3 ).join( ', ' ) }${ result.missing.length > 3 ? ', …' : '' })` : '', result.mismatched.length ? `${ result.mismatched.length } with other bytes (${ result.mismatched.slice( 0, 3 ).join( ', ' ) })` : '', ...result.errors ].filter( Boolean ).join( '; ' );
 
-		} else if ( first !== null && manifestText !== first ) { verdict = 'different'; detail = 'its files.sha256 is not the first location\u2019s'; } else { verdict = 'verified'; detail = `${ result.checked } files`; }
+		} else if ( first !== null && manifestText !== first ) { verdict = 'different'; detail = 'its files.sha256 is not the first location\u2019s'; } else { verdict = 'verified'; detail = `${ result.checked } files${ result.flaky.length ? `; ${ result.flaky.length } needed a retry (${ result.flaky.slice( 0, 3 ).map( f => f.path ).join( ', ' ) }${ result.flaky.length > 3 ? ', …' : '' }): this host is unreliable` : '' }`; }
 		if ( first === null && manifestText !== null ) first = manifestText;
 		locations.push( { base: b, verdict, detail, result } );
 

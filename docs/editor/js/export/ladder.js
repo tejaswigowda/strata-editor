@@ -9,6 +9,7 @@
 
 import { avcCodecCandidates, frameTimestampUs, frameDurationUs } from './frames.js';
 import { codecFromAvcC, packageRendition } from './fmp4.js';
+import { encoderInfo } from './encoderInfo.js';
 
 const sleep = ms => new Promise( r => setTimeout( r, ms ) );
 
@@ -35,7 +36,7 @@ const toBytes = d => d ? ( ArrayBuffer.isView( d ) ? new Uint8Array( d.buffer.sl
 /**
  * @param {{ master: { width, height, fps, samples: Uint8Array[], keyframes: number[], avcC: Uint8Array }, ladder: { name, width, height, kbps }[], onProgress?: (fraction:number, text:string)=>void, shouldCancel?: ()=>boolean, posterAt?: number }} o
  *   keyframes are 0-based frame numbers
- * @returns {Promise<{ rungs: { rung, packaged }[], poster: Uint8Array } | null>}  null when cancelled
+ * @returns {Promise<{ rungs: { rung, packaged, encoder }[], poster: Uint8Array } | null>}   encoder: the record of what that rung's encoder was given (encoderInfo.js), stage 'ladder'  null when cancelled
  */
 export async function transcodeLadder( { master, ladder, onProgress = () => {}, shouldCancel = () => false, posterAt = 0.15, software = false } ) {
 
@@ -53,7 +54,10 @@ export async function transcodeLadder( { master, ladder, onProgress = () => {}, 
 	for ( const rung of ladder ) {
 
 		const config = await pickEncoderConfig( { width: rung.width, height: rung.height, fps, bitrate: rung.kbps * 1000, software } );
-		const out = { rung, samples: [], keyframes: [], avcC: null, canvas: new OffscreenCanvas( rung.width, rung.height ), encoder: null };
+		// what THIS rung's encoder was given, recorded here because it is not the master's: the master is encoded once at a mezzanine bitrate, and each rung is a
+		// re-encode of the decoded master at its own size and bitrate (render.json records the two as separate stages)
+		const record = { ...await encoderInfo( { kind: software ? 'software' : 'hardware', config, extra: { keyEvery }, userAgent: navigator.userAgent, brands: navigator.userAgentData && navigator.userAgentData.brands } ), stage: 'ladder', input: 'master' };
+		const out = { rung, record, samples: [], keyframes: [], avcC: null, canvas: new OffscreenCanvas( rung.width, rung.height ), encoder: null };
 		out.ctx = out.canvas.getContext( '2d' );
 		out.ctx.imageSmoothingQuality = 'high';
 		out.encoder = new VideoEncoder( {
@@ -145,7 +149,7 @@ export async function transcodeLadder( { master, ladder, onProgress = () => {}, 
 	}
 	if ( ! posterBlob ) throw new Error( 'No poster frame was captured.' );
 
-	const rungs = outs.map( o => ( { rung: o.rung, packaged: packageRendition( { width: o.rung.width, height: o.rung.height, fps, avcC: o.avcC, samples: o.samples, keyframes: o.keyframes } ) } ) );
+	const rungs = outs.map( o => ( { rung: o.rung, encoder: o.record, packaged: packageRendition( { width: o.rung.width, height: o.rung.height, fps, avcC: o.avcC, samples: o.samples, keyframes: o.keyframes } ) } ) );
 	const poster = new Uint8Array( await ( await posterBlob ).arrayBuffer() );
 	onProgress( 1, 'Ladder encoded.' );
 	return { rungs, poster };

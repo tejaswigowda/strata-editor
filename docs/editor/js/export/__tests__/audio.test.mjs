@@ -1,6 +1,7 @@
 // Run: node docs/editor/js/export/__tests__/audio.test.mjs
 // The narration track's pure parts: WAV reading, AAC frame segmentation aligned to the video (no padding, no drift), the audio group in
 // the master playlist, and (with a real ffmpeg) that ffmpeg decodes what is written, at the right length, with no warnings.
+const encFor = ( w, h, kbps, fps ) => ( { kind: 'software', name: 'WebCodecs VideoEncoder (H.264)', version: 'Chrome 159', settings_hash: 'sha256:' + 'ab'.repeat( 32 ), threads: null, config: { codec: 'avc1.64001f', width: w, height: h, bitrate: kbps * 1000, framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality', hardwareAcceleration: 'prefer-software', keyEvery: fps * 2 }, stage: 'ladder', input: 'master' } );
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
@@ -138,7 +139,7 @@ await test( 'the publish set holds audio/ files, an audio group in master.m3u8, 
 	const set = assemblePublishSet( {
 		path: 'renders/x', scene: { repo: 'a/b', file: 'x.json', branch: 'main', commit: 'abcdef1', hash: 'sha256:' + 'ab'.repeat( 32 ) },
 		render: { mode: 'offline', renderer: 'WebGLRenderer', device: 'webgl2', encoder: 'software', fps: 30, frames: 400, frameRange: [ 0, 399 ], width: 320, height: 180, renderedAt: '2026-10-26T19:40:00Z' },
-		rungs: [ { rung: { name: '180p30', width: 320, height: 180, kbps: 300 }, packaged } ], poster: Uint8Array.of( 1 ),
+		rungs: [ { rung: { name: '180p30', width: 320, height: 180, kbps: 300 }, encoder: encFor( 320, 180, 300, 30 ), packaged } ], poster: Uint8Array.of( 1 ),
 		audio: { packaged: audio, name: 'English', language: 'en', source: { path: 'audio/x.wav', sha256: 'sha256:' + 'cd'.repeat( 32 ) }, delaySamples: 2112 },
 		determinism: { mode: 'offline', encoder: 'software' },
 	} );

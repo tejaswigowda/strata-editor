@@ -54,6 +54,24 @@ export function sceneSlug( sceneFile ) {
 
 }
 
+/**
+ * The naming convention for a render (guides/PUBLISH.md): the name is the scene file's stem, lowercase, with words joined by "-" (and "+" where a name has one, as
+ * in a+b-cubed), and it names the CONTENT. It is the folder in the renders repository, the tag namespace and the path /video/<name>/v<N>/, so there is one spelling.
+ * A word for the category (short, video, ...) is refused because the second render of that category would collide with the first.
+ */
+export const SLUG_RULE = /^[a-z0-9]+(?:[+-][a-z0-9]+)*$/;
+export const CATEGORY_WORDS = Object.freeze( [ 'short', 'shorts', 'video', 'videos', 'render', 'renders', 'film', 'clip', 'movie', 'scene', 'test', 'tmp', 'temp', 'draft', 'untitled', 'new', 'final' ] );
+
+/** null when `slug` is a valid render name, else what is wrong and how to fix it. */
+export function slugProblem( slug ) {
+
+	const s = String( slug );
+	if ( ! SLUG_RULE.test( s ) ) return `"${ s }" is not a valid render name: use lowercase letters and digits joined by "-" (a "+" is allowed between words). The name is the scene file's stem, so rename the scene file (for example "${ s.toLowerCase().replace( /[^a-z0-9+]+/g, '-' ).replace( /^-+|-+$/g, '' ) || 'bus-stop' }.json").`;
+	if ( CATEGORY_WORDS.includes( s ) ) return `"${ s }" names a category, not the content, so the next ${ s } would collide with this one at /video/${ s }/v<N>/. Name the scene for what it shows (for example "bus-stop") and rename the scene file to match.`;
+	return null;
+
+}
+
 export const tagFor = ( slug, version ) => `${ slug }/v${ version }`;
 
 /** "a+b-cubed/v3" -> { slug, version: 3 }, or null when it is not a release tag (of `slug` when given). */
@@ -273,6 +291,8 @@ export function gateRelease( { renderJson, errors = [], files = null } ) {
 		files_under_100mb: 'a file is 100 MB or more (GitHub refuses it)',
 		frame_count_matches_duration: 'the frame count does not match the duration',
 		audio_duration_matches_video: 'the narration audio is not the same length as the video',
+		encoder_recorded_per_rendition: 'a rendition has no recorded encoder, or the recorded settings are not the ones that produced it',
+		master_matches_audio: 'the master playlist disagrees with whether the render has audio (an audio group, or an mp4a codec, that is not there, or one that is missing)',
 	};
 	for ( const [ k, v ] of Object.entries( checks ) ) if ( v !== true ) failures.push( `check failed: ${ text[ k ] || k }` );
 	// a render.json that declares a manifest is refused when the set does not hold it: a mirror could not be checked against it
@@ -414,6 +434,8 @@ export async function planRelease( api, { repo, slug, branch = 'main', sceneRepo
 		throw new ReleaseError( 'not-separate', `${ repo } is the scene repository. Renders go in a separate repository (default ${ repo.split( '/' )[ 0 ] }/${ RENDERS_REPO_NAME }) so the scene repo stays small; publish there, or opt in explicitly to the legacy layout.` );
 
 	}
+	const problem = slugProblem( slug );
+	if ( problem ) throw new ReleaseError( 'bad-input', problem );
 	let refs = [];
 	try { refs = await api.get( `/repos/${ repo }/git/matching-refs/tags/${ encPath( slug ) }/` ); } catch ( e ) { if ( ! bad( e, 409 ) ) throw e; }     // 409: an empty repository has no refs yet
 	const names = ( Array.isArray( refs ) ? refs : [] ).map( r => String( r.ref ).replace( /^refs\/tags\//, '' ) );

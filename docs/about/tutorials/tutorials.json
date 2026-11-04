@@ -393,7 +393,7 @@
 		"blurb": "The from-scratch workflow: helper functions, noise-displaced ground, night lighting, a moving object and a hero camera.",
 		"thumb": "screenshots/thumbs/build-a-scene.jpg",
 		"desc": "Reusable helper functions, a noise-displaced ground, a grouped structure, night lighting (and the Environment setting that silently undoes it), a moving object, and a static hero camera — the full from-scratch workflow.",
-		"embed": "#repo=tejaswigowda/test1&file=short.json&present=true",
+		"embed": "#repo=tejaswigowda/test1&file=bus-stop.json&present=true",
 		"contributors": [
 			{
 				"name": "Tejaswi Gowda",

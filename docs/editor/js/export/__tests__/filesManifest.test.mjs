@@ -76,6 +76,22 @@ await test( 'a half-synced mirror is reported missing, and one serving other byt
 
 } );
 
+await test( 'an edge that fails a file once and then serves it is not "missing": it is reported flaky; a file that never comes is missing; wrong bytes are never retried', async () => {
+
+	const good = await mirror();
+	const seen = new Map();
+	const flakyFetch = async url => { const n = ( seen.get( url ) || 0 ) + 1; seen.set( url, n ); if ( url.endsWith( 'master.m3u8' ) && n < 3 ) throw Object.assign( new Error( 'HTTP 404' ), { status: 404 } ); return good( url ); };
+	const r = await verifyBase( 'https://m.example/video/cafe/v1/', { fetchBytes: flakyFetch, sha256: sha, delayMs: 0 } );
+	assert.deepStrictEqual( [ r.ok, r.missing, r.flaky ], [ true, [], [ { path: 'master.m3u8', attempts: 3 } ] ] );
+	const never = await verifyBase( 'https://m.example/video/cafe/v1/', { fetchBytes: await mirror( { drop: [ 'master.m3u8' ] } ), sha256: sha, delayMs: 0, attempts: 3 } );
+	assert.deepStrictEqual( [ never.ok, never.missing ], [ false, [ 'master.m3u8' ] ] );
+	let calls = 0;
+	const wrong = await mirror( { corrupt: [ 'master.m3u8' ] } );
+	await verifyBase( 'https://m.example/video/cafe/v1/', { fetchBytes: async u => { if ( u.endsWith( 'master.m3u8' ) ) calls ++; return wrong( u ); }, sha256: sha, delayMs: 0 } );
+	assert.strictEqual( calls, 1, 'a wrong answer was fetched once, not retried' );
+
+} );
+
 await test( 'a mirror that does not serve the manifest cannot be verified, and says so', async () => {
 
 	const r = await verifyBase( 'https://m.example/video/cafe/v1', { fetchBytes: await mirror( { noManifest: true } ), sha256: sha } );

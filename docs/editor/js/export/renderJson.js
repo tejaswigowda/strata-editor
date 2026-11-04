@@ -109,7 +109,55 @@ export const formatBytes = n => n >= MB ? ( n / MB ).toFixed( n >= 10 * MB ? 0 :
  *   publication: null, or releases.js publicationBlock(): where the render lives (storage, repo, path, tag, url, size_bytes)
  *   files:   [{ path, bytes }]  every file of the set, for the size checks
  */
-export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, publication = null, audit = TIME_SOURCE_AUDIT } ) {
+/**
+ * [] when the master playlist agrees with whether the render has audio, else what disagrees. A master that declares an audio group that does not exist plays in
+ * some clients and fails in others, which is the worst kind of defect to find later; and one that omits a group that does exist plays silent.
+ */
+export function masterAudioProblems( master, audioPresent ) {
+
+	const lines = String( master ).replace( /\r/g, '' ).split( '\n' );
+	const media = lines.filter( l => /^#EXT-X-MEDIA:TYPE=AUDIO/.test( l ) ), variants = lines.filter( l => /^#EXT-X-STREAM-INF:/.test( l ) );
+	const p = [];
+	if ( variants.length === 0 ) p.push( 'the master lists no variant' );
+	if ( ! audioPresent ) {
+
+		if ( media.length ) p.push( 'the master declares an audio group (EXT-X-MEDIA TYPE=AUDIO) but the render has no audio' );
+		if ( /mp4a\./.test( master ) ) p.push( 'a CODECS string names an audio codec (mp4a) but the render has no audio' );
+		if ( variants.some( l => /,AUDIO="/.test( l ) ) ) p.push( 'a variant references an AUDIO group that does not exist' );
+
+	} else {
+
+		if ( media.length === 0 ) p.push( 'the render has audio but the master declares no audio group' );
+		const groups = media.map( l => ( /GROUP-ID="([^"]*)"/.exec( l ) || [] )[ 1 ] );
+		for ( const l of variants ) {
+
+			if ( ! /CODECS="[^"]*mp4a\.40\.2/.test( l ) ) p.push( 'a variant\u2019s CODECS does not include mp4a.40.2' );
+			const g = ( /,AUDIO="([^"]*)"/.exec( l ) || [] )[ 1 ];
+			if ( ! g || ! groups.includes( g ) ) p.push( 'a variant does not reference the audio group' );
+
+		}
+
+	}
+	return [ ...new Set( p ) ];
+
+}
+
+/** The record of one rendition's encoder: what it was given and what it was made from. null when none was recorded. */
+export function renditionEncoderRecord( e ) {
+
+	return e ? { ...encoderRecord( e ), stage: 'ladder', input: 'master' } : null;
+
+}
+
+/** True when the recorded encoder is the one that produced this rendition: same size, bitrate and frame rate as the rendition and the render declare. */
+export function encoderMatchesRendition( r, fps ) {
+
+	const c = r && r.encoder && r.encoder.config;
+	return !! c && c.width === r.width && c.height === r.height && c.bitrate === r.bitrateKbps * 1000 && c.framerate === fps;
+
+}
+
+export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, publication = null, masterText = null, audit = TIME_SOURCE_AUDIT } ) {
 
 	const durationS = render.durationS !== undefined ? render.durationS : render.frames / render.fps;
 	const out = {
@@ -118,7 +166,7 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 		render: {
 			mode: render.mode,
 			determinism: { frames: determinism.frames, bytes: determinism.bytes, reasons: determinism.reasons, verification: determinism.verification || null },
-			encoder: encoderRecord( render.encoder ),
+			encoder: { ...encoderRecord( render.encoder ), stage: 'master' },     // the mezzanine the ladder is transcoded from; each rendition records its own (outputs.renditions[].encoder)
 			renderer: render.renderer,
 			device: render.device,
 			fps: render.fps,
@@ -138,6 +186,7 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			renditions: renditions.map( r => ( {
 				name: r.name, width: r.width, height: r.height, bitrate_kbps: r.bitrateKbps,
 				playlist: r.playlist, segments: r.segments, max_segment_bytes: r.maxSegmentBytes,
+				encoder: renditionEncoderRecord( r.encoder ),
 			} ) ),
 			poster,
 			captions,
@@ -149,6 +198,9 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 				playlist: audio.playlist, segments: audio.segments, max_segment_bytes: audio.maxSegmentBytes, duration_s: Math.round( audio.durationS * 1e6 ) / 1e6,
 				source: audio.source, encoder_delay_samples: audio.delaySamples,
 			} : null,
+			// the silence is a recorded fact, not an absence: master_matches_audio (below) asserts the playlist agrees with it
+			audio_present: !! audio,
+			...( audio ? {} : { audio_absence: 'The scene has no narration: no renderAudio, nothing dubbed, no WAV chosen. The master declares no audio group and no audio codec.' } ),
 			...( download ? { file: {
 				path: download.name, bytes: download.bytes.length, container: 'mp4', video: `copied from the ${ download.videoFrom && download.videoFrom !== 'master' ? download.videoFrom + ' rung' : 'master' }, not re-encoded`,
 				audio: download.audio ? 'aac-lc, 48 kHz stereo, 128 kbps' : null, captions: download.captions ? 'mov_text, a soft track the viewer can switch off' : null,
@@ -159,6 +211,8 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			segments_under_20mb: renditions.every( r => r.maxSegmentBytes < LIMITS.segmentBytes ),
 			files_under_100mb: files.every( f => f.bytes < LIMITS.fileBytes ),
 			frame_count_matches_duration: render.frames === Math.round( durationS * render.fps ),
+			encoder_recorded_per_rendition: renditions.every( r => encoderMatchesRendition( r, render.fps ) ),
+			...( masterText === null ? {} : { master_matches_audio: masterAudioProblems( masterText, !! audio ).length === 0 } ),
 			...( audio ? { audio_duration_matches_video: Math.abs( audio.durationS - durationS ) < 0.05 } : {} ),
 		},
 		...( publication ? { publication } : {} ),
@@ -223,9 +277,18 @@ export function validateRenderJson( j ) {
 
 		need( isStr( x.name ) && isInt( x.width ) && isInt( x.height ) && isPos( x.bitrate_kbps ), `rendition ${ x && x.name }: name, width, height and bitrate_kbps are required` );
 		need( isStr( x.playlist ) && isInt( x.segments ) && x.segments > 0 && isInt( x.max_segment_bytes ), `rendition ${ x && x.name }: playlist, segments and max_segment_bytes are required` );
+		if ( x && x.encoder ) {
+
+			const xc = x.encoder.config || {};
+			need( ( x.encoder.kind === 'software' || x.encoder.kind === 'hardware' ) && x.encoder.stage === 'ladder' && /^sha256:[0-9a-f]{64}$/.test( x.encoder.settings_hash || '' ), `rendition ${ x.name }: encoder needs kind, stage ladder and a sha256 settings_hash` );
+			need( xc.width === x.width && xc.height === x.height && xc.bitrate === x.bitrate_kbps * 1000 && xc.framerate === r.fps, `rendition ${ x.name }: the recorded encoder settings are not the ones that produced it (size, bitrate and frame rate must match the rendition)` );
+
+		}
 
 	}
 	need( isStr( o.poster ), 'outputs.poster is required' );
+	need( o.audio_present === undefined || ( typeof o.audio_present === 'boolean' && o.audio_present === !! o.audio ), 'outputs.audio_present must say whether outputs.audio exists' );
+	need( o.audio_present !== false || isStr( o.audio_absence ), 'a render with no audio says so deliberately (outputs.audio_absence)' );
 	need( o.captions === null || isStr( o.captions ), 'outputs.captions must be a path or null' );
 	need( Array.isArray( o.caption_tracks ), 'outputs.caption_tracks must be a list (empty when there are no captions)' );
 	const tracks = Array.isArray( o.caption_tracks ) ? o.caption_tracks : [];
@@ -257,6 +320,7 @@ export function validateRenderJson( j ) {
 
 	const c = j.checks || {};
 	for ( const k of [ 'segments_under_20mb', 'files_under_100mb', 'frame_count_matches_duration' ] ) need( typeof c[ k ] === 'boolean', `checks.${ k } must be a boolean` );
+	for ( const k of [ 'encoder_recorded_per_rendition', 'master_matches_audio' ] ) need( c[ k ] === undefined || typeof c[ k ] === 'boolean', `checks.${ k } must be a boolean` );
 	if ( o.file !== undefined ) need( o.file && isStr( o.file.path ) && isInt( o.file.bytes ) && o.file.bytes > 0 && o.file.container === 'mp4' && isStr( o.file.made_by ), 'outputs.file needs path, bytes, container mp4 and made_by' );
 	need( ! o.audio || typeof c.audio_duration_matches_video === 'boolean', 'checks.audio_duration_matches_video is required when there is audio' );
 	return e;

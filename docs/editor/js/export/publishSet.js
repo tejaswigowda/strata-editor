@@ -54,7 +54,7 @@ const bytesOf = v => typeof v === 'string' ? enc.encode( v ) : v;
  *   path:        'renders/piston'
  *   scene:       { repo, file, branch, commit, hash }
  *   render:      { mode, renderer, device, fps, frames, frameRange, width, height, renderedAt }
- *   rungs:       [{ rung: { name, width, height, kbps }, packaged: packageRendition() output }]
+ *   rungs:       [{ rung: { name, width, height, kbps }, packaged: packageRendition() output, encoder: the rung's encoder record (ladder.js) }]
  *   poster:      Uint8Array
  *   captionTracks: [{ path, language, default, text, record }]   from captions.js cueTrack(): the WebVTT files (written whenever the scene has cues, burned in or not), each with the
  *                  record render.json keeps of it and an HLS subtitle playlist in master.m3u8
@@ -91,14 +91,14 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 	if ( endCard ) add( 'endcard.png', endCard.bytes );
 
 	const renditions = [];
-	for ( const { rung, packaged } of rungs ) {
+	for ( const { rung, packaged, encoder } of rungs ) {
 
 		add( `${ rung.name }/init.mp4`, packaged.init );
 		for ( const s of packaged.segments ) add( `${ rung.name }/${ s.name }`, s.data );
 		add( `${ rung.name }/index.m3u8`, packaged.playlist );
 		renditions.push( {
 			name: rung.name, width: rung.width, height: rung.height, bitrateKbps: rung.kbps,
-			playlist: `${ rung.name }/index.m3u8`, segments: packaged.segments.length, maxSegmentBytes: packaged.maxSegmentBytes,
+			playlist: `${ rung.name }/index.m3u8`, segments: packaged.segments.length, maxSegmentBytes: packaged.maxSegmentBytes, encoder: encoder || null,
 		} );
 
 	}
@@ -119,13 +119,14 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 	}
 
 	if ( download ) add( download.name, download.bytes );
-	add( 'master.m3u8', withSubtitles( masterPlaylist( rungs.map( ( { rung, packaged } ) => ( {
+	const masterText = withSubtitles( masterPlaylist( rungs.map( ( { rung, packaged } ) => ( {
 		name: rung.name, width: rung.width, height: rung.height, playlist: `${ rung.name }/index.m3u8`,
 		codec: packaged.codec, bandwidth: packaged.bandwidth, averageBandwidth: packaged.averageBandwidth,
-	} ) ), render.fps, audio ? { groupId: 'aud', name: audio.name, language: audio.language, uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: audio.packaged.bandwidth, averageBandwidth: audio.packaged.averageBandwidth } : null  ), hlsTracks ) );
+	} ) ), render.fps, audio ? { groupId: 'aud', name: audio.name, language: audio.language, uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: audio.packaged.bandwidth, averageBandwidth: audio.packaged.averageBandwidth } : null  ), hlsTracks );
+	add( 'master.m3u8', masterText );
 
 	const renderJson = buildRenderJson( {
-		scene, render, renditions, captions: captionRecords.length ? captionRecords[ 0 ].path : null, captionTracks: captionRecords, audio: audioMeta, download,
+		masterText, scene, render, renditions, captions: captionRecords.length ? captionRecords[ 0 ].path : null, captionTracks: captionRecords, audio: audioMeta, download,
 		determinism: assessDeterminism( { ...determinism, frameHashes: frameHashes ? { count: frameHashes.count, root: frameHashes.root } : null, endCard } ),
 		frameHashes: frameHashes ? { path: 'frame-hashes.txt', count: frameHashes.count, root: frameHashes.root } : null,
 		endCard: endCard ? { path: 'endcard.png', sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height } : null,

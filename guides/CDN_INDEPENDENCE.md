@@ -82,7 +82,32 @@ Each location comes back `verified`, `incomplete` (files missing: a half-synced 
 
 `resolve.js` `candidateBases` gives the order: the address it was opened at; the render's `canonical` and `mirrors` in their order (before `render.json` has been read, the convention `jsdelivr…@<tag>/<slug>/` and the archive item stand in); then the other jsDelivr hostnames. `render.json` is read from the first of those that answers (a canonical host that is down must not take the title, poster and captions with it); hls.js, the native `<video>` and the download all fail over from where they got to. Timeouts: 6 s to first byte on a host that has a successor, one timeout retry, 10 s to start on native HLS, 60 s per downloaded file; the last host is waited for. `video/cafe/v1` is accepted as a short form.
 
+## Trip wires for staying on Pages
+
+Staying on Pages and jsDelivr is right while the move stays cheap. The exits, so they are not learned from breakage:
+
+| Signal | Threshold | Action |
+| --- | --- | --- |
+| Pages site size | **700 MB** of tracked `docs/` (Pages caps a site at about 1 GB; today 224 MB) | begin the move to storage (the runbook below). `node tools/size-check.mjs` measures it and exits 1 over the threshold. |
+| Encoded video in the editor repository | any file | none belongs here: renders live in the renders repository, which is already where they are published. `size-check` fails on it (one 16.7 MB tutorial demo, `pyth.mp4`, is grandfathered). |
+| Pages bandwidth | GitHub's warning email (about 100 GB a month, a soft limit) | the address must be one you read: **github.com/settings/emails, primary address** (this cannot be read or set from here: the token has no `user` scope, and the setting is not in the API). Act on the first warning: the move is the runbook. |
+| jsDelivr | none visible; they can block without notice | contained: it is a mirror, `render.json` lists the others, the player falls back, and `verify-publication` says which locations still serve the right bytes. |
+
+At 47 MB (`bus-stop`) to 122 MB (`cafe`) a render, none of these is near, and the editor repository does not hold the bytes.
+
+## `docs/video` as a submodule of the renders repository: decided against, for now
+
+The idea: Pages serves `docs/`, so `docs/video` as a submodule of `tejaswigowda/renders` would keep the URL and the bytes out of the editor clone. Checked against how the renders repository is laid out, it does not fit:
+
+- **The path has a version in it and the repository does not.** A submodule checks out one commit of one branch, which holds `<name>/` (the latest files; publishing removes what the new set lacks). Pages would serve `/video/<name>/master.m3u8`, not `/video/<name>/v1/master.m3u8`, and a v2 would replace v1 at the same URL. Tags are the versions, and a submodule cannot expose a tag as a directory. Making it work means changing the renders layout to `<name>/v<N>/` directories, which gives up the one-folder-per-scene, tag-per-version design the publish code and every published `render.json` (`source.path`) rely on.
+- **Every publish would need a commit to the editor repository** to move the submodule pointer, so the tag push is no longer the whole publish action.
+- **It does not address the cap.** Pages' 1 GB limit counts what it serves, submodule or not; it only keeps the clone small.
+
+The editor repository gains no encoded video either way, and `DELIVERY.canonicalLive` is off, so nothing needs serving from `docs/video` now. Revisit at the 700 MB trip wire; at that point the Worker and R2 plan above does the same job without the pointer commits.
+
 ## Existing renders are not touched
+
+`short/v1` was the first render published through the new path (before the `DELIVERY` switch, so its `publication` claims a canonical address that is not routed and an archive mirror that was never uploaded; only its jsDelivr location verifies). It is being replaced by `bus-stop/v1`, a re-render under the content's name with the record fixes of the first-render work order; the `short` tag and folder are deleted once that is published and verified.
 
 `cafe` (`renders@cafe/v1`), `a+b-cubed` (`renders@a+b-cubed/v1`, and the older copy in `test1`) and `projectile` keep serving where they are, and every address form that reached them still resolves. They have no canonical address and no `files.sha256`, and tags never move, so they cannot gain either: they migrate when re-rendered. Until then `verify-publication` reports them `unverifiable`, which is true.
 

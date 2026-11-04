@@ -10,7 +10,7 @@ import { webcrypto } from 'node:crypto';
 if ( ! globalThis.crypto ) globalThis.crypto = webcrypto;
 import {
 	ReleaseError, sceneSlug, tagFor, parseTag, nextVersion, releaseTags, isPinnedRef, pinnedUrl, releaseBase, playerLink, locationOf, publicationBlock, validatePublication,
-	publicationOf, archiveItem, canonicalBase, shareBase, DELIVERY, gateRelease, assessStaleness, verifyPlan, verifyOutcome, releaseSummary, planRelease, commitRelease, listReleaseTags, STORAGE,
+	publicationOf, slugProblem, archiveItem, canonicalBase, shareBase, DELIVERY, gateRelease, assessStaleness, verifyPlan, verifyOutcome, releaseSummary, planRelease, commitRelease, listReleaseTags, STORAGE,
 } from '../releases.js';
 import { buildRenderJson, assessDeterminism, validateRenderJson } from '../renderJson.js';
 import { sidecarText } from '../frameHashes.js';
@@ -31,7 +31,8 @@ const HASHES = Array.from( { length: 240 }, ( _, i ) => ( i % 16 ).toString( 16 
 const SIDECAR = sidecarText( { hashes: HASHES, first: 0, width: 640, height: 360, fps: 24 } );
 const FH = { count: 240, root: 'sha256:' + 'cd'.repeat( 32 ) };
 const VERIFIED = { method: 'shuffled-order', every: 1, seed: 1, frames_checked: 240, of: 240, complete: true, passed: true, mismatched_frames: [], mismatched_count: 0 };
-const RUNGS = [ { name: '360p24', width: 640, height: 360, bitrateKbps: 800, playlist: '360p24/index.m3u8', segments: 4, maxSegmentBytes: 100_000 } ];
+const encFor = ( w, h, kbps, fps ) => ( { kind: 'software', name: 'WebCodecs VideoEncoder (H.264)', version: 'Chrome 159', settings_hash: 'sha256:' + 'ab'.repeat( 32 ), threads: null, config: { codec: 'avc1.64001f', width: w, height: h, bitrate: kbps * 1000, framerate: fps, avc: { format: 'avc' }, latencyMode: 'quality', hardwareAcceleration: 'prefer-software', keyEvery: fps * 2 }, stage: 'ladder', input: 'master' } );
+const RUNGS = [ { name: '360p24', width: 640, height: 360, bitrateKbps: 800, playlist: '360p24/index.m3u8', segments: 4, maxSegmentBytes: 100_000, encoder: encFor( 640, 360, 800, 24 ) } ];
 const mk = ( over = {}, det = {}, extra = {} ) => buildRenderJson( {
 	scene: SCENE, render: { ...RENDER, ...over }, renditions: RUNGS, files: [ { path: 'a', bytes: 5 } ], frameHashes: { path: 'frame-hashes.txt', ...FH },
 	determinism: assessDeterminism( { mode: over.mode || 'offline', encoder: 'software', frameHashes: FH, verification: VERIFIED, ...det } ), ...extra,
@@ -111,7 +112,7 @@ await test( 'R8: the list reads a version-1 render.json already published (one b
 await test( 'assemblePublishSet records publication, with the folder and the size of every other file', () => {
 
 	const input = {
-		path: 'a+b-cubed', scene: SCENE, render: { ...RENDER, frames: 240 }, rungs: [ { rung: { name: '360p24', width: 640, height: 360, kbps: 800 }, packaged: { init: Uint8Array.of( 1 ), segments: [ { name: 'seg00001.m4s', data: new Uint8Array( 50 ) } ], playlist: '#EXTM3U', maxSegmentBytes: 50, codec: 'avc1.64001f', bandwidth: 1, averageBandwidth: 1 } } ],
+		path: 'a+b-cubed', scene: SCENE, render: { ...RENDER, frames: 240 }, rungs: [ { rung: { name: '360p24', width: 640, height: 360, kbps: 800 }, encoder: encFor( 640, 360, 800, 24 ), packaged: { init: Uint8Array.of( 1 ), segments: [ { name: 'seg00001.m4s', data: new Uint8Array( 50 ) } ], playlist: '#EXTM3U', maxSegmentBytes: 50, codec: 'avc1.64001f', bandwidth: 1, averageBandwidth: 1 } } ],
 		poster: new Uint8Array( 10 ), determinism: { mode: 'offline', encoder: 'software' },
 	};
 	const set = assemblePublishSet( { ...input, publication: { storage: STORAGE.renders, repo: 'o/renders', tag: 'a+b-cubed/v1' } } );
@@ -174,6 +175,19 @@ await test( 'DELIVERY: with routing off the share link is the first mirror and t
 	assert.strictEqual( shareBase( old, { delivery: { canonicalLive: true } } ), old.mirrors[ 0 ] );
 	// the archive is listed only when it exists
 	assert.deepStrictEqual( publicationBlock( { storage: STORAGE.renders, repo: 'o/renders', path: 'cafe', tag: 'cafe/v1', archive: true } ).mirrors[ 1 ], 'https://archive.org/download/strata-cafe-v1/' );
+
+} );
+
+await test( 'T1: a render is named for its content, in one spelling: the convention is enforced, a category word and a wrong spelling are refused with the fix', async () => {
+
+	for ( const ok of [ 'cafe', 'a+b-cubed', 'bus-stop', 'littletokyo', 'hardy-weinberg', 'pyth', 'x' ] ) assert.strictEqual( slugProblem( ok ), null, ok );
+	for ( const bad of [ 'Bus_Stop', 'bus stop', 'Cafe', '-cafe', 'cafe-', 'a++b', 'bus--stop', 'a/b', '' ] ) assert.match( slugProblem( bad ), /not a valid render name/, bad );
+	assert.match( slugProblem( 'Bus_Stop' ), /bus-stop\.json/, 'it says what to rename the scene file to' );
+	for ( const cat of [ 'short', 'video', 'render', 'film' ] ) assert.match( slugProblem( cat ), /names a category/, cat );
+	const gh = fakeGithub( { repos: { 'o/renders': { empty: true } } } );
+	await assert.rejects( planRelease( gh.api, { repo: 'o/renders', slug: 'short', sceneRepo: 'o/test1' } ), e => e.code === 'bad-input' && /category/.test( e.message ) );
+	assert.deepStrictEqual( gh.calls, [], 'refused before a single call' );
+	assert.strictEqual( ( await planRelease( gh.api, { repo: 'o/renders', slug: 'bus-stop', sceneRepo: 'o/test1' } ) ).tag, 'bus-stop/v1' );
 
 } );
 
