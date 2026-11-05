@@ -37,13 +37,20 @@
 	footer a { color: inherit; }
 	[hidden] { display: none !important; }
 	/* present mode: only the video, filling the visible window (in a frame, or with present=true) */
-	body.present { display: block; min-height: 0; position: fixed; top: 0; left: 0; right: 0; height: 100vh; height: 100dvh; height: var(--app-h, 100dvh); overflow: hidden; background: #000; }
-	body.present main { max-width: none; padding: 0; height: 100%; }
-	body.present form, body.present .bar, body.present .meta, body.present .warn, body.present .dl, body.present footer { display: none; }
-	body.present .stage { aspect-ratio: auto; max-height: none; width: 100%; height: 100%; border-radius: 0; }
-	body.present video { object-fit: contain; }
-	body.present .error:empty { display: none; }
-	body.present .error { position: fixed; left: 0; right: 0; bottom: 56px; margin: 0; padding: 8px 12px; background: rgba(0, 0, 0, .75); font-size: 13px; }
+	html.present body { display: block; min-height: 0; position: fixed; top: 0; left: 0; right: 0; height: 100vh; height: 100dvh; height: var(--app-h, 100dvh); overflow: hidden; background: #000; }
+	html.present body main { max-width: none; padding: 0; height: 100%; }
+	html.present body form, html.present body .bar, html.present body .meta, html.present body .warn, html.present body .dl, html.present body footer { display: none; }
+	html.present body .stage { aspect-ratio: auto; max-height: none; width: 100%; height: 100%; border-radius: 0; }
+	html.present body video { object-fit: contain; }
+	html.present body .error:empty { display: none; }
+	html.present { background: #000; }
+	html.present body .error { position: fixed; left: 0; right: 0; bottom: 56px; margin: 0; padding: 8px 12px; background: rgba(0, 0, 0, .75); font-size: 13px; }
+
+	/* the centre play button: present mode only, while the video is paused (player.js) */
+	.bigplay { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; width: 84px; height: 84px; min-height: 0; padding: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .85); background: rgba(0, 0, 0, .55); align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+	.bigplay:hover, .bigplay:focus-visible { background: rgba(0, 0, 0, .75); }
+	.bigplay svg { width: 38px; height: 38px; margin-left: 5px; fill: #fff; }
+	html.present .bigplay { display: flex; }
 
 	/* a phone: less padding, the video edge to edge, taps big enough to hit, the controls and the footer wrapping rather than running off the side */
 	@media (max-width: 640px) {
@@ -59,6 +66,17 @@
 	/* a phone held sideways has little height: the address field goes, so the picture and its controls get the screen */
 	@media (max-height: 480px) and (orientation: landscape) { form, footer { display: none; } .stage { max-height: calc(100vh - 20px); max-height: calc(var(--app-h, 100dvh) - 20px); } }
 </style>
+<script>
+	// Present mode has to be decided before the first paint: player.js is a module and runs after it, so deciding there shows the whole page (address bar, title, footer)
+	// for a moment before it is stripped to the video. This is presentMode() in resolve.js (a test keeps the two in step); player.js still applies it on every hash change.
+	( function () {
+		var q = function ( t ) { var m = /(?:^|&)present=([^&#]*)/i.exec( t ); return m ? m[ 1 ].toLowerCase() : null; };
+		var v = q( location.search.replace( /^\?/, '' ) ); if ( v === null ) v = q( location.hash.replace( /^#/, '' ) );
+		var framed; try { framed = window.self !== window.top; } catch ( e ) { framed = true; }
+		var on = v === 'false' || v === '0' ? false : v === 'true' || v === '1' || v === '' ? true : framed;
+		if ( on ) document.documentElement.classList.add( 'present' );
+	} )();
+</script>
 </head>
 <body>
 <main>
@@ -66,7 +84,7 @@
 		<input type="text" id="address" placeholder="https://strataeditor.dev/video/name/v1/" aria-label="Address of a published render" spellcheck="false" autocomplete="off">
 		<button type="submit">Play</button>
 	</form>
-	<div class="stage"><video id="video" controls playsinline crossorigin="anonymous" preload="metadata"></video></div>
+	<div class="stage"><video id="video" controls playsinline crossorigin="anonymous" preload="metadata"></video><button type="button" class="bigplay" id="bigPlay" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button></div>
 	<div class="bar">
 		<h1 id="title">Paste the address of a published render</h1>
 		<label id="qualityLabel" hidden>Quality <select id="quality"></select></label>

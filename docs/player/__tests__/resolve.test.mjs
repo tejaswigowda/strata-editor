@@ -1,5 +1,9 @@
 // Run: node docs/player/__tests__/resolve.test.mjs
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { resolveBase, followsBranch, formatDuration, parseGh, pinnedBase, describeFailure, alternateBases, presentMode, cueParam, locateCue, mirrorsFromCanonical, candidateBases } from '../resolve.js';
 
 const B = 'https://cdn.jsdelivr.net/gh/tejaswigowda/test1@main/renders/projectile/';
@@ -170,6 +174,23 @@ test( 'G4: candidates are the address, the render\'s own list in its order, then
 	assert.strictEqual( candidateBases( C )[ 1 ], 'https://cdn.jsdelivr.net/gh/tejaswigowda/renders@cafe/v1/cafe/' );
 	assert.deepStrictEqual( candidateBases( B, { storage: 'renders-repo', url: B } ), [ B, ...alternateBases( B ) ] );
 	assert.deepStrictEqual( candidateBases( 'https://example.com/x/' ), [ 'https://example.com/x/' ] );
+
+} );
+test( 'the inline script in index.html that decides present mode before first paint gives the same answer as presentMode() for every address', () => {
+
+	const html = readFileSync( path.join( path.dirname( fileURLToPath( import.meta.url ) ), '..', 'index.html' ), 'utf8' );
+	const code = /<script>([\s\S]*?present=[\s\S]*?)<\/script>/.exec( html )[ 1 ];
+	const cases = [ [ '', '', false ], [ '', '#https://x/&present=true', false ], [ '?present=true', '', false ], [ '', '#x&present=1', false ], [ '', '#x&present=', false ], [ '', '#x&present=false', true ],
+		[ '?present=0', '', true ], [ '', '#x&present=TRUE', false ], [ '', '#x', true ], [ '', '#x', false ], [ '?present=false', '#x&present=true', true ], [ '', '#x&present=maybe', true ] ];
+	for ( const [ search, hash, framed ] of cases ) {
+
+		const classes = new Set();
+		const sandbox = { location: { search, hash }, document: { documentElement: { classList: { add: c => classes.add( c ) } } }, window: {} };
+		sandbox.window.self = sandbox.window; sandbox.window.top = framed ? {} : sandbox.window;
+		vm.runInNewContext( code, sandbox );
+		assert.strictEqual( classes.has( 'present' ), presentMode( { search, hash, framed } ), JSON.stringify( { search, hash, framed } ) );
+
+	}
 
 } );
 console.log( `\n${ pass } passed, ${ fail } failed` );

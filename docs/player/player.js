@@ -11,9 +11,9 @@ const $ = id => document.getElementById( id );
 const video = $( 'video' ), qualityLabel = $( 'qualityLabel' ), quality = $( 'quality' );
 let hls = null;
 
-// Present mode: just the video (see presentMode in resolve.js). Decided again on every hash change, since the hash can carry &present=true.
+// Present mode: just the video (see presentMode in resolve.js). index.html decides it before first paint (the class is on <html>); decided again here on every hash change, since the hash can carry &present=true.
 function framed() { try { return window.self !== window.top; } catch ( e ) { return true; } }     // a cross-origin parent throws: that is a frame
-function applyPresent() { document.body.classList.toggle( 'present', presentMode( { search: location.search, hash: location.hash, framed: framed() } ) ); }
+function applyPresent() { document.documentElement.classList.toggle( 'present', presentMode( { search: location.search, hash: location.hash, framed: framed() } ) ); }
 applyPresent();
 
 // The height that is really visible. On a phone 100vh is the page with the browser's own bars away, so a layout sized to it has its bottom (the controls, the
@@ -23,7 +23,13 @@ fit();
 addEventListener( 'resize', fit ); addEventListener( 'orientationchange', fit );
 if ( window.visualViewport ) window.visualViewport.addEventListener( 'resize', fit );
 
-function setError( text ) { $( 'error' ).textContent = text || ''; }
+// The centre play button (present mode shows it): there while the video is paused or has ended, gone while it plays and when there is nothing to play.
+const bigPlay = $( 'bigPlay' );
+const syncBigPlay = () => { bigPlay.hidden = ! video.paused || !! $( 'error' ).textContent; };
+[ 'play', 'playing', 'pause', 'ended', 'emptied' ].forEach( e => video.addEventListener( e, syncBigPlay ) );
+bigPlay.addEventListener( 'click', () => { video.play().catch( () => { /* the browser refused (no gesture, no source yet): the controls remain */ } ); } );
+
+function setError( text ) { $( 'error' ).textContent = text || ''; syncBigPlay(); }
 
 /** After a failure on a branch address: look up the commit the branch is at now, and offer that exact address (jsDelivr caches a branch for hours). */
 async function offerPinned( base ) {
