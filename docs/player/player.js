@@ -176,7 +176,7 @@ async function play( input ) {
 	if ( ! useHls && ! native ) { setError( 'This browser can play neither native HLS nor hls.js (it needs Media Source Extensions).' ); return; }
 
 	// A CDN serving a freshly published tag can answer 404 for a file that exists, from one edge and not another, and hold that answer longer than hls.js retries
-	// (six times, about 30 s). A 404 or no answer therefore moves playback to the next host that serves the same immutable folder (resolve.js candidateBases: the canonical address, the render's mirrors, the other jsDelivr hostnames),
+	// (six times, about 30 s). A 404 or no answer therefore immediately moves playback to the next host that serves the same immutable folder (resolve.js candidateBases: the canonical address, the render's mirrors, the other jsDelivr hostnames),
 	// from where it had got to, and says so; only when every host has failed is it an error.
 	const hosts = candidateBases( base, rj && rj.publication );
 	const tried = [];
@@ -218,8 +218,9 @@ async function play( input ) {
 		hls.on( window.Hls.Events.MANIFEST_PARSED, () => levelChoices( mine ) );
 		hls.on( window.Hls.Events.ERROR, ( e, data ) => {
 
-			if ( ! data.fatal ) return;
+			if ( hls !== mine ) return;
 			const code = data.response && data.response.code !== undefined ? data.response.code : null;
+			if ( ! data.fatal && ! ( ( code === 404 || code === 0 ) && tried.length < hosts.length ) ) return;
 			const detail = describeFailure( data, master );
 			mine.destroy(); if ( hls === mine ) hls = null;
 			// only a missing answer moves on: a 403 or a decode error would be the same from every host
