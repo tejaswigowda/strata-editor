@@ -2,25 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Build a GIS-grounded scene with a clarifying AI - Strata tutorials</title>
+<title>Build a GIS-grounded scene by hand - Strata tutorials</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="stylesheet" href="highlight.css">
 <script src="highlight.js" defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Reproduce a mapped Mesa walkway scene, preserve its geometry through export, and connect speech, a constrained AI and undoable shade proposals through browser automation.">
+<meta name="description" content="Build the Mesa walkway scene with deterministic JS Shell steps and no AI. Inspect source records, coordinates, geometry and saved output, then optionally use AI assistance with human checks.">
 <!-- social:start (generated from tutorials.json by hand; node scripts/tutorial-policy.cjs lint checks it) -->
 <link rel="canonical" href="https://strataeditor.dev/about/tutorials/gis-walkway-shade.html">
 <meta property="og:site_name" content="Strata">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Build a GIS-grounded scene with a clarifying AI">
-<meta property="og:description" content="Turn real mapped walkways into a representative site scene, constrain AI edits to named paths, and record a genuine clarification using speech and browser automation.">
+<meta property="og:title" content="Build a GIS-grounded scene by hand">
+<meta property="og:description" content="Build a Mesa site scene from mapped paths and a footprint with no AI: inspect the data, run deterministic Shell steps, verify the saved geometry, then optionally add human-checked AI assistance.">
 <meta property="og:url" content="https://strataeditor.dev/about/tutorials/gis-walkway-shade.html">
 <meta property="og:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/gis-walkway-shade.jpg">
 <meta property="og:image:width" content="640">
 <meta property="og:image:height" content="400">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Build a GIS-grounded scene with a clarifying AI">
-<meta name="twitter:description" content="Turn real mapped walkways into a representative site scene, constrain AI edits to named paths, and record a genuine clarification using speech and browser automation.">
+<meta name="twitter:title" content="Build a GIS-grounded scene by hand">
+<meta name="twitter:description" content="Build a Mesa site scene from mapped paths and a footprint with no AI: inspect the data, run deterministic Shell steps, verify the saved geometry, then optionally add human-checked AI assistance.">
 <meta name="twitter:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/gis-walkway-shade.jpg">
 <!-- social:end -->
 <style>
@@ -36,6 +36,9 @@
 	figure { margin: 1.5em 0; }
 	figure img { display: block; width: 100%; height: auto; border: 1px solid #2a2e36; border-radius: 8px; box-sizing: border-box; }
 	figcaption { margin-top: .6em; color: #9aa4b2; font-size: .88rem; }
+	iframe { display: block; width: 100%; height: 560px; border: 1px solid #2a2e36; border-radius: 8px; box-sizing: border-box; }
+	details { margin: 1.5em 0; }
+	summary { cursor: pointer; color: #7db2ff; }
 	code { background: #1e2127; border-radius: 4px; padding: .1em .3em; font-size: .9em; }
 	pre { padding: 16px; overflow-x: auto; background: #1a1d23; border: 1px solid #2a2e36; border-radius: 8px; line-height: 1.5; }
 	pre code { padding: 0; background: none; }
@@ -51,18 +54,20 @@
 <body>
 <main>
 	<p><a href="./">All tutorials</a></p>
-	<h1>Build a GIS-grounded scene with a clarifying AI</h1>
-	<p class="tagline">Mapped paths become a small, editable site model. A model selects from operations the project permits, and asks for clarification instead of guessing which walkway to shade.</p>
-	<p>This is how the <strong>FutureFlux</strong> English demo was made at Red Mountain Multigenerational Center in Mesa, Arizona. The geometry can be reproduced without AI. The optional interaction uses Strata's existing AI engine, a project-specific panel, and browser automation across separate speech apps. It did not require a change to Strata's source.</p>
+	<h1>Build a GIS-grounded scene by hand</h1>
+	<p class="tagline">No model, prompt, speech recognition or generated code is required. Build the site with deterministic JavaScript, and inspect the evidence at every step.</p>
+	<p>Reconstruct the <strong>FutureFlux</strong> site at Red Mountain Multigenerational Center in Mesa, Arizona, using the JS Shell. The numbered steps below are complete, sequential snippets for the human-operated Shell, not requests to an AI. AI assistance and the original speech demo are separate, optional extensions at the end.</p>
 	<p><a href="../../#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=7859f88a593617c16cccd96dddc5f905850a6f59&amp;play=false">Open the corrected, pinned scene</a> &middot;
 	<a href="https://github.com/tejaswigowda/test1/tree/7859f88a593617c16cccd96dddc5f905850a6f59/demo">Browse the matching implementation</a></p>
+	<iframe src="../../#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=7859f88a593617c16cccd96dddc5f905850a6f59&amp;play=false" title="Interactive pinned Mesa walkway scene in Strata" loading="lazy" allowfullscreen></iframe>
+	<p>The embed is the actual pinned Strata project, not a video. Orbit and inspect its scene tree, or use the full-size link above. It opens in authoring mode with timeline autoplay off; do not load a model or run the project's optional interaction script for the no-AI walkthrough. Use a separate, empty editor tab to build your own copy.</p>
 	<figure>
 		<a href="screenshots/gis-walkway-shade.png"><img src="screenshots/gis-walkway-shade.png" alt="Overview of the mapped community-center footprint and two walkways, with representative trees and people" width="1920" height="1080"></a>
 		<figcaption>The corrected Mesa scene, captured with Strata's Snapshot tool: City of Mesa GIS footprint and path centerlines, with assumed height and widths and arranged context. No shade or heat result is shown. The tutorial thumbnail is a cropped, resized copy of this capture.</figcaption>
 	</figure>
-	<div class="note"><strong>What the example is not:</strong> a surveyed digital twin, a cooling simulation, a built-in microphone integration, or a completed recording. Path centerlines and the building footprint are sourced; widths, height, ground, trees, people and lighting are representative. Test speech is synthetic.</div>
+	<div class="note"><strong>Before starting:</strong> save unrelated work, open a separate <a href="../../" target="_blank" rel="noopener">editor tab</a>, and use <strong>New</strong> for an empty scene. Open <strong>Shell</strong>, paste each complete block into the input marked <strong>JavaScript, no AI needed</strong>, and press <strong>Enter</strong> to run it (Shift+Enter inserts a newline). Do not use the AI input or <strong>Load AI</strong>. Run each numbered block once, in order, wait for its result, and stop if a check throws. No package installation or Strata build is needed.</div>
 
-	<h2>1. Start from mapped paths, not invented geometry</h2>
+	<h2>1. Load and inspect the source records</h2>
 	<p>The project saved GeoJSON extracts from the <a href="https://gis.mesaaz.gov/mesaaz/rest/services?f=pjson">City of Mesa REST catalogue</a>. The query envelope was <code>-111.6692,33.4305,-111.6653,33.433</code>, using spatial intersection with input and output spatial reference <code>4326</code>.</p>
 	<div class="table-wrap">
 	<table>
@@ -76,74 +81,268 @@
 	</table>
 	</div>
 	<p>The extracts are in <code>demo/data/</code>; other paths in the envelope were deliberately omitted. The <a href="https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/">City's data terms</a> apply. An empty copyright field in a REST response is not a public-domain licence. Record <strong>source, licence, attribution and modifications</strong>, as this project does in <a href="https://github.com/tejaswigowda/test1/blob/7859f88a593617c16cccd96dddc5f905850a6f59/demo/PROVENANCE.md">PROVENANCE.md</a>.</p>
+	<p>This first block downloads only pinned public GeoJSON, not executable project code. A named object on <code>window</code> retains state between Shell runs. The empty-scene guard prevents accidentally adding this tutorial to your other work.</p>
+	<pre><code>(async () =&gt; {
+  if (editor.scene.children.length || window.mesaTutorial) {
+    throw new Error('Use an empty scene and a fresh tab before step 1.');
+  }
+  const base = 'https://raw.githubusercontent.com/tejaswigowda/test1/'
+    + '7859f88a593617c16cccd96dddc5f905850a6f59/demo/data/';
+  const read = async name =&gt; {
+    const response = await fetch(base + name);
+    if (!response.ok) throw new Error(name + ': HTTP ' + response.status);
+    return response.json();
+  };
+  const [paths, buildings] = await Promise.all([
+    read('mesa-paths.geojson'), read('mesa-buildings.geojson')
+  ]);
+  const check = (condition, message) =&gt; {
+    if (!condition) throw new Error(message);
+  };
+  const selected = [
+    { objectid: 30121, id: 'center-walk',
+      label: 'Walkway by the community center', color: '#d2bc8e' },
+    { objectid: 30046, id: 'park-loop',
+      label: 'Walkway along the park loop', color: '#dcd6c1' }
+  ];
+  for (const spec of selected) {
+    const feature = paths.features.find(f =&gt; f.id === spec.objectid);
+    check(feature?.geometry.type === 'LineString', 'Missing ' + spec.id);
+  }
+  const footprint = buildings.features.find(f =&gt; f.id === 53258);
+  check(footprint?.geometry.type === 'Polygon', 'Missing footprint 53258');
+  window.mesaTutorial = { paths, footprint, selected, check };
+  return selected.map(spec =&gt; {
+    const f = paths.features.find(f =&gt; f.id === spec.objectid);
+    return { id: spec.id, source: f.id, facility: f.properties.FACILITYID,
+      points: f.geometry.coordinates.length };
+  });
+})()</code></pre>
+	<p><strong>Human check:</strong> inspect the returned records: <code>center-walk</code> is source 30121 / PKPTH2837 with 5 points; <code>park-loop</code> is 30046 / PKPTH2771 with 13. Compare the saved coordinates and IDs with the linked source layers. If the download fails, stop and inspect the error; do not substitute invented paths.</p>
 
 	<h2>2. Project the site into local metres</h2>
-	<p>Longitude and latitude are not scene distances. The generator uses a small-site approximation around a fixed origin: x east, y up, z south. This is suitable for the representative scene, not surveying. The following excerpts use <code>T</code> for the Three.js namespace in the Node generator, not bare Shell globals.</p>
-	<pre><code>const origin = [ -111.667328704, 33.431791272 ];
-const project = ( [ lon, lat ], y = 0 ) =&gt; [
-  ( lon - origin[ 0 ] ) * 111320
-    * Math.cos( origin[ 1 ] * Math.PI / 180 ),
-  y,
-  -( lat - origin[ 1 ] ) * 111320
-];</code></pre>
-	<p>Each selected LineString becomes a group with stable metadata:</p>
-	<pre><code>group.userData.fluxPath = {
-  id: 'center-walk',
-  label: 'Walkway by the community center',
-  aliases: [ 'center-walk', 'community center', 'centro comunitario' ],
-  points: feature.geometry.coordinates.map( p =&gt; project( p, 0.12 ) ),
-  source: 'Mesa OBJECTID 30121 / PKPTH2837'
-};</code></pre>
-	<p>The IDs and landmark aliases are authored grounding metadata. They are not names invented by the model. The same stored points drive both the visible path and the later shade proposal.</p>
+	<p>Longitude and latitude are not scene distances. Use the fixed origin below, with x east, y up and z south. This small-site approximation is for representative massing, not surveying. <code>THREE</code> and the editor command classes are already available in the JS Shell.</p>
+	<pre><code>(() =&gt; {
+  const m = window.mesaTutorial;
+  m.origin = [-111.667328704, 33.431791272];
+  m.project = ([lon, lat], y = 0) =&gt; [
+    (lon - m.origin[0]) * 111320 * Math.cos(m.origin[1] * Math.PI / 180),
+    y, -(lat - m.origin[1]) * 111320
+  ];
+  m.check(m.project(m.origin).every(v =&gt; v === 0), 'Origin must be zero');
+  const first = m.paths.features.find(f =&gt; f.id === 30121)
+    .geometry.coordinates[0];
+  const local = m.project(first, 0.12);
+  m.check(Math.abs(local[0] - 63.8344484391) &lt; 0.000001, 'Check x');
+  m.check(Math.abs(local[2] - 31.0489561484) &lt; 0.000001, 'Check z');
+  return { origin: m.project(m.origin), firstPathPointMetres: local };
+})()</code></pre>
+	<p><strong>Human check:</strong> the origin becomes <code>[0,0,0]</code>. The first center-walk point is approximately <code>[63.834448,0.12,31.048956]</code> metres. Check the signs: east is positive x; south is positive z. All later meshes use this same conversion.</p>
 
-	<h2>3. Build and serialize the scene</h2>
-	<p>For each pair of path points, the generator makes a thin box with an assumed width of 3.3 m. Its midpoint supplies the position and its direction supplies the y rotation:</p>
-	<pre><code>const a = new T.Vector3( ...points[ i - 1 ] );
-const b = new T.Vector3( ...points[ i ] );
-const segment = new T.Mesh(
-  new T.BoxGeometry( 3.3, 0.18, a.distanceTo( b ) + 0.1 ),
-  pathMaterial
-);
-segment.position.copy( a ).add( b ).multiplyScalar( 0.5 );
-segment.rotation.y = Math.atan2( b.x - a.x, b.z - a.z );
-group.add( segment );</code></pre>
-	<p>The building polygon is made into a <code>Shape</code> using <code>(x, -z)</code>, then extruded to an assumed height of 6 m. Rotate the <em>mesh</em> so extrusion depth becomes vertical:</p>
-	<pre><code>const shape = new T.Shape( footprint.geometry.coordinates[ 0 ].map( p =&gt; {
-  const [ x, , z ] = project( p );
-  return new T.Vector2( x, -z );
-} ) );
-const building = new T.Mesh(
-  new T.ExtrudeGeometry( shape, { depth: 6, bevelEnabled: false } ),
-  buildingMaterial
-);
-building.rotation.x = -Math.PI / 2;
-building.position.y = 0.05;
-scene.add( building );</code></pre>
-	<p>Ground slabs, procedural trees and capsule participants give scale. A hemisphere light and a directional light give illustrative daylight. The overview camera is at <code>[190, 160, 235]</code>, looking at <code>[0, 0, -16]</code>, with a 43-degree field of view.</p>
-	<pre><code>camera.position.set( 190, 160, 235 );
-camera.lookAt( 0, 0, -16 );
-camera.updateMatrixWorld();
-scene.updateMatrixWorld( true );
+	<h2>3. Build the ground and footprint</h2>
+	<p>Set up a mesh helper and an undoable add helper. The building polygon uses <code>(x,-z)</code> in its 2D shape; rotating its mesh by -90 degrees around x makes its 6 m extrusion vertical.</p>
+	<pre><code>(() =&gt; {
+  const m = window.mesaTutorial;
+  m.mesh = (name, geometry, color, position) =&gt; {
+    const object = new THREE.Mesh(geometry,
+      new THREE.MeshStandardMaterial({ color, roughness: 0.94 }));
+    object.name = name;
+    object.position.set(...position);
+    object.castShadow = object.receiveShadow = true;
+    return object;
+  };
+  m.add = objects =&gt; {
+    for (const object of objects) editor.execute(new AddObjectCommand(editor, object));
+  };
+  const ground = m.mesh('Representative desert ground',
+    new THREE.BoxGeometry(430, 1, 420), '#cbbd9e', [0, -0.6, -10]);
+  const planted = m.mesh('Representative planted zone',
+    new THREE.BoxGeometry(240, 0.1, 70), '#9fa87c', [5, -0.03, -85]);
+  const shape = new THREE.Shape(m.footprint.geometry.coordinates[0].map(p =&gt; {
+    const [x, , z] = m.project(p);
+    return new THREE.Vector2(x, -z);
+  }));
+  m.building = m.mesh('Community center / assumed 6m height',
+    new THREE.ExtrudeGeometry(shape, { depth: 6, bevelEnabled: false }),
+    '#eee4d0', [0, 0.05, 0]);
+  m.building.rotation.x = -Math.PI / 2;
+  m.building.userData = { source: 'City of Mesa building OBJECTID 53258',
+    modifications: 'Assumed 6m height; not surveyed.' };
+  m.add([ground, planted, m.building]);
+  const size = new THREE.Box3().setFromObject(m.building)
+    .getSize(new THREE.Vector3());
+  m.check(Math.abs(size.y - 6) &lt; 0.00001, 'Building must be 6m high');
+  return { buildingSizeMetres: size.toArray() };
+})()</code></pre>
+	<p><strong>Human check:</strong> the building is approximately <code>109.131 &times; 6 &times; 79.330</code> m in x/y/z, not an 80 m tall wall. In the Scene tree, select it and inspect its rotation and silhouette. The ground dimensions and planted rectangle are arranged context, not GIS land-cover measurements. Each object or path group is an undoable addition; undo all additions from a block before rerunning it.</p>
 
-const json = {
-  // The full generator also writes project settings, scripts and history.
-  camera: camera.toJSON(),
-  controls: { center: [ 0, 0, -16 ] },
-  scene: scene.toJSON()
-};</code></pre>
+	<h2>4. Turn the two centerlines into walkways</h2>
+	<p>Make one named group per source path. Each pair of points becomes a box, positioned at its midpoint and rotated along its direction. Width 3.3 m and thickness 0.18 m are assumptions. These boxes approximate a buffered centerline, not a surveyed paving polygon.</p>
+	<pre><code>(() =&gt; {
+  const m = window.mesaTutorial;
+  m.pathGroups = m.selected.map(spec =&gt; {
+    const feature = m.paths.features.find(f =&gt; f.id === spec.objectid);
+    const points = feature.geometry.coordinates.map(p =&gt; m.project(p, 0.12));
+    const group = new THREE.Group();
+    group.name = spec.label;
+    group.userData.fluxPath = { id: spec.id, label: spec.label, points,
+      source: 'Mesa OBJECTID ' + spec.objectid + ' / ' + feature.properties.FACILITYID };
+    for (let i = 1; i &lt; points.length; i++) {
+      const a = new THREE.Vector3(...points[i - 1]);
+      const b = new THREE.Vector3(...points[i]);
+      const segment = m.mesh(spec.id + ' / ' + i,
+        new THREE.BoxGeometry(3.3, 0.18, a.distanceTo(b) + 0.1),
+        spec.color, a.clone().add(b).multiplyScalar(0.5).toArray());
+      segment.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+      group.add(segment);
+    }
+    return group;
+  });
+  m.add(m.pathGroups);
+  m.check(m.pathGroups[0].children.length === 4, 'Expected 4 center segments');
+  m.check(m.pathGroups[1].children.length === 12, 'Expected 12 park segments');
+  return m.pathGroups.map(g =&gt; ({ id: g.userData.fluxPath.id,
+    segments: g.children.length,
+    firstMidpoint: g.children[0].position.toArray() }));
+})()</code></pre>
+	<p><strong>Human check:</strong> expand both groups in the Scene tree: there are 4 and 12 segments. The first midpoints are approximately <code>[58.150234,0.12,31.923832]</code> and <code>[33.105119,0.12,-84.984967]</code>. Compare these with the average of each source's first two projected points. The community-center path is south of the footprint; the curved park path is north of it.</p>
+
+	<h2>5. Add representative trees and people</h2>
+	<p>These are explicitly authored placements, not a tree inventory or observations of real people. The dimensions and positions below reproduce the original scene's context.</p>
+	<pre><code>(() =&gt; {
+  const m = window.mesaTutorial;
+  const objects = [];
+  for (const [x, z, radius] of [
+    [-68,-68,6], [-30,-94,5], [4,-93,5], [38,-100,6],
+    [65,-75,4], [85,30,4], [-82,38,4], [68,62,4]
+  ]) {
+    objects.push(m.mesh('Arranged tree trunk / not surveyed',
+      new THREE.CylinderGeometry(0.25, 0.4, 4, 8), '#8a7554', [x,2,z]));
+    const crown = m.mesh('Arranged tree crown',
+      new THREE.SphereGeometry(radius, 14, 9), '#647d59', [x,6.8,z]);
+    crown.scale.y = 0.8;
+    objects.push(crown);
+  }
+  for (const [x, z, color] of [
+    [39,39,'#305d70'], [42,40,'#b77f50'],
+    [39,43,'#f1ead6'], [35,40,'#536d54']
+  ]) {
+    objects.push(m.mesh('Arranged participant',
+      new THREE.CapsuleGeometry(0.28, 1.05, 4, 8), color, [x,0.95,z]));
+    objects.push(m.mesh('Participant head',
+      new THREE.SphereGeometry(0.24, 10, 8), '#bf9979', [x,1.85,z]));
+  }
+  m.add(objects);
+  m.check(objects.length === 24, 'Expected 16 tree and 8 participant meshes');
+  return { trees: 8, participants: 4, contextMeshes: objects.length };
+})()</code></pre>
+	<p><strong>Human check:</strong> count eight crowns and four people, orbiting or zooming as needed. People should sit near the southern path, not at the scene origin. Trees are several metres high, while people are about two metres high.</p>
+
+	<h2>6. Light and frame the site</h2>
+	<pre><code>(() =&gt; {
+  const m = window.mesaTutorial;
+  const sky = new THREE.HemisphereLight('#f6f7ee', '#796e58', 2.7);
+  sky.name = 'Desert sky';
+  const sun = new THREE.DirectionalLight('#fff4d8', 3.1);
+  sun.name = 'Illustrative sun / not a dated solar study';
+  sun.position.set(-70, 130, 50);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera,
+    { left: -180, right: 180, top: 180, bottom: -180, far: 500 });
+  sun.shadow.bias = -0.0005;
+  m.add([sky, sun]);
+  editor.scene.name = 'Mesa walkways / human-built representative scene';
+  editor.scene.background = new THREE.Color('#dce5df');
+  editor.scene.fog = new THREE.Fog('#dce5df', 420, 1000);
+  editor.backgroundType = 'Color';
+  editor.scene.userData.provenance = {
+    source: 'City of Mesa GIS: paths 30121/30046, building 53258',
+    licence: 'City of Mesa Data Terms of Use License Agreement',
+    attribution: 'City of Mesa GIS / representative reconstruction',
+    modifications: 'Local metres; assumed widths and height; arranged context.'
+  };
+  editor.camera.position.set(190, 160, 235);
+  editor.camera.fov = 43;
+  editor.camera.near = 0.1;
+  editor.camera.far = 2000;
+  editor.controls.center.set(0, 0, -16);
+  editor.camera.lookAt(editor.controls.center);
+  editor.camera.updateProjectionMatrix();
+  editor.camera.updateMatrixWorld();
+  editor.scene.updateMatrixWorld(true);
+  editor.deselect();
+  editor.signals.sceneGraphChanged.dispatch();
+  editor.signals.cameraChanged.dispatch(editor.camera);
+  return { camera: editor.camera.position.toArray(),
+    center: editor.controls.center.toArray(),
+    objects: editor.scene.children.length };
+})()</code></pre>
+	<p><strong>Human check:</strong> there are 31 top-level objects, two distinct paths, a horizontal building, eight trees and four people. Camera position is <code>[190,160,235]</code> and orbit center is <code>[0,0,-16]</code>. Orbit the view to inspect both paths; the screenshot above uses a slightly more overhead angle. Lighting is illustrative, never a dated sun or cooling study.</p>
+
+	<h2>7. Verify the saved scene and capture it</h2>
+	<p>Verify the serialized result, not just the working viewport. This block exports to memory and reloads a separate copy for inspection; it does not replace the live scene or run scripts.</p>
+	<pre><code>(() =&gt; {
+  const m = window.mesaTutorial;
+  editor.scene.updateMatrixWorld(true);
+  editor.camera.updateMatrixWorld();
+  const json = editor.toJSON();
+  m.check(Object.keys(json.scripts).length === 0, 'No scripts should be installed');
+  const copy = new THREE.ObjectLoader().parse(json.scene);
+  copy.updateMatrixWorld(true);
+  const groups = copy.children.filter(o =&gt; o.userData.fluxPath);
+  m.check(groups.length === 2, 'Expected two reloaded paths');
+  for (const group of groups) {
+    const points = group.userData.fluxPath.points.map(p =&gt; new THREE.Vector3(...p));
+    m.check(group.children.length === points.length - 1, 'Segment count changed');
+    group.children.forEach((segment, i) =&gt; {
+      const middle = points[i].clone().add(points[i + 1]).multiplyScalar(0.5);
+      const position = segment.getWorldPosition(new THREE.Vector3());
+      m.check(position.distanceTo(middle) &lt; 0.000001, 'Lost path position');
+      const direction = points[i + 1].clone().sub(points[i]).normalize();
+      const axis = new THREE.Vector3(0,0,1).transformDirection(segment.matrixWorld);
+      m.check(axis.dot(direction) &gt; 0.999999, 'Lost path rotation');
+    });
+  }
+  const building = copy.getObjectByName('Community center / assumed 6m height');
+  const size = new THREE.Box3().setFromObject(building).getSize(new THREE.Vector3());
+  m.check(Math.abs(size.y - 6) &lt; 0.00001, 'Lost building orientation');
+  m.check(json.controls.center.every((v, i) =&gt; v === [0,0,-16][i]),
+    'Camera center changed; reset editor.controls.center to [0,0,-16]');
+  return { verified: true, paths: groups.length, buildingHeight: size.y,
+    scripts: Object.keys(json.scripts).length };
+})()</code></pre>
 	<div class="note"><strong>The export bug worth learning from:</strong> the first version saved identity matrices for unrendered objects, collapsing paths and trees at the origin. Rotating the procedural <code>ExtrudeGeometry</code> itself also failed to survive its parameter-based JSON reconstruction, leaving the building upright. Updating scene matrices and rotating the building mesh fixes both. Strata's saved orbit pivot is <code>controls.center</code>, not <code>controls.target</code>.</div>
-	<p>To reproduce the complete export, use the pinned project rather than assembling these excerpts into a partial app file:</p>
-	<pre><code>git clone https://github.com/tejaswigowda/test1.git futureflux-demo
-cd futureflux-demo
-git checkout --detach 7859f88a593617c16cccd96dddc5f905850a6f59
-cd demo
-npm ci
-npm run scene
-npm test
-shasum -a 256 -c files.sha256</code></pre>
-	<p><code>npm run scene</code> generates assets; it is <strong>not a Strata build</strong>. It writes identical root <code>flux.json</code> and <code>demo/scene.json</code> files and a checksum manifest. The six tests include a JSON reload check: every path segment must retain its GIS-derived midpoint and orientation, the building must remain 6 m high, and both paths must intersect the saved camera frustum. Always inspect the reloaded scene visually as well.</p>
+	<p><strong>Human check:</strong> expect <code>verified: true</code>, 2 paths, building height approximately 6 and 0 scripts. Save the project with Strata's <strong>Save</strong> control. Reopen that saved JSON in a separate editor tab and repeat the visual checks: separated paths, horizontal building, distributed trees and no interaction panel. Use <strong>Render &rarr; Snapshot</strong> to export a still; its UI lets you pick an explicit image size. Compare it with the screenshot, not with a claim of success from an assistant.</p>
+	<p>This completes the scene with <strong>zero AI inference, speech synthesis or transcription</strong>. The code constructs geometry from inspected records and explicit numbers. No model chooses coordinates, invents a footprint, or decides whether verification passed.</p>
+	<p>The seven blocks were tested through the actual hosted Strata Shell in a fresh browser session: 31 top-level objects, two reloaded paths, a 6 m building, zero scene scripts and no model loaded. These checks complement, rather than replace, your own visual inspection.</p>
 
-	<h2>4. Give the model a closed vocabulary</h2>
+	<h2>Optional: use AI assistance without giving up verification</h2>
+	<p>An assistant can explain the projection, suggest a material, help find a record, or draft a code change. None of that is required above. Treat its output as a proposal to inspect, not evidence that the scene is correct.</p>
+	<div class="table-wrap">
+	<table>
+		<thead><tr><th>AI may help with</th><th>The human-verifiable acceptance check</th></tr></thead>
+		<tbody>
+			<tr><td>Find a source record</td><td>Open the original layer; verify ID, geometry type, coordinates and reuse terms against the pinned extract.</td></tr>
+			<tr><td>Explain or change the projection</td><td>Recalculate the origin and first test point in step 2; retain axes and metre units.</td></tr>
+			<tr><td>Draft geometry or layout changes</td><td>Read the code before running it; inspect dimensions, source IDs, segment counts and the reloaded saved file. Label new assumptions.</td></tr>
+			<tr><td>Automate repetitive editor actions</td><td>Review the proposed steps, watch them happen, inspect the scene tree and check undo. Do not equate automation with correctness.</td></tr>
+			<tr><td>Interpret a shade request</td><td>Show candidate IDs and raw model output; validate the proposed operation and target before applying it. A refusal must be visible, not staged.</td></tr>
+			<tr><td>Transcribe speech</td><td>Listen to the actual audio, compare its actual transcript and report errors. Do not silently correct a transcript to make a demonstration pass.</td></tr>
+		</tbody>
+	</table>
+	</div>
+	<pre><code>Help me review this human-built Mesa scene; do not build it for me.
+Use the source records and checks in this tutorial as acceptance criteria.
+Explain any proposed change and its evidence before I approve it.
+Do not invent source IDs, geometry, units, licences or successful checks.
+Do not run a model or speech tool unless I explicitly request that extension.
+For each change, show what I can inspect and how to undo it.
+Stop on a failed check; never replace it with a success-shaped fallback.</code></pre>
+	<p>The original project also has an optional, model-driven shade demo. That is an extension, not how the base scene must be built. It includes speech and an operation host; its additional tools are credited below.</p>
+	<details>
+	<summary>Optional extension: the original AI and speech interaction, with its checks and limitations</summary>
+	<h3>A. Give the model a closed vocabulary</h3>
 	<p>The host in <code>ops.mjs</code> enumerates tagged paths that are not hidden by their own or ancestor visibility and whose bounding boxes intersect the camera frustum. This is a <strong>frustum test, not an occlusion test</strong>. The panel shows the same candidates supplied to the model.</p>
 	<pre><code>shade.add(path, kind)      kind: canopy | sail | trees
 shade.width(value)         1 to 12 metres
@@ -165,7 +364,7 @@ heat.hide()</code></pre>
 	</ol>
 	<p>The host is deliberately conservative; the model does not invent a path or arbitrary geometry. A test with a stubbed model is useful for the host, but is not evidence that real inference or speech transcription worked.</p>
 
-	<h2>5. Connect the project panel to the editor</h2>
+	<h3>B. Connect the project panel to the editor</h3>
 	<p><code>panel.mjs</code> mounts an HTML overlay with the candidate list, transcript textarea, submit button, model output and elapsed inference time. It calls <code>host.hear()</code> with Strata's existing <code>editor.aiEngine.complete()</code>. It displays a named failure if no model is loaded.</p>
 	<p><code>install.mjs</code> connects the host to <code>editor.scene</code> and <code>editor.camera</code>. It imports Strata's existing <code>AddObjectCommand</code>, <code>RemoveObjectCommand</code> and <code>MultiCmdsCommand</code> so proposal changes participate in editor undo. It exposes the host as <code>window.flux</code> for automation.</p>
 	<p>The saved scene also embeds the host and panel in a scene lifecycle script for player execution. <strong>Opening the authoring scene link alone does not install its editor integration or a microphone pipeline.</strong> The rehearsal runner explicitly installs the authoring version into the browser session.</p>
@@ -191,7 +390,7 @@ await editor.evaluate( async code =&gt; new Function(
 )(), code );</code></pre>
 	<p>This small wrapper relies on these particular modules' layout; it is not a general JavaScript bundler. Only evaluate the reviewed, pinned project code. Clearing the demo scene avoids appending duplicate paths on reruns; save unrelated work first and do not accept a recovery prompt that restores an older scene.</p>
 
-	<h2>6. Bridge speech through browser automation</h2>
+	<h3>C. Bridge speech through browser automation</h3>
 	<pre><code>Dub tab: SRT -&gt; actual synthetic WAV
 Whisper tab: WAV -&gt; actual ASR transcript
 Playwright: delayed typing into the Strata panel
@@ -203,7 +402,7 @@ Project host: validation -&gt; refusal or undoable geometry edit</code></pre>
 	<pre><code>FLUX_BROWSER_CHANNEL=chrome node run.mjs --beat english --rehearse</code></pre>
 	<p>That is not the same as driving VS Code's shared integrated browser. If you want to record VS Code itself, ask Copilot to reuse the shared tabs and project implementation instead of launching this runner.</p>
 
-	<h2>7. Record the English interaction</h2>
+	<h3>D. Record the English interaction</h3>
 	<p>Share the Strata, Whisper and Dub browser tabs with Copilot, save unrelated editor work, then use this prompt. The agent should prepare first and wait while you start your own screen recorder.</p>
 	<pre><code>Drive the FutureFlux English demo using Playwright/browser tools in
 VS Code's existing shared integrated browser. I record VS Code myself.
@@ -243,7 +442,7 @@ interface, report the blocker rather than silently switching browsers.
 This is manual VS Code capture, not an OBS/1920x1080 acceptance claim.</code></pre>
 	<p>Do not tighten the take by speeding up inference or deleting the clarification delay. Earlier English rehearsals took about 49 seconds, not the aspirational fifteen. Recording a prepared clip through ASR is also not a live microphone demonstration.</p>
 
-	<h2>8. Keep the limitations visible</h2>
+	<h3>E. Keep the limitations visible</h3>
 	<ul>
 		<li><strong>English:</strong> genuine Dub-to-Whisper-to-model rehearsals passed. Their archived reports predate the scene export fix, so they prove speech and operations, not the old scene's visual correctness. The corrected export passed six tests and a hosted-browser geometry/visual check.</li>
 		<li><strong>Spanish:</strong> two real ASR attempts failed on the clarification. No transcript was corrected and no mistranscription alias was added. Spanish end-to-end remains blocked, and synthetic speech does not satisfy the original human-speech requirement.</li>
@@ -252,6 +451,7 @@ This is manual VS Code capture, not an OBS/1920x1080 acceptance claim.</code></p
 		<li><strong>Scope:</strong> one operator, no multiplayer, no headset capture and no quantified cooling claim.</li>
 	</ul>
 	<p>Keep the project's <a href="https://github.com/tejaswigowda/test1/blob/7859f88a593617c16cccd96dddc5f905850a6f59/demo/NOTES.md">live/staged notes</a>, <a href="https://github.com/tejaswigowda/test1/blob/7859f88a593617c16cccd96dddc5f905850a6f59/demo/PROVENANCE.md">provenance</a> and <a href="https://github.com/tejaswigowda/test1/blob/7859f88a593617c16cccd96dddc5f905850a6f59/demo/validation.json">validation evidence</a> with the footage. The valuable demonstration is not that an AI always acts: it is that the system can show its choices, refuse an unresolved instruction, and act after a real clarification.</p>
+	</details>
 
 <!-- credits:start -->
 	<section class="credits" id="credits">

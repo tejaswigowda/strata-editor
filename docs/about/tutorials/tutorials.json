@@ -1,11 +1,11 @@
 [
 	{
-		"title": "Build a GIS-grounded scene with a clarifying AI",
+		"title": "Build a GIS-grounded scene by hand",
 		"href": "gis-walkway-shade.html",
 		"group": "Scenes",
 		"thumb": "screenshots/thumbs/gis-walkway-shade.jpg",
-		"blurb": "Turn real mapped walkways into a representative site scene, constrain AI edits to named paths, and record a genuine clarification using speech and browser automation.",
-		"desc": "Reproduce the FutureFlux scene from Mesa GIS extracts, preserve transforms through JSON export, connect a project-specific operation panel to Strata, and bridge Dub and Whisper with Playwright without changing the editor.",
+		"blurb": "Build a Mesa site scene from mapped paths and a footprint with no AI: inspect the data, run deterministic Shell steps, verify the saved geometry, then optionally add human-checked AI assistance.",
+		"desc": "Seven complete JS Shell steps build the ground, footprint, walkways, trees, people, lighting and camera without a model. Each step has inspectable checks; optional AI assistance and the original speech demo are separate extensions.",
 		"embed": "#repo=tejaswigowda/test1&file=flux.json&commit=7859f88a593617c16cccd96dddc5f905850a6f59&play=false",
 		"contributors": [
 			{
