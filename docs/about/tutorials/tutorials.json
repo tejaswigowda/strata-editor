@@ -4,9 +4,9 @@
 		"href": "gis-walkway-shade.html",
 		"group": "Scenes",
 		"thumb": "screenshots/thumbs/gis-walkway-shade.jpg",
-		"blurb": "Build a Mesa site scene from mapped paths and a footprint with no AI: inspect the data, run deterministic Shell steps, verify the saved geometry, then optionally add human-checked AI assistance.",
-		"desc": "Seven complete JS Shell steps build the ground, footprint, walkways, trees, people, lighting and camera without a model. Each step has inspectable checks; optional AI assistance and the original speech demo are separate extensions.",
-		"embed": "#repo=tejaswigowda/test1&file=flux.json&commit=7859f88a593617c16cccd96dddc5f905850a6f59&play=false",
+		"blurb": "Build a Mesa site scene from mapped paths and a footprint without AI, add procedural finishes and cinematic lighting, and verify every saved result. AI assistance remains optional and human-checked.",
+		"desc": "Seven complete JS Shell steps build mapped geometry, seeded gravel, paving and stucco, warm key/cool fill lighting, softened shadows and an ACES camera look without a model. Each step has inspectable checks; optional AI and speech are separate extensions.",
+		"embed": "#repo=tejaswigowda/test1&file=flux.json&commit=7b9359e3b2226064e9852cbce5d2c721175957a1&play=false",
 		"contributors": [
 			{
 				"name": "Tejaswi Gowda",
