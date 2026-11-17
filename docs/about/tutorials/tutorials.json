@@ -1,5 +1,68 @@
 [
 	{
+		"title": "Build a GIS-grounded scene with a clarifying AI",
+		"href": "gis-walkway-shade.html",
+		"group": "Scenes",
+		"blurb": "Turn real mapped walkways into a representative site scene, constrain AI edits to named paths, and record a genuine clarification using speech and browser automation.",
+		"desc": "Reproduce the FutureFlux scene from Mesa GIS extracts, preserve transforms through JSON export, connect a project-specific operation panel to Strata, and bridge Dub and Whisper with Playwright without changing the editor.",
+		"embed": "#repo=tejaswigowda/test1&file=flux.json&commit=7859f88a593617c16cccd96dddc5f905850a6f59&play=false",
+		"contributors": [
+			{
+				"name": "Tejaswi Gowda",
+				"role": "script",
+				"url": "https://tejaswigowda.com/"
+			},
+			{
+				"name": "Tejaswi Gowda",
+				"role": "scene",
+				"url": "https://tejaswigowda.com/"
+			}
+		],
+		"assets": [
+			{
+				"name": "City of Mesa GIS paths, building footprint and center location",
+				"source": "https://gis.mesaaz.gov/mesaaz/rest/services?f=pjson",
+				"licence": "City of Mesa Data Terms of Use License Agreement; see the linked provenance",
+				"attribution": "City of Mesa GIS. Extracted 2026-11-16; projected to local metres, paths given assumed widths, footprint given an assumed height."
+			}
+		],
+		"tools": [
+			{
+				"name": "Three.js",
+				"licence": "MIT",
+				"url": "https://threejs.org/"
+			},
+			{
+				"name": "Playwright",
+				"licence": "Apache-2.0",
+				"url": "https://playwright.dev/"
+			},
+			{
+				"name": "dub.webcli.app",
+				"licence": "GPL-3.0",
+				"url": "https://dub.webcli.app/",
+				"note": "Separate browser app, not bundled with Strata. Test speech is synthetic."
+			},
+			{
+				"name": "Kokoro",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX"
+			},
+			{
+				"name": "whisper.webcli.app",
+				"licence": "not stated in the demo provenance; consult the app before redistributing its code",
+				"url": "https://whisper.webcli.app/",
+				"note": "Separate transcription app; its code is not copied into this tutorial."
+			},
+			{
+				"name": "Qwen2.5-Coder-1.5B-Instruct",
+				"licence": "Apache-2.0",
+				"url": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct",
+				"note": "The English rehearsal used Strata's Qwen2.5-Coder-1.5B-Instruct-q4f32_1-MLC model."
+			}
+		]
+	},
+	{
 		"title": "Make a Pythagorean-theorem short",
 		"href": "makeshort.html",
 		"group": "Animation and rendering",
