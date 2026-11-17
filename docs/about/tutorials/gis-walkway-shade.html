@@ -15,13 +15,13 @@
 <meta property="og:title" content="Build a GIS-grounded scene with a clarifying AI">
 <meta property="og:description" content="Turn real mapped walkways into a representative site scene, constrain AI edits to named paths, and record a genuine clarification using speech and browser automation.">
 <meta property="og:url" content="https://strataeditor.dev/about/tutorials/gis-walkway-shade.html">
-<meta property="og:image" content="https://strataeditor.dev/demo.png">
-<meta property="og:image:width" content="800">
-<meta property="og:image:height" content="435">
+<meta property="og:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/gis-walkway-shade.jpg">
+<meta property="og:image:width" content="640">
+<meta property="og:image:height" content="400">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Build a GIS-grounded scene with a clarifying AI">
 <meta name="twitter:description" content="Turn real mapped walkways into a representative site scene, constrain AI edits to named paths, and record a genuine clarification using speech and browser automation.">
-<meta name="twitter:image" content="https://strataeditor.dev/demo.png">
+<meta name="twitter:image" content="https://strataeditor.dev/about/tutorials/screenshots/thumbs/gis-walkway-shade.jpg">
 <!-- social:end -->
 <style>
 	:root { color-scheme: dark; }
@@ -33,6 +33,9 @@
 	h3 { font-size: 1.05rem; }
 	a { color: #7db2ff; }
 	.tagline { color: #9aa4b2; font-size: 1.05rem; }
+	figure { margin: 1.5em 0; }
+	figure img { display: block; width: 100%; height: auto; border: 1px solid #2a2e36; border-radius: 8px; box-sizing: border-box; }
+	figcaption { margin-top: .6em; color: #9aa4b2; font-size: .88rem; }
 	code { background: #1e2127; border-radius: 4px; padding: .1em .3em; font-size: .9em; }
 	pre { padding: 16px; overflow-x: auto; background: #1a1d23; border: 1px solid #2a2e36; border-radius: 8px; line-height: 1.5; }
 	pre code { padding: 0; background: none; }
@@ -53,6 +56,10 @@
 	<p>This is how the <strong>FutureFlux</strong> English demo was made at Red Mountain Multigenerational Center in Mesa, Arizona. The geometry can be reproduced without AI. The optional interaction uses Strata's existing AI engine, a project-specific panel, and browser automation across separate speech apps. It did not require a change to Strata's source.</p>
 	<p><a href="../../#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=7859f88a593617c16cccd96dddc5f905850a6f59&amp;play=false">Open the corrected, pinned scene</a> &middot;
 	<a href="https://github.com/tejaswigowda/test1/tree/7859f88a593617c16cccd96dddc5f905850a6f59/demo">Browse the matching implementation</a></p>
+	<figure>
+		<a href="screenshots/gis-walkway-shade.png"><img src="screenshots/gis-walkway-shade.png" alt="Overview of the mapped community-center footprint and two walkways, with representative trees and people" width="1920" height="1080"></a>
+		<figcaption>The corrected Mesa scene, captured with Strata's Snapshot tool: City of Mesa GIS footprint and path centerlines, with assumed height and widths and arranged context. No shade or heat result is shown. The tutorial thumbnail is a cropped, resized copy of this capture.</figcaption>
+	</figure>
 	<div class="note"><strong>What the example is not:</strong> a surveyed digital twin, a cooling simulation, a built-in microphone integration, or a completed recording. Path centerlines and the building footprint are sourced; widths, height, ground, trees, people and lighting are representative. Test speech is synthetic.</div>
 
 	<h2>1. Start from mapped paths, not invented geometry</h2>
