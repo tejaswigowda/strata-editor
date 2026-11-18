@@ -46,11 +46,13 @@ function PresentBar( editor ) {
 	timeLabel.className = 'present-time';
 	timeLabel.textContent = '00:00 / 00:00';
 	container.dom.appendChild( timeLabel );
+	const transport = [ playButton, stopButton, seek, timeLabel ];
+	for ( const control of transport ) control.hidden = true;
 
-	// Remix: drop back into the full editor on the SAME scene — reloads with
-	// `present`/`preview` (an alias — shared links have used both names)
-	// stripped from the hash (a hash-only change alone wouldn't re-run the
-	// app's boot-time hash loader, so it's followed by an explicit reload).
+	// Remix keeps the SAME scene, opening a new tab for opaque embeds where
+	// storage remains unavailable, otherwise reloading. Strip `present`/`preview`
+	// (an alias used in shared links) from the hash. A hash-only change would
+	// not re-run the app's boot-time hash loader.
 	// Every other param (repo/file/branch/play/...) is left untouched — a
 	// plain string filter, NOT a URLSearchParams round-trip, since
 	// re-serializing via URLSearchParams.toString() percent-encodes
@@ -66,11 +68,20 @@ function PresentBar( editor ) {
 			.split( '&' )
 			.filter( function ( pair ) { const key = pair.split( '=' )[ 0 ]; return key !== 'present' && key !== 'preview'; } )
 			.join( '&' );
-		window.location.hash = rest ? '#' + rest : '';
-		window.location.reload();
+		if ( editor.storageFree ) {
 
+			const url = new URL( window.location.href );
+			url.hash = rest;
+			window.open( url.href, '_blank', 'noopener,noreferrer' );
+
+		} else {
+
+			window.location.hash = rest ? '#' + rest : '';
+			window.location.reload();
+
+		}
 	} );
-	if ( ! editor.storageFree ) container.dom.appendChild( remixButton );
+	container.dom.appendChild( remixButton );
 
 	function setPlayingUI( playing ) {
 
@@ -115,6 +126,7 @@ function PresentBar( editor ) {
 	signals.timelinePlayheadUpdated.add( function ( info ) {
 
 		const duration = info.duration || 0;
+		for ( const control of transport ) control.hidden = duration <= 0;
 		seek.max = String( Math.max( duration, 0.01 ) );
 		setPlayingUI( !! info.playing );
 

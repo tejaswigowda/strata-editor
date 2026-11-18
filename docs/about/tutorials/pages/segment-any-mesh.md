@@ -10,7 +10,7 @@ image: asset:images/thumbs/segment-any-mesh.jpg
 
 # Cut any textured mesh into named parts
 
-<div class="wc-embed" title="Cut any textured mesh into named parts: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&amp;file=duck.json&amp;present=true">Open embed</a></div>
+<div class="wc-embed allow-popups" title="Cut any textured mesh into named parts: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&amp;file=duck.json&amp;present=true">Open embed</a></div>
 
 <p class="tagline">A model usually arrives as one mesh with one material, so nothing in the scene says &quot;this is the beak&quot;. The editor&#39;s <code>SEG</code> tool cuts such a mesh into separate named, classed meshes in one undo step, from the evidence the file carries: which pieces of the texture are separate patches, and what colours are painted on them. This page uses it three times: on an avocado, where the file practically labels itself; on a toy duck, where you have to read the evidence and decide; and on an animated fox, a skinned mesh, where the cut must leave the skeleton and its animations alone. It also says where the method stops. Built with the JS Shell.</p>
 

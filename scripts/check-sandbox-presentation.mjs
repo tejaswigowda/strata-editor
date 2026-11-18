@@ -30,7 +30,7 @@ const server = createServer( async ( req, res ) => {
 		res.writeHead( 200, { 'content-type': 'text/html' } );
 		return res.end( `<script>addEventListener('message', e => {
 			if (e.source === document.querySelector('iframe')?.contentWindow) window.presentation = e.data;
-		});</script><iframe sandbox="allow-scripts" width="560" height="320" src="${ sceneURL.replaceAll( '&', '&amp;' ) }"></iframe>` );
+		});</script><iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" width="560" height="320" src="${ sceneURL.replaceAll( '&', '&amp;' ) }"></iframe>` );
 
 	}
 
@@ -61,7 +61,7 @@ function probe() {
 	const errors = [];
 	addEventListener( 'error', e => errors.push( String( e.error || e.message || e.target?.src ) ), true );
 	addEventListener( 'unhandledrejection', e => errors.push( String( e.reason?.stack || e.reason ) ) );
-	const report = setInterval( () => {
+	const report = setInterval( async () => {
 
 		const canvas = document.querySelector( '#viewport > canvas[data-engine]' );
 		const overlay = document.querySelector( '#scene-load-overlay' );
@@ -73,6 +73,7 @@ function probe() {
 
 		}
 
+		clearInterval( report );
 		const denied = [ 'localStorage', 'sessionStorage' ].map( key => {
 
 			try { void self[ key ]; return 'accessible'; } catch ( e ) { return e.name; }
@@ -84,7 +85,21 @@ function probe() {
 		const ctx = copy.getContext( '2d' );
 		ctx.drawImage( canvas, 0, 0, 32, 32 );
 		const pixels = new Uint32Array( ctx.getImageData( 0, 0, 32, 32 ).data.buffer );
-		clearInterval( report );
+		const visibleTransport = () => [ ...document.querySelectorAll( '#present-bar button:not(.present-remix), #present-bar input, #present-bar .present-time' ) ]
+			.filter( node => getComputedStyle( node ).display !== 'none' ).length;
+		const staticControls = visibleTransport();
+		const clips = editor.scene.animations;
+		const settle = () => new Promise( resolve => requestAnimationFrame( () => requestAnimationFrame( resolve ) ) );
+		editor.scene.animations = [ ...( clips || [] ), new THREE.AnimationClip( 'Presentation regression', 2, [] ) ];
+		editor.signals.animationsChanged.dispatch();
+		await settle();
+		const animatedControls = visibleTransport();
+		const animatedMax = document.querySelector( '#present-bar input' ).max;
+		editor.scene.animations = clips;
+		editor.signals.animationsChanged.dispatch();
+		await settle();
+		const clearedControls = visibleTransport();
+		const remix = document.querySelector( '#present-bar .present-remix' ).getBoundingClientRect();
 		parent.postMessage( {
 			origin: self.origin, denied, scene: editor.scene.uuid,
 			walkway: !! editor.scene.getObjectByName( 'Walkway by the community center' ),
@@ -92,6 +107,8 @@ function probe() {
 			chrome: !! document.querySelector( '#sidebar, #menubar' ),
 			presentBar: getComputedStyle( document.querySelector( '#present-bar' ) ).display,
 			playOverlay: !! document.querySelector( '[title="Click outside the button to close"]' ),
+			staticControls, animatedControls, animatedMax, clearedControls,
+			remix: { x: remix.x + remix.width / 2, y: remix.y + remix.height / 2 },
 			errors
 		}, '*' );
 
@@ -181,9 +198,28 @@ try {
 	assert.equal( result.presentBar, 'flex' );
 	assert.equal( result.chrome, false );
 	assert.equal( result.playOverlay, false );
+	assert.equal( result.staticControls, 0 );
+	assert.equal( result.animatedControls, 4 );
+	assert.equal( result.animatedMax, '2' );
+	assert.equal( result.clearedControls, 0 );
 	assert.deepEqual( result.errors, [] );
 	assert.ok( ! errors.some( text => /SecurityError|Load failed|failed to load tejaswigowda/.test( text ) ), errors.join( '\n' ) );
 	console.log( 'Opaque iframe rendered pinned scene:', result );
+
+	const frame = await evaluate( 'document.querySelector("iframe").getBoundingClientRect().toJSON()' );
+	const point = { x: frame.x + 2 + result.remix.x, y: frame.y + 2 + result.remix.y };
+	await send( 'Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 } );
+	await send( 'Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 } );
+	const remixURL = base + sceneURL.replace( '&present=true', '' );
+	const popup = await until( async () => {
+
+		const { targetInfos } = await send( 'Target.getTargets' );
+		return targetInfos.find( target => target.type === 'page' && target.url === remixURL );
+
+	}, () => 'Remix to open the full editor in a new tab with the same pinned scene' );
+	assert.equal( popup.canAccessOpener, false );
+	await send( 'Target.closeTarget', { targetId: popup.targetId } );
+	console.log( 'Remix opened an isolated full-editor tab with the original scene parameters.' );
 
 	await send( 'Page.navigate', { url: `${ base }/` } );
 	await until( () => evaluate( '!!document.querySelector("#viewport > canvas[data-engine]") && !!window.editor?.work && !!document.querySelector("#menubar")' ), () => `authoring canvas: ${ errors.join( '\n' ) }` );

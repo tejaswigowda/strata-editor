@@ -10,7 +10,7 @@ image: asset:images/thumbs/projectile.jpg
 
 # A projectile: two motions, one path
 
-<div class="wc-embed" title="A projectile: two motions, one path: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&amp;file=projectile.json&amp;present=true">Open embed</a></div>
+<div class="wc-embed allow-popups" title="A projectile: two motions, one path: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&amp;file=projectile.json&amp;present=true">Open embed</a></div>
 
 <p class="tagline">A 79-second visual argument that the curve a thrown ball makes is two simple motions at once: sideways at a constant speed, and up and down under gravity. Each motion is shown alone (a shadow on the ground, a shadow on a pole), the camera orbits so you can look at either one by itself, and then they are put back together. The same two motions, with a different angle or speed, give a different curve. Built with the JS Shell, with exact physics.</p>
 

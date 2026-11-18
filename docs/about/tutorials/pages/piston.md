@@ -10,7 +10,7 @@ image: asset:images/thumbs/piston.jpg
 
 # A crank, a rod and a piston: crank-slider kinematics
 
-<div class="wc-embed" title="A crank, a rod and a piston: crank-slider kinematics: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&amp;file=piston.json&amp;present=true">Open embed</a></div>
+<div class="wc-embed allow-popups" title="A crank, a rod and a piston: crank-slider kinematics: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&amp;file=piston.json&amp;present=true">Open embed</a></div>
 
 <p class="tagline">A 103-second visual argument about the mechanism inside every piston engine: a crankshaft, a connecting rod and a piston, turned through one full revolution. The dead centers are labelled, the stroke is measured, and the changing mechanical advantage is drawn as a gold gap that shrinks to nothing at the dead centers and is largest near the middle of the stroke. Orbit cameras show the parts that a flat view hides. Built with the JS Shell, with exact kinematics.</p>
 

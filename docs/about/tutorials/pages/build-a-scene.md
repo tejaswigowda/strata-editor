@@ -10,7 +10,7 @@ image: asset:images/thumbs/build-a-scene.jpg
 
 # Build a night scene from scratch
 
-<div class="wc-embed" title="Build a night scene from scratch: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=bus-stop.json&amp;present=true">Open embed</a></div>
+<div class="wc-embed allow-popups" title="Build a night scene from scratch: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=bus-stop.json&amp;present=true">Open embed</a></div>
 
 <p class="tagline">No importing assets, no AI — just the JS Shell, a handful of reusable helper functions, and the Universal Timeline. This walks through the same workflow used to build &quot;Last Stop,&quot; a procedural night bus-stop scene: helpers → environment → a structure → night lighting → a moving object → a static hero camera → render. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 

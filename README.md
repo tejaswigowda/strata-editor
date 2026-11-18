@@ -74,7 +74,10 @@ the licensing of Strata or any credited assets.
 Run `node scripts/tutorial-policy.cjs lint` after changes to check the published
 catalogue links, metadata and preserved credit text and destinations.
 Embedded presentation mode loads public scenes without authoring persistence;
-the iframe remains `sandbox="allow-scripts"`. With `docs/` served locally, run
+the iframe remains opaque and cannot access storage. Tutorial embeds opt in to
+popup permissions so **Remix** opens the same pinned scene in a separate full-editor
+tab. Play, stop, seek and time controls appear only when animations are present.
+With `docs/` served locally, run
 `node scripts/check-sandbox-presentation.mjs http://127.0.0.1:5597/` to verify
 scene rendering in the sandbox and normal editor persistence outside it.
 

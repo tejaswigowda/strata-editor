@@ -539,6 +539,10 @@ body.present-mode #present-bar {
 	display: flex;
 }
 
+	#present-bar [hidden] {
+		display: none;
+	}
+
 	#present-bar button {
 		flex-shrink: 0;
 		width: 28px;
@@ -572,6 +576,7 @@ body.present-mode #present-bar {
 
 	#present-bar .present-remix {
 		flex-shrink: 0;
+		margin-inline-start: auto;
 		width: auto;
 		height: 28px;
 		padding: 0 14px;

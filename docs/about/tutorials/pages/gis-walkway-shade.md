@@ -18,7 +18,7 @@ Reconstruct the **FutureFlux** site at Red Mountain Multigenerational Center in 
 
 <p><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=7b9359e3b2226064e9852cbce5d2c721175957a1&amp;play=false">Open the cinematic, pinned scene</a> ·&#10;	<a href="https://github.com/tejaswigowda/test1/tree/7b9359e3b2226064e9852cbce5d2c721175957a1/demo">Browse the matching implementation</a></p>
 
-<div class="wc-embed" title="Interactive pinned Mesa walkway scene in Strata"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=7b9359e3b2226064e9852cbce5d2c721175957a1&amp;play=false&amp;present=true">Open embed</a></div>
+<div class="wc-embed allow-popups" title="Interactive pinned Mesa walkway scene in Strata"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=7b9359e3b2226064e9852cbce5d2c721175957a1&amp;play=false&amp;present=true">Open embed</a></div>
 
 The embed is the actual pinned Strata project, not a video. Orbit and inspect its scene tree, or use the full-size link above. It opens in authoring mode with timeline autoplay off; do not load a model or run the project's optional interaction script for the no-AI walkthrough. Use a separate, empty editor tab to build your own copy.
 
