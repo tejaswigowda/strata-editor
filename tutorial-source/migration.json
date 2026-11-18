@@ -1,0 +1,79 @@
+{
+  "staged": [
+    "animate-a-character.html",
+    "author-a-face.html",
+    "edit-captured-motion.html",
+    "make-your-own-metahuman.html",
+    "martial-arts-dojo.html",
+    "racing-circuit-scene.html",
+    "render-camera-sequence.html",
+    "segment-a-diorama.html",
+    "segment-a-scene.html",
+    "sparring-from-mocap.html",
+    "two-character-dance.html",
+    "vrm-restyle-explorer.html",
+    "wizard-hat-sculpt.html"
+  ],
+  "retained": [
+    {
+      "name": "a-plus-b-cubed.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "area-volume.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "bubble-shooter-scene.html",
+      "reason": "bad-html: a \"<\" that starts no tag (write &lt; for the character)"
+    },
+    {
+      "name": "build-a-scene.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "fight-arena-scene.html",
+      "reason": "bad-html: <a download> is not allowed"
+    },
+    {
+      "name": "gis-walkway-shade.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "hardy-weinberg.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "index.html",
+      "reason": "existing interactive index"
+    },
+    {
+      "name": "makeshort.html",
+      "reason": "existing native video"
+    },
+    {
+      "name": "molecule-shapes.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "paddle-table-view.html",
+      "reason": "bad-html: a \"<\" that starts no tag (write &lt; for the character)"
+    },
+    {
+      "name": "piston.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "projectile.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "segment-a-mesh.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    },
+    {
+      "name": "segment-any-mesh.html",
+      "reason": "existing interactive embed (sandbox parity not established)"
+    }
+  ]
+}

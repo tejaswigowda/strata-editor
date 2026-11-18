@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "title": "Strata tutorials",
+  "author": "Strata",
+  "description": "Hands-on Strata tutorials",
+  "domain": "https://strataeditor.dev",
+  "pagePermalink": "/{slug}.html"
+}
