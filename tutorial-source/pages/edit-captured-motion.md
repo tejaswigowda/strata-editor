@@ -5,7 +5,7 @@ status: published
 parent: tutorials
 ---
 
-<h1>Editing captured motion as data</h1>
+# Editing captured motion as data
 
 <p class="tagline">A two-performer capture runs <strong>170.17 s</strong> and has a <strong>53-second dead middle</strong>. Cut it to <strong>52.9 s</strong> with a few hundred bytes of edit list — the capture itself is never modified.</p>
 
@@ -19,7 +19,7 @@ parent: tutorials
 
 <pre><code>const sparring = $M.group('sparring', ['#a', '#b']);&#10;sparring.collision();      // baseline over the full capture</code></pre>
 
-<p>The baseline report says how close the two hips ever get on the floor. For the capture used here: <code>min 0.80 m</code>, never under the 0.6 m floor for non-contact sparring.</p>
+The baseline report says how close the two hips ever get on the floor. For the capture used here: `min 0.80 m`, never under the 0.6 m floor for non-contact sparring.
 
 <h2><span class="step">2</span> Find the exchanges</h2>
 
@@ -27,7 +27,7 @@ parent: tutorials
 
 <table>&#10;		<tr><th>#</th><th>in</th><th>out</th><th>dur</th><th>closest</th></tr>&#10;		<tr><td>E01</td><td>1.60</td><td>9.00</td><td>7.40 s</td><td>0.94 m</td></tr>&#10;		<tr><td>E02</td><td>14.60</td><td>22.10</td><td>7.50 s</td><td>0.96 m</td></tr>&#10;		<tr><td>E03</td><td>30.80</td><td>44.40</td><td>13.60 s</td><td>0.80 m</td></tr>&#10;		<tr><td>E04</td><td>97.50</td><td>103.40</td><td>5.90 s</td><td>1.11 m</td></tr>&#10;		<tr><td>E05</td><td>104.80</td><td>110.80</td><td>6.00 s</td><td>0.93 m</td></tr>&#10;		<tr><td>E06</td><td>113.70</td><td>117.60</td><td>3.90 s</td><td>1.08 m</td></tr>&#10;		<tr><td>E07</td><td>134.70</td><td>140.60</td><td>5.90 s</td><td>1.10 m</td></tr>&#10;		<tr><td>E08</td><td>158.40</td><td>161.10</td><td>2.70 s</td><td>1.17 m</td></tr>&#10;	</table>
 
-<p>That removes <strong>44.4 – 97.5 s (53.1 s)</strong> and keeps 52.9 s — 31% of the source.</p>
+That removes **44.4 – 97.5 s (53.1 s)** and keeps 52.9 s — 31% of the source.
 
 <h2><span class="step">3</span> Splice them</h2>
 
@@ -43,7 +43,7 @@ parent: tutorials
 
 <pre><code>console.log(sparring.collision());   // { min, minAt, ok, violations: [...], spans: [...] }&#10;sparring.collision({ floor: 0.6 }); // the default floor, in metres</code></pre>
 
-<p>For this cut: <code>ok: true</code>, no span under 0.6 m. The closest approach sits inside a blend window (0.74 m) — the blend interpolates the two performers' positions, so it can bring them closer than either source span does; the check is what tells you.</p>
+For this cut: `ok: true`, no span under 0.6 m. The closest approach sits inside a blend window (0.74 m) — the blend interpolates the two performers' positions, so it can bring them closer than either source span does; the check is what tells you.
 
 <h2><span class="step">5</span> Remap the cameras</h2>
 

@@ -5,7 +5,7 @@ status: published
 parent: tutorials
 ---
 
-<h1>Make your own MetaHuman</h1>
+# Make your own MetaHuman
 
 <p class="tagline">A <a href="https://www.unrealengine.com/metahuman">MetaHuman</a> is a photoreal rigged character — and <a href="https://github.com/creategamecharacters/metahuman-to-glb">metahuman-to-glb</a> is an open-source (MIT) pipeline that exports one from Unreal Engine 5.7 as a single web-ready <code>.glb</code> with all 51 ARKit face blendshapes. This tutorial loads one of its sample characters, Bruce, straight from the project's GitHub Pages URL, then makes him yours: no hair, a new skin tone and outfit, a smile posed from the blendshapes, selector-friendly classes on every part, and a still image from the Render tab. Open the <a href="../../">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
@@ -19,7 +19,7 @@ parent: tutorials
 
 <pre><code>const url = 'https://creategamecharacters.github.io/metahuman-to-glb/5.7/characters/bruce/bruce.glb';&#10;const blob = await (await fetch(url)).blob();&#10;editor.loader.loadFiles([new File([blob], 'bruce.glb', { type: 'model/gltf-binary' })]);</code></pre>
 
-<p>A progress banner shows reading, then parsing, and then the <strong>Import glTF</strong> dialog appears. Leave the defaults and click <strong>OK</strong> — geometry compression is for later, and see the note in step 7 before you turn it on for a rigged character.</p>
+A progress banner shows reading, then parsing, and then the **Import glTF** dialog appears. Leave the defaults and click **OK** — geometry compression is for later, and see the note in step 7 before you turn it on for a rigged character.
 
 <div class="note"><strong>Use <code>fetch</code>, not <code>fetchAPI</code>, for binary files.</strong> <code>fetchAPI</code> returns parsed JSON or text, which is right for APIs and wrong for a 80 MB model. Plain <code>fetch(...).blob()</code> keeps the bytes intact.</div>
 
@@ -29,7 +29,7 @@ parent: tutorials
 
 <pre><code>const rig = [];&#10;scene.traverse(o =&gt; { if (o.isMesh) rig.push(o.name + (o.isSkinnedMesh ? '  (skinned)' : '  (hair card)')); });&#10;rig;</code></pre>
 
-<p>You'll see the skinned <code>SKM_Bruce_FaceMesh_1…8</code> (skin, teeth, eyes, lashes), <code>SKM_Bruce_BodyMesh001</code>, the outfit pieces <code>Bruce_Outfits_1/2/3</code> (jacket, pants, shoes), and flat card meshes for <code>Hair_</code>, <code>Beard_</code>, <code>Mustache_</code> and <code>Eyebrows_</code>. The face also carries the 51 ARKit blendshapes:</p>
+You'll see the skinned `SKM_Bruce_FaceMesh_1…8` (skin, teeth, eyes, lashes), `SKM_Bruce_BodyMesh001`, the outfit pieces `Bruce_Outfits_1/2/3` (jacket, pants, shoes), and flat card meshes for `Hair_`, `Beard_`, `Mustache_` and `Eyebrows_`. The face also carries the 51 ARKit blendshapes:
 
 <pre><code>const face = scene.getObjectByName('SKM_Bruce_FaceMesh_1');&#10;Object.keys(face.morphTargetDictionary).length;   // 51&#10;Object.keys(face.morphTargetDictionary).slice(0, 5);&#10;// ['eyeBlinkLeft', 'eyeLookDownLeft', 'eyeLookInLeft', 'eyeLookOutLeft', 'eyeLookUpLeft']</code></pre>
 
@@ -47,7 +47,7 @@ parent: tutorials
 
 <pre><code>const restyle = (mesh, fn) =&gt; {&#10;  const edit = old =&gt; { const m = old.clone(); fn(m); old.dispose(); return m; };&#10;  mesh.material = Array.isArray(mesh.material) ? mesh.material.map(edit) : edit(mesh.material);&#10;};&#10;&#10;// Skin: tint only, keep the texture&#10;for (const n of ['SKM_Bruce_FaceMesh_1', 'SKM_Bruce_BodyMesh001']) {&#10;  restyle(scene.getObjectByName(n), m =&gt; m.color.set(0xb98a6c));&#10;}&#10;&#10;// Clothes: flat colour, no texture&#10;restyle(scene.getObjectByName('Bruce_Outfits_1'), m =&gt; { m.map = null; m.color.set(0x1b3a6b); m.roughness = 0.6; });  // jacket&#10;restyle(scene.getObjectByName('Bruce_Outfits_2'), m =&gt; { m.map = null; m.color.set(0x202428); m.roughness = 0.7; });  // pants&#10;restyle(scene.getObjectByName('Bruce_Outfits_3'), m =&gt; { m.map = null; m.color.set(0xf2f2f2); m.roughness = 0.5; });  // shoes</code></pre>
 
-<p>Change the hex values to change the person. Skin is the one to tune by eye: lighter tints read warmer under the default environment than they look as swatches.</p>
+Change the hex values to change the person. Skin is the one to tune by eye: lighter tints read warmer under the default environment than they look as swatches.
 
 <h2><span class="step">5</span> Pose the face with the ARKit blendshapes</h2>
 
@@ -55,7 +55,7 @@ parent: tutorials
 
 <pre><code>const express = (shape, value) =&gt; scene.traverse(o =&gt; {&#10;  const i = o.morphTargetDictionary?.[shape];&#10;  if (i !== undefined) o.morphTargetInfluences[i] = value;&#10;});&#10;&#10;express('mouthSmileLeft', 0.8);&#10;express('mouthSmileRight', 0.8);&#10;express('cheekSquintLeft', 0.4);&#10;express('cheekSquintRight', 0.4);&#10;express('browInnerUp', 0.3);</code></pre>
 
-<p>Other useful ones: <code>jawOpen</code>, <code>eyeBlinkLeft</code>/<code>eyeBlinkRight</code>, <code>mouthPucker</code>, <code>browDownLeft</code>, <code>eyeLookUpLeft</code>. Because they're ordinary morph target influences, the Universal Timeline can keyframe them like any other number — a blink or a talking mouth is just a short clip.</p>
+Other useful ones: `jawOpen`, `eyeBlinkLeft`/`eyeBlinkRight`, `mouthPucker`, `browDownLeft`, `eyeLookUpLeft`. Because they're ordinary morph target influences, the Universal Timeline can keyframe them like any other number — a blink or a talking mouth is just a short clip.
 
 <h2><span class="step">6</span> Tag the parts with classes</h2>
 
@@ -69,7 +69,7 @@ parent: tutorials
 
 <pre><code>const cam = editor.camera;&#10;cam.position.set(0.35, 1.68, 1.15);&#10;cam.lookAt(0, 1.52, 0);&#10;editor.controls.center.set(0, 1.52, 0);&#10;editor.signals.cameraChanged.dispatch(cam);</code></pre>
 
-<p>Now open the <strong>Render</strong> tab. The <strong>Snapshot</strong> section at the top renders the scene once, offscreen, with no grid, gizmos or skeleton lines: pick <strong>Current view</strong>, a size (1280 × 720 for the picture above), <strong>PNG</strong>, and press <strong>Take Snapshot</strong>. It downloads the file and leaves a preview with <em>Download again</em> and <em>Copy to clipboard</em> buttons under it. Tick <strong>Transparent</strong> for a cut-out with no background.</p>
+Now open the **Render** tab. The **Snapshot** section at the top renders the scene once, offscreen, with no grid, gizmos or skeleton lines: pick **Current view**, a size (1280 × 720 for the picture above), **PNG**, and press **Take Snapshot**. It downloads the file and leaves a preview with _Download again_ and _Copy to clipboard_ buttons under it. Tick **Transparent** for a cut-out with no background.
 
 <div class="note"><strong>Don't compress a rigged character on import.</strong> The Import glTF dialog's geometry options include <em>Simplify mesh</em>. Strata skips that step for skinned meshes and ones with morph targets (it would otherwise strip the skin weights and blendshapes), so on a MetaHuman it does nothing useful — and quantizing normals only helps non-skinned meshes. Leave compression off here.</div>
 
@@ -79,7 +79,7 @@ parent: tutorials
 
 <pre class="customize-spec"><code>{ "customize": [ { "ops": [&#10;  { "op": "hide",       "target": "part:hair",    "optional": true },&#10;  { "op": "hide",       "target": "part:beard",   "optional": true },&#10;  { "op": "tint",       "target": "part:skin",    "color": "#b98a6c" },&#10;  { "op": "recolor",    "target": "part:shirt",   "color": "#1b3a6b", "roughness": 0.6 },&#10;  { "op": "recolor",    "target": "part:bottom",  "color": "#202428", "roughness": 0.7 },&#10;  { "op": "recolor",    "target": "part:shoes",   "color": "#f2f2f2", "roughness": 0.5 },&#10;  { "op": "blendshape", "shapes": { "mouthSmileLeft": 0.8, "mouthSmileRight": 0.8, "cheekSquintLeft": 0.4, "cheekSquintRight": 0.4, "browInnerUp": 0.3 } },&#10;  { "op": "tag",        "target": "part:skin",    "classes": ["skin"] }&#10;] } ] }</code></pre>
 
-<p>Paste it into the Customize tab's <strong>Spec</strong> box and press <strong>Apply spec</strong>, or hand it to <code>runCustomizeStage(scene, spec)</code> from <code>customize/customizeOps.js</code>. <code>"optional": true</code> skips an op when the character has no such part (Ada has no beard), so one spec serves both.</p>
+Paste it into the Customize tab's **Spec** box and press **Apply spec**, or hand it to `runCustomizeStage(scene, spec)` from `customize/customizeOps.js`. `"optional": true` skips an op when the character has no such part (Ada has no beard), so one spec serves both.
 
 <div class="note"><strong>Why it can only do these things.</strong> Every op here leaves the vertex set, the skin weights and the skeleton alone, which is what keeps the body skeleton and the 51 face morph targets working: the customized character still bakes and animates exactly as before (the tab shows a fingerprint of the rig and refuses to finish a run that changed it). Geometry edits, bone edits, swapping the body mesh, and <em>adding</em> a jacket or dress are therefore not customize ops — the spec validator rejects them. A rigid accessory such as sunglasses is allowed because it is parented to a bone; a new deformable garment must be skinned to the body first (the tab's <em>Skin selected garment to body</em> rig step), otherwise it z-fights and stays put when the character moves. Recoloring the clothing the character already has is the cheap, safe wardrobe.</div>
 

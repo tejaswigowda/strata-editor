@@ -84,7 +84,7 @@
 <h2 id="4-check-for-collisions"><span class="step">4</span> Check for collisions <a class="anchor" href="#4-check-for-collisions" aria-label="Link to this section">#</a></h2>
 <p class="lede">No renderer will warn you that the fighters now overlap. The collision report measures the hip-to-hip floor distance over the <em>edited</em> timeline and flags every span under the floor:</p>
 <pre><code>console.log(sparring.collision());   // { min, minAt, ok, violations: [...], spans: [...] }&#10;sparring.collision({ floor: 0.6 }); // the default floor, in metres</code></pre>
-<p>For this cut: <code>ok: true</code>, no span under 0.6 m. The closest approach sits inside a blend window (0.74 m) — the blend interpolates the two performers' positions, so it can bring them closer than either source span does; the check is what tells you.</p>
+<p>For this cut: <code>ok: true</code>, no span under 0.6 m. The closest approach sits inside a blend window (0.74 m) — the blend interpolates the two performers&#39; positions, so it can bring them closer than either source span does; the check is what tells you.</p>
 <h2 id="5-remap-the-cameras"><span class="step">5</span> Remap the cameras <a class="anchor" href="#5-remap-the-cameras" aria-label="Link to this section">#</a></h2>
 <p class="lede">Shots authored against the 170 s source need the new timebase. <code>remapShots()</code> keeps every event that lies wholly inside one kept span, moves it to the cut's clock, and drops (and reports) the rest:</p>
 <pre><code>const r = sparring.remapShots();&#10;r.kept; r.dropped;          // what survived the cut&#10;editor.timeline.duration;   // 52.9</code></pre>

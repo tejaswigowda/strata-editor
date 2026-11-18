@@ -5,7 +5,7 @@ status: published
 parent: tutorials
 ---
 
-<h1>Authoring a face: gaze and idle</h1>
+# Authoring a face: gaze and idle
 
 <p class="tagline">Two characters watch each other for 53 seconds. Most of the acting is <strong>where they look</strong> and <strong>not looking dead</strong> — both are timeline data you can edit.</p>
 
@@ -19,7 +19,7 @@ parent: tutorials
 
 <pre><code>const A = $S('#a'), B = $S('#b');&#10;A.gaze(0, '#b', { duration: 0 });&#10;B.gaze(0, '#a', { duration: 0 });</code></pre>
 
-<p>Eyes and head are separate. The <code>head</code> weight (default 0.35) is the share of the aim the head takes — <code>0</code> is a glance, higher is a turn. When the target changes, the <strong>eyes lead and the head lags</strong>: it starts 0.1 s later and takes 40% longer to arrive. Past about ±30° the eyes stop at their anatomical limit and the head takes the rest, so a target behind a character becomes a head turn, never doll eyes.</p>
+Eyes and head are separate. The `head` weight (default 0.35) is the share of the aim the head takes — `0` is a glance, higher is a turn. When the target changes, the **eyes lead and the head lags**: it starts 0.1 s later and takes 40% longer to arrive. Past about ±30° the eyes stop at their anatomical limit and the head takes the rest, so a target behind a character becomes a head turn, never doll eyes.
 
 <h2><span class="step">2</span> Look away between exchanges</h2>
 
@@ -27,7 +27,7 @@ parent: tutorials
 
 <pre><code>for (const t of [6.4, 14.2, 28, 34.4, 40.2, 44.1])&#10;  A.gaze(t, 'away', { duration: 250, head: 0.2 }).gaze(t + 0.9, '#b', { duration: 300 });&#10;for (const t of [6.9, 14.7, 28.6, 34.9, 40.6, 44.6])&#10;  B.gaze(t, 'away', { duration: 250, head: 0.2 }).gaze(t + 0.9, '#a', { duration: 300 });&#10;&#10;A.gazeKeys();      // [{ index, time, target, head, duration, easing, label }]</code></pre>
 
-<p>Measured on a real 52.9 s cut: wherever the other fighter is inside the eyes' range, the eyes sit within about 1° of that fighter's head, and sampling the whole face costs about 0.6 ms per frame.</p>
+Measured on a real 52.9 s cut: wherever the other fighter is inside the eyes' range, the eyes sit within about 1° of that fighter's head, and sampling the whole face costs about 0.6 ms per frame.
 
 <h2><span class="step">3</span> Don't look dead: the idle layer</h2>
 
@@ -43,7 +43,7 @@ parent: tutorials
 
 <pre><code>A.face.keyAt(20, { shapes: { browInnerUp: 1, eyeWideLeft: 1, eyeWideRight: 1 }, duration: 0 });   // snap to alarm&#10;A.face.keyAt(24, { shapes: { browInnerUp: 0, eyeWideLeft: 0, eyeWideRight: 0 }, duration: 2000, easing: 'ease-in-out' });   // slow fall&#10;&#10;B.face.applyPreset('focus', 30, { duration: 500, hold: true });   // a held beat&#10;A.face.keys();       // the explicit per-shape keys — a preset is never stored, only its values</code></pre>
 
-<p>A <strong>preset expands to explicit keys</strong> you can then edit, move or delete (<code>moveKey(i, …)</code>, <code>deleteKey(i)</code>).</p>
+A **preset expands to explicit keys** you can then edit, move or delete (`moveKey(i, …)`, `deleteKey(i)`).
 
 <h2><span class="step">5</span> The same keys in the GUI</h2>
 
@@ -53,7 +53,7 @@ parent: tutorials
 
 <pre><code>console.log(A.face.asCommand());    // the commands that rebuild this face byte for byte&#10;console.log(B.face.asCommand());</code></pre>
 
-<p>Same keys, same face, every run — no viewport needed, so an agent can author a performance deterministically. Morph weights, and the eye and head rotations, are baked into a glTF export by running the real sampler, so the file matches what you saw.</p>
+Same keys, same face, every run — no viewport needed, so an agent can author a performance deterministically. Morph weights, and the eye and head rotations, are baked into a glTF export by running the real sampler, so the file matches what you saw.
 
 <div class="note"><strong>Honest scope.</strong> This is for stylized targets and for the face you want to <em>author</em>. Speech (audio-derived mouth shapes) is not built. And if a character's face was reshaped to a photo by Face bind, its morph targets are carried through that reshape untouched, so authored expressions on a strongly reshaped face are approximate — see the <a href="../../../guides/FACE_TRACK.md">authored-face guide</a> for the measured numbers.</div>
 

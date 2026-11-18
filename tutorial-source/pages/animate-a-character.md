@@ -5,7 +5,7 @@ status: published
 parent: tutorials
 ---
 
-<h1>Animate a finished character</h1>
+# Animate a finished character
 
 <p class="tagline">One character, two baked clips and a timeline. Read what the file carries, start the body on cue, keep a camera on a character who walks, and check every claim by sampling the pose at a time and reading the numbers. It also says plainly where this scene stopped working.</p>
 
@@ -23,7 +23,7 @@ parent: tutorials
 
 <pre><code>1</code></pre>
 
-<p>(End the line with the count: <code>tagClass</code> on its own returns the whole object, and the Shell prints all of it.)</p>
+(End the line with the count: `tagClass` on its own returns the whole object, and the Shell prints all of it.)
 
 <h2><span class="step">2</span> Read what the file carries</h2>
 
@@ -35,7 +35,7 @@ parent: tutorials
 
 <table class="cuts">&#10;		<tr><th>Animation</th><th>What it is</th></tr>&#10;		<tr><td>Timeline</td><td>The scene's own clock (35.1 s), with no tracks of its own: the timeline in step 3 drives the other two.</td></tr>&#10;		<tr><td>test</td><td>The <strong>body</strong>: 994 keys at 30 frames a second over 33.1 s, on 118 rotation tracks (one per bone) and one position track (the hips, <code>J_Bip_C_Hips</code>). The hips position is the character's root motion: she does not dance on the spot.</td></tr>&#10;		<tr><td>testface</td><td>The <strong>face</strong>: 346 keys over 11.5 s, as one morph-weight track on each of the nine face meshes. Each mesh has 124 morph targets, the VRoid expressions (<code>Fcl_MTH_A</code>, <code>Fcl_EYE_Close</code>, …) and the 52 ARKit names (<code>jawOpen</code>, <code>mouthSmileLeft</code>, <code>eyeBlinkLeft</code>, …). The clip moves 44 of the 124 by more than 0.05.</td></tr>&#10;	</table>
 
-<p>The file is named <code>…_2-tracks.glb</code>: two tracks, the body and the face. They are baked data, and Strata does not edit their keys. What you author is <em>control</em>: which clip, when, how fast, and what lies over it.</p>
+The file is named `…_2-tracks.glb`: two tracks, the body and the face. They are baked data, and Strata does not edit their keys. What you author is _control_: which clip, when, how fast, and what lies over it.
 
 <h2><span class="step">3</span> The timeline is two events</h2>
 
@@ -45,17 +45,17 @@ parent: tutorials
 
 <pre><code>[["#test",[[2,"play",33.1]]],["#testface",[[0,"play",11.5]]]]</code></pre>
 
-<p>The body starts at 2 s and the face at 0. To see what that does, <code>holdTimelineAt(t)</code> jumps the whole scene to <code>t</code> seconds, and then the bones and the morph weights can be read like any other property. Run it at a few times and read the hips, one upper-arm bone and the total morph weight on the face:</p>
+The body starts at 2 s and the face at 0. To see what that does, `holdTimelineAt(t)` jumps the whole scene to `t` seconds, and then the bones and the morph weights can be read like any other property. Run it at a few times and read the hips, one upper-arm bone and the total morph weight on the face:
 
 <pre><code>holdTimelineAt(6); JSON.stringify([scene.getObjectByName('J_Bip_C_Hips').position, scene.getObjectByName('J_Bip_R_UpperArm').quaternion].map(v =&gt; v.toArray().map(x =&gt; +x.toFixed(3))))</code></pre>
 
 <pre><code>[[-0.766,0.82,-1.069],[-0.167,0.511,-0.363,0.761]]</code></pre>
 
-<p>The same reading at eight times (measured on this scene; the face column is the sum of the absolute morph weights on the first face mesh, <code>Facebaked_custom</code>):</p>
+The same reading at eight times (measured on this scene; the face column is the sum of the absolute morph weights on the first face mesh, `Facebaked_custom`):
 
 <table class="cuts">&#10;		<tr><th>t (s)</th><th>hips (x, y, z)</th><th>arm quaternion</th><th>face</th></tr>&#10;		<tr><td>0</td><td>−0.397, 0.848, −0.577</td><td>0.027, 0.149, −0.306, 0.940</td><td>9.573</td></tr>&#10;		<tr><td>1.9</td><td>−0.397, 0.848, −0.577</td><td>0.027, 0.149, −0.306, 0.940</td><td>4.751</td></tr>&#10;		<tr><td>2</td><td>−0.397, 0.848, −0.577</td><td>0.027, 0.149, −0.306, 0.940</td><td>9.358</td></tr>&#10;		<tr><td>6</td><td>−0.766, 0.820, −1.069</td><td>−0.167, 0.511, −0.363, 0.761</td><td>12.896</td></tr>&#10;		<tr><td>11.4</td><td>−0.794, 0.795, −1.123</td><td>−0.074, 0.627, −0.463, 0.622</td><td>4.483</td></tr>&#10;		<tr><td>11.6</td><td>−0.827, 0.828, −1.128</td><td>−0.083, 0.622, −0.488, 0.607</td><td>5.493</td></tr>&#10;		<tr><td>20</td><td>−0.031, 0.824, 0.046</td><td>−0.156, 0.600, −0.459, 0.636</td><td>5.493</td></tr>&#10;		<tr><td>35.1</td><td>−1.316, 0.809, −0.023</td><td>−0.162, 0.595, −0.496, 0.611</td><td>5.493</td></tr>&#10;	</table>
 
-<p>Two things in the table are the point of this page:</p>
+Two things in the table are the point of this page:
 
 <ol class="steps">&#10;		<li><strong>The body holds its first pose for two seconds.</strong> The hips and the arm are identical at 0, 1.9 and 2, then move. Before a clip's first <code>play</code> it holds its first frame, so a character that should be moving from the first frame of the render is standing still for 2 s.</li>&#10;		<li><strong>The face stops at 11.5 s.</strong> The face column changes up to 11.4 s and is then 5.493 at 11.6, 20 and 35.1: the clip has ended and holds its last frame, while the body carries on for another 23.6 s with a frozen face.</li>&#10;	</ol>
 
@@ -65,21 +65,21 @@ parent: tutorials
 
 <pre><code>$S('#test').at(0).play('test')</code></pre>
 
-<p>This does not move the clip's event: it <strong>adds a second one</strong>. The timeline now has <code>play</code> events for <code>test</code> at 2 s and at 0 s, and the two fight. Sampling the arm shows it: at 1 s it moves, and at 2 s it is back at the first pose (<code>0.027, 0.149, −0.306, 0.940</code>), because the event at 2 s restarted the clip. Undo it (<strong>Undo</strong>, or <code>undo()</code>), then move the event that is already there, by its id:</p>
+This does not move the clip's event: it **adds a second one**. The timeline now has `play` events for `test` at 2 s and at 0 s, and the two fight. Sampling the arm shows it: at 1 s it moves, and at 2 s it is back at the first pose (`0.027, 0.149, −0.306, 0.940`), because the event at 2 s restarted the clip. Undo it (**Undo**, or `undo()`), then move the event that is already there, by its id:
 
 <pre><code>editor.timeline.moveEvent(editor.timeline.tracks[0].events[0].id, 0)</code></pre>
 
 <pre><code>true</code></pre>
 
-<p>(<code>tracks[0]</code> is the <code>#test</code> track here; the event is the purple block on that row of the <strong>Animations</strong> tab, which you can drag instead.) <strong>This edit is not on the Undo stack</strong> (checked: the undo count did not change, and <strong>Undo</strong> afterwards took back the <code>tagClass</code> of step 1 and left the event at 0), so reload the scene to get the original timing back. Sampling again, the arm is at its first pose at 0 s and has moved by 1 s and by 2 s, with no reset:</p>
+(`tracks[0]` is the `#test` track here; the event is the purple block on that row of the **Animations** tab, which you can drag instead.) **This edit is not on the Undo stack** (checked: the undo count did not change, and **Undo** afterwards took back the `tagClass` of step 1 and left the event at 0), so reload the scene to get the original timing back. Sampling again, the arm is at its first pose at 0 s and has moved by 1 s and by 2 s, with no reset:
 
 <figure class="pair narrow">&#10;		<div><img src="screenshots/char-timeline-before.png" alt="The Animations tab before the move: the body block starts later than the face block."><figcaption>Before</figcaption></div>&#10;		<div><img src="screenshots/char-timeline-after.png" alt="The Animations tab after the move: both blocks start at the left edge, and the duration readout has dropped to 33.099 seconds."><figcaption>After <code>moveEvent(…, 0)</code>: both clips start at 0 and the readout is 00:33.099.</figcaption></div>&#10;	</figure>
 
-<p><strong>The panel does not redraw by itself.</strong> A screenshot taken right after <code>moveEvent</code> still showed the block at 2 s and the old duration; zooming or pressing <strong>Fit</strong> redrew it. The move had happened (the arm samples in the table above are from after it), so redraw before you trust what you see. The duration is not a separate step: it fell from 35.099 s to 33.099 s because the timeline's length follows its last event.</p>
+**The panel does not redraw by itself.** A screenshot taken right after `moveEvent` still showed the block at 2 s and the old duration; zooming or pressing **Fit** redrew it. The move had happened (the arm samples in the table above are from after it), so redraw before you trust what you see. The duration is not a separate step: it fell from 35.099 s to 33.099 s because the timeline's length follows its last event.
 
 <table class="cuts">&#10;		<tr><th>t (s)</th><th>arm quaternion, body event at 0</th></tr>&#10;		<tr><td>0</td><td>0.027, 0.149, −0.306, 0.940</td></tr>&#10;		<tr><td>1</td><td>−0.258, 0.428, −0.421, 0.757</td></tr>&#10;		<tr><td>2</td><td>−0.141, 0.605, −0.533, 0.575</td></tr>&#10;	</table>
 
-<p><code>.play()</code> takes the other controls too, and each adds its own event: <code>{ speed: 0.5 }</code> makes the event 66.2 s long (the clip at half speed), and <code>{ loop: true }</code> keeps the 33.1 s. Use them on a clip you have removed or not yet placed, not on top of the one already there.</p>
+`.play()` takes the other controls too, and each adds its own event: `{ speed: 0.5 }` makes the event 66.2 s long (the clip at half speed), and `{ loop: true }` keeps the 33.1 s. Use them on a clip you have removed or not yet placed, not on top of the one already there.
 
 <h2><span class="step">5</span> The face: what the clip leaves, and a warning</h2>
 
@@ -87,7 +87,7 @@ parent: tutorials
 
 <table class="cuts">&#10;		<tr><th>t (s)</th><th>mouthSmileLeft</th><th>eyeBlinkLeft</th></tr>&#10;		<tr><td>10</td><td>0.509</td><td>0.688</td></tr>&#10;		<tr><td>13.9</td><td>0.764</td><td>0.431</td></tr>&#10;		<tr><td>14.7</td><td>0.800</td><td>0.431</td></tr>&#10;		<tr><td>20</td><td>0.800</td><td>0.431</td></tr>&#10;	</table>
 
-<p>The key took the smile from the clip's last value to 0.8; <code>eyeBlinkLeft</code>, which the key did not name, stayed at the clip's last value, 0.431, to the end of the take.</p>
+The key took the smile from the clip's last value to 0.8; `eyeBlinkLeft`, which the key did not name, stayed at the clip's last value, 0.431, to the end of the take.
 
 <div class="note"><strong>Do not paste face edits into this scene yet.</strong> They are not offered here as a recipe because they <strong>hung the browser tab</strong> on this character: of five attempts (<code>face.keyAt</code> twice on the long class and once on a short class, <code>face.idle({ seed: 7 })</code> twice), four froze the tab until the browser killed its renderer, and only the smile above finished. Camera and clip edits (steps 4 and 6) did not do this. The cause is not known; it may be specific to a character whose face morphs are driven by a baked clip. If you try it, save first and expect to lose the tab.</div>
 
@@ -99,13 +99,13 @@ parent: tutorials
 
 <pre><code>… a promise: its result is shown when it settles&#10;✨ Scene updated — 15 commands executed</code></pre>
 
-<p>Fifteen keys (the first lands at 0.001 s), one undo step each, and the camera never leaves its position. Check the aim the same way as the body: sample the scene, and measure the angle between the camera's forward direction and the direction from the camera to the hips at chest height:</p>
+Fifteen keys (the first lands at 0.001 s), one undo step each, and the camera never leaves its position. Check the aim the same way as the body: sample the scene, and measure the angle between the camera's forward direction and the direction from the camera to the hips at chest height:
 
 <figure class="pair">&#10;		<div><img src="screenshots/char-camera-static.png" alt="The viewport through the render camera at 17.5 seconds with no camera keys: the character is at the far right edge of the frame and the rest of the frame is empty."><figcaption>17.5 s, before the loop: the camera has not moved, and she is at the right edge.</figcaption></div>&#10;		<div><img src="screenshots/char-camera-tracked.png" alt="The same moment after the camera keys: the character is in the middle of the frame."><figcaption>17.5 s, after the fifteen keys: the same moment, with her in the middle.</figcaption></div>&#10;	</figure>
 
 <pre><code>t (s)         0.5  1.25    2   3.75     6   8.75    13  16.25    20  26.25    28    33    35&#10;off aim (°)   0.6   1.5  2.3   2.1   1.8   1.2   0.4   12.5     0    1.2   1.5   1.3     0</code></pre>
 
-<p>The camera is within 2.3° of her at twelve of the thirteen times, and 12.5° off at 16.25 s, between the keys at 15 and 17.5 s: the hips move faster there than a straight turn between two keys follows. Add a key (<code>$S('#cam-render').keyAt(16.25, { lookAt: [x, 1.0, z] })</code> with the hips at that time) or sample every second in the loop. <code>$S('#cam-render').keys()</code> lists the keys and <code>.smooth(true)</code> plays them as one curve; <a href="../../../guides/CAMERA_PATHS.md">Editing camera moves by hand</a> has the one-click moves.</p>
+The camera is within 2.3° of her at twelve of the thirteen times, and 12.5° off at 16.25 s, between the keys at 15 and 17.5 s: the hips move faster there than a straight turn between two keys follows. Add a key (`$S('#cam-render').keyAt(16.25, { lookAt: [x, 1.0, z] })` with the hips at that time) or sample every second in the loop. `$S('#cam-render').keys()` lists the keys and `.smooth(true)` plays them as one curve; [Editing camera moves by hand](../../../guides/CAMERA_PATHS.md) has the one-click moves.
 
 <h2><span class="step">7</span> Render it</h2>
 

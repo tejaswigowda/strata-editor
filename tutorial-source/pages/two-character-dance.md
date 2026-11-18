@@ -5,7 +5,7 @@ status: published
 parent: tutorials
 ---
 
-<h1>One dance, two characters</h1>
+# One dance, two characters
 
 <img width="100%" src="./screenshots/1dance.gif" alt="Two characters dancing on a white stage">
 
@@ -21,7 +21,7 @@ parent: tutorials
 
 <ol class="steps">&#10;		<li>Go to <a href="https://www.mixamo.com">mixamo.com</a> and sign in with your Adobe ID (free).</li>&#10;		<li>Open the <strong>Characters</strong> tab and pick <strong>The Boss</strong>.</li>&#10;		<li>Press <strong>Download</strong>. Choose format <strong>FBX Binary (.fbx)</strong> and pose <strong>T-pose</strong>, then download and save the file as <code>boss.fbx</code>.</li>&#10;	</ol>
 
-<p>Mixamo's menus change from time to time, so the labels above may read a little differently — what matters is the character as a rigged <code>.fbx</code> in a T-pose.</p>
+Mixamo's menus change from time to time, so the labels above may read a little differently — what matters is the character as a rigged `.fbx` in a T-pose.
 
 <div class="note"><strong>Want a different dance?</strong> You don't have to use Mixamo's motions. bodyrig-webCLI accepts BVH, FBX or GLB for the animation, and it ships a 33-second sample, <a href="http://tejaswigowda.com/bodyrig-webCLI/samples/mocap-33s.bvh">mocap-33s.bvh</a>, that this tutorial uses. If you'd rather pick one from Mixamo, open its <strong>Animations</strong> tab, choose a dance, and download it as FBX with skin set to <strong>Without Skin</strong>; the tool reads animation-only FBX files too.</div>
 
@@ -39,27 +39,27 @@ parent: tutorials
 
 <figure>&#10;		<img src="screenshots/bodyrig-bruce.png" alt="bodyrig-webCLI with bruce.glb loaded as the character and mocap-33s as the animation track, the status bar reading Done: bruce_mocap-33s.glb, and Bruce dancing in the preview.">&#10;		<figcaption>bodyrig-webCLI after baking Bruce: character and motion chips on the left, the finished GLB playing in the preview on the right.</figcaption>&#10;	</figure>
 
-<p>Because both characters were baked from the same motion file, they are <strong>two different sources mapped natively into Strata</strong> by one tool: the animation clip in each GLB has the same name, <code>mocap-33s</code>, and the same 33.1-second length — which is exactly what lets The Boss copy Bruce later with a plain time offset.</p>
+Because both characters were baked from the same motion file, they are **two different sources mapped natively into Strata** by one tool: the animation clip in each GLB has the same name, `mocap-33s`, and the same 33.1-second length — which is exactly what lets The Boss copy Bruce later with a plain time offset.
 
 <div class="note"><strong>It's a CLI in a page.</strong> Every control is just a command in the box under <em>Command</em>: after dropping the files, <code>bake --fps 30</code> is what the button runs. Useful flags are <code>--foot-lock</code> (pin planted feet with IK), <code>--loop</code> (close the cycle), <code>--in-place</code> and <code>--trim 2:20</code> (seconds). Run <code>help</code> to see them all. For a MetaHuman, leave <strong>Align reference pose</strong> ticked — it is what makes the A-pose Bruce and the T-pose Boss follow the same motion.</div>
 
 <div class="note"><strong>Skip the dragging for Bruce.</strong> The tool also reads a deep link, so you can bake him straight from his URL: <code>http://tejaswigowda.com/bodyrig-webCLI/?character=&lt;bruce URL&gt;&amp;motion=&lt;motion URL&gt;&amp;run=bake</code> (URL-encode the two values). Add <code>--hide Outfits</code> to the command to leave the clothes out of the bake if you only want the bare body.</div>
 
-<p>The GLBs are <a href="https://github.com/zeux/meshoptimizer">meshopt</a>-compressed to keep them small (Bruce comes out near 39 MB, down from about 80 MB). Strata's loader already includes the meshopt decoder, so nothing extra is needed; tick off <strong>Meshopt compress</strong> only if you plan to open the file in a tool that lacks it.</p>
+The GLBs are [meshopt](https://github.com/zeux/meshoptimizer)-compressed to keep them small (Bruce comes out near 39 MB, down from about 80 MB). Strata's loader already includes the meshopt decoder, so nothing extra is needed; tick off **Meshopt compress** only if you plan to open the file in a tool that lacks it.
 
 <h2><span class="step">4</span> Import both into Strata</h2>
 
 <p class="lede">Use <strong>File → Import</strong> (or drag both files onto the editor window). A progress banner tracks each file while it is read and parsed. When the <strong>Import glTF</strong> dialog appears, leave the compression options off — Strata skips mesh simplification on skinned and morph-target meshes anyway, and rigged characters don't benefit from it — and press <strong>OK</strong>.</p>
 
-<p>Then check what arrived in the Shell:</p>
+Then check what arrived in the Shell:
 
 <pre><code>scene.children.map(o =&gt; o.name);        // ['bruce_mocap-33s.glb', 'boss_mocap-33s.glb']&#10;scene.animations.map(a =&gt; a.name);      // ['mocap-33s', 'mocap-33s']</code></pre>
 
-<p>Give them short names to address them by, and measure each character so you know whether the scale is sane. Strata normalizes each import (it centres and grounds the model, and rescales a centimetre-unit Mixamo rig by ×0.01), so both should come in close to 2 m. Each shell command runs in its own scope, so look the characters up again in every block that needs them:</p>
+Give them short names to address them by, and measure each character so you know whether the scale is sane. Strata normalizes each import (it centres and grounds the model, and rescales a centimetre-unit Mixamo rig by ×0.01), so both should come in close to 2 m. Each shell command runs in its own scope, so look the characters up again in every block that needs them:
 
 <pre><code>const bruce = scene.children.find(o =&gt; o.name.startsWith('bruce'));&#10;const boss  = scene.children.find(o =&gt; o.name.startsWith('boss'));&#10;relabel(bruce, 'bruce');               // Bruce becomes #bruce&#10;relabel(boss, 'boss');                 // The Boss becomes #boss&#10;&#10;const height = o =&gt; new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3()).y;&#10;[height(bruce).toFixed(2), height(boss).toFixed(2)]   // about 2 m each</code></pre>
 
-<p>If one is off, scale his group so he stands about as tall as Bruce — one command, undoable:</p>
+If one is off, scale his group so he stands about as tall as Bruce — one command, undoable:
 
 <pre><code>const boss = scene.children.find(o =&gt; o.name.startsWith('boss'));&#10;const k = 1.8 / new THREE.Box3().setFromObject(boss).getSize(new THREE.Vector3()).y;&#10;editor.execute(new SetScaleCommand(editor, boss, boss.scale.clone().multiplyScalar(k)));</code></pre>
 
@@ -83,7 +83,7 @@ parent: tutorials
 
 <pre><code>$S('#bruce').at(0).play('mocap-33s');&#10;$S('#boss').at(3).play('mocap-33s');</code></pre>
 
-<p>Open the <strong>Animations</strong> tab and scrub: Bruce starts moving at once, The Boss begins three seconds in and repeats the same moves. The whole timeline is 36.1 seconds — the 33.1-second dance plus the Boss's 3-second head start.</p>
+Open the **Animations** tab and scrub: Bruce starts moving at once, The Boss begins three seconds in and repeats the same moves. The whole timeline is 36.1 seconds — the 33.1-second dance plus the Boss's 3-second head start.
 
 <div class="note"><strong>Why bake the same motion twice?</strong> You could retarget live in the page, but a baked clip is plain keyframe data: it is versioned with the scene, selectable by <code>$S</code>, and rendered identically every time. Retargeting <em>per character</em> is the part that needs a tool; sequencing and staging is what Strata is for.</div>
 
@@ -93,7 +93,7 @@ parent: tutorials
 
 <pre><code>const cam = new PerspectiveCamera(35, 16 / 9, 0.5, 60);   // tight near/far = more depth precision&#10;cam.name = 'Orbit Camera';&#10;editor.execute(new AddObjectCommand(editor, cam));&#10;relabel(cam, 'orbit-camera');&#10;&#10;// A camera helper that does the aiming for us. Object3D.lookAt points +Z at the&#10;// target; a camera looks down -Z, so use a camera, not a bare Object3D.&#10;const rig = new PerspectiveCamera();&#10;const center = new THREE.Vector3(1.7, 1.0, 0.7);     // between the two dancers&#10;const times = [], pos = [], quat = [];&#10;for (let t = 0; t &lt;= 33; t += 0.5) {&#10;  const az = THREE.MathUtils.degToRad(150 + 35 * Math.sin(2 * Math.PI * t / 33));&#10;  const r  = 8.5 - Math.sin(Math.PI * t / 33);        // push in, then ease out&#10;  rig.position.set(center.x + r * Math.sin(az), 1.45, center.z + r * Math.cos(az));&#10;  rig.lookAt(center);&#10;  times.push(t);&#10;  pos.push(...rig.position.toArray());&#10;  quat.push(...rig.quaternion.toArray());&#10;}&#10;&#10;addClip(scene, new THREE.AnimationClip('camera-orbit', 33, [&#10;  new THREE.VectorKeyframeTrack(cam.uuid + '.position', times, pos),&#10;  new THREE.QuaternionKeyframeTrack(cam.uuid + '.quaternion', times, quat),&#10;]));&#10;$S('#orbit-camera').at(0).play('camera-orbit');</code></pre>
 
-<p>Track names must be <code>&lt;object uuid&gt;.&lt;property&gt;</code>, which is why the clip is built from <code>cam.uuid</code>. If your dancers face another way, change the <code>150</code> (degrees from +Z) and check a few frames with <code>holdTimelineAt</code>:</p>
+Track names must be `<object uuid>.<property>`, which is why the clip is built from `cam.uuid`. If your dancers face another way, change the `150` (degrees from +Z) and check a few frames with `holdTimelineAt`:
 
 <pre><code>const { holdTimelineAt } = await import('./editor/js/intelligence/timelineController.js');&#10;holdTimelineAt(editor, 16);            // jump the whole scene to t = 16 s&#10;editor.viewportCamera = cam;           // look through the new camera&#10;editor.signals.viewportCameraChanged.dispatch();</code></pre>
 
@@ -103,7 +103,7 @@ parent: tutorials
 
 <ol class="steps">&#10;		<li>Open the <strong>Render</strong> tab. The <strong>Snapshot</strong> section saves the scene exactly as it is right now, with no grid or gizmos: hold the timeline at a moment you like (<code>holdTimelineAt(editor, 16)</code>), pick <strong>Orbit Camera</strong> and a size, and press <strong>Take Snapshot</strong>.</li>&#10;		<li>For the video, scroll to <strong>Video Render</strong>. With no Camera Sequence shots, the render uses the viewport camera, so add one shot at 0 s pointing at <strong>Orbit Camera</strong> (<em>+ Add Shot</em>, then choose the camera). Pick 1280 × 720 at 30 fps and press <strong>Render &amp; Export</strong>. The whole 36.1-second timeline renders; expect it to take about as long as the clip itself.</li>&#10;		<li>Keep the tab in the foreground while it renders — browsers throttle hidden tabs, which makes frames stall.</li>&#10;	</ol>
 
-<p>To keep the scene, set your repository and token in the <strong>Git</strong> tab and use <strong>Commit Scene</strong>. The characters and their baked clips are stored as binary asset files next to a small scene JSON, so the commit is large but not unmanageable (a few dozen megabytes for this scene).</p>
+To keep the scene, set your repository and token in the **Git** tab and use **Commit Scene**. The characters and their baked clips are stored as binary asset files next to a small scene JSON, so the commit is large but not unmanageable (a few dozen megabytes for this scene).
 
 <pre><code>// Sanity-check what you're about to commit&#10;$S('#bruce').count();                  // 1&#10;editor.timeline.toJSON().tracks.map(t =&gt; t.target);   // ['#bruce', '#boss', '#orbit-camera']</code></pre>
 

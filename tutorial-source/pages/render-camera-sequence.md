@@ -5,7 +5,7 @@ status: published
 parent: tutorials
 ---
 
-<h1>Add a static hero camera to a render sequence</h1>
+# Add a static hero camera to a render sequence
 
 <p class="tagline">Your main camera is animated for the whole timeline — but sometimes one moment (an explosion, a headlight beam, a reveal) deserves its own fixed, carefully-framed shot cut into the middle of the video. This tutorial adds a second, <em>non-animated</em> camera and schedules it in the <strong>Render</strong> tab's Camera Sequence. Open the <a href="../../">editor</a>, load a scene with an existing timeline, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
@@ -17,7 +17,7 @@ parent: tutorials
 
 <pre><code>const { holdTimelineAt } = await import('./editor/js/intelligence/timelineController.js');&#10;holdTimelineAt(editor, 24); // seconds into the Universal Timeline</code></pre>
 
-<p>If the main camera's framing doesn't do that moment justice — too far, wrong angle, an object in the way — that's exactly the case for a second, purpose-built camera.</p>
+If the main camera's framing doesn't do that moment justice — too far, wrong angle, an object in the way — that's exactly the case for a second, purpose-built camera.
 
 <h2><span class="step">2</span> Add the new camera</h2>
 
@@ -25,11 +25,11 @@ parent: tutorials
 
 <pre><code>const heroCam = new THREE.PerspectiveCamera(38, 16 / 9, 0.1, 500);&#10;heroCam.name = 'HeadlightHeroCam';&#10;heroCam.position.set(-4.15, 3.2, 14);&#10;heroCam.lookAt(-4.15, 1.0, -40);&#10;editor.execute(new AddObjectCommand(editor, heroCam));</code></pre>
 
-<p>Jump back to your target moment and check the framing from the new camera before wiring it into anything — swap the viewport over to it temporarily:</p>
+Jump back to your target moment and check the framing from the new camera before wiring it into anything — swap the viewport over to it temporarily:
 
 <pre><code>editor.viewportCamera = heroCam;&#10;editor.signals.viewportCameraChanged.dispatch();&#10;holdTimelineAt(editor, 24);</code></pre>
 
-<p>Nudge <code>heroCam.position</code> / re-run <code>.lookAt(...)</code> and re-dispatch <code>objectChanged</code> until it reads well across the <em>whole</em> span you'll use it for — not just one instant. A bus or character can move a long way in a few seconds; check both ends of the window:</p>
+Nudge `heroCam.position` / re-run `.lookAt(...)` and re-dispatch `objectChanged` until it reads well across the _whole_ span you'll use it for — not just one instant. A bus or character can move a long way in a few seconds; check both ends of the window:
 
 <pre><code>heroCam.position.set(-4.15, 3.2, 14);&#10;heroCam.lookAt(-4.15, 1.0, -40);&#10;editor.signals.objectChanged.dispatch(heroCam);</code></pre>
 
@@ -41,7 +41,7 @@ parent: tutorials
 
 <pre><code>const shots = [&#10;  { id: 'shot-intro',     at: 0,  camera: editor.camera.uuid, transition: 'cut',  transitionDur: 0.5 },&#10;  { id: 'shot-headlight', at: 20, camera: heroCam.uuid,       transition: 'fade', transitionDur: 0.8 },&#10;  { id: 'shot-return',    at: 29, camera: editor.camera.uuid, transition: 'fade', transitionDur: 0.8 },&#10;];&#10;editor.scene.userData = editor.scene.userData || {};&#10;editor.scene.userData.renderShots = shots;&#10;editor.signals.sceneGraphChanged.dispatch(); // refreshes the Render tab's sequencer UI</code></pre>
 
-<p>Switch the viewport back to your main camera when you're done previewing:</p>
+Switch the viewport back to your main camera when you're done previewing:
 
 <pre><code>editor.viewportCamera = editor.camera;&#10;editor.signals.viewportCameraChanged.dispatch();</code></pre>
 

@@ -73,7 +73,7 @@
 <h2 id="2-look-away-between-exchanges"><span class="step">2</span> Look away between exchanges <a class="anchor" href="#2-look-away-between-exchanges" aria-label="Link to this section">#</a></h2>
 <p class="lede">A glance away and back is two keys. <code>'away'</code> is a fixed averted look (35° to the character's left, 10° down):</p>
 <pre><code>for (const t of [6.4, 14.2, 28, 34.4, 40.2, 44.1])&#10;  A.gaze(t, 'away', { duration: 250, head: 0.2 }).gaze(t + 0.9, '#b', { duration: 300 });&#10;for (const t of [6.9, 14.7, 28.6, 34.9, 40.6, 44.6])&#10;  B.gaze(t, 'away', { duration: 250, head: 0.2 }).gaze(t + 0.9, '#a', { duration: 300 });&#10;&#10;A.gazeKeys();      // [{ index, time, target, head, duration, easing, label }]</code></pre>
-<p>Measured on a real 52.9 s cut: wherever the other fighter is inside the eyes' range, the eyes sit within about 1° of that fighter's head, and sampling the whole face costs about 0.6 ms per frame.</p>
+<p>Measured on a real 52.9 s cut: wherever the other fighter is inside the eyes&#39; range, the eyes sit within about 1° of that fighter&#39;s head, and sampling the whole face costs about 0.6 ms per frame.</p>
 <h2 id="3-don-t-look-dead-the-idle-layer"><span class="step">3</span> Don't look dead: the idle layer <a class="anchor" href="#3-don-t-look-dead-the-idle-layer" aria-label="Link to this section">#</a></h2>
 <p class="lede">Fully keyed faces read as corpses; real faces are never still. The idle layer adds a blink, a faint breath and a little gaze micro-noise:</p>
 <pre><code>A.face.idle({ seed: 11 });&#10;B.face.idle({ seed: 12 });</code></pre>
