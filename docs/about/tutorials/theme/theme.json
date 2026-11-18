@@ -1,0 +1,12 @@
+{
+  "name": "Strata tutorials",
+  "version": "1.0.0",
+  "licence": "MIT",
+  "source": "https://github.com/tejaswigowda/strata-editor",
+  "description": "First-party Strata tutorial layout; original page styles scoped by tutorial.",
+  "class_contract": "wordpress-classic",
+  "css": [
+    "tutorials.css"
+  ],
+  "skeleton": "skeleton.html"
+}
