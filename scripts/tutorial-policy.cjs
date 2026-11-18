@@ -132,7 +132,8 @@ function lintTutorials( dir = TUTORIAL_DIR ) {
 		const html = fs.readFileSync( path.join( dir, f ), 'utf8' );
 
 		// Every editor tutorial carries the Strata mark (docs/about/brand.js). Other repos' folders are not held to this.
-		if ( dir === TUTORIAL_DIR && f !== 'callcard.html' && ! /\.\.\/brand\.js/.test( html ) ) problems.push( f + ': missing <script src="../brand.js" defer></script>' );
+		const blogBrand = /<script src="https:\/\/cdn\.jsdelivr\.net\/gh\/tejaswigowda\/strata-editor@[a-f0-9]{40}\/docs\/about\/tutorials\/tutorial-enhancements\.js"[^>]*integrity="sha384-[A-Za-z0-9+/]{64}"/.test( html );
+		if ( dir === TUTORIAL_DIR && f !== 'callcard.html' && ! /\.\.\/brand\.js/.test( html ) && ! blogBrand ) problems.push( f + ': missing Strata branding script (legacy brand.js or integrity-pinned tutorial-enhancements.js)' );
 
 		// URL / slug.
 		for ( const hit of findViolations( words( f.replace( /\.html$/, '' ) ) ) ) add( f, 'file slug', hit );

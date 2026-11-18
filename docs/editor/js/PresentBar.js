@@ -70,7 +70,7 @@ function PresentBar( editor ) {
 		window.location.reload();
 
 	} );
-	container.dom.appendChild( remixButton );
+	if ( ! editor.storageFree ) container.dom.appendChild( remixButton );
 
 	function setPlayingUI( playing ) {
 

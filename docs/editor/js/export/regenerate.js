@@ -137,7 +137,7 @@ export async function regenerateRecords( editor, env = {} ) {
 	const groups = emptyGroups( editor.scene );
 	if ( ! groups.length ) return [];
 	if ( ! editor.recordStatus ) editor.recordStatus = new Map();
-	const cache = env.cache || ( editor.sourceCache || ( editor.sourceCache = makeSourceCache() ) );
+	const cache = env.cache || ( editor.sourceCache || ( editor.sourceCache = makeSourceCache( editor.storageFree ? { idb: null } : {} ) ) );
 	const log = env.log || ( m => { if ( editor.importLog ) editor.importLog( m ); } );
 	const set = ( g, status ) => { editor.recordStatus.set( g.uuid, status ); if ( editor.signals && editor.signals.recordStatusChanged ) editor.signals.recordStatusChanged.dispatch( g, status ); };
 	const out = [];

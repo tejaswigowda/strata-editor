@@ -517,6 +517,7 @@ body.present-mode #script,
 body.present-mode #player {
 	top: 0;
 	right: 0;
+	height: auto; /* Don't reserve space for the mobile sidebar in a short embed. */
 }
 
 #present-bar {

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "title": "Strata tutorials",
+  "author": "Strata",
+  "description": "Step-by-step walkthroughs for building scenes, games, animation and characters with Strata.",
+  "domain": "https://strataeditor.dev/about/tutorials",
+  "repo": "tejaswigowda/strata-editor/docs/about/tutorials",
+  "pagePermalink": "/{slug}.html",
+  "search": true,
+  "stylesheet": "linked",
+  "theme": {
+    "repo": "tejaswigowda/strata-editor/docs/about/tutorials/theme",
+    "ref": "71b04a54462d31995855717d63a32a5868373229",
+    "sha256": "173d6adaba80468abc1636185c89f53b61fa742e691ba8e7138347a54069309f",
+    "name": "Strata tutorials",
+    "version": "1.0.0",
+    "licence": "MIT",
+    "contract": "wordpress-classic"
+  },
+  "assets": {
+    "base": "https://raw.githubusercontent.com/{owner}/{repo}/{sha}/{path}",
+    "repos": {
+      "images": "tejaswigowda/strata-editor/docs/about/tutorials/screenshots",
+      "site": "tejaswigowda/strata-editor/docs"
+    }
+  },
+  "favicon": "asset:site/favicon.svg",
+  "cover": "asset:site/demo.png",
+  "scripts": [
+    {
+      "src": "https://cdn.jsdelivr.net/gh/tejaswigowda/strata-editor@71b04a54462d31995855717d63a32a5868373229/docs/about/tutorials/highlight.js",
+      "integrity": "sha384-5O8XaBxPv1co/+NcaeuovF6z71g68SUWbwDP2+n/7rn2XgwsDlfIoGBPugLvMuqr"
+    },
+    {
+      "src": "https://cdn.jsdelivr.net/gh/tejaswigowda/strata-editor@71b04a54462d31995855717d63a32a5868373229/docs/about/tutorials/tutorial-enhancements.js",
+      "integrity": "sha384-y1sh6hzXHZjzXM5Q2CYB8PNjm3NYzLLJ8hIAdWxgd1mZgsEU1VFdrcL3474EhSs8"
+    }
+  ]
+}

@@ -167,7 +167,7 @@ async function fetchChunkedText( owner, repo, ref, path, count, mode ) {
  * Throws SceneFetchError with an accurate `.kind` — a missing file is always
  * 'not-found', never misreported as 'rate-limited'.
  */
-export async function resolveSceneJSON( { owner, repo, ref, path, mode, apiFetch } ) {
+export async function resolveSceneJSON( { owner, repo, ref, path, mode, apiFetch, useCache = true } ) {
 
 	const refs = ref ? [ ref ] : [ 'main', 'master' ];
 	const key = sceneCacheKey( owner, repo, path );
@@ -191,7 +191,7 @@ export async function resolveSceneJSON( { owner, repo, ref, path, mode, apiFetch
 
 		}
 
-		putCache( key, text );
+		if ( useCache ) putCache( key, text );
 
 		return { json, ref: resolvedRef, source: 'cdn' };
 
@@ -211,7 +211,7 @@ export async function resolveSceneJSON( { owner, repo, ref, path, mode, apiFetch
 		try {
 
 			const json = await apiFetch( apiRef );
-			putCache( key, JSON.stringify( json ) );
+			if ( useCache ) putCache( key, JSON.stringify( json ) );
 			return { json, ref: apiRef, source: 'api' };
 
 		} catch ( apiErr ) {
@@ -228,7 +228,7 @@ export async function resolveSceneJSON( { owner, repo, ref, path, mode, apiFetch
 
 	// Fully offline (or every live backend failed) — last resort: whatever we
 	// cached from a previous successful load of this exact file.
-	const cached = await getCache( key );
+	const cached = useCache ? await getCache( key ) : null;
 	if ( cached !== null ) {
 
 		try { return { json: JSON.parse( cached ), ref: ref || 'main', source: 'cache' }; } catch { /* stale/corrupt cache entry — fall through to throwing below */ }

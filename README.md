@@ -49,6 +49,35 @@ Beyond device-local (browser WebLLM), Strata runs org-sovereign: a local model o
 
 ## Documentation
 
+### Editing the tutorials
+
+The complete [tutorial site](https://strataeditor.dev/about/tutorials/) is published
+with [blog-webCLI](https://blog.webcli.app/#repo=tejaswigowda/strata-editor/docs/about/tutorials&tab=pages).
+Its root is [`docs/about/tutorials`](docs/about/tutorials): `blog.json`, the
+Markdown sources in `pages/`, and generated HTML live together. `pages/home.md`
+is the searchable tutorial index. Sign in, choose **Pages**, edit, then publish;
+the editor commits the source and regenerates the static site. GitHub Pages
+continues to serve `main:/docs`, without an Actions deployment.
+
+All original `.html` URLs, screenshots, credits and scene links are retained.
+Simple headings, paragraphs and isolated code blocks are native editor content;
+styled structures remain editable HTML. Scene examples use sandboxed iframe
+widgets; the demonstration video uses native controls. The original catalogue
+in `tutorials.json` remains available to other consumers.
+
+The first-party tutorial theme under `docs/about/tutorials/theme` is MIT
+licensed. Its CSS and the site enhancement scripts are pinned to an immutable
+commit, with script integrity hashes. Changing them requires committing the
+new files and repinning; normal content editing does not. This does not change
+the licensing of Strata or any credited assets.
+
+Run `node scripts/tutorial-policy.cjs lint` after changes to check the published
+catalogue links, metadata and preserved credit text and destinations.
+Embedded presentation mode loads public scenes without authoring persistence;
+the iframe remains `sandbox="allow-scripts"`. With `docs/` served locally, run
+`node scripts/check-sandbox-presentation.mjs http://127.0.0.1:5597/` to verify
+scene rendering in the sandbox and normal editor persistence outside it.
+
 This README is the landing page and the thesis. The reference material is split into focused guides, each listed once below. For **what exists and what is still open**, start with the Roadmap (the single status source, first row of the last group below); the Audit is a dated, code-level snapshot behind it. Link health: `node scripts/check-doc-links.mjs`.
 
 ### Start here: the language and the shell

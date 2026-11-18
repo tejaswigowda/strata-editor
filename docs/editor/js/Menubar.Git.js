@@ -349,13 +349,13 @@ async function ghSend( method, path, body, token ) {
 // API can also serve stale bytes for a short while right after a large
 // multi-file commit, on top of being rate-limited, so falling back to it is
 // strictly worse than the CDN reads on both counts, not just quota.
-async function ghGetBytes( parsed, branch, path, token, mode ) {
+async function ghGetBytes( parsed, branch, path, token, mode, useCache = true ) {
 
 	const immutable = path.startsWith( 'assets/' );
 	const cacheUrl  = `https://strata.local/git-asset/${ parsed.owner }/${ parsed.repo }/${ path }`;
 
 	let cache = null;
-	if ( immutable && typeof caches !== 'undefined' ) {
+	if ( useCache && immutable && typeof caches !== 'undefined' ) {
 
 		try {
 
@@ -498,12 +498,12 @@ async function commitFiles( parsed, branch, token, files, message, onProgress, {
 // geometries (deduped on commit) are downloaded only once. No-op for legacy
 // inline scenes. `mode` ('authoring' | 'present') picks the CDN backend order —
 // see GitResolver.js.
-async function internalizeFromGit( json, parsed, branch, token, mode ) {
+async function internalizeFromGit( json, parsed, branch, token, mode, useCache = true ) {
 
 	const cache = new Map();
 	const fetchBytes = ( path ) => {
 
-		if ( ! cache.has( path ) ) cache.set( path, ghGetBytes( parsed, branch, path, token, mode ) );
+		if ( ! cache.has( path ) ) cache.set( path, ghGetBytes( parsed, branch, path, token, mode, useCache ) );
 		return cache.get( path );
 
 	};
@@ -1241,14 +1241,14 @@ export async function loadSceneFromHash( editor ) {
 	// than one is given: &commit= (most specific pin) > &branch= > an "@ref" on
 	// repo= itself > nothing.
 	const ref  = commitParam || branchParam || repoRef || null;
-	const mode = presentMode ? 'present' : 'authoring'; // picks the CDN backend order — see GitResolver.js
+	const mode = presentMode || editor.storageFree ? 'present' : 'authoring'; // CDN backend order — see GitResolver.js
 
 	// An existing token (saved from a prior session) is reused if it happens to
 	// cover this repo — but reading never REQUIRES one for a public repo, so a
 	// missing/wrong token here still degrades to a plain anonymous read rather
 	// than failing outright. Only ever used for the GitHub-API fallback (the
 	// common path below is CDN-only, no token needed or sent).
-	const existingPat = loadSettings().pat || null;
+	const existingPat = editor.storageFree ? null : loadSettings().pat || null;
 
 	const banner = _showBanner( `Loading ${ parsed.owner }/${ parsed.repo } from URL…` );
 	showLoadOverlay();
@@ -1267,6 +1267,7 @@ export async function loadSceneFromHash( editor ) {
 		const pin = existingPat && mode === 'authoring' && ! commitParam ? await cancellable( pinBranchHead( parsed, ref, existingPat ) ) : null;
 		const resolved = await cancellable( resolveSceneJSON( {
 			owner: parsed.owner, repo: parsed.repo, ref: pin ? pin.sha : ref, path: file, mode,
+			useCache: ! editor.storageFree,
 			apiFetch: ( apiRef ) => ghGetSceneJSON( `/repos/${ parsed.owner }/${ parsed.repo }/contents/${ file }?ref=${ apiRef }`, existingPat ),
 		} ) );
 		const json   = resolved.json;
@@ -1274,7 +1275,7 @@ export async function loadSceneFromHash( editor ) {
 
 		stage = 'fetching assets';
 		setLoadProgress( 0.5, 'Fetching assets…' );
-		await cancellable( internalizeFromGit( json, parsed, resolved.ref, existingPat, mode ) );
+		await cancellable( internalizeFromGit( json, parsed, resolved.ref, existingPat, mode, ! editor.storageFree ) );
 
 		stage = 'applying the scene';
 		setLoadCancellable( false ); // from here the scene is being replaced: too late to back out
@@ -1291,20 +1292,20 @@ export async function loadSceneFromHash( editor ) {
 			|| ( Array.isArray( editor.scene.animations ) && editor.scene.animations.some( c => c.duration > 0 ) );
 		const play = playParam === 'false' ? false : ( playParam === 'true' ? true : !! hasAnimation );
 
-		localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+		if ( ! editor.storageFree ) {
 
-		// Reflect what was loaded in the Git tab (repo/branch/commit/file) so
-		// Compare/Commit target the same place — WITHOUT touching any saved
-		// token; that keeps working (or keeps being absent) exactly as it already
-		// was. The Branch field only ever shows an actual branch name — a
-		// &commit= pin lives in its own field, never overwriting Branch with a
-		// raw SHA.
-		const priorSettings = loadSettings();
-		// Branch: explicit &branch= / @ref, else the ref that actually resolved (main or master) — so the Git tab
-		// and the hash agree. A &commit= pin leaves the branch field as it was.
-		const shownBranch = branchParam || repoRef || ( commitParam ? ( priorSettings.branch || 'main' ) : ( branch || priorSettings.branch || 'main' ) );
-		saveSettings( { ...priorSettings, repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch: shownBranch, commit: commitParam || '', scenePath: file } );
-		editor.signals.gitSettingsChanged.dispatch();
+			localStorage.setItem( LS_LAST_CTX_KEY, sceneContextString( editor ) );
+
+			// Reflect what was loaded in the Git tab so Compare/Commit target the
+			// same place without changing the saved token or using a SHA as a branch.
+			const priorSettings = loadSettings();
+			// Branch: explicit &branch= / @ref, else the ref that actually resolved (main or master) — so the Git tab
+			// and the hash agree. A &commit= pin leaves the branch field as it was.
+			const shownBranch = branchParam || repoRef || ( commitParam ? ( priorSettings.branch || 'main' ) : ( branch || priorSettings.branch || 'main' ) );
+			saveSettings( { ...priorSettings, repoUrl: `https://github.com/${ parsed.owner }/${ parsed.repo }`, branch: shownBranch, commit: commitParam || '', scenePath: file } );
+			editor.signals.gitSettingsChanged.dispatch();
+
+		}
 		appliedHash = window.location.hash; // this hash is what was just loaded
 
 		if ( editor.work ) await editor.work.loaded( held );
@@ -1319,7 +1320,7 @@ export async function loadSceneFromHash( editor ) {
 		setLoadProgress( 1, `✓ Loaded ${ parsed.owner }/${ parsed.repo }/${ file }` );
 		hideLoadOverlay();
 		banner.remove();
-		const tokenHint = existingPat ? '' : ' — add a token in the Git tab to enable commits';
+		const tokenHint = editor.storageFree || existingPat ? '' : ' — add a token in the Git tab to enable commits';
 		_showBanner( `✓ Loaded ${ parsed.owner }/${ parsed.repo }/${ file } from URL${ tokenHint }`, 4000 );
 
 		return { loaded: true, play };
@@ -1348,7 +1349,7 @@ export async function loadSceneFromHash( editor ) {
 			: `network error — ${ err.message }`;
 
 		if ( err && err.stack ) console.warn( err.stack );
-		console.warn( `loadSceneFromHash(): failed to load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ reason }. Falling back to normal startup.` );
+		console.warn( `loadSceneFromHash(): failed to load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ reason }.${ editor.storageFree ? '' : ' Falling back to normal startup.' }` );
 		_showBanner( `Could not load ${ parsed.owner }/${ parsed.repo }/${ file } — ${ reason }`, 5000 );
 		return false;
 

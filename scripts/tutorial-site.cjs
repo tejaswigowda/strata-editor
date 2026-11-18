@@ -218,6 +218,7 @@ function renderCredits( t ) {
 function auditCredits( list, dir = DIR ) {
 
 	const problems = [], notes = [];
+	const blog = fs.existsSync( path.join( dir, 'blog.json' ) );
 	for ( const t of visible( list ) ) {
 
 		if ( isExternal( t.href ) ) continue;
@@ -226,10 +227,10 @@ function auditCredits( list, dir = DIR ) {
 		const file = path.join( dir, t.href );
 		if ( ! fs.existsSync( file ) ) continue;
 		const html = fs.readFileSync( file, 'utf8' );
-		const got = between( html, '<!-- credits:start -->', '<!-- credits:end -->' );
-		if ( ! got ) problems.push( t.href + ': no <!-- credits:start --> … <!-- credits:end --> block, just before <footer>' );
-		else if ( norm( got ) !== norm( renderCredits( t ) ) ) problems.push( t.href + ': the credit block differs from tutorials.json. Expected:\n' + renderCredits( t ) );
-		const prose = html.replace( /<!-- credits:start -->[\s\S]*?<!-- credits:end -->/, '' ).replace( /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ' );
+		const got = blog ? /<section class="credits" id="credits">[\s\S]*?<\/section>/.exec( html )?.[ 0 ] : between( html, '<!-- credits:start -->', '<!-- credits:end -->' );
+		if ( ! got ) problems.push( t.href + ': missing credits section' );
+		else if ( blog ? creditSignature( got ) !== creditSignature( renderCredits( t ) ) : norm( got ) !== norm( renderCredits( t ) ) ) problems.push( t.href + ': the credit block differs from tutorials.json. Expected:\n' + renderCredits( t ) );
+		const prose = html.replace( got || '', '' ).replace( /<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ' );
 		for ( const [ re, what, declared ] of MENTIONS ) if ( re.test( prose ) && ! declared( t ) ) problems.push( t.href + `: the page names ${ what }, but tutorials.json does not credit it (add it to "assets" or "tools")` );
 
 	}
@@ -237,10 +238,59 @@ function auditCredits( list, dir = DIR ) {
 
 }
 
+function decoded( value ) {
+
+	return value.replace( /&#(x[0-9a-f]+|\d+);/gi, ( all, code ) => String.fromCodePoint( code[ 0 ].toLowerCase() === 'x' ? parseInt( code.slice( 1 ), 16 ) : Number( code ) ) )
+		.replace( /&amp;/g, '&' ).replace( /&quot;/g, '"' ).replace( /&apos;/g, "'" ).replace( /&lt;/g, '<' ).replace( /&gt;/g, '>' );
+
+}
+
+function creditSignature( html ) {
+
+	const content = html.replace( /<style[\s\S]*?<\/style>|<!--[\s\S]*?-->|<a class="anchor"[\s\S]*?<\/a>/g, '' );
+	const text = norm( decoded( content.replace( /<[^>]*>/g, ' ' ) ) );
+	const links = [ ...content.matchAll( /href="([^"]*)"/g ) ].map( ( m ) => new URL( decoded( m[ 1 ] ), SITE ).href ).sort();
+	return JSON.stringify( { text, links } );
+
+}
+
+function checkBlog( dir, list ) {
+
+	const problems = [];
+	const config = JSON.parse( fs.readFileSync( path.join( dir, 'blog.json' ), 'utf8' ) );
+	const index = fs.readFileSync( path.join( dir, 'index.html' ), 'utf8' );
+	const sitemap = fs.readFileSync( path.join( dir, 'sitemap.xml' ), 'utf8' );
+	for ( const file of [ 'index.html', ...visible( list ).filter( ( t ) => ! isExternal( t.href ) ).map( ( t ) => t.href ) ] ) {
+
+		const html = fs.readFileSync( path.join( dir, file ), 'utf8' );
+		const address = config.domain + '/' + ( file === 'index.html' ? '' : file );
+		if ( ! html.includes( `<link rel="canonical" href="${ esc( address ) }">` ) ) problems.push( file + ': missing self-canonical' );
+		if ( ! html.includes( `<meta property="og:url" content="${ esc( address ) }">` ) ) problems.push( file + ': missing Open Graph address' );
+		if ( ! /<meta name="description" content="[^"]+"/.test( html ) ) problems.push( file + ': missing description' );
+		if ( ! sitemap.includes( `<loc>${ esc( address ) }</loc>` ) ) problems.push( 'tutorial sitemap: missing ' + address );
+		if ( file !== 'index.html' && ! index.includes( `href="${ esc( address ) }"` ) ) problems.push( 'index.html: missing link to ' + file );
+		if ( file !== 'index.html' && ! /<meta property="og:image" content="https:/.test( html ) ) problems.push( file + ': missing share image' );
+		if ( /http-equiv="refresh"/i.test( html ) ) problems.push( file + ': must serve the page, not a redirect' );
+
+	}
+	if ( ! /id="jump"/.test( index ) || ! /id="list"/.test( index ) ) problems.push( 'index.html: missing searchable tutorial catalogue' );
+	if ( ( index.match( /<article class="card">/g ) || [] ).length !== visible( list ).length ) problems.push( 'index.html: card count differs from tutorials.json' );
+	if ( dir === DIR ) {
+
+		const rootSitemap = fs.readFileSync( path.join( DOCS, 'sitemap.xml' ), 'utf8' );
+		if ( ! rootSitemap.includes( `<loc>${ esc( config.domain ) }/sitemap.xml</loc>` ) ) problems.push( 'docs/sitemap.xml must reference the generated tutorial sitemap' );
+
+	}
+	problems.push( ...auditCredits( list, dir ).problems );
+	return problems;
+
+}
+
 /** Everything wrong between tutorials.json and the static pages. */
 function check( dir = DIR ) {
 
 	const problems = [], list = load( dir ), shown = visible( list );
+	if ( fs.existsSync( path.join( dir, 'blog.json' ) ) ) return checkBlog( dir, list );
 
 	// 1. index.html: the list is in the HTML source, not fetched.
 	const indexHtml = fs.readFileSync( path.join( dir, 'index.html' ), 'utf8' );

@@ -240,7 +240,7 @@ function Timeline( editor ) {
 	// blocks' edges still win when close, and Alt always moves freely
 	const magnetIcon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v9a7 7 0 0 0 14 0V3"/><path d="M5 7h4M15 7h4"/></svg>';
 	let gridSnap = false;
-	try { gridSnap = localStorage.getItem( SNAP_GRID_KEY ) === '1'; } catch ( e ) { /* storage blocked */ }
+	try { gridSnap = ! editor.storageFree && localStorage.getItem( SNAP_GRID_KEY ) === '1'; } catch ( e ) { /* storage blocked */ }
 	const snapButton = document.createElement( 'button' );
 	snapButton.type = 'button';
 	snapButton.className = 'Button timeline-toggle';
@@ -249,7 +249,7 @@ function Timeline( editor ) {
 	snapButton.addEventListener( 'click', function () {
 
 		gridSnap = ! gridSnap;
-		try { localStorage.setItem( SNAP_GRID_KEY, gridSnap ? '1' : '0' ); } catch ( e ) { /* storage blocked */ }
+		try { if ( ! editor.storageFree ) localStorage.setItem( SNAP_GRID_KEY, gridSnap ? '1' : '0' ); } catch ( e ) { /* storage blocked */ }
 		applySnapUI();
 
 	} );
@@ -280,7 +280,7 @@ function Timeline( editor ) {
 	// the delete / + Key / Fit buttons move up into the transport row; the track list and the code panel regain the
 	// freed height (they are flex items that share what the toolbar leaves).
 	let barCollapsed = false;
-	try { barCollapsed = localStorage.getItem( BAR_COLLAPSED_KEY ) === '1'; } catch ( e ) { /* storage blocked */ }
+	try { barCollapsed = ! editor.storageFree && localStorage.getItem( BAR_COLLAPSED_KEY ) === '1'; } catch ( e ) { /* storage blocked */ }
 
 	function setBarCollapsed( on, persist ) {
 
@@ -299,7 +299,7 @@ function Timeline( editor ) {
 		chevronButton.setAttribute( 'aria-expanded', String( ! on ) );
 		if ( persist ) {
 
-			try { localStorage.setItem( BAR_COLLAPSED_KEY, on ? '1' : '0' ); } catch ( e ) { /* storage blocked */ }
+			try { if ( ! editor.storageFree ) localStorage.setItem( BAR_COLLAPSED_KEY, on ? '1' : '0' ); } catch ( e ) { /* storage blocked */ }
 			render();
 			requestAnimationFrame( positionKeyPopover ); // the blocks moved with the layout: re-anchor the key popover
 
@@ -480,13 +480,13 @@ function Timeline( editor ) {
 	const SPLIT_KEY = 'strata.timeline.split';
 	const MIN_AREA_PX = 90, MIN_CODE_PX = 70;
 	let split = 0.5;
-	try { const saved = parseFloat( localStorage.getItem( SPLIT_KEY ) ); if ( saved > 0.1 && saved < 0.9 ) split = saved; } catch ( e ) { /* storage blocked */ }
+	try { const saved = editor.storageFree ? 0 : parseFloat( localStorage.getItem( SPLIT_KEY ) ); if ( saved > 0.1 && saved < 0.9 ) split = saved; } catch ( e ) { /* storage blocked */ }
 
 	function applySplit() {
 
 		area.style.flexGrow = String( split );
 		codePanelWrap.style.flexGrow = String( 1 - split );
-		try { localStorage.setItem( SPLIT_KEY, String( split ) ); } catch ( e ) { /* storage blocked */ }
+		try { if ( ! editor.storageFree ) localStorage.setItem( SPLIT_KEY, String( split ) ); } catch ( e ) { /* storage blocked */ }
 
 	}
 
@@ -546,7 +546,7 @@ function Timeline( editor ) {
 	const codeFocusHandlers = [];
 	const codeBlurHandlers = [];
 
-	require( [ 'vs/editor/editor.main' ], function () {
+	if ( ! editor.storageFree ) require( [ 'vs/editor/editor.main' ], function () {
 
 		registerSugarLanguage( monaco ); // highlighting without Monaco's TypeScript worker, which overflows its stack on long chains
 

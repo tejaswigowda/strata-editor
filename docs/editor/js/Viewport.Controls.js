@@ -137,13 +137,14 @@ function ViewportControls( editor ) {
 
 		const shading = editor.viewportShading;
 		shadingSelect.setValue( shading );
+		if ( editor.storageFree ) return;
 		try { if ( shading === 'render' ) sessionStorage.setItem( 'strata/viewportAsRender', '1' ); else sessionStorage.removeItem( 'strata/viewportAsRender' ); } catch ( e ) { /* storage blocked */ }
 
 	} );
 
 	try {
 
-		if ( sessionStorage.getItem( 'strata/viewportAsRender' ) === '1' ) {
+		if ( ! editor.storageFree && sessionStorage.getItem( 'strata/viewportAsRender' ) === '1' ) {
 
 			shadingSelect.setValue( 'render' );
 			editor.viewportShading = 'render'; // Viewport reads it each frame, no signal needed

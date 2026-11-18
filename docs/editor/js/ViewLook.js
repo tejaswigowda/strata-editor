@@ -1,6 +1,6 @@
 import {
 	ASPECT_PRESETS, DEFAULTS, SAFE_ACTION, SAFE_TITLE,
-	aspectRatio, effectiveState, frameRect, hideOutlinePasses, loadSettings, safeRect, saveSettings
+	aspectRatio, effectiveState, frameRect, hideOutlinePasses, loadSettings, safeRect, sanitizeSettings, saveSettings
 } from './ViewLookLogic.js';
 
 // ── ViewLook.js ───────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ const GLOW_DIVISOR = 16; // glow copy is the frame at 1/16 size; the browser's s
 function ViewLook( editor, requestRender = function () {} ) {
 
 	const signals = editor.signals;
-	let settings = loadSettings( window.localStorage );
+	let settings = editor.storageFree ? sanitizeSettings( null ) : loadSettings( window.localStorage );
 	let exporting = false;
 	let lastGlow = 0;
 	let ready = false;
@@ -122,7 +122,7 @@ function ViewLook( editor, requestRender = function () {} ) {
 	function change( patch ) {
 
 		settings = { ...settings, ...patch };
-		saveSettings( window.localStorage, settings );
+		if ( ! editor.storageFree ) saveSettings( window.localStorage, settings );
 		update();
 
 	}

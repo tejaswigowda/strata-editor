@@ -2,8 +2,11 @@
 slug: edit-captured-motion
 title: Editing captured motion as data
 status: published
-parent: tutorials
+description: "Cut a 170-second two-performer capture to 53 seconds with a non-destructive edit list: register the pair, splice eight spans with a blend, check hip-to-hip collisions, remap the cameras, then undo or clear it — all from the JS Shell, and the capture itself is never modified."
+image: asset:images/thumbs/edit-captured-motion.jpg
 ---
+
+<div class="strata-tutorial-edit-captured-motion"></div>
 
 # Editing captured motion as data
 
@@ -11,13 +14,13 @@ parent: tutorials
 
 <div class="note"><strong>The idea.</strong> Motion is data you can edit. A cut is not a re-bake: it is an <em>edit list</em> — a handful of spans over the captured clip — stored on the timeline next to everything else. Clear the list and the full capture plays again, byte for byte. A generated video clip cannot do this; a captured, rigged performance can.</div>
 
-<div class="note"><strong>What you'll need.</strong> A scene with two rigged performers that were captured together (so they share one world frame), each with a baked clip, on the Universal Timeline — for example <code>$S('#a').at(0).play('clip-a')</code> and the same for <code>#b</code>. Everything below is pasted into the <strong>Shell</strong> tab; nothing needs the viewport, so an agent can author the same cut headlessly.</div>
+<div class="note"><strong>What you&#39;ll need.</strong> A scene with two rigged performers that were captured together (so they share one world frame), each with a baked clip, on the Universal Timeline — for example <code>$S(&#39;#a&#39;).at(0).play(&#39;clip-a&#39;)</code> and the same for <code>#b</code>. Everything below is pasted into the <strong>Shell</strong> tab; nothing needs the viewport, so an agent can author the same cut headlessly.</div>
 
 <h2><span class="step">1</span> Register the pair</h2>
 
 <p class="lede">Two performers captured in one metric frame are only coherent <em>together</em>. Registering them as a <strong>group</strong> makes every edit apply to both, atomically — same spans, same blend windows.</p>
 
-<pre><code>const sparring = $M.group('sparring', ['#a', '#b']);&#10;sparring.collision();      // baseline over the full capture</code></pre>
+<pre><code>const sparring = $M.group(&#39;sparring&#39;, [&#39;#a&#39;, &#39;#b&#39;]);&#10;sparring.collision();      // baseline over the full capture</code></pre>
 
 The baseline report says how close the two hips ever get on the floor. For the capture used here: `min 0.80 m`, never under the 0.6 m floor for non-contact sparring.
 
@@ -35,7 +38,7 @@ That removes **44.4 – 97.5 s (53.1 s)** and keeps 52.9 s — 31% of the source
 
 <pre><code>sparring.splice([&#10;  [1.6, 9.0], [14.6, 22.1], [30.8, 44.4], [97.5, 103.4],&#10;  [104.8, 110.8], [113.7, 117.6], [134.7, 140.6], [158.4, 161.1],&#10;].map(([from, to]) =&gt; ({ from, to })), { blend: 0.25 });&#10;&#10;editor.timeline.duration;   // 52.9 (once the cameras are remapped — step 5)&#10;sparring.asCommand();       // the declarative form of this cut</code></pre>
 
-<div class="note"><strong>Why the pair moves as one.</strong> The continuity offset at each cut is computed from the pair's centroid and applied to <em>both</em> performers, so their separation survives the cut. Per-performer <code>timeOffset</code> and <code>speedOf</code> are refused until you call <code>breakRegistration()</code> — it warns what is lost (they can clip through each other) and is undoable. A directive on a single member, e.g. <code>$S('#a').play('clip-a', { from: 1, to: 5 })</code>, is refused for the same reason.</div>
+<div class="note"><strong>Why the pair moves as one.</strong> The continuity offset at each cut is computed from the pair&#39;s centroid and applied to <em>both</em> performers, so their separation survives the cut. Per-performer <code>timeOffset</code> and <code>speedOf</code> are refused until you call <code>breakRegistration()</code> — it warns what is lost (they can clip through each other) and is undoable. A directive on a single member, e.g. <code>$S(&#39;#a&#39;).play(&#39;clip-a&#39;, { from: 1, to: 5 })</code>, is refused for the same reason.</div>
 
 <h2><span class="step">4</span> Check for collisions</h2>
 
@@ -47,7 +50,7 @@ For this cut: `ok: true`, no span under 0.6 m. The closest approach sits inside 
 
 <h2><span class="step">5</span> Remap the cameras</h2>
 
-<p class="lede">Shots authored against the 170 s source need the new timebase. <code>remapShots()</code> keeps every event that lies wholly inside one kept span, moves it to the cut's clock, and drops (and reports) the rest:</p>
+<p class="lede">Shots authored against the 170 s source need the new timebase. <code>remapShots()</code> keeps every event that lies wholly inside one kept span, moves it to the cut&#39;s clock, and drops (and reports) the rest:</p>
 
 <pre><code>const r = sparring.remapShots();&#10;r.kept; r.dropped;          // what survived the cut&#10;editor.timeline.duration;   // 52.9</code></pre>
 
@@ -59,8 +62,10 @@ For this cut: `ok: true`, no span under 0.6 m. The closest approach sits inside 
 
 <h2><span class="step">7</span> Undo, clear, commit</h2>
 
-<ol class="steps">&#10;		<li>Every call above is one <strong>Undo</strong> step — the same stack as the Animations tab.</li>&#10;		<li><code>sparring.clear()</code> drops the edit list; the full 170.17 s capture plays again, untouched.</li>&#10;		<li>Open the <strong>Animations</strong> tab: the cut is one teal block per performer with a tick at every span boundary, and a <strong>Collision check</strong> / <strong>Clear cut</strong> bar underneath. Drag a block and both performers move together; the code panel shows the same cut as a <code>$M('sparring').cut(...)</code> line you can edit and save.</li>&#10;		<li>Commit from the <strong>Git</strong> tab. The scene is written compact (no pretty-printing) with the animation floats quantized — see below.</li>&#10;	</ol>
+<ol class="steps">&#10;		<li>Every call above is one <strong>Undo</strong> step — the same stack as the Animations tab.</li>&#10;		<li><code>sparring.clear()</code> drops the edit list; the full 170.17 s capture plays again, untouched.</li>&#10;		<li>Open the <strong>Animations</strong> tab: the cut is one teal block per performer with a tick at every span boundary, and a <strong>Collision check</strong> / <strong>Clear cut</strong> bar underneath. Drag a block and both performers move together; the code panel shows the same cut as a <code>$M(&#39;sparring&#39;).cut(...)</code> line you can edit and save.</li>&#10;		<li>Commit from the <strong>Git</strong> tab. The scene is written compact (no pretty-printing) with the animation floats quantized — see below.</li>&#10;	</ol>
 
-<div class="note"><strong>Honest note on what is and isn't modified.</strong> The captured clip on the scene is only ever read. The cut is compiled in memory from the edit list each time it is needed (and for glTF export), the way the Timeline clip is, and is never saved. Saving the scene writes the capture as it was plus a few hundred bytes of edit list. Saved animation values are quantized (quaternions 5 decimals, positions and times 4) — a deliberate, deterministic, lossy size saving applied at save, independent of any edit.</div>
+<div class="note"><strong>Honest note on what is and isn&#39;t modified.</strong> The captured clip on the scene is only ever read. The cut is compiled in memory from the edit list each time it is needed (and for glTF export), the way the Timeline clip is, and is never saved. Saving the scene writes the capture as it was plus a few hundred bytes of edit list. Saved animation values are quantized (quaternions 5 decimals, positions and times 4) — a deliberate, deterministic, lossy size saving applied at save, independent of any edit.</div>
 
-<section class="credits" id="credits">&#10;		&#10;		<h2>Credits and licences</h2>&#10;		<h3>People</h3>&#10;		<ul>&#10;			<li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script)</span></li>&#10;			<li><a href="https://search.asu.edu/profile/1795222">Pavan Turaga</a> <span class="lic">(asset)</span></li>&#10;			<li><a href="https://search.asu.edu/profile/215415">Assegid Kidane</a> <span class="lic">(asset)</span></li>&#10;		</ul>&#10;		<h3>Assets</h3>&#10;		<ul>&#10;			<li><a href="https://search.asu.edu/profile/1795222">Sparring capture: clips st1_1072026Skeleton and st2_1072026Skeleton (170.17 s)</a>: Recorded with an OptiTrack system in &quot;Martial Arts and Motion Capture&quot; (GAME 294), Arizona State University; course run by Pavan Turaga, recorded by Assegid Kidane; the two performers are not named <span class="lic">Licence: not stated.</span></li>&#10;		</ul>&#10;		<h3>Tools</h3>&#10;		<p>None used.</p>&#10;	</section>
+<section class="credits" id="credits">&#10;		&#10;		<h2>Credits and licences</h2>&#10;		<h3>People</h3>&#10;		<ul>&#10;			<li><a href="https://tejaswigowda.com/" rel="noopener noreferrer">Tejaswi Gowda</a> <span class="lic">(script)</span></li>&#10;			<li><a href="https://search.asu.edu/profile/1795222" rel="noopener noreferrer">Pavan Turaga</a> <span class="lic">(asset)</span></li>&#10;			<li><a href="https://search.asu.edu/profile/215415" rel="noopener noreferrer">Assegid Kidane</a> <span class="lic">(asset)</span></li>&#10;		</ul>&#10;		<h3>Assets</h3>&#10;		<ul>&#10;			<li><a href="https://search.asu.edu/profile/1795222" rel="noopener noreferrer">Sparring capture: clips st1_1072026Skeleton and st2_1072026Skeleton (170.17 s)</a>: Recorded with an OptiTrack system in &quot;Martial Arts and Motion Capture&quot; (GAME 294), Arizona State University; course run by Pavan Turaga, recorded by Assegid Kidane; the two performers are not named <span class="lic">Licence: not stated.</span></li>&#10;		</ul>&#10;		<h3>Tools</h3>&#10;		<p>None used.</p>&#10;	</section>
+
+<div class="tutorial-footer">&#10;		<a href="https://strataeditor.dev/about/tutorials/">← All tutorials</a>&#10;	</div>

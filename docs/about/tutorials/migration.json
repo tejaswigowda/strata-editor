@@ -1,0 +1,178 @@
+{
+  "root": "tejaswigowda/strata-editor/docs/about/tutorials",
+  "domain": "https://strataeditor.dev/about/tutorials",
+  "sourceRef": "7b4f81db1b13712a58b85cd112cb4171e8e45d5a",
+  "pages": [
+    {
+      "name": "a-plus-b-cubed.html",
+      "source": "pages/a-plus-b-cubed.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1&file=a%2Bb-cubed.json&present=true"
+      ]
+    },
+    {
+      "name": "animate-a-character.html",
+      "source": "pages/animate-a-character.md",
+      "changes": []
+    },
+    {
+      "name": "area-volume.html",
+      "source": "pages/area-volume.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=area-volume.json&present=true"
+      ]
+    },
+    {
+      "name": "author-a-face.html",
+      "source": "pages/author-a-face.md",
+      "changes": []
+    },
+    {
+      "name": "bubble-shooter-scene.html",
+      "source": "pages/bubble-shooter-scene.md",
+      "changes": []
+    },
+    {
+      "name": "build-a-scene.html",
+      "source": "pages/build-a-scene.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1&file=bus-stop.json&present=true"
+      ]
+    },
+    {
+      "name": "edit-captured-motion.html",
+      "source": "pages/edit-captured-motion.md",
+      "changes": []
+    },
+    {
+      "name": "fight-arena-scene.html",
+      "source": "pages/fight-arena-scene.md",
+      "changes": [
+        "<a> download removed; destination and content retained"
+      ]
+    },
+    {
+      "name": "gis-walkway-shade.html",
+      "source": "pages/gis-walkway-shade.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=7b9359e3b2226064e9852cbce5d2c721175957a1&play=false&present=true",
+        "<a> target removed; destination and content retained"
+      ]
+    },
+    {
+      "name": "hardy-weinberg.html",
+      "source": "pages/hardy-weinberg.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=hw.json&present=true"
+      ]
+    },
+    {
+      "name": "index.html",
+      "source": "pages/home.md",
+      "changes": [
+        "Section jump navigation retained as a labelled div",
+        "<a> tabindex removed; destination and content retained"
+      ]
+    },
+    {
+      "name": "make-your-own-metahuman.html",
+      "source": "pages/make-your-own-metahuman.md",
+      "changes": []
+    },
+    {
+      "name": "makeshort.html",
+      "source": "pages/makeshort.md",
+      "changes": [
+        "video converted to wc-video: https://strataeditor.dev/about/tutorials/demos/pyth.mp4",
+        "Mathematical variable retained as italic emphasis"
+      ]
+    },
+    {
+      "name": "martial-arts-dojo.html",
+      "source": "pages/martial-arts-dojo.md",
+      "changes": []
+    },
+    {
+      "name": "molecule-shapes.html",
+      "source": "pages/molecule-shapes.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&file=molecule-shapes.json&present=true"
+      ]
+    },
+    {
+      "name": "paddle-table-view.html",
+      "source": "pages/paddle-table-view.md",
+      "changes": []
+    },
+    {
+      "name": "piston.html",
+      "source": "pages/piston.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&file=piston.json&present=true"
+      ]
+    },
+    {
+      "name": "projectile.html",
+      "source": "pages/projectile.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&file=projectile.json&present=true"
+      ]
+    },
+    {
+      "name": "racing-circuit-scene.html",
+      "source": "pages/racing-circuit-scene.md",
+      "changes": []
+    },
+    {
+      "name": "render-camera-sequence.html",
+      "source": "pages/render-camera-sequence.md",
+      "changes": []
+    },
+    {
+      "name": "segment-a-diorama.html",
+      "source": "pages/segment-a-diorama.md",
+      "changes": []
+    },
+    {
+      "name": "segment-a-mesh.html",
+      "source": "pages/segment-a-mesh.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=avocado.json&present=true"
+      ]
+    },
+    {
+      "name": "segment-a-scene.html",
+      "source": "pages/segment-a-scene.md",
+      "changes": []
+    },
+    {
+      "name": "segment-any-mesh.html",
+      "source": "pages/segment-any-mesh.md",
+      "changes": [
+        "iframe converted to wc-embed: https://strataeditor.dev/#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=duck.json&present=true"
+      ]
+    },
+    {
+      "name": "sparring-from-mocap.html",
+      "source": "pages/sparring-from-mocap.md",
+      "changes": []
+    },
+    {
+      "name": "two-character-dance.html",
+      "source": "pages/two-character-dance.md",
+      "changes": []
+    },
+    {
+      "name": "vrm-restyle-explorer.html",
+      "source": "pages/vrm-restyle-explorer.md",
+      "changes": []
+    },
+    {
+      "name": "wizard-hat-sculpt.html",
+      "source": "pages/wizard-hat-sculpt.md",
+      "changes": []
+    }
+  ],
+  "previousSource": "tutorial-source",
+  "themeLicence": "MIT"
+}

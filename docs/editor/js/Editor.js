@@ -19,7 +19,7 @@ import { applyStoredTheme } from './Theme.js';
 import { settleBakedOutline } from './toon/bakedOutlines.js';
 import { isRecordScene, canonicalForm, framing, FRAMING } from './export/records.js';
 import { regenerateRecords } from './export/regenerate.js';
-import { snapshotState, flatState } from './export/oplog.js';
+import { OpLog, snapshotState, flatState } from './export/oplog.js';
 import { openOpLog, declareActor } from './export/oplogStore.js';
 
 var _DEFAULT_CAMERA = new THREE.PerspectiveCamera( 50, 1, 0.001, 1e10 );
@@ -28,9 +28,10 @@ _DEFAULT_CAMERA.name = 'Edit Camera'; // the built-in nav camera — never added
 _DEFAULT_CAMERA.position.set( 0, 5, 10 );
 _DEFAULT_CAMERA.lookAt( new THREE.Vector3() );
 
-function Editor() {
+function Editor( { storageFree = false } = {} ) {
 
-	applyStoredTheme(); // Auto / Light / Dark from Settings; Auto (the default) changes nothing
+	this.storageFree = storageFree;
+	if ( ! storageFree ) applyStoredTheme();
 
 	const Signal = signals.Signal; // eslint-disable-line no-undef
 
@@ -166,13 +167,13 @@ function Editor() {
 	// Material command dispatches this signal (see their execute()/undo()).
 	this.signals.objectChanged.add( function ( object ) { invalidateRestState( object ); } );
 
-	this.config = new Config();
+	this.config = new Config( storageFree ? null : undefined );
 	// Who drove each operation, kept beside the history and out of the scene (export/oplog.js, guides/ATTRIBUTION.md).
-	this.oplog = openOpLog();
+	this.oplog = storageFree ? new OpLog() : openOpLog();
 	this.oplog.witness = () => flatState( this.scene );   // lets the Shell's direct changes be seen (export/oplog.js, diffState)
 	this.history = new _History( this );
 	this.selector = new Selector( this );
-	this.storage = new _Storage();
+	this.storage = storageFree ? null : new _Storage();
 	this.strings = new Strings( this.config );
 
 	this.loader = new Loader( this );
@@ -731,7 +732,7 @@ Editor.prototype = {
 
 		this.history.clear();
 		if ( this.oplog ) this.oplog.note( 'reset' );   // File, New: what was done before is not in the scene any more
-		this.storage.clear();
+		this.storage?.clear();
 		this.recordStatus = new Map();
 		this.recordReady = null;
 
@@ -1019,7 +1020,7 @@ Editor.prototype = {
 	/** Say who is driving this tab: { id, kind: 'user' | 'agent' }. Self-reported and unauthenticated; an agent that does not say so is logged as the user. */
 	setActor: function ( actor ) {
 
-		return declareActor( this.oplog, actor );
+		return declareActor( this.oplog, actor, this.storageFree ? null : undefined );
 
 	},
 

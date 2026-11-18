@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "generator": {
+    "name": "blog-webcli",
+    "licence": "MIT"
+  },
+  "blog": {
+    "title": "Strata tutorials",
+    "author": "Strata"
+  },
+  "dependencies": [
+    {
+      "kind": "theme",
+      "name": "Strata tutorials",
+      "version": "1.0.0",
+      "licence": "MIT",
+      "repo": "tejaswigowda/strata-editor/docs/about/tutorials/theme",
+      "ref": "71b04a54462d31995855717d63a32a5868373229",
+      "sha256": "173d6adaba80468abc1636185c89f53b61fa742e691ba8e7138347a54069309f",
+      "contract": "wordpress-classic",
+      "source": "https://github.com/tejaswigowda/strata-editor"
+    }
+  ]
+}

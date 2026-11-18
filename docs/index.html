@@ -66,6 +66,8 @@
 			import { PlayBar } from './editor/js/PlayBar.js';
 			import { SubtitlePreview } from './editor/js/SubtitlePreview.js';
 			import { Sidebar } from './editor/js/Sidebar.js';
+			import { SidebarProjectRenderer } from './editor/js/Sidebar.Project.Renderer.js';
+			import { Timeline } from './editor/js/Timeline.js';
 			import { Menubar } from './editor/js/Menubar.js';
 			import { Resizer } from './editor/js/Resizer.js';
 			import { autoLoadFromGit, loadSceneFromHash, showPlayOverlay, watchHashChanges, currentGitSource } from './editor/js/Menubar.Git.js';
@@ -100,19 +102,27 @@
 
 			}
 
-			if ( isPresentMode() ) document.body.classList.add( 'present-mode' );
+			const presentMode = isPresentMode();
+			if ( presentMode ) document.body.classList.add( 'present-mode' );
+			// location.origin describes the URL; window.origin describes the document,
+			// which is opaque in a sandbox without allow-same-origin.
+			const storageFree = presentMode && window.origin === 'null';
 
 			// Function to initialize the editor after all dependencies are loaded
 			async function initializeEditor() {
-				const editor = new Editor();
+				const editor = new Editor( { storageFree } );
 
 				window.editor = editor; // Expose editor to Console
 				window.THREE = THREE; // Expose THREE to APP Scripts and Console
 
 				// Unsaved-work guard: keyed autosave, dirty tracking, recover-on-load (see WorkGuard.js).
 				// Created before the menubar so its chip can subscribe; idle until boot finishes.
-				editor.work = new WorkGuard( editor, { getSource: currentGitSource } );
-				editor.work.start();
+				if ( ! storageFree ) {
+
+					editor.work = new WorkGuard( editor, { getSource: currentGitSource } );
+					editor.work.start();
+
+				}
 
 				THREE.ObjectLoader.registerGeometry( 'TextGeometry', TextGeometry );
 
@@ -129,32 +139,43 @@
 				// below and making the scene look like it "isn't auto-loading").
 				const rendererReady = new Promise( function ( resolve ) { editor.signals.rendererCreated.addOnce( resolve ); } );
 
-				const toolbar = new Toolbar( editor );
-				document.body.appendChild( toolbar.dom );
-
-				const script = new Script( editor );
-				document.body.appendChild( script.dom );
-
-				const player = new Player( editor );
-				document.body.appendChild( player.dom );
-
 				const presentBar = new PresentBar( editor );
 				document.body.appendChild( presentBar.dom );
 
-				const sidebar = new Sidebar( editor );
-				document.body.appendChild( sidebar.dom );
+				if ( storageFree ) {
 
-				const menubar = new Menubar( editor );
-				document.body.appendChild( menubar.dom );
+					// The renderer and timeline transport are also used by the viewer.
+					// Don't mount the authoring panels just to get their signal handlers.
+					new SidebarProjectRenderer( editor );
+					new Timeline( editor );
 
-				const playBar = new PlayBar( editor );
-				document.body.appendChild( playBar.dom );
+				} else {
+
+					const toolbar = new Toolbar( editor );
+					document.body.appendChild( toolbar.dom );
+
+					const script = new Script( editor );
+					document.body.appendChild( script.dom );
+
+					const player = new Player( editor );
+					document.body.appendChild( player.dom );
+
+					const sidebar = new Sidebar( editor );
+					document.body.appendChild( sidebar.dom );
+
+					const menubar = new Menubar( editor );
+					document.body.appendChild( menubar.dom );
+
+					const playBar = new PlayBar( editor );
+					document.body.appendChild( playBar.dom );
+
+					const resizer = new Resizer( editor );
+					document.body.appendChild( resizer.dom );
+
+				}
 
 				const subtitlePreview = new SubtitlePreview( editor );
 				document.body.appendChild( subtitlePreview.dom );
-
-				const resizer = new Resizer( editor );
-				document.body.appendChild( resizer.dom );
 
 				// WebGPU's renderer creation is async (adapter/device round-trip)
 				// unlike WebGL's synchronous constructor, so wait for the first
@@ -178,6 +199,14 @@
 
 				// Keep the Git tab in step with later hash edits (address bar, back / forward, pasted links).
 				watchHashChanges( editor, result => { if ( result.play ) showPlayOverlay( editor ); } );
+
+				if ( storageFree ) {
+
+					window.addEventListener( 'resize', onWindowResize );
+					onWindowResize();
+					return; // No autosave, Git settings, file drops or service worker in the opaque viewer.
+
+				}
 
 				editor.storage.init( function () {
 
