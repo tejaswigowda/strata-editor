@@ -130,7 +130,14 @@ function ViewportControls( editor ) {
 	shadingSelect.onChange( function () {
 
 		editor.setViewportShading( this.getValue() );
-		try { if ( this.getValue() === 'render' ) sessionStorage.setItem( 'strata/viewportAsRender', '1' ); else sessionStorage.removeItem( 'strata/viewportAsRender' ); } catch ( e ) { /* storage blocked */ }
+
+	} );
+
+	signals.viewportShadingChanged.add( function () {
+
+		const shading = editor.viewportShading;
+		shadingSelect.setValue( shading );
+		try { if ( shading === 'render' ) sessionStorage.setItem( 'strata/viewportAsRender', '1' ); else sessionStorage.removeItem( 'strata/viewportAsRender' ); } catch ( e ) { /* storage blocked */ }
 
 	} );
 
@@ -151,10 +158,9 @@ function ViewportControls( editor ) {
 		editor.setViewportCamera( editor.camera.uuid );
 
 		// 'as render' is a working mode, not a per-scene view: it survives loading another scene
-		if ( shadingSelect.getValue() === 'render' ) return;
+		if ( editor.viewportShading === 'render' ) return;
 
-		shadingSelect.setValue( 'solid' );
-		editor.setViewportShading( shadingSelect.getValue() );
+		editor.setViewportShading( 'solid' );
 
 	} );
 

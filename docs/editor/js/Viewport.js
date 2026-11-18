@@ -1604,13 +1604,25 @@ function Viewport( editor ) {
 			previewBadge = document.createElement( 'div' );
 			previewBadge.id = 'viewport-as-render-badge';
 			previewBadge.textContent = 'PREVIEW AS RENDER';
-			previewBadge.title = 'The viewport is drawing exactly what the Render tab exports: MToon / shader materials become WebGL stand-ins and helpers are hidden. Switch shading back to "solid" to see the real materials.';
-			previewBadge.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:20;padding:2px 10px;border-radius:10px;background:#e4572e;color:#fff;font:600 11px/18px sans-serif;letter-spacing:.06em;pointer-events:none;';
+			previewBadge.title = 'The viewport is drawing exactly what the Render tab exports: MToon / shader materials become WebGL stand-ins and helpers are hidden.';
+			previewBadge.style.cssText = 'position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:8px;padding:2px 5px 2px 10px;border-radius:10px;background:#e4572e;color:#fff;font:600 11px/18px sans-serif;letter-spacing:.06em;pointer-events:none;white-space:nowrap;';
+
+			const stop = document.createElement( 'button' );
+			stop.type = 'button';
+			stop.textContent = 'Stop';
+			stop.title = 'Stop preview and return to solid shading';
+			stop.style.cssText = 'pointer-events:auto;cursor:pointer;font:inherit;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:#fff;color:#392016;';
+			stop.addEventListener( 'click', function () {
+
+				editor.setViewportShading( 'solid' );
+
+			} );
+			previewBadge.appendChild( stop );
 			container.dom.appendChild( previewBadge );
 
 		}
 
-		if ( previewBadge !== null ) previewBadge.style.display = on ? '' : 'none';
+		if ( previewBadge !== null ) previewBadge.style.display = on ? 'flex' : 'none';
 		if ( ! on && renderPreview !== null && renderPreview.domElement ) renderPreview.domElement.style.display = 'none';
 
 	}
