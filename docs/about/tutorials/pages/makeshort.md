@@ -22,11 +22,52 @@ image: asset:images/thumbs/makeshort.jpg
 
 <p class="lede">The demonstration needs the squares to come apart and go back together, so each one is made of unit tiles instead of one big box. A tile is a 1×1×1 cube, so it reads as a solid block from any side when it tumbles later. Tiles sit in a row or a column group, and the group sits in a square group: <code>#3x3-square</code> › <code>#3col1</code> › <code>cube_3.1.1</code>. That nesting is what lets the timeline say &quot;the first column of the 3×3&quot; later.</p>
 
-<pre><code>// A square of side n is n lines (rows or columns) of n tiles. Each tile is a&#10;// 1 x 1 x 1 cube; each line is its own group so the timeline can address it.&#10;function makeSquare(n, name, color, kind, place) {&#10;  const square = new Group();&#10;  square.name = name;&#10;  for (let k = 1; k &lt;= n; k++) {&#10;    const line = new Group();&#10;    line.name = `${n}${kind}${k}`;&#10;    for (let m = 1; m &lt;= n; m++) {&#10;      const tile = new Mesh(&#10;        new BoxGeometry(1, 1, 1),&#10;        // emissive = the tile&#39;s own colour at 30%: bright even in the shade of another tile&#10;        new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.2 })&#10;      );&#10;      tile.name = `cube_${n}.${k}.${m}`;&#10;      tile.position.set(...place(k, m), 0);&#10;      tile.castShadow = tile.receiveShadow = true;&#10;      tile.userData.hasEdgeOutline = true; // black border, drawn by the viewport&#10;      line.add(tile);&#10;    }&#10;    square.add(line);&#10;  }&#10;  editor.execute(new AddObjectCommand(editor, square));&#10;  return square;&#10;}&#10;&#10;// 3x3 on the vertical leg: columns, column 1 touches the triangle.&#10;makeSquare(3, &#39;3x3-square&#39;, 0xff4d6a, &#39;col&#39;, (k, m) =&gt; [1 - k, 3 - m]);&#10;// 4x4 under the horizontal leg: rows, row 1 touches the triangle.&#10;makeSquare(4, &#39;4x4-square&#39;, 0x14e0c8, &#39;row&#39;, (k, m) =&gt; [m, -k]);&#10;// 5x5 on the hypotenuse: built upright, then turned onto the slope.&#10;const big = makeSquare(5, &#39;5x5-square&#39;, 0xffc93c, &#39;row&#39;, (k, m) =&gt; [m - 0.5, 5.5 - k]);&#10;big.position.set(4.5, -0.5, 0);&#10;big.rotation.z = Math.atan2(4, 3);   // 53.13 degrees, the angle of the 3-4-5 triangle</code></pre>
+```javascript
+// A square of side n is n lines (rows or columns) of n tiles. Each tile is a
+// 1 x 1 x 1 cube; each line is its own group so the timeline can address it.
+function makeSquare(n, name, color, kind, place) {
+  const square = new Group();
+  square.name = name;
+  for (let k = 1; k <= n; k++) {
+    const line = new Group();
+    line.name = `${n}${kind}${k}`;
+    for (let m = 1; m <= n; m++) {
+      const tile = new Mesh(
+        new BoxGeometry(1, 1, 1),
+        // emissive = the tile's own colour at 30%: bright even in the shade of another tile
+        new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.2 })
+      );
+      tile.name = `cube_${n}.${k}.${m}`;
+      tile.position.set(...place(k, m), 0);
+      tile.castShadow = tile.receiveShadow = true;
+      tile.userData.hasEdgeOutline = true; // black border, drawn by the viewport
+      line.add(tile);
+    }
+    square.add(line);
+  }
+  editor.execute(new AddObjectCommand(editor, square));
+  return square;
+}
+
+// 3x3 on the vertical leg: columns, column 1 touches the triangle.
+makeSquare(3, '3x3-square', 0xff4d6a, 'col', (k, m) => [1 - k, 3 - m]);
+// 4x4 under the horizontal leg: rows, row 1 touches the triangle.
+makeSquare(4, '4x4-square', 0x14e0c8, 'row', (k, m) => [m, -k]);
+// 5x5 on the hypotenuse: built upright, then turned onto the slope.
+const big = makeSquare(5, '5x5-square', 0xffc93c, 'row', (k, m) => [m - 0.5, 5.5 - k]);
+big.position.set(4.5, -0.5, 0);
+big.rotation.z = Math.atan2(4, 3);   // 53.13 degrees, the angle of the 3-4-5 triangle
+```
 
 Give everything an addressable class — squares, lines and tiles — so selectors like `#3x3-square #3col1 .cube` and `.cube` work. Class names are stored lowercase, so use lowercase everywhere:
 
-<pre><code>$S(&#39;#3x3-square, #4x4-square, #5x5-square&#39;).addClass(&#39;square&#39;);&#10;$S(&#39;#3x3-square &gt; *&#39;).addClass(&#39;col&#39;);&#10;$S(&#39;#4x4-square &gt; *, #5x5-square &gt; *&#39;).addClass(&#39;row&#39;);&#10;$S(&#39;#3x3-square &gt; * &gt; *, #4x4-square &gt; * &gt; *, #5x5-square &gt; * &gt; *&#39;).addClass(&#39;cube&#39;);&#10;$S(&#39;.cube&#39;).nodes.filter(n =&gt; n.name.startsWith(&#39;cube_&#39;)).length   // 50 tiles: 9 + 16 + 25</code></pre>
+```javascript
+$S('#3x3-square, #4x4-square, #5x5-square').addClass('square');
+$S('#3x3-square > *').addClass('col');
+$S('#4x4-square > *, #5x5-square > *').addClass('row');
+$S('#3x3-square > * > *, #4x4-square > * > *, #5x5-square > * > *').addClass('cube');
+$S('.cube').nodes.filter(n => n.name.startsWith('cube_')).length   // 50 tiles: 9 + 16 + 25
+```
 
 <div class="note"><strong>Selectors reach down.</strong> A class on a node also matches everything inside it, and each tile&#39;s black border is a child of the tile, so <code>$S(&#39;.cube&#39;).nodes.length</code> says 100, not 50: the 50 tiles and their 50 borders. That is harmless — the borders follow their tiles through every fade and flight, and <code>moveToEach</code> pairs borders with borders in the same order — but it is why the check above filters by name.</div>
 
@@ -36,9 +77,26 @@ Give everything an addressable class — squares, lines and tiles — so selecto
 
 <p class="lede">Legs 4 and 3, one unit thick, with its right angle on the corner the 3×3 and the 4×4 share. The 5×5 sits on the long side.</p>
 
-<pre><code>const tri = new Mesh(&#10;  new ExtrudeGeometry(&#10;    new Shape([new Vector2(0, 0), new Vector2(4, 0), new Vector2(0, 3)]),   // legs 4 and 3&#10;    { depth: 1, bevelEnabled: false }&#10;  ),&#10;  new MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: 0.22, roughness: 0.45, metalness: 0.1 })&#10;);&#10;tri.geometry.translate(0, 0, -0.5);        // centre the 1-unit thickness on z = 0&#10;tri.name = &#39;RightTriangle&#39;;&#10;tri.position.set(0.5, -0.5, 0);            // right angle sits at the corner the squares share&#10;tri.castShadow = tri.receiveShadow = true;&#10;tri.userData.hasEdgeOutline = true;&#10;editor.execute(new AddObjectCommand(editor, tri));</code></pre>
+```javascript
+const tri = new Mesh(
+  new ExtrudeGeometry(
+    new Shape([new Vector2(0, 0), new Vector2(4, 0), new Vector2(0, 3)]),   // legs 4 and 3
+    { depth: 1, bevelEnabled: false }
+  ),
+  new MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: 0.22, roughness: 0.45, metalness: 0.1 })
+);
+tri.geometry.translate(0, 0, -0.5);        // centre the 1-unit thickness on z = 0
+tri.name = 'RightTriangle';
+tri.position.set(0.5, -0.5, 0);            // right angle sits at the corner the squares share
+tri.castShadow = tri.receiveShadow = true;
+tri.userData.hasEdgeOutline = true;
+editor.execute(new AddObjectCommand(editor, tri));
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-build.png" alt="The triangle with the full 3x3 square on its vertical leg and the first row of the 4x4 square along its horizontal leg, seen through the scene camera at 24 seconds: coral-red and aqua tiles and a gold triangle on a blue wall, each throwing a soft shadow, with the labels 3 squared and, beside the horizontal leg, 4.">&#10;		<figcaption>Twenty-four seconds in, seen through the scene camera: the 3×3 has unfolded, the 4×4 is about to. (This frame comes from the finished timeline in steps 6–9.)</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-build.png" alt="The triangle with the full 3x3 square on its vertical leg and the first row of the 4x4 square along its horizontal leg, seen through the scene camera at 24 seconds: coral-red and aqua tiles and a gold triangle on a blue wall, each throwing a soft shadow, with the labels 3 squared and, beside the horizontal leg, 4.">
+<figcaption>Twenty-four seconds in, seen through the scene camera: the 3×3 has unfolded, the 4×4 is about to. (This frame comes from the finished timeline in steps 6–9.)</figcaption>
+</figure>
 
 <h2><span class="step">3</span> Three text labels</h2>
 
@@ -48,19 +106,68 @@ Give everything an addressable class — squares, lines and tiles — so selecto
 
 <p>You never set their text in the panel. Every word they show comes from <code>.change()</code> events on the timeline, so the placeholder &quot;THREE.JS&quot; is overwritten at 0 s. Position them and give them a class like anything else:</p>
 
-<pre><code>$S(&#39;#three&#39;).moveTo(-1, 3.1, 1.24);     // beside the top of the vertical leg&#10;$S(&#39;#four&#39;).moveTo(5.6, -0.8, 1.24);    // beside the end of the horizontal leg, clear of the subtitles&#10;$S(&#39;#eqn&#39;).moveTo(-1.3, -3.1, 1.24);    // where the sum will be assembled, above the subtitle band&#10;$S(&#39;#three, #four, #eqn&#39;).addClass(&#39;label&#39;);</code></pre>
+```javascript
+$S('#three').moveTo(-1, 3.1, 1.24);     // beside the top of the vertical leg
+$S('#four').moveTo(5.6, -0.8, 1.24);    // beside the end of the horizontal leg, clear of the subtitles
+$S('#eqn').moveTo(-1.3, -3.1, 1.24);    // where the sum will be assembled, above the subtitle band
+$S('#three, #four, #eqn').addClass('label');
+```
 
 <h2><span class="step">4</span> Background, a lit room, and a glow for the text</h2>
 
 <p class="lede"><code>makeTexture</code> is a Shell helper — hand it a function that paints a 2D canvas, and it returns a ready-to-use texture. The default environment lights the scene from the background, so ask for it to be rebuilt once the background changes, otherwise the tiles keep the old, brighter lighting. Text lit only by scene lights goes faint on a dark ground, so give the labels some light of their own:</p>
 
-<pre><code>scene.background = makeTexture((ctx, size) =&gt; {&#10;  const g = ctx.createLinearGradient(0, 0, 0, size);&#10;  g.addColorStop(0, &#39;#1b2340&#39;);&#10;  g.addColorStop(0.55, &#39;#141a2e&#39;);&#10;  g.addColorStop(1, &#39;#0a0d18&#39;);&#10;  ctx.fillStyle = g;&#10;  ctx.fillRect(0, 0, size, size);&#10;}, 512);&#10;setEnvironment(&#39;Default&#39;);   // rebuild the image-based lighting from the new background&#10;&#10;// text lit only by scene lights goes faint on a dark ground: give it a glow of its own&#10;$S(&#39;.label&#39;).nodes.forEach(o =&gt; {&#10;  o.material.emissive = new Color(0xffffff);&#10;  o.material.emissiveIntensity = 0.7;&#10;  o.material.needsUpdate = true;&#10;});&#10;&#10;// white text over a bright tile needs an edge: a black drop shadow, offset down and to the right&#10;$S(&#39;.label&#39;).nodes.forEach(o =&gt; { o.userData.textShadow = true; o.castShadow = false; });   // (no second shadow on the wall)</code></pre>
+```javascript
+scene.background = makeTexture((ctx, size) => {
+  const g = ctx.createLinearGradient(0, 0, 0, size);
+  g.addColorStop(0, '#1b2340');
+  g.addColorStop(0.55, '#141a2e');
+  g.addColorStop(1, '#0a0d18');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+}, 512);
+setEnvironment('Default');   // rebuild the image-based lighting from the new background
+
+// text lit only by scene lights goes faint on a dark ground: give it a glow of its own
+$S('.label').nodes.forEach(o => {
+  o.material.emissive = new Color(0xffffff);
+  o.material.emissiveIntensity = 0.7;
+  o.material.needsUpdate = true;
+});
+
+// white text over a bright tile needs an edge: a black drop shadow, offset down and to the right
+$S('.label').nodes.forEach(o => { o.userData.textShadow = true; o.castShadow = false; });   // (no second shadow on the wall)
+```
 
 The shadow is a black copy of the label that the editor draws behind it and keeps in step with it: it follows every `change()`, every fade and every move, so it needs no keyframes of its own. It is not saved in the scene; only the `textShadow` flag is. Give `userData.textShadow` an object, such as `{ size: 0.1 }`, for a longer shadow. Cues on the video use the same idea: the subtitles have a black outline and shadow too.
 
 A flat gradient behind a flat figure looks like a slide. The cheapest way to make it a place is a room around the camera, one light, and shadows. The camera never moves, it only turns, and every figure (the 3-4-5, the two extra triples, the end card) is 15 to 20 units from it, so a box seen from the inside, centred on the camera, puts a wall behind each of them. One point light above the camera lights all four walls and throws every figure's shadow onto the wall behind it:
 
-<pre><code>// a room: four walls, floor and ceiling in one box, drawn from the inside (BackSide), centred on the camera&#10;const room = new Mesh(new BoxGeometry(52, 30, 52),&#10;  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));&#10;room.name = &#39;Room&#39;;&#10;room.position.set(3, 2, 20);&#10;room.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, room));&#10;&#10;// one light above the camera: it lights the walls (bright in the middle, darker towards the corners) and the tiles&#10;const key = new PointLight(0xfff1dd, 4.5, 0, 0);   // no distance limit, no fall-off&#10;key.name = &#39;KeyLight&#39;;&#10;key.position.set(0, 7, 20);&#10;key.castShadow = true;&#10;key.shadow.mapSize.set(2048, 2048);&#10;key.shadow.bias = -0.0004;&#10;key.shadow.intensity = 0.6;    // shadows lighter than black, so they stay blue&#10;key.shadow.radius = 4;         // a soft edge&#10;key.shadow.camera.near = 0.5;&#10;key.shadow.camera.far = 70;&#10;editor.execute(new AddObjectCommand(editor, key));&#10;&#10;// a little sky and ground light so the side of a tumbling cube is never black&#10;editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: &#39;FillLight&#39; })));</code></pre>
+```javascript
+// a room: four walls, floor and ceiling in one box, drawn from the inside (BackSide), centred on the camera
+const room = new Mesh(new BoxGeometry(52, 30, 52),
+  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(3, 2, 20);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+// one light above the camera: it lights the walls (bright in the middle, darker towards the corners) and the tiles
+const key = new PointLight(0xfff1dd, 4.5, 0, 0);   // no distance limit, no fall-off
+key.name = 'KeyLight';
+key.position.set(0, 7, 20);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;    // shadows lighter than black, so they stay blue
+key.shadow.radius = 4;         // a soft edge
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 70;
+editor.execute(new AddObjectCommand(editor, key));
+
+// a little sky and ground light so the side of a tumbling cube is never black
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));
+```
 
 <div class="note"><strong>Shadows of things that are not there yet.</strong> The shadow pass ignores opacity, so a tile that has not faded in would still throw its shadow on the wall. The editor handles it: whenever the timeline is sampled, a mesh that its fades have left fully invisible stops casting, and starts again the moment it shows. That switch is never saved: the scene file keeps <code>castShadow</code> as you set it. The tiles, the triangles and the 5×5 pad cast and receive shadows (step 1 and step 9 set it); the labels do not, since they already have their own drop shadow. The background gradient above is still in the scene, but the room now hides it.</div>
 
@@ -70,11 +177,24 @@ A flat gradient behind a flat figure looks like a slide. The cheapest way to mak
 
 <p class="lede">The film is shot by a camera that lives in the scene, so it can be animated and chosen as a render shot. It looks straight down −Z at the middle of the figure. The rest of the film is the camera turning on the spot, a quarter turn at a time: left to a second triple, round to a third, and finally to the end card, which sits 15 units off to the camera&#39;s right.</p>
 
-<pre><code>const cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 2000);&#10;cam.name = &#39;PerspectiveCamera&#39;;&#10;cam.position.set(3, 0.68, 20);              // dead-centre on the figure, looking down -Z&#10;editor.execute(new AddObjectCommand(editor, cam));</code></pre>
+```javascript
+const cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 2000);
+cam.name = 'PerspectiveCamera';
+cam.position.set(3, 0.68, 20);              // dead-centre on the figure, looking down -Z
+editor.execute(new AddObjectCommand(editor, cam));
+```
 
 Open **Stencils → Mesh → Call card** and click it. It inserts an addressable plane that embeds the current [/about/callcard](https://strataeditor.dev/about/callcard/) live and fits it to the viewport camera. Move it off to the camera's right instead, make it landscape, and hide it until the reveal:
 
-<pre><code>const card = $S(&#39;#callcard&#39;).nodes[0];&#10;card.userData.width = 3.2;                  // landscape: the stencil&#39;s portrait 1.8 x 3.2 swapped&#10;card.userData.height = 1.8;&#10;card.geometry = new PlaneGeometry(3.2, 1.8);&#10;$S(&#39;#callcard&#39;).moveTo(18, 0.68, 20).scaleTo(8);   // 15 units to the camera&#39;s right, 8x bigger&#10;card.rotation.set(0, -Math.PI / 2, 0);             // front face toward the camera&#39;s start position&#10;card.material.opacity = 0;</code></pre>
+```javascript
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;                  // landscape: the stencil's portrait 1.8 x 3.2 swapped
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(18, 0.68, 20).scaleTo(8);   // 15 units to the camera's right, 8x bigger
+card.rotation.set(0, -Math.PI / 2, 0);             // front face toward the camera's start position
+card.material.opacity = 0;
+```
 
 <div class="note"><strong>Three details in that block.</strong> <code>scaleTo</code> sets an absolute scale; <code>scale</code> would multiply the size the stencil already gave it. A mesh&#39;s front is its local <strong>+Z</strong>, so turning the card a quarter turn about Y (−90°) points that front back at the camera&#39;s start position; if you get it backwards the card shows mirrored (it is double-sided, so it never disappears). And the card is hidden by being fully transparent, not by <code>visible = false</code>, because the reveal only animates opacity. The viewport may show the card stretched until it is re-baked: the Render tab does that, and so does reopening the saved scene.</div>
 
@@ -82,7 +202,30 @@ Open **Stencils → Mesh → Call card** and click it. It inserts an addressable
 
 <p class="lede">Everything from here on is one clock. <code>.at(t)</code> places an event at an absolute time in seconds; durations in <code>.animate()</code> are milliseconds and in <code>.fadeIn()</code> seconds. The beat is the same for both legs: a label counts the length, a one-tile-thin sliver shows up on the leg, and later the sliver unfolds into the whole square.</p>
 
-<pre><code>// the triangle, then the two entrance slivers&#10;$S(&#39;#RightTriangle&#39;).at(0).fadeIn(1.5);&#10;&#10;// 3: the label, the leg-thin sliver of the 3x3, then the whole square&#10;$S(&#39;#three&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#three&#39;).at(6.77).change(&#39;3&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#3x3-square #3col1 .cube&#39;).at(6.77).animate({ to: { positionX: 0.4, scaleX: 0.2, scaleY: 0.9 } }, 100);&#10;$S(&#39;#3x3-square #3col1 .cube&#39;).at(6.77).fadeIn(0.8);&#10;$S(&#39;#three&#39;).at(13).animate({ to: { positionX: -1, positionY: 3.1 } }, 800);&#10;$S(&#39;#3x3-square #3col1 .cube&#39;).at(14).animate({ to: { positionX: 0, scaleX: 1, scaleY: 1 } }, 400);&#10;$S(&#39;#3x3-square #3col2 .cube, #3x3-square #3col3 .cube&#39;).at(14).fadeIn(1);&#10;$S(&#39;#three&#39;).at(16).change(&#39;3\u00B2&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;&#10;// 4: the same beat, on rows&#10;$S(&#39;#four&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#four&#39;).at(10.15).change(&#39;4&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#4x4-square #4row1 .cube&#39;).at(10.15).animate({ to: { positionY: -0.6, scaleY: 0.2, scaleX: 0.9 } }, 100);&#10;$S(&#39;#4x4-square #4row1 .cube&#39;).at(10.15).fadeIn(0.8);&#10;$S(&#39;#four&#39;).at(23).animate({ to: { positionX: 5.8, positionY: -2.5 } }, 800);   // settles beside the middle of the 4x4&#10;$S(&#39;#4x4-square #4row1 .cube&#39;).at(24).animate({ to: { positionY: -1, scaleY: 1, scaleX: 1 } }, 400);&#10;$S(&#39;#4x4-square #4row2 .cube, #4x4-square #4row3 .cube, #4x4-square #4row4 .cube&#39;).at(24).fadeIn(1);&#10;$S(&#39;#four&#39;).at(26).change(&#39;4\u00B2&#39;, { transition: &#39;fade&#39;, dur: 400 });</code></pre>
+```javascript
+// the triangle, then the two entrance slivers
+$S('#RightTriangle').at(0).fadeIn(1.5);
+
+// 3: the label, the leg-thin sliver of the 3x3, then the whole square
+$S('#three').at(0).change('');
+$S('#three').at(6.77).change('3', { transition: 'fade', dur: 400 });
+$S('#3x3-square #3col1 .cube').at(6.77).animate({ to: { positionX: 0.4, scaleX: 0.2, scaleY: 0.9 } }, 100);
+$S('#3x3-square #3col1 .cube').at(6.77).fadeIn(0.8);
+$S('#three').at(13).animate({ to: { positionX: -1, positionY: 3.1 } }, 800);
+$S('#3x3-square #3col1 .cube').at(14).animate({ to: { positionX: 0, scaleX: 1, scaleY: 1 } }, 400);
+$S('#3x3-square #3col2 .cube, #3x3-square #3col3 .cube').at(14).fadeIn(1);
+$S('#three').at(16).change('3\u00B2', { transition: 'fade', dur: 400 });
+
+// 4: the same beat, on rows
+$S('#four').at(0).change('');
+$S('#four').at(10.15).change('4', { transition: 'fade', dur: 400 });
+$S('#4x4-square #4row1 .cube').at(10.15).animate({ to: { positionY: -0.6, scaleY: 0.2, scaleX: 0.9 } }, 100);
+$S('#4x4-square #4row1 .cube').at(10.15).fadeIn(0.8);
+$S('#four').at(23).animate({ to: { positionX: 5.8, positionY: -2.5 } }, 800);   // settles beside the middle of the 4x4
+$S('#4x4-square #4row1 .cube').at(24).animate({ to: { positionY: -1, scaleY: 1, scaleX: 1 } }, 400);
+$S('#4x4-square #4row2 .cube, #4x4-square #4row3 .cube, #4x4-square #4row4 .cube').at(24).fadeIn(1);
+$S('#four').at(26).change('4\u00B2', { transition: 'fade', dur: 400 });
+```
 
 <div class="note"><strong>Why a sliver first.</strong> The 3 and the 4 are lengths before they are areas. The first column is squashed to 0.2 of a tile wide and moved 0.4 along so it hugs the leg like a ruler (<code>positionX: 0.4</code>, <code>scaleX: 0.2</code>); at 14 s it relaxes to <code>positionX: 0, scaleX: 1</code> and the other two columns fade in beside it. The animated values are <em>absolute</em> (<code>to:</code>), which is why the &quot;relax&quot; event can name the resting values directly. <code>.change(&#39;&#39;)</code> at 0 s blanks a label until its first word.</div>
 
@@ -90,9 +233,21 @@ Open **Stencils → Mesh → Call card** and click it. It inserts an addressable
 
 <p class="lede">The 5×5 is only a landing pad. Make it invisible from the first frame, then send every tile of the other two squares onto one of its cells. <code>moveToEach</code> pairs sources to targets by <em>order</em>: the sources are listed 3×3 first, so the nine red tiles take the first nine cells (row 1 and the first four of row 2) and the sixteen teal tiles take the rest.</p>
 
-<pre><code>// the 5x5 is only a landing pad: start it transparent so it is never seen, not even at 0 s&#10;$S(&#39;#5x5-square .cube&#39;).nodes.forEach(t =&gt; { t.material.transparent = true; t.material.opacity = 0; });&#10;$S(&#39;#5x5-square, #5x5-square *, #5x5-square .cube&#39;).at(0).fadeOut(1);&#10;&#10;// the check: 9 tiles + 16 tiles tumble onto the 25 pad cells, 3 seconds, in selector-list order&#10;$S(&#39;#3x3-square .cube, #4x4-square .cube&#39;).at(40).moveToEach(&#39;#5x5-square .cube&#39;, 3000, {&#10;  spin: [1, 1, 0], arc: 3, stagger: 0.4, easing: &#39;ease-in-out&#39;&#10;});</code></pre>
+```javascript
+// the 5x5 is only a landing pad: start it transparent so it is never seen, not even at 0 s
+$S('#5x5-square .cube').nodes.forEach(t => { t.material.transparent = true; t.material.opacity = 0; });
+$S('#5x5-square, #5x5-square *, #5x5-square .cube').at(0).fadeOut(1);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-proof.png" alt="Mid-flight at 41.5 seconds: bright coral and aqua cubes tumbling from the two small squares towards the hypotenuse of the triangle, their shadows tumbling on the wall behind, with the label 4 squared still showing.">&#10;		<figcaption>41.5 seconds in: the tiles are mid-tumble, flipping about two axes and lifted towards the camera, each on its own arc. They also turn as they travel, because the pad cells they are heading for are rotated 53.13°.</figcaption>&#10;	</figure>
+// the check: 9 tiles + 16 tiles tumble onto the 25 pad cells, 3 seconds, in selector-list order
+$S('#3x3-square .cube, #4x4-square .cube').at(40).moveToEach('#5x5-square .cube', 3000, {
+  spin: [1, 1, 0], arc: 3, stagger: 0.4, easing: 'ease-in-out'
+});
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-proof.png" alt="Mid-flight at 41.5 seconds: bright coral and aqua cubes tumbling from the two small squares towards the hypotenuse of the triangle, their shadows tumbling on the wall behind, with the label 4 squared still showing.">
+<figcaption>41.5 seconds in: the tiles are mid-tumble, flipping about two axes and lifted towards the camera, each on its own arc. They also turn as they travel, because the pad cells they are heading for are rotated 53.13°.</figcaption>
+</figure>
 
 <div class="note"><strong>Why 3 seconds, and why a pad.</strong> Twenty-five tiles at once blur under about a second; three seconds lets a viewer follow &quot;those nine went there, those sixteen went there&quot;. Because the destinations are the pad&#39;s <em>actual</em> cell positions and rotations, resolved when the timeline is compiled, the reveal is deterministic and reversible when you scrub, and it re-targets itself if you move the pad. The pad is hidden by <em>starting</em> transparent — a bare <code>fadeOut</code> at 0 s would show it for the first second.</div>
 
@@ -102,11 +257,53 @@ Open **Stencils → Mesh → Call card** and click it. It inserts an addressable
 
 <p class="lede">While the tiles are still settling, the labels slide to the bottom into the shape of the sum: <code>3² + 4²</code>, which turns into <code>9 + 16</code>, closes up into <code>25</code>, and is then restated as <code>5²</code> and as the theorem itself. All of it is <code>.change()</code> on the three labels. Each phrase is held for three to five seconds, because a viewer needs that long to read it and connect it to what just happened on screen.</p>
 
-<pre><code>// 44-60 s: the sum, read off the screen. Each phrase stays up 3-5 s: long enough to read.&#10;$S(&#39;#eqn&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#three&#39;).at(44).animate({ to: { positionX: -2.9, positionY: -3.1 } }, 800);&#10;$S(&#39;#four&#39;).at(44).animate({ to: { positionX: -0.2, positionY: -3.1 } }, 800);&#10;$S(&#39;#eqn&#39;).at(44).change(&#39;+&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;&#10;$S(&#39;#three&#39;).at(47).change(&#39;9&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#four&#39;).at(47).change(&#39;16&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;&#10;$S(&#39;#three&#39;).at(52).animate({ to: { positionX: -1.3, positionY: -3.1 } }, 1000);&#10;$S(&#39;#four&#39;).at(52).animate({ to: { positionX: -1.3, positionY: -3.1 } }, 1000);&#10;$S(&#39;#three&#39;).at(53).fadeOut(0.3);&#10;$S(&#39;#four&#39;).at(53).fadeOut(0.3);&#10;$S(&#39;#eqn&#39;).at(53).change(&#39;25&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#eqn&#39;).at(56.5).change(&#39;5\u00B2&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#eqn&#39;).at(62.77).change(&#39;a\u00B2 + b\u00B2 = c\u00B2&#39;, { transition: &#39;fade&#39;, dur: 400 });</code></pre>
+```javascript
+// 44-60 s: the sum, read off the screen. Each phrase stays up 3-5 s: long enough to read.
+$S('#eqn').at(0).change('');
+$S('#three').at(44).animate({ to: { positionX: -2.9, positionY: -3.1 } }, 800);
+$S('#four').at(44).animate({ to: { positionX: -0.2, positionY: -3.1 } }, 800);
+$S('#eqn').at(44).change('+', { transition: 'fade', dur: 400 });
+
+$S('#three').at(47).change('9', { transition: 'fade', dur: 400 });
+$S('#four').at(47).change('16', { transition: 'fade', dur: 400 });
+
+$S('#three').at(52).animate({ to: { positionX: -1.3, positionY: -3.1 } }, 1000);
+$S('#four').at(52).animate({ to: { positionX: -1.3, positionY: -3.1 } }, 1000);
+$S('#three').at(53).fadeOut(0.3);
+$S('#four').at(53).fadeOut(0.3);
+$S('#eqn').at(53).change('25', { transition: 'fade', dur: 400 });
+$S('#eqn').at(56.5).change('5\u00B2', { transition: 'fade', dur: 400 });
+$S('#eqn').at(62.77).change('a\u00B2 + b\u00B2 = c\u00B2', { transition: 'fade', dur: 400 });
+```
 
 <p>The theorem is stated with letters, so name the sides it talks about. Three more labels, copied from <code>eqn</code> so they keep its font, glow and shadow, sit beside the triangle: <code>a</code> on the vertical leg, <code>b</code> on the horizontal one, and <code>c</code> on the hypotenuse, the side opposite the right angle. They appear one at a time while the subtitle says what each one is, and are gone before the camera turns away at 73 s:</p>
 
-<pre><code>// 68-73 s: name the sides the theorem talks about: a and b are the legs, c is the hypotenuse&#10;const src = $S(&#39;#eqn&#39;).nodes[0];&#10;function makeSide(name, x, y) {&#10;  const label = new Mesh(src.geometry.clone(), src.material.clone());&#10;  label.name = name;&#10;  label.scale.copy(src.scale).multiplyScalar(0.75);   // smaller than the equation, so they fit beside the figure&#10;  label.userData.textShadow = true;&#10;  label.position.set(x, y, 1.24);&#10;  editor.execute(new AddObjectCommand(editor, label));&#10;}&#10;makeSide(&#39;sideA&#39;, -0.7, 0.9);    // left of the vertical leg&#10;makeSide(&#39;sideB&#39;, 2.3, -1.2);    // under the horizontal leg&#10;makeSide(&#39;sideC&#39;, 2.8, 1.45);     // just off the hypotenuse&#10;$S(&#39;#sideA, #sideB, #sideC&#39;).addClass(&#39;label&#39;);&#10;&#10;$S(&#39;#sideA&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#sideB&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#sideC&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#sideA&#39;).at(68.42).change(&#39;a&#39;, { transition: &#39;fade&#39;, dur: 300 });&#10;$S(&#39;#sideB&#39;).at(69.12).change(&#39;b&#39;, { transition: &#39;fade&#39;, dur: 300 });&#10;$S(&#39;#sideC&#39;).at(71.02).change(&#39;c&#39;, { transition: &#39;fade&#39;, dur: 300 });   // as the cue says &quot;hypotenuse&quot;&#10;$S(&#39;#sideA&#39;).at(72.8).change(&#39;&#39;, { transition: &#39;fade&#39;, dur: 300 });&#10;$S(&#39;#sideB&#39;).at(72.8).change(&#39;&#39;, { transition: &#39;fade&#39;, dur: 300 });&#10;$S(&#39;#sideC&#39;).at(72.8).change(&#39;&#39;, { transition: &#39;fade&#39;, dur: 300 });</code></pre>
+```javascript
+// 68-73 s: name the sides the theorem talks about: a and b are the legs, c is the hypotenuse
+const src = $S('#eqn').nodes[0];
+function makeSide(name, x, y) {
+  const label = new Mesh(src.geometry.clone(), src.material.clone());
+  label.name = name;
+  label.scale.copy(src.scale).multiplyScalar(0.75);   // smaller than the equation, so they fit beside the figure
+  label.userData.textShadow = true;
+  label.position.set(x, y, 1.24);
+  editor.execute(new AddObjectCommand(editor, label));
+}
+makeSide('sideA', -0.7, 0.9);    // left of the vertical leg
+makeSide('sideB', 2.3, -1.2);    // under the horizontal leg
+makeSide('sideC', 2.8, 1.45);     // just off the hypotenuse
+$S('#sideA, #sideB, #sideC').addClass('label');
+
+$S('#sideA').at(0).change('');
+$S('#sideB').at(0).change('');
+$S('#sideC').at(0).change('');
+$S('#sideA').at(68.42).change('a', { transition: 'fade', dur: 300 });
+$S('#sideB').at(69.12).change('b', { transition: 'fade', dur: 300 });
+$S('#sideC').at(71.02).change('c', { transition: 'fade', dur: 300 });   // as the cue says "hypotenuse"
+$S('#sideA').at(72.8).change('', { transition: 'fade', dur: 300 });
+$S('#sideB').at(72.8).change('', { transition: 'fade', dur: 300 });
+$S('#sideC').at(72.8).change('', { transition: 'fade', dur: 300 });
+```
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-sides.png" alt="The 3-4-5 triangle at 72 seconds with the letters a on the vertical leg, b under the horizontal leg and c beside the hypotenuse, over the tiles that fill the square on it, and the line a squared plus b squared equals c squared below. Every letter has a black drop shadow.">&#10;		<figcaption>72 seconds in: <em>a</em> and <em>b</em> name the legs, <em>c</em> the hypotenuse, above the theorem. The tiles are cubes now, and every white letter has a black drop shadow.</figcaption>&#10;	</figure>
 
@@ -116,7 +313,79 @@ Open **Stencils → Mesh → Call card** and click it. It inserts an addressable
 
 <p class="lede">3-4-5 is not the only right triangle with whole-number sides. Two more, 5-12-13 and 8-15-17, get the same treatment — tiles in a square on each leg that fly onto the square on the hypotenuse — and they are placed around the camera instead of in front of it: the camera starts facing the first, and every quarter turn about Y (90°) brings the next into view. <code>makeTriple</code> builds one from its two legs and hypotenuse, scales it to about the height of the 3-4-5 so it fills the frame the same way, and turns it to face the camera that will be looking at it. The hypotenuse square is made of <em>empty</em> groups, one per cell, because the tiles only need somewhere to land: they are never drawn.</p>
 
-<pre><code>// A Pythagorean triple p-q-c, laid out like the 3-4-5 and built the same way: unit tiles in a square on&#10;// each leg, and an empty landing pad on the hypotenuse for them to fly onto. The figure is scaled to&#10;// about the height of the 3-4-5 and turned to face `yaw` degrees.&#10;function makeTriple(id, p, q, c, target, yaw) {&#10;  const k = 10 / (2 * q + p);&#10;  const outer = new Group();&#10;  outer.name = id;&#10;  outer.position.set(...target);&#10;  outer.rotation.y = THREE.MathUtils.degToRad(yaw);&#10;  outer.scale.setScalar(k);&#10;  const figure = new Group();&#10;  figure.position.set(-q / 2, -p / 2, 0);      // put the figure&#39;s bounding box on the target&#10;  outer.add(figure);&#10;&#10;  const group = (name, x, y, rotZ) =&gt; {&#10;    const g = new Group();&#10;    g.name = `${id}-${name}`;&#10;    g.position.set(x, y, 0);&#10;    g.rotation.z = rotZ;&#10;    figure.add(g);&#10;    return g;&#10;  };&#10;&#10;  const triangle = new Mesh(&#10;    new ExtrudeGeometry(new Shape([new Vector2(0, 0), new Vector2(q, 0), new Vector2(0, p)]), { depth: 1 / k, bevelEnabled: false }),&#10;    new MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: 0.22, roughness: 0.45, metalness: 0.1 })&#10;  );&#10;  triangle.geometry.translate(0, 0, -0.5 / k);&#10;  triangle.name = `${id}-tri`;&#10;  triangle.castShadow = triangle.receiveShadow = true;&#10;  figure.add(triangle);&#10;&#10;  // n x n tiles; tile (i, j) is centred at place(i, j). One shared geometry, and two shades in a&#10;  // checkerboard, so single tiles stay visible even when they are only a few pixels wide.&#10;  const square = (name, n, color, place) =&gt; {&#10;    const g = group(name, 0, 0, 0);&#10;    const geometry = new BoxGeometry(0.9, 0.9, 0.9);   // a cube, with a gap between neighbours&#10;    const shade = [color, new Color(color).offsetHSL(0, 0, 0.06)].map(c =&gt; new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.2 }));&#10;    for (let i = 1; i &lt;= n; i++) {&#10;      for (let j = 1; j &lt;= n; j++) {&#10;        const tile = new Mesh(geometry, shade[(i + j) % 2]);&#10;        tile.name = `${id}-${name}.${i}.${j}`;&#10;        tile.position.set(...place(i, j), 0);&#10;        tile.castShadow = tile.receiveShadow = true;&#10;        g.add(tile);&#10;      }&#10;    }&#10;  };&#10;  square(&#39;p&#39;, p, 0xff4d6a, (i, j) =&gt; [j - 0.5 - p, i - 0.5]);     // on the vertical leg&#10;  square(&#39;q&#39;, q, 0x14e0c8, (i, j) =&gt; [j - 0.5, 0.5 - i]);         // under the horizontal leg&#10;&#10;  // the hypotenuse square: c x c empty groups, turned onto the slope, no geometry at all&#10;  const pad = group(&#39;pad&#39;, q, 0, Math.atan2(q, p));&#10;  for (let i = 1; i &lt;= c; i++) {&#10;    for (let j = 1; j &lt;= c; j++) {&#10;      const cell = new Group();&#10;      cell.name = `${id}-cell.${i}.${j}`;&#10;      cell.position.set(j - 0.5, c + 0.5 - i, 0);&#10;      pad.add(cell);&#10;    }&#10;  }&#10;&#10;  editor.execute(new AddObjectCommand(editor, outer));&#10;}&#10;&#10;makeTriple(&#39;t2&#39;, 5, 12, 13, [-17, 2.88, 20], 90);    // a quarter turn to the camera&#39;s left&#10;makeTriple(&#39;t3&#39;, 8, 15, 17, [3, 2.88, 40], 180);     // behind the camera&#39;s start&#10;&#10;$S(&#39;#t2-p &gt; *, #t2-q &gt; *, #t3-p &gt; *, #t3-q &gt; *&#39;).addClass(&#39;tile&#39;);&#10;$S(&#39;#t2-pad &gt; *, #t3-pad &gt; *&#39;).addClass(&#39;cell&#39;);&#10;[$S(&#39;.tile&#39;).nodes.length, $S(&#39;.cell&#39;).nodes.length]   // [458, 458]</code></pre>
+```javascript
+// A Pythagorean triple p-q-c, laid out like the 3-4-5 and built the same way: unit tiles in a square on
+// each leg, and an empty landing pad on the hypotenuse for them to fly onto. The figure is scaled to
+// about the height of the 3-4-5 and turned to face `yaw` degrees.
+function makeTriple(id, p, q, c, target, yaw) {
+  const k = 10 / (2 * q + p);
+  const outer = new Group();
+  outer.name = id;
+  outer.position.set(...target);
+  outer.rotation.y = THREE.MathUtils.degToRad(yaw);
+  outer.scale.setScalar(k);
+  const figure = new Group();
+  figure.position.set(-q / 2, -p / 2, 0);      // put the figure's bounding box on the target
+  outer.add(figure);
+
+  const group = (name, x, y, rotZ) => {
+    const g = new Group();
+    g.name = `${id}-${name}`;
+    g.position.set(x, y, 0);
+    g.rotation.z = rotZ;
+    figure.add(g);
+    return g;
+  };
+
+  const triangle = new Mesh(
+    new ExtrudeGeometry(new Shape([new Vector2(0, 0), new Vector2(q, 0), new Vector2(0, p)]), { depth: 1 / k, bevelEnabled: false }),
+    new MeshStandardMaterial({ color: 0xffb703, emissive: 0xffb703, emissiveIntensity: 0.22, roughness: 0.45, metalness: 0.1 })
+  );
+  triangle.geometry.translate(0, 0, -0.5 / k);
+  triangle.name = `${id}-tri`;
+  triangle.castShadow = triangle.receiveShadow = true;
+  figure.add(triangle);
+
+  // n x n tiles; tile (i, j) is centred at place(i, j). One shared geometry, and two shades in a
+  // checkerboard, so single tiles stay visible even when they are only a few pixels wide.
+  const square = (name, n, color, place) => {
+    const g = group(name, 0, 0, 0);
+    const geometry = new BoxGeometry(0.9, 0.9, 0.9);   // a cube, with a gap between neighbours
+    const shade = [color, new Color(color).offsetHSL(0, 0, 0.06)].map(c => new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.2 }));
+    for (let i = 1; i <= n; i++) {
+      for (let j = 1; j <= n; j++) {
+        const tile = new Mesh(geometry, shade[(i + j) % 2]);
+        tile.name = `${id}-${name}.${i}.${j}`;
+        tile.position.set(...place(i, j), 0);
+        tile.castShadow = tile.receiveShadow = true;
+        g.add(tile);
+      }
+    }
+  };
+  square('p', p, 0xff4d6a, (i, j) => [j - 0.5 - p, i - 0.5]);     // on the vertical leg
+  square('q', q, 0x14e0c8, (i, j) => [j - 0.5, 0.5 - i]);         // under the horizontal leg
+
+  // the hypotenuse square: c x c empty groups, turned onto the slope, no geometry at all
+  const pad = group('pad', q, 0, Math.atan2(q, p));
+  for (let i = 1; i <= c; i++) {
+    for (let j = 1; j <= c; j++) {
+      const cell = new Group();
+      cell.name = `${id}-cell.${i}.${j}`;
+      cell.position.set(j - 0.5, c + 0.5 - i, 0);
+      pad.add(cell);
+    }
+  }
+
+  editor.execute(new AddObjectCommand(editor, outer));
+}
+
+makeTriple('t2', 5, 12, 13, [-17, 2.88, 20], 90);    // a quarter turn to the camera's left
+makeTriple('t3', 8, 15, 17, [3, 2.88, 40], 180);     // behind the camera's start
+
+$S('#t2-p > *, #t2-q > *, #t3-p > *, #t3-q > *').addClass('tile');
+$S('#t2-pad > *, #t3-pad > *').addClass('cell');
+[$S('.tile').nodes.length, $S('.cell').nodes.length]   // [458, 458]
+```
 
 <div class="note"><strong>Why these tiles have no black borders.</strong> The 3-4-5 tiles draw a border by carrying a child line object, and a class on a node also matches everything inside it, so <code>.cube</code> matches both the tiles and their borders. That is harmless when every target is a tile too, but here the targets are empty groups with no borders, so a selector that matched borders would pair the wrong things. These tiles are therefore plain meshes (a little under 1 wide, so a gap shows) in two shades laid out like a checkerboard. They share one geometry and two materials per square; the editor logs a warning that a shared material is animated on several nodes, which is exactly what the fade-in wants.</div>
 
@@ -126,19 +395,71 @@ Open **Stencils → Mesh → Call card** and click it. It inserts an addressable
 
 Each triple gets one caption, copied from the `eqn` label so it keeps the font, the glow and the size (and gets the shadow flag too), then placed below its figure in the figure's own frame:
 
-<pre><code>// One caption per triple, copied from the first label so it keeps the font, the glow and the size.&#10;const src = $S(&#39;#eqn&#39;).nodes[0];&#10;function makeCaption(name, target, yaw) {&#10;  const a = THREE.MathUtils.degToRad(yaw);&#10;  const [dx, dy, dz] = [-3.7, -6.5, 1.24];   // below the figure, in the figure&#39;s own screen frame&#10;  const label = new Mesh(src.geometry.clone(), src.material.clone());&#10;  label.name = name;&#10;  label.scale.copy(src.scale);&#10;  label.userData.textShadow = true;          // the drop shadow from step 4&#10;  label.rotation.y = a;&#10;  label.position.set(target[0] + dx * Math.cos(a) + dz * Math.sin(a), target[1] + dy, target[2] - dx * Math.sin(a) + dz * Math.cos(a));&#10;  editor.execute(new AddObjectCommand(editor, label));&#10;}&#10;makeCaption(&#39;eqn2&#39;, [-17, 2.88, 20], 90);&#10;makeCaption(&#39;eqn3&#39;, [3, 2.88, 40], 180);&#10;$S(&#39;#eqn2, #eqn3&#39;).addClass(&#39;label&#39;);</code></pre>
+```javascript
+// One caption per triple, copied from the first label so it keeps the font, the glow and the size.
+const src = $S('#eqn').nodes[0];
+function makeCaption(name, target, yaw) {
+  const a = THREE.MathUtils.degToRad(yaw);
+  const [dx, dy, dz] = [-3.7, -6.5, 1.24];   // below the figure, in the figure's own screen frame
+  const label = new Mesh(src.geometry.clone(), src.material.clone());
+  label.name = name;
+  label.scale.copy(src.scale);
+  label.userData.textShadow = true;          // the drop shadow from step 4
+  label.rotation.y = a;
+  label.position.set(target[0] + dx * Math.cos(a) + dz * Math.sin(a), target[1] + dy, target[2] - dx * Math.sin(a) + dz * Math.cos(a));
+  editor.execute(new AddObjectCommand(editor, label));
+}
+makeCaption('eqn2', [-17, 2.88, 20], 90);
+makeCaption('eqn3', [3, 2.88, 40], 180);
+$S('#eqn2, #eqn3').addClass('label');
+```
 
 <p>Now the clock. The existing film is untouched up to 56.5 s. After that the beats are spaced for a voice reading the subtitles aloud (see step 11): the theorem stays on screen for ten seconds while its letters are explained, and each triple then gets about 25 seconds, and they follow the same beat as the 3-4-5: a 2.5-second quarter turn, the triangle, the two squares of tiles fading in one at a time with their areas as captions, then all the tiles tumbling onto the hypotenuse square (3 seconds, in selector-list order, so the first leg&#39;s tiles take the first cells), ending on the sum. The lift is measured in the figure&#39;s own units, and these figures are scaled down (by about 0.35 and 0.26), so <code>arc: 8</code> and <code>arc: 10</code> lift the tiles about as far in the world as <code>arc: 3</code> does on the full-size 3-4-5:</p>
 
-<pre><code>// 73-97.7 s: a quarter turn to the left, the 5-12-13 triple&#10;$S(&#39;#eqn2&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#PerspectiveCamera&#39;).at(73.0).animate({ to: { rotation: [0, 90, 0] } }, 2500);&#10;$S(&#39;#t2-tri&#39;).at(74.5).fadeIn(1);&#10;$S(&#39;#t2-p .tile&#39;).at(77.45).fadeIn(1);&#10;$S(&#39;#eqn2&#39;).at(77.45).change(&#39;5\u00B2 = 25&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#t2-q .tile&#39;).at(81.67).fadeIn(1);&#10;$S(&#39;#eqn2&#39;).at(81.67).change(&#39;12\u00B2 = 144&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#t2-p .tile, #t2-q .tile&#39;).at(85.97).moveToEach(&#39;#t2-pad .cell&#39;, 3000, {&#10;  spin: [1, 1, 0], arc: 8, stagger: 0.4, easing: &#39;ease-in-out&#39;&#10;});&#10;$S(&#39;#eqn2&#39;).at(85.97).change(&#39;25 + 144&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#eqn2&#39;).at(89.07).change(&#39;= 169 = 13\u00B2&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;&#10;// 97.7-123.2 s: another quarter turn, the 8-15-17 triple&#10;$S(&#39;#eqn3&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;#PerspectiveCamera&#39;).at(97.72).animate({ to: { rotation: [0, 180, 0] } }, 2500);&#10;$S(&#39;#t3-tri&#39;).at(99.22).fadeIn(1);&#10;$S(&#39;#t3-p .tile&#39;).at(102.95).fadeIn(1);&#10;$S(&#39;#eqn3&#39;).at(102.95).change(&#39;8\u00B2 = 64&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#t3-q .tile&#39;).at(107.22).fadeIn(1);&#10;$S(&#39;#eqn3&#39;).at(107.22).change(&#39;15\u00B2 = 225&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#t3-p .tile, #t3-q .tile&#39;).at(111.55).moveToEach(&#39;#t3-pad .cell&#39;, 3000, {&#10;  spin: [1, 1, 0], arc: 10, stagger: 0.4, easing: &#39;ease-in-out&#39;&#10;});&#10;$S(&#39;#eqn3&#39;).at(111.55).change(&#39;64 + 225&#39;, { transition: &#39;fade&#39;, dur: 400 });&#10;$S(&#39;#eqn3&#39;).at(114.95).change(&#39;= 289 = 17\u00B2&#39;, { transition: &#39;fade&#39;, dur: 400 });</code></pre>
+```javascript
+// 73-97.7 s: a quarter turn to the left, the 5-12-13 triple
+$S('#eqn2').at(0).change('');
+$S('#PerspectiveCamera').at(73.0).animate({ to: { rotation: [0, 90, 0] } }, 2500);
+$S('#t2-tri').at(74.5).fadeIn(1);
+$S('#t2-p .tile').at(77.45).fadeIn(1);
+$S('#eqn2').at(77.45).change('5\u00B2 = 25', { transition: 'fade', dur: 400 });
+$S('#t2-q .tile').at(81.67).fadeIn(1);
+$S('#eqn2').at(81.67).change('12\u00B2 = 144', { transition: 'fade', dur: 400 });
+$S('#t2-p .tile, #t2-q .tile').at(85.97).moveToEach('#t2-pad .cell', 3000, {
+  spin: [1, 1, 0], arc: 8, stagger: 0.4, easing: 'ease-in-out'
+});
+$S('#eqn2').at(85.97).change('25 + 144', { transition: 'fade', dur: 400 });
+$S('#eqn2').at(89.07).change('= 169 = 13\u00B2', { transition: 'fade', dur: 400 });
+
+// 97.7-123.2 s: another quarter turn, the 8-15-17 triple
+$S('#eqn3').at(0).change('');
+$S('#PerspectiveCamera').at(97.72).animate({ to: { rotation: [0, 180, 0] } }, 2500);
+$S('#t3-tri').at(99.22).fadeIn(1);
+$S('#t3-p .tile').at(102.95).fadeIn(1);
+$S('#eqn3').at(102.95).change('8\u00B2 = 64', { transition: 'fade', dur: 400 });
+$S('#t3-q .tile').at(107.22).fadeIn(1);
+$S('#eqn3').at(107.22).change('15\u00B2 = 225', { transition: 'fade', dur: 400 });
+$S('#t3-p .tile, #t3-q .tile').at(111.55).moveToEach('#t3-pad .cell', 3000, {
+  spin: [1, 1, 0], arc: 10, stagger: 0.4, easing: 'ease-in-out'
+});
+$S('#eqn3').at(111.55).change('64 + 225', { transition: 'fade', dur: 400 });
+$S('#eqn3').at(114.95).change('= 289 = 17\u00B2', { transition: 'fade', dur: 400 });
+```
 
 <h2><span class="step">10</span> The last quarter turn: the end card</h2>
 
 <p class="lede">The camera does not travel anywhere, even now: one more 90° turn about Y, to 270°, points it at the end card that was placed 15 units to its right in step 5, while the card fades in. At 8× scale and a 50° field of view it fills the frame.</p>
 
-<pre><code>// 123.25 s: the last quarter turn, to the end card on the camera&#39;s right&#10;$S(&#39;#callcard&#39;).at(123.75).fadeIn(3);&#10;$S(&#39;#PerspectiveCamera&#39;).at(123.25).animate({ to: { rotation: [0, 270, 0] } }, 2500);</code></pre>
+```javascript
+// 123.25 s: the last quarter turn, to the end card on the camera's right
+$S('#callcard').at(123.75).fadeIn(3);
+$S('#PerspectiveCamera').at(123.25).animate({ to: { rotation: [0, 270, 0] } }, 2500);
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-triples.png" alt="Two frames side by side: left, the 5-12-13 triple mid-flight, with red and teal tiles tumbling from the two leg squares towards the hypotenuse; right, the 8-15-17 triple after landing, with the tiles filling the square on the hypotenuse.">&#10;		<figcaption>The same dissection on the other triples: 5-12-13 mid-flight on the left (87.2 s), 8-15-17 landed on the right (117.2 s).</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-triples.png" alt="Two frames side by side: left, the 5-12-13 triple mid-flight, with red and teal tiles tumbling from the two leg squares towards the hypotenuse; right, the 8-15-17 triple after landing, with the tiles filling the square on the hypotenuse.">
+<figcaption>The same dissection on the other triples: 5-12-13 mid-flight on the left (87.2 s), 8-15-17 landed on the right (117.2 s).</figcaption>
+</figure>
 
 <p>The timeline now runs 126.8 seconds, and the render holds the last frame for two more. The theorem stays on screen from 62.8 to 73 s before the camera turns away from it. This is the whole cut sheet:</p>
 
@@ -148,7 +469,34 @@ Each triple gets one caption, copied from the `eqn` label so it keeps the font, 
 
 <p class="lede">Subtitles are cues kept on the scene itself (<code>scene.userData.renderSubtitles</code>), so they are saved, versioned and committed with it. <code>setSubtitles</code> replaces the whole list in one undoable step. Times are output-video seconds, which here equal timeline seconds because the render starts at 0. They show over the viewport while you play or scrub, and the Render tab can burn them into the picture or export an <code>.srt</code>.</p>
 
-<pre><code>setSubtitles([&#10;  { start: 0.5, end: 6.72, text: &#39;This is a right angled triangle.\nOne leg is 3, the other is 4.&#39; },&#10;  { start: 6.77, end: 10.09, text: &#39;The short leg is 3 units long.&#39; },&#10;  { start: 10.15, end: 13.32, text: &#39;The long leg is 4 units long.&#39; },&#10;  { start: 14.0, end: 19.65, text: &#39;Let\&#39;s make a square on the short leg:\n3 \u00D7 3 = 9 tiles.&#39; },&#10;  { start: 24.0, end: 30.12, text: &#39;Let\&#39;s make another square on the long leg:\n4 \u00D7 4 = 16 tiles.&#39; },&#10;  { start: 31.5, end: 37.35, text: &#39;Do 9 and 16 tiles fill a square\non the hypotenuse, the slanted side?&#39; },&#10;  { start: 40.2, end: 42.55, text: &#39;Watch them move.&#39; },&#10;  { start: 44.0, end: 47.05, text: &#39;3 squared plus 4 squared \u2026&#39; },&#10;  { start: 47.1, end: 50.25, text: &#39;\u2026 is 9 + 16 tiles.&#39; },&#10;  { start: 53.0, end: 56.4, text: &#39;25 tiles fill it exactly.&#39; },&#10;  { start: 56.6, end: 62.72, text: &#39;And 25 is 5 squared:\nthe 5-by-5 square on the hypotenuse.&#39; },&#10;  { start: 62.77, end: 68.17, text: &#39;In every right triangle:\na squared, plus b squared equals c\u00B2&#39; },&#10;  { start: 68.22, end: 72.75, text: &#39;a and b are the 2 legs;\nand c is the hypotenuse.&#39; },&#10;  { start: 73.2, end: 77.4, text: &#39;Does it hold for other so called Pythagorean triples?&#39; },&#10;  { start: 77.45, end: 81.62, text: &#39;The square on the 5 side:\n25 tiles.&#39; },&#10;  { start: 81.67, end: 85.92, text: &#39;On the 12 side: 144 tiles.&#39; },&#10;  { start: 85.97, end: 89.47, text: &#39;Do they fill the square\non the hypotenuse?&#39; },&#10;  { start: 89.52, end: 97.67, text: &#39;Exactly: 169 tiles.\n5-squared, plus 12-squared equals 13-squared.&#39; },&#10;  { start: 98.22, end: 102.89, text: &#39;One more Pythagorean triple: 8, 15, 17.&#39; },&#10;  { start: 102.95, end: 107.17, text: &#39;The square on the 8 side:\n64 tiles.&#39; },&#10;  { start: 107.22, end: 111.5, text: &#39;On the 15 side: 225 tiles.&#39; },&#10;  { start: 111.55, end: 113.83, text: &#39;Do they fit again?&#39; },&#10;  { start: 115.1, end: 123.1, text: &#39;Exactly: 289 tiles.\n8 squared, plus 15 squared equals 17 squared.&#39; },&#10;  { start: 124.25, end: 126.7, text: &#39;Made with Strata.&#39; },&#10;]).length   // 24</code></pre>
+```javascript
+setSubtitles([
+  { start: 0.5, end: 6.72, text: 'This is a right angled triangle.\nOne leg is 3, the other is 4.' },
+  { start: 6.77, end: 10.09, text: 'The short leg is 3 units long.' },
+  { start: 10.15, end: 13.32, text: 'The long leg is 4 units long.' },
+  { start: 14.0, end: 19.65, text: 'Let\'s make a square on the short leg:\n3 \u00D7 3 = 9 tiles.' },
+  { start: 24.0, end: 30.12, text: 'Let\'s make another square on the long leg:\n4 \u00D7 4 = 16 tiles.' },
+  { start: 31.5, end: 37.35, text: 'Do 9 and 16 tiles fill a square\non the hypotenuse, the slanted side?' },
+  { start: 40.2, end: 42.55, text: 'Watch them move.' },
+  { start: 44.0, end: 47.05, text: '3 squared plus 4 squared \u2026' },
+  { start: 47.1, end: 50.25, text: '\u2026 is 9 + 16 tiles.' },
+  { start: 53.0, end: 56.4, text: '25 tiles fill it exactly.' },
+  { start: 56.6, end: 62.72, text: 'And 25 is 5 squared:\nthe 5-by-5 square on the hypotenuse.' },
+  { start: 62.77, end: 68.17, text: 'In every right triangle:\na squared, plus b squared equals c\u00B2' },
+  { start: 68.22, end: 72.75, text: 'a and b are the 2 legs;\nand c is the hypotenuse.' },
+  { start: 73.2, end: 77.4, text: 'Does it hold for other so called Pythagorean triples?' },
+  { start: 77.45, end: 81.62, text: 'The square on the 5 side:\n25 tiles.' },
+  { start: 81.67, end: 85.92, text: 'On the 12 side: 144 tiles.' },
+  { start: 85.97, end: 89.47, text: 'Do they fill the square\non the hypotenuse?' },
+  { start: 89.52, end: 97.67, text: 'Exactly: 169 tiles.\n5-squared, plus 12-squared equals 13-squared.' },
+  { start: 98.22, end: 102.89, text: 'One more Pythagorean triple: 8, 15, 17.' },
+  { start: 102.95, end: 107.17, text: 'The square on the 8 side:\n64 tiles.' },
+  { start: 107.22, end: 111.5, text: 'On the 15 side: 225 tiles.' },
+  { start: 111.55, end: 113.83, text: 'Do they fit again?' },
+  { start: 115.1, end: 123.1, text: 'Exactly: 289 tiles.\n8 squared, plus 15 squared equals 17 squared.' },
+  { start: 124.25, end: 126.7, text: 'Made with Strata.' },
+]).length   // 24
+```
 
 <div class="note"><strong>Writing cues that fit the picture.</strong> Each cue starts with the thing it describes (the leg at 6.8 and 10.2 s, the unfolding square at 14 and 24 s) and ends before the next beat; none is longer than two short lines, and none overlaps another. Keep a cue on screen at least about a second for every fifteen characters, and leave room for the voice: a spoken cue needs its text read aloud plus a quarter of a second (and a slower voice needs about a seventh more than a faster one, so time the cues with the voice you will use), so the later cues here are short (&quot;144 tiles.&quot;, not a sentence) to finish before the next one starts when dubbed with a text-to-speech tool. <code>exportSrt()</code> returns the same cues as <code>.srt</code> text.</div>
 
@@ -156,7 +504,10 @@ Each triple gets one caption, copied from the `eqn` label so it keeps the font, 
 
 <ol class="steps">&#10;		<li>Open the <strong>Render</strong> tab and click <strong>+ Add Shot</strong> under <strong>Camera Sequence</strong>. The first shot lands at 0 s on your scene camera, with a cut. <em>Without a shot the render uses the Edit Camera</em>, so none of the quarter turns would be filmed — see <a href="https://strataeditor.dev/about/tutorials/render-camera-sequence.html">Add a static hero camera to a render sequence</a> for what a shot can do.</li>&#10;		<li>Pick a resolution and frame rate. The scene camera is authored 16:9 and the card is landscape; a portrait crop is a manual resolution choice.</li>&#10;		<li>Optionally set <strong>File name</strong>. The line under it shows what the download will be called, by default <code>pyth_2m09s_720p_30fps_2026-10-25.mp4</code>: the scene&#39;s file, the length of the video (with the two-second hold at the end), the resolution, the frame rate and the date. Type your own template with <code>{project}</code>, <code>{duration}</code>, <code>{res}</code>, <code>{fps}</code>, <code>{date}</code>, <code>{time}</code>, <code>{camera}</code> and <code>{360}</code>, for example <code>Pythagoras {res}</code>.</li>&#10;		<li>Under <strong>Subtitles</strong>, tick <strong>Hard-burn</strong> to draw the captions into the picture, and keep <strong>Also export a matching .srt</strong>. For captions a viewer can switch off, leave the burn unticked and add the .srt to the MP4 as a soft track afterwards: <code>ffmpeg -i film.mp4 -i film.srt -c copy -c:s mov_text -metadata:s:s:0 language=eng film-subs.mp4</code>.</li>&#10;		<li>Click <strong>Render &amp; Export</strong> and wait — rendering runs in real time, so a little over two minutes.</li>&#10;		<li>The call card is re-fetched and re-baked <em>fresh</em> at render time at its true aspect — edit <code>/about/callcard</code> later and every future render picks up the change with no edits to this scene.</li>&#10;	</ol>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-endcard.png" alt="The end card filling the frame at the end of the film: the line &#39;The idea outlasts the engine&#39;, &#39;Made with Strata&#39;, and a QR code, over the blue wall of the room.">&#10;		<figcaption>The end of the film: the camera has made its last quarter turn and the card fills the frame.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pythagorean-endcard.png" alt="The end card filling the frame at the end of the film: the line &#39;The idea outlasts the engine&#39;, &#39;Made with Strata&#39;, and a QR code, over the blue wall of the room.">
+<figcaption>The end of the film: the camera has made its last quarter turn and the card fills the frame.</figcaption>
+</figure>
 
 <div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like — the timeline, the geometry, and the call-card <em>reference</em> (never a copy of its pixels) all round-trip through the same scene JSON. See <a href="https://strataeditor.dev/guides/ANIMATION.md">the animation guide</a> and <a href="https://strataeditor.dev/guides/CALLCARD.md">the call-card guide</a> for the full grammar this tutorial only samples.</div>
 
@@ -170,7 +521,30 @@ Each triple gets one caption, copied from the `eqn` label so it keeps the font, 
 
 <p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S(&#39;#id&#39;)</code>, <code>$S(&#39;.class&#39;)</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. The unnamed group inside each of <code>t2</code> and <code>t3</code> is now <code>t2_parts</code> and <code>t3_parts</code>.</p>
 
-<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)&#10;// and a class; classes are what make the scene queryable: $S(&#39;.square&#39;), $S(&#39;.triple&#39;), $S(&#39;.label&#39;). The table&#39;s first column is the names it covers, the second the classes it gives;&#10;// an object can match several rows, and anything left without a class is listed and the block stops.&#10;for (const name of [&#39;t2&#39;, &#39;t3&#39;]) {                                      // the group inside each of the two extra triples had no name&#10;  const inner = scene.getObjectByName(name).children[0];&#10;  if (!inner.name) inner.name = name + &#39;_parts&#39;;&#10;}&#10;const rules = [&#10;  [/^\d+x\d+-square$/, [&#39;square&#39;]], [/^RightTriangle$/, [&#39;triangle&#39;]], [/^PerspectiveCamera$/, [&#39;camera&#39;]],&#10;  [/^(Labels|three|four|eqn)$/, [&#39;label&#39;]], [/^callcard$/, [&#39;card&#39;]], [/^t\d(-|_|$)/, [&#39;triple&#39;]],&#10;  [/^Room$/, [&#39;environment&#39;]], [/Light$/, [&#39;light&#39;]]&#10;];&#10;const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === &#39;object&#39;) ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs&#10;const left = [];&#10;scene.traverse(o =&gt; {&#10;  if (o === scene || o.name.startsWith(&#39;__&#39;)) return;&#10;  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);&#10;  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || &#39;(unnamed)&#39;); return; }&#10;  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];&#10;});&#10;if (left.length) throw new Error(left.length + &#39; objects have no class: &#39; + left.slice(0, 12).join(&#39;, &#39;));&#10;requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+```javascript
+// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.square'), $S('.triple'), $S('.label'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+for (const name of ['t2', 't3']) {                                      // the group inside each of the two extra triples had no name
+  const inner = scene.getObjectByName(name).children[0];
+  if (!inner.name) inner.name = name + '_parts';
+}
+const rules = [
+  [/^\d+x\d+-square$/, ['square']], [/^RightTriangle$/, ['triangle']], [/^PerspectiveCamera$/, ['camera']],
+  [/^(Labels|three|four|eqn)$/, ['label']], [/^callcard$/, ['card']], [/^t\d(-|_|$)/, ['triple']],
+  [/^Room$/, ['environment']], [/Light$/, ['light']]
+];
+const classesOf = c => Array.isArray(c) ? c : (c && typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o => {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) => re.test(o.name)).flatMap(([, c]) => c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless
+```
 
 <div class="note" id="film-contract"><strong>The film&#39;s contract.</strong> <em>Units:</em> lengths are counted in tiles: a tile is a 1 × 1 × 1 cube, so the squares on the legs have 9 and 16 tiles and the square on the hypotenuse 25. <em>Assumptions:</em> the triangles are exact integer right triangles (3-4-5, 5-12-13, 8-15-17); the film checks these three by counting tiles and does not prove the theorem for every right triangle. <em>Render:</em> the film in <code>demos/pyth.mp4</code> was committed on 25 October, a day before the offline exporter, so it came from the real-time recorder; it has not been re-rendered since. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 

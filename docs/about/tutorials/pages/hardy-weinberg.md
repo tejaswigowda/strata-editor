@@ -36,15 +36,92 @@ The cameras cut at 29.5, 51.5, 89.9 and 111.9 s. Everything below is a paste int
 
 <p class="lede">The same room as in the cube tutorial, with one addition: a <em>wall</em> just behind the square, so that the square has something close to throw its shadow on. A flat figure in a big empty room throws its shadow far away and soft; a wall 1.1 units behind it gives a tight, readable shadow. The wall is only 26 wide: the end camera sits at x = 14.6 and looks along +x, and a wider wall would be seen edge-on in its frame.</p>
 
-<pre><code>// a room around the scene, a wall just behind the square for the shadows to land on, and a floor&#10;const room = new Mesh(new BoxGeometry(80, 40, 80),&#10;  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));&#10;room.name = &#39;Room&#39;;&#10;room.position.set(0, 2, 0);&#10;room.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, room));&#10;&#10;const wall = new Mesh(new PlaneGeometry(26, 30), new MeshStandardMaterial({ color: 0x303b92, roughness: 0.95, metalness: 0 }));&#10;wall.name = &#39;Wall&#39;;&#10;wall.position.set(0, 4, -1.6);                        // 1.1 behind the back of the tiles; only 26 wide: it ends before the end camera (x = 14.6), which would otherwise see it edge-on&#10;wall.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, wall));&#10;&#10;const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));&#10;floor.name = &#39;Floor&#39;;&#10;floor.rotation.x = -Math.PI / 2;&#10;floor.position.y = -3.4;&#10;floor.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, floor));&#10;&#10;// one key light up and to the right, in front, so every shadow falls down and to the left on the wall; one soft fill&#10;const key = new PointLight(0xfff1dd, 4.2, 0, 0);&#10;key.name = &#39;KeyLight&#39;;&#10;key.position.set(7, 9, 11);&#10;key.castShadow = true;&#10;key.shadow.mapSize.set(2048, 2048);&#10;key.shadow.bias = -0.0004;&#10;key.shadow.intensity = 0.6;&#10;key.shadow.radius = 4;&#10;key.shadow.camera.near = 0.5;&#10;key.shadow.camera.far = 90;&#10;editor.execute(new AddObjectCommand(editor, key));&#10;editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: &#39;FillLight&#39; })));</code></pre>
+```javascript
+// a room around the scene, a wall just behind the square for the shadows to land on, and a floor
+const room = new Mesh(new BoxGeometry(80, 40, 80),
+  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(0, 2, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+const wall = new Mesh(new PlaneGeometry(26, 30), new MeshStandardMaterial({ color: 0x303b92, roughness: 0.95, metalness: 0 }));
+wall.name = 'Wall';
+wall.position.set(0, 4, -1.6);                        // 1.1 behind the back of the tiles; only 26 wide: it ends before the end camera (x = 14.6), which would otherwise see it edge-on
+wall.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, wall));
+
+const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -3.4;
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// one key light up and to the right, in front, so every shadow falls down and to the left on the wall; one soft fill
+const key = new PointLight(0xfff1dd, 4.2, 0, 0);
+key.name = 'KeyLight';
+key.position.set(7, 9, 11);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 90;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));
+```
 
 <h2><span class="step">3</span> The square: 25 tiles in four groups</h2>
 
 <p class="lede">The square is built from unit tiles, as in the Pythagorean short, one shared geometry and one shared material per colour (the next steps reuse those three materials for the rulers, the tokens and the coloured labels, so the whole film has <strong>nine materials</strong>), and each piece is a <em>group</em> of its tiles placed relative to the middle of the piece. A group is what lets a piece fly, shrink and turn as a body, and it is how the editor sees &quot;the pink piece&quot; as one thing. The table in <code>PIECES</code> says, for each piece, its width and height in tiles and the middle of the piece in the whole square. The top-left piece is <em>p</em> wide and <em>p</em> tall (<code>g-pp</code>), the bottom-right <em>q</em> by <em>q</em> (<code>g-qq</code>), and the two off-diagonal ones are <em>q</em> wide and <em>p</em> tall (<code>g-pq1</code>) and <em>p</em> wide and <em>q</em> tall (<code>g-pq2</code>): the same rectangle, once upright and once lying down.</p>
 
-<pre><code>// the square: p = 3 tiles and q = 2 tiles on a side (the drawing is 3 and 2 so the two parts look different; the film says p and q).&#10;// It is the Pythagorean short&#39;s squares of unit tiles, cut into four pieces: rows and columns split at p.&#10;const P = 3, Q = 2, H = (P + Q) / 2;&#10;const COLOR = { pp: 0xff4d6a, pq: 0xffb703, qq: 0x14e0c8 };           // AA coral, Aa gold, aa aqua&#10;const unit = new BoxGeometry(0.94, 0.94, 0.94);                         // one shared cube, a small gap between tiles&#10;const mat = Object.fromEntries(Object.entries(COLOR).map(([k, c]) =&gt;&#10;  [k, new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.4, roughness: 0.5, metalness: 0.1 })]));&#10;// one material per colour for the whole film: the tiles, the rulers, the allele tokens and the coloured labels all share these three&#10;globalThis.PAL = { coral: mat.pp, gold: mat.pq, aqua: mat.qq };&#10;&#10;// name, kind, width and height in tiles, and the middle of the piece in the whole square&#10;const PIECES = [&#10;  [&#39;g-pp&#39;,  &#39;pp&#39;, P, P, -H + P / 2,     H - P / 2],       // top left: p wide, p tall          AA   p^2&#10;  [&#39;g-pq1&#39;, &#39;pq&#39;, Q, P,  H - Q / 2,     H - P / 2],       // top right: q wide, p tall           Aa   pq&#10;  [&#39;g-pq2&#39;, &#39;pq&#39;, P, Q, -H + P / 2,    -H + Q / 2],       // bottom left: p wide, q tall         aA   pq&#10;  [&#39;g-qq&#39;,  &#39;qq&#39;, Q, Q,  H - Q / 2,    -H + Q / 2]        // bottom right: q wide, q tall        aa   q^2&#10;];&#10;for (const [name, kind, w, h, cx, cy] of PIECES) {&#10;  const group = new Group();&#10;  group.name = name;&#10;  group.position.set(cx, cy, 0);&#10;  for (let i = 0; i &lt; w; i++) for (let j = 0; j &lt; h; j++) {&#10;    const tile = new Mesh(unit, mat[kind]);&#10;    tile.name = `${name}.${i}.${j}`;&#10;    tile.position.set(i + 0.5 - w / 2, j + 0.5 - h / 2, 0);              // relative to the middle of the piece&#10;    tile.castShadow = tile.receiveShadow = true;&#10;    tile.userData.hasEdgeOutline = true;                                  // a black border, drawn by the viewport&#10;    group.add(tile);&#10;  }&#10;  group.userData.home = [cx, cy];&#10;  editor.execute(new AddObjectCommand(editor, group));&#10;}&#10;$S(&#39;#g-pp&#39;).addClass(&#39;pp&#39;);&#10;$S(&#39;#g-qq&#39;).addClass(&#39;qq&#39;);&#10;$S(&#39;#g-pq1, #g-pq2&#39;).addClass(&#39;pq&#39;);&#10;$S(&#39;.pp, .pq, .qq&#39;).addClass(&#39;piece&#39;);&#10;// a class on a group also matches everything inside it (each tile&#39;s border too), so count the tiles by name&#10;$S(&#39;.piece&#39;).nodes.filter(n =&gt; n.isMesh &amp;&amp; n.name.startsWith(&#39;g-&#39;)).length      // 25 tiles: 9 + 6 + 6 + 4</code></pre>
+```javascript
+// the square: p = 3 tiles and q = 2 tiles on a side (the drawing is 3 and 2 so the two parts look different; the film says p and q).
+// It is the Pythagorean short's squares of unit tiles, cut into four pieces: rows and columns split at p.
+const P = 3, Q = 2, H = (P + Q) / 2;
+const COLOR = { pp: 0xff4d6a, pq: 0xffb703, qq: 0x14e0c8 };           // AA coral, Aa gold, aa aqua
+const unit = new BoxGeometry(0.94, 0.94, 0.94);                         // one shared cube, a small gap between tiles
+const mat = Object.fromEntries(Object.entries(COLOR).map(([k, c]) =>
+  [k, new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.4, roughness: 0.5, metalness: 0.1 })]));
+// one material per colour for the whole film: the tiles, the rulers, the allele tokens and the coloured labels all share these three
+globalThis.PAL = { coral: mat.pp, gold: mat.pq, aqua: mat.qq };
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-whole.png" alt="A square of 25 tiles in four colours on a blue wall: a 3 by 3 coral block at top left, a 2 by 3 gold block at top right, a 3 by 2 gold block at bottom left and a 2 by 2 aqua block at bottom right, with the title (p + q) squared above it.">&#10;		<figcaption>2 seconds in: the whole square, already cut into four pieces; the white line is its outline.</figcaption>&#10;	</figure>
+// name, kind, width and height in tiles, and the middle of the piece in the whole square
+const PIECES = [
+  ['g-pp',  'pp', P, P, -H + P / 2,     H - P / 2],       // top left: p wide, p tall          AA   p^2
+  ['g-pq1', 'pq', Q, P,  H - Q / 2,     H - P / 2],       // top right: q wide, p tall           Aa   pq
+  ['g-pq2', 'pq', P, Q, -H + P / 2,    -H + Q / 2],       // bottom left: p wide, q tall         aA   pq
+  ['g-qq',  'qq', Q, Q,  H - Q / 2,    -H + Q / 2]        // bottom right: q wide, q tall        aa   q^2
+];
+for (const [name, kind, w, h, cx, cy] of PIECES) {
+  const group = new Group();
+  group.name = name;
+  group.position.set(cx, cy, 0);
+  for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) {
+    const tile = new Mesh(unit, mat[kind]);
+    tile.name = `${name}.${i}.${j}`;
+    tile.position.set(i + 0.5 - w / 2, j + 0.5 - h / 2, 0);              // relative to the middle of the piece
+    tile.castShadow = tile.receiveShadow = true;
+    tile.userData.hasEdgeOutline = true;                                  // a black border, drawn by the viewport
+    group.add(tile);
+  }
+  group.userData.home = [cx, cy];
+  editor.execute(new AddObjectCommand(editor, group));
+}
+$S('#g-pp').addClass('pp');
+$S('#g-qq').addClass('qq');
+$S('#g-pq1, #g-pq2').addClass('pq');
+$S('.pp, .pq, .qq').addClass('piece');
+// a class on a group also matches everything inside it (each tile's border too), so count the tiles by name
+$S('.piece').nodes.filter(n => n.isMesh && n.name.startsWith('g-')).length      // 25 tiles: 9 + 6 + 6 + 4
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-whole.png" alt="A square of 25 tiles in four colours on a blue wall: a 3 by 3 coral block at top left, a 2 by 3 gold block at top right, a 3 by 2 gold block at bottom left and a 2 by 2 aqua block at bottom right, with the title (p + q) squared above it.">
+<figcaption>2 seconds in: the whole square, already cut into four pieces; the white line is its outline.</figcaption>
+</figure>
 
 <div class="note"><strong>A class on a group matches the group&#39;s contents too.</strong> <code>$S(&#39;.piece&#39;)</code> returns the four groups <em>and</em> their tiles, and each tile&#39;s black border besides, so the count at the end of the block filters by name. This is the same thing the Pythagorean short&#39;s note about <code>.cube</code> says; here it matters whenever a verb is applied to a class: <code>.fade</code> on <code>.piece</code> would fade the tiles one by one, which is what you want for a glass effect but not for a move.</div>
 
@@ -52,13 +129,82 @@ The cameras cut at 29.5, 51.5, 89.9 and 111.9 s. Everything below is a paste int
 
 <p class="lede">Four thin white bars mark the outline of the whole square; it is what the pieces come from and go back to, and it stays behind, faint, while they are apart. Along the top and down the left side, two rulers show how each side splits: <em>p</em> in coral, the colour of <em>A</em>, and <em>q</em> in aqua, the colour of <em>a</em>; they use the coral and aqua materials of the tiles. The two cuts are thin white bars that are a little proud of the tiles, so they read as lines drawn across the square. Rulers and cuts start at scale 0.001 on every axis (invisible) and <em>grow</em> when their moment comes: because they share a material with other objects, they cannot be faded one at a time.</p>
 
-<pre><code>// the outline of the whole square (what the pieces come from and go back to), and the rulers along its top and left side:&#10;// p in coral (the colour of A), q in aqua (the colour of a)&#10;// materials are shared: the frame has its own (it fades as a whole); the rulers use the coral and aqua of the pieces; the cuts and&#10;// all white text share one white. Nothing that shares a material fades on its own: rulers and cuts grow and shrink instead.&#10;globalThis.PAL.frame = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.9 });&#10;globalThis.PAL.white = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.7 });&#10;const bar = (w, h, d, x, y, z, material, name) =&gt; {&#10;  const m = new Mesh(new BoxGeometry(w, h, d), material);&#10;  m.name = name;&#10;  m.position.set(x, y, z);&#10;  return m;&#10;};&#10;const frame = new Group();&#10;frame.name = &#39;Frame&#39;;&#10;const t = 0.07, h = 2.5;&#10;for (const y of [-h, h]) frame.add(bar(5 + t, t, 0.3, 0, y, 0, PAL.frame, &#39;FrameEdge&#39;));&#10;for (const x of [-h, h]) frame.add(bar(t, 5 + t, 0.3, x, 0, 0, PAL.frame, &#39;FrameEdge&#39;));&#10;editor.execute(new AddObjectCommand(editor, frame));&#10;$S(&#39;#Frame &gt; *&#39;).addClass(&#39;frameedge&#39;);&#10;&#10;// rulers start collapsed (scale 0.001 on every axis, so nothing is left to see) and grow out of their middles&#10;const ruler = (w, h, x, y, material, name) =&gt; {&#10;  const m = bar(w, h, 0.22, x, y, 0.3, material, name);&#10;  m.scale.setScalar(0.001);&#10;  editor.execute(new AddObjectCommand(editor, m));&#10;};&#10;ruler(3 - 0.08, 0.2, -1, 3.05, PAL.coral, &#39;RulerTopP&#39;);      // along the top: p, then q&#10;ruler(2 - 0.08, 0.2, 1.5, 3.05, PAL.aqua, &#39;RulerTopQ&#39;);&#10;ruler(0.2, 3 - 0.08, -3.05, 1, PAL.coral, &#39;RulerSideP&#39;);     // down the left side: p, then q&#10;ruler(0.2, 2 - 0.08, -3.05, -1.5, PAL.aqua, &#39;RulerSideQ&#39;);&#10;$S(&#39;#RulerTopP, #RulerTopQ&#39;).addClass(&#39;rulertop&#39;);&#10;$S(&#39;#RulerSideP, #RulerSideQ&#39;).addClass(&#39;rulerside&#39;);&#10;&#10;// the two cuts, where each side splits into p and q: thin, bright, a little proud of the tiles; collapsed until their moment&#10;const cutV = bar(0.09, 5.6, 0.6, 0.5, 0, 0.6, PAL.white, &#39;CutV&#39;);  cutV.scale.setScalar(0.001);&#10;const cutH = bar(5.6, 0.09, 0.6, 0, -0.5, 0.6, PAL.white, &#39;CutH&#39;); cutH.scale.setScalar(0.001);&#10;editor.execute(new AddObjectCommand(editor, cutV));&#10;editor.execute(new AddObjectCommand(editor, cutH));&#10;$S(&#39;#CutV, #CutH&#39;).addClass(&#39;cut&#39;);</code></pre>
+```javascript
+// the outline of the whole square (what the pieces come from and go back to), and the rulers along its top and left side:
+// p in coral (the colour of A), q in aqua (the colour of a)
+// materials are shared: the frame has its own (it fades as a whole); the rulers use the coral and aqua of the pieces; the cuts and
+// all white text share one white. Nothing that shares a material fades on its own: rulers and cuts grow and shrink instead.
+globalThis.PAL.frame = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.9 });
+globalThis.PAL.white = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.7 });
+const bar = (w, h, d, x, y, z, material, name) => {
+  const m = new Mesh(new BoxGeometry(w, h, d), material);
+  m.name = name;
+  m.position.set(x, y, z);
+  return m;
+};
+const frame = new Group();
+frame.name = 'Frame';
+const t = 0.07, h = 2.5;
+for (const y of [-h, h]) frame.add(bar(5 + t, t, 0.3, 0, y, 0, PAL.frame, 'FrameEdge'));
+for (const x of [-h, h]) frame.add(bar(t, 5 + t, 0.3, x, 0, 0, PAL.frame, 'FrameEdge'));
+editor.execute(new AddObjectCommand(editor, frame));
+$S('#Frame > *').addClass('frameedge');
+
+// rulers start collapsed (scale 0.001 on every axis, so nothing is left to see) and grow out of their middles
+const ruler = (w, h, x, y, material, name) => {
+  const m = bar(w, h, 0.22, x, y, 0.3, material, name);
+  m.scale.setScalar(0.001);
+  editor.execute(new AddObjectCommand(editor, m));
+};
+ruler(3 - 0.08, 0.2, -1, 3.05, PAL.coral, 'RulerTopP');      // along the top: p, then q
+ruler(2 - 0.08, 0.2, 1.5, 3.05, PAL.aqua, 'RulerTopQ');
+ruler(0.2, 3 - 0.08, -3.05, 1, PAL.coral, 'RulerSideP');     // down the left side: p, then q
+ruler(0.2, 2 - 0.08, -3.05, -1.5, PAL.aqua, 'RulerSideQ');
+$S('#RulerTopP, #RulerTopQ').addClass('rulertop');
+$S('#RulerSideP, #RulerSideQ').addClass('rulerside');
+
+// the two cuts, where each side splits into p and q: thin, bright, a little proud of the tiles; collapsed until their moment
+const cutV = bar(0.09, 5.6, 0.6, 0.5, 0, 0.6, PAL.white, 'CutV');  cutV.scale.setScalar(0.001);
+const cutH = bar(5.6, 0.09, 0.6, 0, -0.5, 0.6, PAL.white, 'CutH'); cutH.scale.setScalar(0.001);
+editor.execute(new AddObjectCommand(editor, cutV));
+editor.execute(new AddObjectCommand(editor, cutH));
+$S('#CutV, #CutH').addClass('cut');
+```
 
 <h2><span class="step">5</span> Five cameras</h2>
 
 <p class="lede">A shot camera is an ordinary camera with a track of keys: <code>setKeys([{ t, pos, lookAt }, …], { smooth: true })</code> plays one smooth curve through them (see <a href="https://strataeditor.dev/guides/CAMERA_PATHS.md">Editing camera moves</a>). <code>orbit</code> writes the keys from an azimuth, a radius and a height. Because this scene is flat, the cameras stay nearly head-on (azimuth within ±8°): a square seen from the side is a sliver, and the equation above it, a row of text that faces the front, would shrink. Each is aimed a little above the middle of what it films. The second one is further back and aimed lower, because during the sort the pieces fly up towards the equation. The third is closer and aimed to the right of the middle, for the allele count, so that the list of assumptions has room beside the bins; the fourth pulls back for the finished square, and the fifth faces the end card.</p>
 
-<pre><code>// five cameras: a slow push-in on the whole square, a closer one for the sorting, one for the allele count, a wide one for the reassembly, and one for the end card&#10;function addCamera(name, fov) {&#10;  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);&#10;  cam.name = name;&#10;  editor.execute(new AddObjectCommand(editor, cam));&#10;  return cam;&#10;}&#10;&#10;// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds&#10;function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 4) {&#10;  const n = Math.max(1, Math.round((t1 - t0) / step));&#10;  const keys = [];&#10;  for (let i = 0; i &lt;= n; i++) {&#10;    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);&#10;    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });&#10;  }&#10;  $S(&#39;#&#39; + cam.name).setKeys(keys, { smooth: true });&#10;  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts&#10;  cam.lookAt(...aim);&#10;}&#10;&#10;const camA = addCamera(&#39;camA&#39;, 40), camB = addCamera(&#39;camB&#39;, 40), camC = addCamera(&#39;camC&#39;, 40), camD = addCamera(&#39;camD&#39;, 40), end = addCamera(&#39;camCard&#39;, 50);&#10;orbit(camA, 0.001, 29.5, -5, 6, 16.5, 3.5, 3, [0, 1.6, 0]);        // a little push round, nearly head-on&#10;orbit(camB, 29.5, 51.5, 6, -6, 18, 2.5, 2, [0.3, 0.9, 0]);          // further back and aimed lower: the pieces fly apart, then up to the row&#10;orbit(camC, 51.5, 89.9, -6, 4, 14.5, 2.6, 2.8, [1.8, 1.4, 0], 6);   // closer, and aimed to the right, for the allele count and the list of assumptions beside it&#10;orbit(camD, 89.9, 111.9, -2, 6, 16.5, 3, 4, [0, 1.6, 0], 6);       // pulls back for the whole square again&#10;end.position.set(14.6, 0.5, 0);                                      // faces the end card, which hangs on the right-hand wall&#10;end.lookAt(30, 0.5, 0);</code></pre>
+```javascript
+// five cameras: a slow push-in on the whole square, a closer one for the sorting, one for the allele count, a wide one for the reassembly, and one for the end card
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+
+// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds
+function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 4) {
+  const n = Math.max(1, Math.round((t1 - t0) / step));
+  const keys = [];
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);
+    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });
+  }
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+}
+
+const camA = addCamera('camA', 40), camB = addCamera('camB', 40), camC = addCamera('camC', 40), camD = addCamera('camD', 40), end = addCamera('camCard', 50);
+orbit(camA, 0.001, 29.5, -5, 6, 16.5, 3.5, 3, [0, 1.6, 0]);        // a little push round, nearly head-on
+orbit(camB, 29.5, 51.5, 6, -6, 18, 2.5, 2, [0.3, 0.9, 0]);          // further back and aimed lower: the pieces fly apart, then up to the row
+orbit(camC, 51.5, 89.9, -6, 4, 14.5, 2.6, 2.8, [1.8, 1.4, 0], 6);   // closer, and aimed to the right, for the allele count and the list of assumptions beside it
+orbit(camD, 89.9, 111.9, -2, 6, 16.5, 3, 4, [0, 1.6, 0], 6);       // pulls back for the whole square again
+end.position.set(14.6, 0.5, 0);                                      // faces the end card, which hangs on the right-hand wall
+end.lookAt(30, 0.5, 0);
+```
 
 <h2><span class="step">6</span> The labels</h2>
 
@@ -68,7 +214,44 @@ The cameras cut at 29.5, 51.5, 89.9 and 111.9 s. Everything below is a paste int
 
 At a scale of 0.6 and a gap of 0.45 between nine labels the equation is 12.1 wide, so its first label starts at −6.05, and each next one at the sum of the widths and gaps before it. The letters on the pieces are _children_ of their piece (`parent.add(label)`), so they travel, shrink and turn with it.
 
-<pre><code>// every label is a copy of the one Text stencil, so they share its font; they also share a material per colour, so the labels appear&#10;// with a cut (and the cross-fade is left out), because a shared material cannot fade one label without fading them all. A label&#39;s text begins at its own origin, so to&#10;// centre one you subtract half its width: the widths come from the font, in units of the font size (see the table below).&#10;const tpl = $S(&#39;#Text&#39;).nodes[0];&#10;const WHITE = PAL.white, CORAL = PAL.coral, GOLD = PAL.gold, AQUA = PAL.aqua;   // shared materials, one per colour&#10;let first = true;&#10;function label(name, material, x, y, z, scale, parent) {&#10;  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);&#10;  m.name = name;&#10;  m.material = material;&#10;  m.scale.setScalar(scale);&#10;  m.position.set(x, y, z);&#10;  m.userData.textShadow = true;&#10;  m.castShadow = false;&#10;  if (!first) editor.execute(new AddObjectCommand(editor, m));&#10;  first = false;&#10;  if (parent) parent.add(m);                         // hang it on a piece, so it travels with it&#10;  return m;&#10;}&#10;&#10;// the equation, nine labels in a row, at scale 0.6 with 0.45 between them: (p + q)^2 = p^2 + 2pq + q^2 = 1&#10;const EQ = [[&#39;lead&#39;, WHITE, -6.05], [&#39;eq1&#39;, WHITE, -2.74], [&#39;tP&#39;, CORAL, -1.79], [&#39;pl1&#39;, WHITE, -0.51], [&#39;tPQ&#39;, GOLD, 0.43],&#10;            [&#39;pl2&#39;, WHITE, 2.37], [&#39;tQ&#39;, AQUA, 3.32], [&#39;eq2&#39;, WHITE, 4.61], [&#39;one&#39;, WHITE, 5.55]];&#10;for (const [name, color, x] of EQ) label(name, color, x, 4.9, 0, 0.6);&#10;&#10;// the letters on the rulers: p and q, centred over and beside their bars&#10;label(&#39;rp1&#39;, CORAL, -1.29, 3.4, 0.3, 0.7);   label(&#39;rq1&#39;, AQUA, 1.21, 3.4, 0.3, 0.7);       // over the top ruler&#10;label(&#39;rp2&#39;, CORAL, -3.85, 0.75, 0.3, 0.7);  label(&#39;rq2&#39;, AQUA, -3.85, -1.75, 0.3, 0.7);    // beside the left one&#10;$S(&#39;#rp1, #rq1, #rp2, #rq2&#39;).addClass(&#39;ruler&#39;);&#10;&#10;// the kind of child, on each piece: AA, Aa, Aa and aa, centred on the piece (half the width back, a third of the cap height down)&#10;// (ids are matched without regard to case, so &#39;#kAA&#39; and &#39;#kaa&#39; would be the same label: the names say where, not what)&#10;const kids = [[&#39;kidPP&#39;, &#39;g-pp&#39;, -0.96], [&#39;kidPQ1&#39;, &#39;g-pq1&#39;, -0.83], [&#39;kidPQ2&#39;, &#39;g-pq2&#39;, -0.83], [&#39;kidQQ&#39;, &#39;g-qq&#39;, -0.71]];&#10;for (const [name, group, x] of kids) label(name, WHITE, x, -0.32, 0.6, 0.9, $S(&#39;#&#39; + group).nodes[0]);&#10;$S(&#39;#kidPP, #kidPQ1, #kidPQ2, #kidQQ&#39;).addClass(&#39;kid&#39;);&#10;$S(&#39;#lead, #eq1, #tP, #pl1, #tPQ, #pl2, #tQ, #eq2, #one&#39;).addClass(&#39;term&#39;).nodes.length      // 9</code></pre>
+```javascript
+// every label is a copy of the one Text stencil, so they share its font; they also share a material per colour, so the labels appear
+// with a cut (and the cross-fade is left out), because a shared material cannot fade one label without fading them all. A label's text begins at its own origin, so to
+// centre one you subtract half its width: the widths come from the font, in units of the font size (see the table below).
+const tpl = $S('#Text').nodes[0];
+const WHITE = PAL.white, CORAL = PAL.coral, GOLD = PAL.gold, AQUA = PAL.aqua;   // shared materials, one per colour
+let first = true;
+function label(name, material, x, y, z, scale, parent) {
+  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);
+  m.name = name;
+  m.material = material;
+  m.scale.setScalar(scale);
+  m.position.set(x, y, z);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  if (!first) editor.execute(new AddObjectCommand(editor, m));
+  first = false;
+  if (parent) parent.add(m);                         // hang it on a piece, so it travels with it
+  return m;
+}
+
+// the equation, nine labels in a row, at scale 0.6 with 0.45 between them: (p + q)^2 = p^2 + 2pq + q^2 = 1
+const EQ = [['lead', WHITE, -6.05], ['eq1', WHITE, -2.74], ['tP', CORAL, -1.79], ['pl1', WHITE, -0.51], ['tPQ', GOLD, 0.43],
+            ['pl2', WHITE, 2.37], ['tQ', AQUA, 3.32], ['eq2', WHITE, 4.61], ['one', WHITE, 5.55]];
+for (const [name, color, x] of EQ) label(name, color, x, 4.9, 0, 0.6);
+
+// the letters on the rulers: p and q, centred over and beside their bars
+label('rp1', CORAL, -1.29, 3.4, 0.3, 0.7);   label('rq1', AQUA, 1.21, 3.4, 0.3, 0.7);       // over the top ruler
+label('rp2', CORAL, -3.85, 0.75, 0.3, 0.7);  label('rq2', AQUA, -3.85, -1.75, 0.3, 0.7);    // beside the left one
+$S('#rp1, #rq1, #rp2, #rq2').addClass('ruler');
+
+// the kind of child, on each piece: AA, Aa, Aa and aa, centred on the piece (half the width back, a third of the cap height down)
+// (ids are matched without regard to case, so '#kAA' and '#kaa' would be the same label: the names say where, not what)
+const kids = [['kidPP', 'g-pp', -0.96], ['kidPQ1', 'g-pq1', -0.83], ['kidPQ2', 'g-pq2', -0.83], ['kidQQ', 'g-qq', -0.71]];
+for (const [name, group, x] of kids) label(name, WHITE, x, -0.32, 0.6, 0.9, $S('#' + group).nodes[0]);
+$S('#kidPP, #kidPQ1, #kidPQ2, #kidQQ').addClass('kid');
+$S('#lead, #eq1, #tP, #pl1, #tPQ, #pl2, #tQ, #eq2, #one').addClass('term').nodes.length      // 9
+```
 
 <div class="note"><strong>Shared materials: no cross-fade, and one selector per object.</strong> The first version of this scene gave every label, ruler and cut a material of its own, 34 in all, so that each could fade by itself. A material belongs to every mesh that holds it, so a fade on one is a fade on all. The film now has nine: three for the room, coral, gold and aqua (tiles, rulers, tokens and coloured labels), white (white labels, cuts, bins), the outline, which fades as a whole, and the end card. The price is that labels appear with a cut (<code>change(text)</code> with no <code>transition</code>) and rulers and cuts <em>grow</em> instead of fading. The other rule is that every event for one object goes through <em>one</em> selector: <code>.rulertop</code> and <code>#RulerTopP</code> would both write the same scale track, and the ruler would drift to the wrong size.</div>
 
@@ -78,43 +261,153 @@ At a scale of 0.6 and a gap of 0.45 between nine labels the equation is 12.1 wid
 
 <p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it. This block makes it landscape, hangs it on the right-hand wall (x = 30), turns it to face the end camera and makes it invisible until its fade-in.</p>
 
-<pre><code>// the end card: the Call card stencil, landscape, hung on the right-hand wall and facing the end camera&#10;const card = $S(&#39;#callcard&#39;).nodes[0];&#10;card.userData.width = 3.2;&#10;card.userData.height = 1.8;&#10;card.geometry = new PlaneGeometry(3.2, 1.8);&#10;$S(&#39;#callcard&#39;).moveTo(30, 0.5, 0).scaleTo(8);&#10;card.rotation.set(0, -Math.PI / 2, 0);&#10;card.material.opacity = 0;</code></pre>
+```javascript
+// the end card: the Call card stencil, landscape, hung on the right-hand wall and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(30, 0.5, 0).scaleTo(8);
+card.rotation.set(0, -Math.PI / 2, 0);
+card.material.opacity = 0;
+```
 
 <h2><span class="step">8</span> The camera sequence</h2>
 
 <p class="lede">The Render tab&#39;s <strong>Camera Sequence</strong> lives in <code>scene.userData.renderShots</code>: a camera and the time it takes over, entered with a <code>&#39;cut&#39;</code> or a <code>&#39;fade&#39;</code>. In the Render tab it is <strong>+ Add Shot</strong> five times; from the Shell it is one assignment, and <code>editor.work.touch()</code> tells the unsaved-work guard that the scene changed.</p>
 
-<pre><code>// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)&#10;const cams = Object.fromEntries([&#39;camA&#39;, &#39;camB&#39;, &#39;camC&#39;, &#39;camD&#39;, &#39;camCard&#39;].map(n =&gt; [n, $S(&#39;#&#39; + n).nodes[0]]));&#10;const cuts = [[0, &#39;camA&#39;], [29.5, &#39;camB&#39;], [51.5, &#39;camC&#39;], [89.9, &#39;camD&#39;], [111.9, &#39;camCard&#39;]];&#10;editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({&#10;  id: &#39;shot-&#39; + name, at, camera: cams[name].uuid, transition: i === 0 ? &#39;cut&#39; : &#39;fade&#39;, transitionDur: 0.6&#10;}));&#10;editor.work.touch();&#10;editor.scene.userData.renderShots.length      // 5</code></pre>
+```javascript
+// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)
+const cams = Object.fromEntries(['camA', 'camB', 'camC', 'camD', 'camCard'].map(n => [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camA'], [29.5, 'camB'], [51.5, 'camC'], [89.9, 'camD'], [111.9, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) => ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 5
+```
 
 <h2><span class="step">9</span> The rulers and the cuts</h2>
 
 <p class="lede">The voice introduces <em>p</em> and <em>q</em> twice, once for each parent, so the ruler appears twice: along the top at 8.2 s (<em>p</em>, then <em>q</em>, as the voice says &quot;p plus q is one&quot;) and down the side at 17.8 s (when &quot;one parent&#39;s alleles&quot; becomes &quot;the other&#39;s&quot;). The two cuts slide in at 25.9 and 26.6 s, a second after &quot;cut where each side splits&quot;, and rulers and cuts shrink away as the square comes apart at 29.4 s. After that the two top rulers have one more job (step 12), so they are moved out to the sides while they are invisible (at 30.2 s, by a 50 ms move) to be ready. Every ruler letter is its own track (<code>#rp1</code>, <code>#rq1</code>, …): two <code>change</code> events from two different selectors on one label would fight.</p>
 
-<pre><code>// the rulers: p and q along the top as the voice says they make one; down the side when the other parent comes in.&#10;// A ruler grows out of its middle (they share materials with the pieces, so they cannot fade on their own).&#10;// (every event of one ruler goes through one selector, its own id: two selectors on one object would both write its scale track)&#10;const grow = (sel, at, to, dur = 700) =&gt; $S(sel).at(at).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, dur, to &gt; 0.5 ? &#39;ease-out&#39; : &#39;ease-in&#39;);&#10;const TOP = [&#39;#RulerTopP&#39;, &#39;#RulerTopQ&#39;];&#10;TOP.forEach(s =&gt; grow(s, 8.2, 1, 800));&#10;[&#39;#rp1&#39;, &#39;#rq1&#39;, &#39;#rp2&#39;, &#39;#rq2&#39;].forEach(s =&gt; $S(s).at(0).change(&#39;&#39;));       // one track per label: two tracks on one label fight&#10;$S(&#39;#rp1&#39;).at(8.6).change(&#39;p&#39;);&#10;$S(&#39;#rq1&#39;).at(9.1).change(&#39;q&#39;);&#10;grow(&#39;.rulerside&#39;, 17.8, 1, 800);&#10;$S(&#39;#rp2&#39;).at(18.2).change(&#39;p&#39;);&#10;$S(&#39;#rq2&#39;).at(18.7).change(&#39;q&#39;);&#10;&#10;// the two cuts slide in where each side splits, one after the other, and go with the rulers&#10;grow(&#39;#CutV&#39;, 25.9, 1, 500);&#10;grow(&#39;#CutH&#39;, 26.6, 1, 500);&#10;grow(&#39;#CutV&#39;, 29.4, 0.001, 500);&#10;grow(&#39;#CutH&#39;, 29.4, 0.001, 500);&#10;TOP.forEach(s =&gt; grow(s, 29.4, 0.001, 600));&#10;grow(&#39;.rulerside&#39;, 29.4, 0.001, 600);&#10;[&#39;#rp1&#39;, &#39;#rq1&#39;, &#39;#rp2&#39;, &#39;#rq2&#39;].forEach(s =&gt; $S(s).at(29.4).change(&#39;&#39;));&#10;&#10;// the whole square stays behind as a faint outline while the pieces are apart&#10;$S(&#39;.frameedge&#39;).at(29.6).fade(1, 0.25, 0.6);</code></pre>
+```javascript
+// the rulers: p and q along the top as the voice says they make one; down the side when the other parent comes in.
+// A ruler grows out of its middle (they share materials with the pieces, so they cannot fade on their own).
+// (every event of one ruler goes through one selector, its own id: two selectors on one object would both write its scale track)
+const grow = (sel, at, to, dur = 700) => $S(sel).at(at).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, dur, to > 0.5 ? 'ease-out' : 'ease-in');
+const TOP = ['#RulerTopP', '#RulerTopQ'];
+TOP.forEach(s => grow(s, 8.2, 1, 800));
+['#rp1', '#rq1', '#rp2', '#rq2'].forEach(s => $S(s).at(0).change(''));       // one track per label: two tracks on one label fight
+$S('#rp1').at(8.6).change('p');
+$S('#rq1').at(9.1).change('q');
+grow('.rulerside', 17.8, 1, 800);
+$S('#rp2').at(18.2).change('p');
+$S('#rq2').at(18.7).change('q');
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-rulers.png" alt="The square with a coral and an aqua ruler along its top and left side, each marked p and q.">&#10;		<figcaption>20 seconds in: the two parents, drawn as the two rulers.</figcaption>&#10;	</figure>
+// the two cuts slide in where each side splits, one after the other, and go with the rulers
+grow('#CutV', 25.9, 1, 500);
+grow('#CutH', 26.6, 1, 500);
+grow('#CutV', 29.4, 0.001, 500);
+grow('#CutH', 29.4, 0.001, 500);
+TOP.forEach(s => grow(s, 29.4, 0.001, 600));
+grow('.rulerside', 29.4, 0.001, 600);
+['#rp1', '#rq1', '#rp2', '#rq2'].forEach(s => $S(s).at(29.4).change(''));
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-cuts.png" alt="The square with a bright vertical and horizontal line across it where the rulers change colour.">&#10;		<figcaption>27 seconds in: the cuts, where each side splits into p and q.</figcaption>&#10;	</figure>
+// the whole square stays behind as a faint outline while the pieces are apart
+$S('.frameedge').at(29.6).fade(1, 0.25, 0.6);
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-rulers.png" alt="The square with a coral and an aqua ruler along its top and left side, each marked p and q.">
+<figcaption>20 seconds in: the two parents, drawn as the two rulers.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-cuts.png" alt="The square with a bright vertical and horizontal line across it where the rulers change colour.">
+<figcaption>27 seconds in: the cuts, where each side splits into p and q.</figcaption>
+</figure>
 
 <h2><span class="step">10</span> The square falls apart, and the pieces sort themselves</h2>
 
 <p class="lede">At 29.8 s each piece steps a little away from the middle (<code>APART</code>), so that the four are separate and can be named. The voice then names each one and the labels come in: <em>AA</em>, <em>Aa</em>, <em>Aa</em>, <em>aa</em>. Then, as each term of the equation appears, its piece flies to a spot under it and shrinks to 42% (<code>scaleX/Y/Z</code> are absolute). The two gold pieces are the interesting part: they fly under <em>2pq</em> <em>together</em>, one above the other, so that the middle term looks like what it is, <strong>two</strong> pieces. The tall one turns a quarter turn (<code>rotateZ: 90</code>) to lie like the other, and its label turns the other way (<code>-90</code>) so that the letters stay upright. After the allele count (the next-but-one step) everything flies back, at 90.1 s, the turned piece turns back, and the square is whole.</p>
 
-<pre><code>// the pieces step apart, then each kind flies to its place under its own term of the equation, smaller (scale 0.42),&#10;// and the two Aa rectangles are stacked: the one that is q wide and p tall turns a quarter turn to lie like the other.&#10;// Positions are in the world, the pieces&#39; groups sit at their middles.&#10;const S = 0.42;&#10;const APART = { &#39;g-pp&#39;: [-1.2, 1.2], &#39;g-pq1&#39;: [1.2, 1.2], &#39;g-pq2&#39;: [-1.2, -1.2], &#39;g-qq&#39;: [1.2, -1.2] };     // a step away from the middle&#10;const HOME = { &#39;g-pp&#39;: [-1, 1], &#39;g-pq1&#39;: [1.5, 1], &#39;g-pq2&#39;: [-1, -1.5], &#39;g-qq&#39;: [1.5, -1.5] };&#10;const ROW = { &#39;g-pp&#39;: [-1.37, 2.2], &#39;g-pq1&#39;: [1.18, 2.65], &#39;g-pq2&#39;: [1.18, 1.75], &#39;g-qq&#39;: [3.74, 2.2] };      // under p^2, 2pq (two, stacked) and q^2&#10;for (const [name, [dx, dy]] of Object.entries(APART)) {&#10;  const [x, y] = HOME[name];&#10;  $S(&#39;#&#39; + name).at(29.8).animate({ to: { positionX: x + dx, positionY: y + dy } }, 2200, &#39;ease-out&#39;);&#10;}&#10;const fly = (name, at, spin) =&gt; {&#10;  const [x, y] = ROW[name];&#10;  $S(&#39;#&#39; + name).at(at).animate({ to: { positionX: x, positionY: y, scaleX: S, scaleY: S, scaleZ: S } }, 1800, &#39;ease-in-out&#39;);&#10;  if (spin) {                                         // a quarter turn, and the letters on it turn back so they stay upright&#10;    $S(&#39;#&#39; + name).at(at).animate({ to: { rotateZ: 90 } }, 1800, &#39;ease-in-out&#39;);&#10;    $S(&#39;#&#39; + name + &#39; &gt; .kid&#39;).at(at).animate({ to: { rotateZ: -90 } }, 1800, &#39;ease-in-out&#39;);&#10;  }&#10;};&#10;fly(&#39;g-pp&#39;, 35.9);&#10;fly(&#39;g-pq1&#39;, 40.8, true);   fly(&#39;g-pq2&#39;, 41.4);&#10;fly(&#39;g-qq&#39;, 47.3);&#10;&#10;// and back (after the allele count, below): the whole square again, pieces full size, the turned one turned back&#10;const back = (name, at, spin) =&gt; {&#10;  const [x, y] = HOME[name];&#10;  $S(&#39;#&#39; + name).at(at).animate({ to: { positionX: x, positionY: y, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 2400, &#39;ease-in-out&#39;);&#10;  if (spin) {&#10;    $S(&#39;#&#39; + name).at(at).animate({ to: { rotateZ: -90 } }, 2400, &#39;ease-in-out&#39;);&#10;    $S(&#39;#&#39; + name + &#39; &gt; .kid&#39;).at(at).animate({ to: { rotateZ: 90 } }, 2400, &#39;ease-in-out&#39;);&#10;  }&#10;};&#10;const BACK = 90.1;&#10;Object.keys(HOME).forEach(n =&gt; back(n, BACK, n === &#39;g-pq1&#39;));&#10;$S(&#39;.frameedge&#39;).at(BACK).fade(0.25, 1, 0.8);</code></pre>
+```javascript
+// the pieces step apart, then each kind flies to its place under its own term of the equation, smaller (scale 0.42),
+// and the two Aa rectangles are stacked: the one that is q wide and p tall turns a quarter turn to lie like the other.
+// Positions are in the world, the pieces' groups sit at their middles.
+const S = 0.42;
+const APART = { 'g-pp': [-1.2, 1.2], 'g-pq1': [1.2, 1.2], 'g-pq2': [-1.2, -1.2], 'g-qq': [1.2, -1.2] };     // a step away from the middle
+const HOME = { 'g-pp': [-1, 1], 'g-pq1': [1.5, 1], 'g-pq2': [-1, -1.5], 'g-qq': [1.5, -1.5] };
+const ROW = { 'g-pp': [-1.37, 2.2], 'g-pq1': [1.18, 2.65], 'g-pq2': [1.18, 1.75], 'g-qq': [3.74, 2.2] };      // under p^2, 2pq (two, stacked) and q^2
+for (const [name, [dx, dy]] of Object.entries(APART)) {
+  const [x, y] = HOME[name];
+  $S('#' + name).at(29.8).animate({ to: { positionX: x + dx, positionY: y + dy } }, 2200, 'ease-out');
+}
+const fly = (name, at, spin) => {
+  const [x, y] = ROW[name];
+  $S('#' + name).at(at).animate({ to: { positionX: x, positionY: y, scaleX: S, scaleY: S, scaleZ: S } }, 1800, 'ease-in-out');
+  if (spin) {                                         // a quarter turn, and the letters on it turn back so they stay upright
+    $S('#' + name).at(at).animate({ to: { rotateZ: 90 } }, 1800, 'ease-in-out');
+    $S('#' + name + ' > .kid').at(at).animate({ to: { rotateZ: -90 } }, 1800, 'ease-in-out');
+  }
+};
+fly('g-pp', 35.9);
+fly('g-pq1', 40.8, true);   fly('g-pq2', 41.4);
+fly('g-qq', 47.3);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-apart.png" alt="Four separate pieces floating where the square was, joined by the faint white outline of the whole square: coral top left, gold top right, gold bottom left, aqua bottom right.">&#10;		<figcaption>31 seconds in: the four pieces, apart.</figcaption>&#10;	</figure>
+// and back (after the allele count, below): the whole square again, pieces full size, the turned one turned back
+const back = (name, at, spin) => {
+  const [x, y] = HOME[name];
+  $S('#' + name).at(at).animate({ to: { positionX: x, positionY: y, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 2400, 'ease-in-out');
+  if (spin) {
+    $S('#' + name).at(at).animate({ to: { rotateZ: -90 } }, 2400, 'ease-in-out');
+    $S('#' + name + ' > .kid').at(at).animate({ to: { rotateZ: 90 } }, 2400, 'ease-in-out');
+  }
+};
+const BACK = 90.1;
+Object.keys(HOME).forEach(n => back(n, BACK, n === 'g-pq1'));
+$S('.frameedge').at(BACK).fade(0.25, 1, 0.8);
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-sort.png" alt="The equation reads (p + q) squared equals p squared; a small coral piece labelled AA sits under it, and the other three pieces are still large inside the faint outline of the square.">&#10;		<figcaption>38 seconds in: the coral piece has flown under p²; the others wait.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-apart.png" alt="Four separate pieces floating where the square was, joined by the faint white outline of the whole square: coral top left, gold top right, gold bottom left, aqua bottom right.">
+<figcaption>31 seconds in: the four pieces, apart.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-row.png" alt="Under the full equation p squared plus 2 p q plus q squared: a small coral piece, two gold pieces stacked on each other, and a small aqua piece.">&#10;		<figcaption>50 seconds in: each kind under its own term; the gold pair, stacked, under 2pq.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-sort.png" alt="The equation reads (p + q) squared equals p squared; a small coral piece labelled AA sits under it, and the other three pieces are still large inside the faint outline of the square.">
+<figcaption>38 seconds in: the coral piece has flown under p²; the others wait.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-row.png" alt="Under the full equation p squared plus 2 p q plus q squared: a small coral piece, two gold pieces stacked on each other, and a small aqua piece.">
+<figcaption>50 seconds in: each kind under its own term; the gold pair, stacked, under 2pq.</figcaption>
+</figure>
 
 <h2><span class="step">11</span> The equation grows</h2>
 
 <p class="lede">The nine labels start empty and each gets its text at the moment its piece flies, with a cut; the letters on the pieces come in as the voice names each kind of child. The last two labels, <em>=</em> and <em>1</em>, come at 95.8 s, once the square is whole again, and that is the only digit written on screen. The end card fades in at 112.1 s as the last camera arrives (it has a material of its own: it is the one object that fades).</p>
 
-<pre><code>// the equation grows with the pieces; the letters on the pieces appear when the voice says each is a kind of child&#10;const show = (sel, at, text) =&gt; $S(sel).at(at).change(text);&#10;$S(&#39;.term&#39;).at(0).change(&#39;&#39;);&#10;$S(&#39;.kid&#39;).at(0).change(&#39;&#39;);&#10;show(&#39;#lead&#39;, 0.8, &#39;(p + q)²&#39;);&#10;[&#39;#kidPP&#39;, &#39;#kidPQ1&#39;, &#39;#kidPQ2&#39;, &#39;#kidQQ&#39;].forEach((s, i) =&gt; show(s, 31.6 + 0.25 * i, [&#39;AA&#39;, &#39;Aa&#39;, &#39;Aa&#39;, &#39;aa&#39;][i]));&#10;show(&#39;#eq1&#39;, 35.9, &#39;=&#39;);      show(&#39;#tP&#39;, 35.9, &#39;p²&#39;);&#10;show(&#39;#pl1&#39;, 40.8, &#39;+&#39;);      show(&#39;#tPQ&#39;, 40.8, &#39;2pq&#39;);&#10;show(&#39;#pl2&#39;, 47.3, &#39;+&#39;);      show(&#39;#tQ&#39;, 47.3, &#39;q²&#39;);&#10;show(&#39;#eq2&#39;, 95.8, &#39;=&#39;);      show(&#39;#one&#39;, 95.8, &#39;1&#39;);&#10;// the end card fades in as the last camera arrives&#10;$S(&#39;#callcard&#39;).at(112.1).fadeIn(2.5);</code></pre>
+```javascript
+// the equation grows with the pieces; the letters on the pieces appear when the voice says each is a kind of child
+const show = (sel, at, text) => $S(sel).at(at).change(text);
+$S('.term').at(0).change('');
+$S('.kid').at(0).change('');
+show('#lead', 0.8, '(p + q)²');
+['#kidPP', '#kidPQ1', '#kidPQ2', '#kidQQ'].forEach((s, i) => show(s, 31.6 + 0.25 * i, ['AA', 'Aa', 'Aa', 'aa'][i]));
+show('#eq1', 35.9, '=');      show('#tP', 35.9, 'p²');
+show('#pl1', 40.8, '+');      show('#tPQ', 40.8, '2pq');
+show('#pl2', 47.3, '+');      show('#tQ', 47.3, 'q²');
+show('#eq2', 95.8, '=');      show('#one', 95.8, '1');
+// the end card fades in as the last camera arrives
+$S('#callcard').at(112.1).fadeIn(2.5);
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-back.png" alt="The whole square again, with AA, Aa, Aa and aa written on its four pieces, under the equation p squared plus 2 p q plus q squared equals 1.">&#10;		<figcaption>99 seconds in: the square is whole again; the equation ends with = 1.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-back.png" alt="The whole square again, with AA, Aa, Aa and aa written on its four pieces, under the equation p squared plus 2 p q plus q squared equals 1.">
+<figcaption>99 seconds in: the square is whole again; the equation ends with = 1.</figcaption>
+</figure>
 
 <h2><span class="step">12</span> The allele count</h2>
 
@@ -124,17 +417,137 @@ The count is a _measurement_, not a line of arithmetic. A cube is 0.42 wide on a
 
 Everything for the count hangs on one group, `Counting` (the bins, the 50 cubes and the two labels), so that it can be shrunk away in one move before the pieces fly back. The cubes start at the middle of the piece they come from, invisible, and fly to their slots. Each cube's slot is the next free one in its bin, filled from the bottom, six to a row for _A_ and four for _a_.
 
-<pre><code>// the allele count: the equilibrium itself. After the four kinds of child are sorted under the equation, each child gives up its two&#10;// alleles: 50 small cubes, coloured by ALLELE (A coral, a aqua), not by genotype. They stream into two bins; and the same two rulers&#10;// that measured the parents (p along the top, q along the top) are brought across to measure the bins.&#10;//   AA  9 children -&gt; 18 A          Aa 12 children -&gt; 12 A + 12 a          aa 4 children -&gt; 8 a          total 30 A, 20 a&#10;// The token is 0.42 on a 0.5 pitch, so a bin of 6 columns is 2.92 wide (the length of the p ruler) and a bin of 4 is 1.92 (the q ruler).&#10;const COUNTING = [0, -1.25, 0];                                    // the group that holds the bins, the tokens and the labels&#10;const group = new Group();&#10;group.name = &#39;Counting&#39;;&#10;group.position.set(...COUNTING);&#10;&#10;// two bins: a floor and two walls each, in the shared white, centred at x = -1.2 (A, 3 wide) and x = 1.7 (a, 2 wide), growing in from nothing&#10;const bin = (name, cx, w) =&gt; {&#10;  const g = new Group();&#10;  g.name = name;&#10;  g.position.set(cx, 0, 0);&#10;  g.scale.setScalar(0.001);&#10;  const part = (pw, ph, x, y) =&gt; { const m = new Mesh(new BoxGeometry(pw, ph, 0.5), PAL.white); m.position.set(x, y, 0.2); m.castShadow = true; g.add(m); };&#10;  part(w + 0.22, 0.08, 0, -1.29);                                  // floor&#10;  part(0.08, 2.62, -(w / 2 + 0.07), 0);                            // walls&#10;  part(0.08, 2.62, w / 2 + 0.07, 0);&#10;  group.add(g);&#10;};&#10;bin(&#39;binBigA&#39;, -1.2, 3);&#10;bin(&#39;binLittleA&#39;, 1.7, 2);&#10;&#10;// where a token starts (the middle of the piece it comes from, in the row under the equation) and where it ends (the next free slot)&#10;const SOURCE = { &#39;g-pp&#39;: [-1.37, 2.2], &#39;g-pq1&#39;: [1.18, 2.65], &#39;g-pq2&#39;: [1.18, 1.75], &#39;g-qq&#39;: [3.74, 2.2] };&#10;const slot = { A: { n: 0, cols: 6, x0: -2.45 }, a: { n: 0, cols: 4, x0: 0.95 } };&#10;const tokenGeometry = new BoxGeometry(0.42, 0.42, 0.42);&#10;const plan = [];                                                    // [source, allele, time]&#10;const emit = (source, alleles, t0, step) =&gt; alleles.forEach((al, k) =&gt; plan.push([source, al, t0 + step * k]));&#10;emit(&#39;g-pp&#39;, Array(18).fill(&#39;A&#39;), 53.4, 0.2);                       // AA: two A each&#10;emit(&#39;g-pq1&#39;, Array(12).fill(0).map((_, k) =&gt; k % 2 ? &#39;a&#39; : &#39;A&#39;), 57.9, 0.17);          // Aa: one of each&#10;emit(&#39;g-pq2&#39;, Array(12).fill(0).map((_, k) =&gt; k % 2 ? &#39;a&#39; : &#39;A&#39;), 60.0, 0.17);&#10;emit(&#39;g-qq&#39;, Array(8).fill(&#39;a&#39;), 62.7, 0.17);                       // aa: two a each&#10;&#10;const flights = [];&#10;plan.forEach(([source, al, t], i) =&gt; {&#10;  const s = slot[al], n = s.n++;&#10;  const x = s.x0 + 0.5 * (n % s.cols), y = -2.25 + 0.5 * Math.floor(n / s.cols) + 1.25;      // y is in the group, which sits 1.25 below the origin&#10;  const token = new Mesh(tokenGeometry, al === &#39;A&#39; ? PAL.coral : PAL.aqua);&#10;  token.name = &#39;alleleToken_&#39; + String(i + 1).padStart(2, &#39;0&#39;);    // a &#39;.&#39; in a name would read as a class, so an underscore&#10;  token.position.set(SOURCE[source][0], SOURCE[source][1] - COUNTING[1], 0.2);&#10;  token.scale.setScalar(0.001);&#10;  token.castShadow = token.receiveShadow = true;&#10;  token.userData.hasEdgeOutline = true;&#10;  group.add(token);&#10;  flights.push([token.name, al, t, x, y]);&#10;});&#10;&#10;// the labels p&#39; and q&#39; above the bins, each in the colour of its allele, starting empty&#10;const stencil = $S(&#39;#lead&#39;).nodes[0];&#10;const tag = (name, material, x, y) =&gt; {&#10;  const m = new Mesh(stencil.geometry.clone(), material);&#10;  m.name = name;&#10;  m.scale.setScalar(0.5);&#10;  m.position.set(x, y - COUNTING[1], 0.3);&#10;  m.userData.textShadow = true;&#10;  m.castShadow = false;&#10;  group.add(m);&#10;};&#10;tag(&#39;pPrime&#39;, PAL.coral, -2.66, 0.62);&#10;tag(&#39;qPrime&#39;, PAL.aqua, 0.74, 0.62);&#10;editor.execute(new AddObjectCommand(editor, group));&#10;&#10;for (const [name, al] of flights) $S(&#39;#&#39; + name).addClass(&#39;allele&#39;).addClass(al === &#39;A&#39; ? &#39;bigA&#39; : &#39;littleA&#39;);&#10;&#10;// the assumptions, as the voice names them, down the right-hand side&#10;const assume = [[&#39;Assumptions&#39;, PAL.gold, 82.7], [&#39;random mating&#39;, PAL.white, 83.4], [&#39;no selection&#39;, PAL.white, 84.6], [&#39;no mutation&#39;, PAL.white, 85.7],&#10;                [&#39;no migration&#39;, PAL.white, 86.7], [&#39;large population&#39;, PAL.white, 88.0]];&#10;const names = [];&#10;assume.forEach(([text, material, t], i) =&gt; {&#10;  const m = new Mesh(stencil.geometry.clone(), material);&#10;  m.name = &#39;assume_&#39; + (i + 1);&#10;  m.scale.setScalar(0.5);&#10;  m.position.set(4.7, 2.9 - 0.7 * i, 0.3);&#10;  m.userData.textShadow = true;&#10;  m.castShadow = false;&#10;  editor.execute(new AddObjectCommand(editor, m));&#10;  names.push(m.name);&#10;});&#10;names.forEach(n =&gt; $S(&#39;#&#39; + n).at(0).change(&#39;&#39;));&#10;assume.forEach(([text, , t], i) =&gt; $S(&#39;#&#39; + names[i]).at(t).change(text));&#10;names.forEach(n =&gt; $S(&#39;#&#39; + n).at(89.9).change(&#39;&#39;));&#10;$S(&#39;#pPrime&#39;).at(0).change(&#39;&#39;);   $S(&#39;#qPrime&#39;).at(0).change(&#39;&#39;);&#10;&#10;// ---- the film of it ----&#10;$S(&#39;#binBigA&#39;).at(52.0).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 600, &#39;ease-out&#39;);&#10;$S(&#39;#binLittleA&#39;).at(52.4).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 600, &#39;ease-out&#39;);&#10;for (const [name, , t, x, y] of flights)&#10;  $S(&#39;#&#39; + name).at(t).animate({ to: { positionX: x, positionY: y, positionZ: 0.2, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 700, &#39;ease-out&#39;);&#10;&#10;// the two top rulers wait off to the sides (while they are collapsed), then slide across and grow to measure the bins&#10;$S(&#39;#RulerTopP&#39;).at(30.2).animate({ to: { positionX: -9, positionY: 0.3 } }, 50, &#39;linear&#39;);&#10;$S(&#39;#RulerTopQ&#39;).at(30.2).animate({ to: { positionX: 9, positionY: 0.3 } }, 50, &#39;linear&#39;);&#10;$S(&#39;#RulerTopP&#39;).at(67.9).animate({ to: { positionX: -1.2, positionY: 0.3, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 1500, &#39;ease-out&#39;);&#10;$S(&#39;#RulerTopQ&#39;).at(67.9).animate({ to: { positionX: 1.7, positionY: 0.3, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 1500, &#39;ease-out&#39;);&#10;$S(&#39;#pPrime&#39;).at(71.4).change(&quot;p&#39;&quot;);        $S(&#39;#qPrime&#39;).at(72.0).change(&quot;q&#39;&quot;);&#10;$S(&#39;#pPrime&#39;).at(74.5).change(&quot;p&#39; = p&quot;);    $S(&#39;#qPrime&#39;).at(74.9).change(&quot;q&#39; = q&quot;);&#10;&#10;// and away again before the pieces go back together&#10;[&#39;#RulerTopP&#39;, &#39;#RulerTopQ&#39;].forEach(r =&gt; $S(r).at(89.9).animate({ to: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 600, &#39;ease-in&#39;));&#10;$S(&#39;#Counting&#39;).at(89.9).animate({ to: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 600, &#39;ease-in&#39;);&#10;flights.length      // 50</code></pre>
+```javascript
+// the allele count: the equilibrium itself. After the four kinds of child are sorted under the equation, each child gives up its two
+// alleles: 50 small cubes, coloured by ALLELE (A coral, a aqua), not by genotype. They stream into two bins; and the same two rulers
+// that measured the parents (p along the top, q along the top) are brought across to measure the bins.
+//   AA  9 children -> 18 A          Aa 12 children -> 12 A + 12 a          aa 4 children -> 8 a          total 30 A, 20 a
+// The token is 0.42 on a 0.5 pitch, so a bin of 6 columns is 2.92 wide (the length of the p ruler) and a bin of 4 is 1.92 (the q ruler).
+const COUNTING = [0, -1.25, 0];                                    // the group that holds the bins, the tokens and the labels
+const group = new Group();
+group.name = 'Counting';
+group.position.set(...COUNTING);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-tokens.png" alt="Two open bins under the faint outline of the square; the left one is half full of coral cubes, the right one holds a few aqua cubes, and a few cubes are in flight from the pieces above.">&#10;		<figcaption>57 seconds in: the children give up their alleles, coral for A and aqua for a.</figcaption>&#10;	</figure>
+// two bins: a floor and two walls each, in the shared white, centred at x = -1.2 (A, 3 wide) and x = 1.7 (a, 2 wide), growing in from nothing
+const bin = (name, cx, w) => {
+  const g = new Group();
+  g.name = name;
+  g.position.set(cx, 0, 0);
+  g.scale.setScalar(0.001);
+  const part = (pw, ph, x, y) => { const m = new Mesh(new BoxGeometry(pw, ph, 0.5), PAL.white); m.position.set(x, y, 0.2); m.castShadow = true; g.add(m); };
+  part(w + 0.22, 0.08, 0, -1.29);                                  // floor
+  part(0.08, 2.62, -(w / 2 + 0.07), 0);                            // walls
+  part(0.08, 2.62, w / 2 + 0.07, 0);
+  group.add(g);
+};
+bin('binBigA', -1.2, 3);
+bin('binLittleA', 1.7, 2);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-bins.png" alt="Two full bins: a coral one with 30 cubes in six columns of five, and an aqua one with 20 in four columns of five.">&#10;		<figcaption>65 seconds in: the bins are full: 30 A and 20 a.</figcaption>&#10;	</figure>
+// where a token starts (the middle of the piece it comes from, in the row under the equation) and where it ends (the next free slot)
+const SOURCE = { 'g-pp': [-1.37, 2.2], 'g-pq1': [1.18, 2.65], 'g-pq2': [1.18, 1.75], 'g-qq': [3.74, 2.2] };
+const slot = { A: { n: 0, cols: 6, x0: -2.45 }, a: { n: 0, cols: 4, x0: 0.95 } };
+const tokenGeometry = new BoxGeometry(0.42, 0.42, 0.42);
+const plan = [];                                                    // [source, allele, time]
+const emit = (source, alleles, t0, step) => alleles.forEach((al, k) => plan.push([source, al, t0 + step * k]));
+emit('g-pp', Array(18).fill('A'), 53.4, 0.2);                       // AA: two A each
+emit('g-pq1', Array(12).fill(0).map((_, k) => k % 2 ? 'a' : 'A'), 57.9, 0.17);          // Aa: one of each
+emit('g-pq2', Array(12).fill(0).map((_, k) => k % 2 ? 'a' : 'A'), 60.0, 0.17);
+emit('g-qq', Array(8).fill('a'), 62.7, 0.17);                       // aa: two a each
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-measure.png" alt="The same coral and aqua rulers now lie along the tops of the two bins, each exactly as long as its bin, with p prime and q prime over them.">&#10;		<figcaption>73 seconds in: the ruler that measured the parents measures the children.</figcaption>&#10;	</figure>
+const flights = [];
+plan.forEach(([source, al, t], i) => {
+  const s = slot[al], n = s.n++;
+  const x = s.x0 + 0.5 * (n % s.cols), y = -2.25 + 0.5 * Math.floor(n / s.cols) + 1.25;      // y is in the group, which sits 1.25 below the origin
+  const token = new Mesh(tokenGeometry, al === 'A' ? PAL.coral : PAL.aqua);
+  token.name = 'alleleToken_' + String(i + 1).padStart(2, '0');    // a '.' in a name would read as a class, so an underscore
+  token.position.set(SOURCE[source][0], SOURCE[source][1] - COUNTING[1], 0.2);
+  token.scale.setScalar(0.001);
+  token.castShadow = token.receiveShadow = true;
+  token.userData.hasEdgeOutline = true;
+  group.add(token);
+  flights.push([token.name, al, t, x, y]);
+});
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-hold.png" alt="The two rulers over the two bins with the labels p prime equals p and q prime equals q; the pieces still sit under the equation.">&#10;		<figcaption>77 seconds in: p′ = p and q′ = q. The frame is held: this is the equilibrium.</figcaption>&#10;	</figure>
+// the labels p' and q' above the bins, each in the colour of its allele, starting empty
+const stencil = $S('#lead').nodes[0];
+const tag = (name, material, x, y) => {
+  const m = new Mesh(stencil.geometry.clone(), material);
+  m.name = name;
+  m.scale.setScalar(0.5);
+  m.position.set(x, y - COUNTING[1], 0.3);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  group.add(m);
+};
+tag('pPrime', PAL.coral, -2.66, 0.62);
+tag('qPrime', PAL.aqua, 0.74, 0.62);
+editor.execute(new AddObjectCommand(editor, group));
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-assume.png" alt="The bins with the rulers and labels at left and, at right, a gold heading Assumptions and the lines random mating, no selection, no mutation, no migration, large population.">&#10;		<figcaption>89 seconds in: the five assumptions, listed as the voice says them.</figcaption>&#10;	</figure>
+for (const [name, al] of flights) $S('#' + name).addClass('allele').addClass(al === 'A' ? 'bigA' : 'littleA');
+
+// the assumptions, as the voice names them, down the right-hand side
+const assume = [['Assumptions', PAL.gold, 82.7], ['random mating', PAL.white, 83.4], ['no selection', PAL.white, 84.6], ['no mutation', PAL.white, 85.7],
+                ['no migration', PAL.white, 86.7], ['large population', PAL.white, 88.0]];
+const names = [];
+assume.forEach(([text, material, t], i) => {
+  const m = new Mesh(stencil.geometry.clone(), material);
+  m.name = 'assume_' + (i + 1);
+  m.scale.setScalar(0.5);
+  m.position.set(4.7, 2.9 - 0.7 * i, 0.3);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  editor.execute(new AddObjectCommand(editor, m));
+  names.push(m.name);
+});
+names.forEach(n => $S('#' + n).at(0).change(''));
+assume.forEach(([text, , t], i) => $S('#' + names[i]).at(t).change(text));
+names.forEach(n => $S('#' + n).at(89.9).change(''));
+$S('#pPrime').at(0).change('');   $S('#qPrime').at(0).change('');
+
+// ---- the film of it ----
+$S('#binBigA').at(52.0).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 600, 'ease-out');
+$S('#binLittleA').at(52.4).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 600, 'ease-out');
+for (const [name, , t, x, y] of flights)
+  $S('#' + name).at(t).animate({ to: { positionX: x, positionY: y, positionZ: 0.2, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 700, 'ease-out');
+
+// the two top rulers wait off to the sides (while they are collapsed), then slide across and grow to measure the bins
+$S('#RulerTopP').at(30.2).animate({ to: { positionX: -9, positionY: 0.3 } }, 50, 'linear');
+$S('#RulerTopQ').at(30.2).animate({ to: { positionX: 9, positionY: 0.3 } }, 50, 'linear');
+$S('#RulerTopP').at(67.9).animate({ to: { positionX: -1.2, positionY: 0.3, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 1500, 'ease-out');
+$S('#RulerTopQ').at(67.9).animate({ to: { positionX: 1.7, positionY: 0.3, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 1500, 'ease-out');
+$S('#pPrime').at(71.4).change("p'");        $S('#qPrime').at(72.0).change("q'");
+$S('#pPrime').at(74.5).change("p' = p");    $S('#qPrime').at(74.9).change("q' = q");
+
+// and away again before the pieces go back together
+['#RulerTopP', '#RulerTopQ'].forEach(r => $S(r).at(89.9).animate({ to: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 600, 'ease-in'));
+$S('#Counting').at(89.9).animate({ to: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 600, 'ease-in');
+flights.length      // 50
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-tokens.png" alt="Two open bins under the faint outline of the square; the left one is half full of coral cubes, the right one holds a few aqua cubes, and a few cubes are in flight from the pieces above.">
+<figcaption>57 seconds in: the children give up their alleles, coral for A and aqua for a.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-bins.png" alt="Two full bins: a coral one with 30 cubes in six columns of five, and an aqua one with 20 in four columns of five.">
+<figcaption>65 seconds in: the bins are full: 30 A and 20 a.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-measure.png" alt="The same coral and aqua rulers now lie along the tops of the two bins, each exactly as long as its bin, with p prime and q prime over them.">
+<figcaption>73 seconds in: the ruler that measured the parents measures the children.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-hold.png" alt="The two rulers over the two bins with the labels p prime equals p and q prime equals q; the pieces still sit under the equation.">
+<figcaption>77 seconds in: p′ = p and q′ = q. The frame is held: this is the equilibrium.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-assume.png" alt="The bins with the rulers and labels at left and, at right, a gold heading Assumptions and the lines random mating, no selection, no mutation, no migration, large population.">
+<figcaption>89 seconds in: the five assumptions, listed as the voice says them.</figcaption>
+</figure>
 
 <div class="note"><strong>Names.</strong> The cubes are <code>alleleToken_01</code> to <code>alleleToken_50</code> (underscores: a <code>.</code> in an id reads as a class), and carry the classes <code>allele</code> with <code>bigA</code> or <code>littleA</code>; the bins are <code>binBigA</code> and <code>binLittleA</code>. Ids and classes are matched without regard to case, so <code>binA</code> and <code>bina</code>, or classes <code>A</code> and <code>a</code>, would be one and the same.</div>
 
@@ -142,7 +555,29 @@ Everything for the count hangs on one group, `Counting` (the bins, the 50 cubes 
 
 <p class="lede">Nineteen cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the other shorts. They are written to be read aloud: no digits, no symbols (<em>p squared</em>, <em>two p q</em>). Six of them are the allele count and its assumptions, and the last but one says what the film has shown: that <em>p</em> and <em>q</em> stay fixed, so the proportions return.</p>
 
-<pre><code>setSubtitles([&#10;  { start: 0.8, end: 8.02, text: &#39;A gene comes in two forms. Big A has frequency p.\nLittle a has frequency q.&#39; },&#10;  { start: 8.17, end: 12.69, text: &#39;Between them they make up everything:\np plus q is one.&#39; },&#10;  { start: 12.84, end: 17.56, text: &#39;Every child gets one allele from each parent,\nat random.&#39; },&#10;  { start: 17.71, end: 25.66, text: &#39;So draw a square. Along the top, one parent\&#39;s alleles.\nDown the side, the other\&#39;s.&#39; },&#10;  { start: 25.81, end: 29.44, text: &#39;Cut where each side splits\ninto p and q.&#39; },&#10;  { start: 29.59, end: 35.44, text: &#39;Each piece is one kind of child, and its area\nis how common that kind is.&#39; },&#10;  { start: 35.59, end: 40.34, text: &#39;Both parents give A: p times p.\nThat is p squared.&#39; },&#10;  { start: 40.49, end: 46.79, text: &#39;One gives A and the other gives a. There are two ways,\nso two rectangles: two p q.&#39; },&#10;  { start: 46.94, end: 51.44, text: &#39;Both give little a: q times q.\nThat is q squared.&#39; },&#10;  { start: 51.59, end: 57.77, text: &#39;Now count the alleles in all these children.\nEach child carries two.&#39; },&#10;  { start: 57.92, end: 62.42, text: &#39;Send every A to one bin,\nand every little a to the other.&#39; },&#10;  { start: 62.57, end: 67.12, text: &#39;Out of fifty alleles, thirty are A,\nand twenty are little a.&#39; },&#10;  { start: 67.27, end: 73.77, text: &#39;Measure the bins with the same two rulers that\nmeasured the parents: p, and q. They match.&#39; },&#10;  { start: 73.92, end: 81.42, text: &#39;The allele frequencies have not changed.\nRandom mating only shuffles them into new pairs.&#39; },&#10;  { start: 81.57, end: 89.82, text: &#39;That holds when mating is random, with no selection,\nno mutation, no migration, and a large population.&#39; },&#10;  { start: 89.97, end: 97.07, text: &#39;Put the pieces back together: the whole square,\nthe whole population. Area one.&#39; },&#10;  { start: 97.22, end: 102.47, text: &#39;So p squared, plus two p q, plus q squared,\nequals one.&#39; },&#10;  { start: 102.62, end: 111.82, text: &#39;That is the Hardy-Weinberg equilibrium: p and q stay fixed,\nso these proportions return, generation after generation.&#39; },&#10;  { start: 111.97, end: 114.47, text: &#39;Made with Strata.&#39; },&#10;]).length   // 19</code></pre>
+```javascript
+setSubtitles([
+  { start: 0.8, end: 8.02, text: 'A gene comes in two forms. Big A has frequency p.\nLittle a has frequency q.' },
+  { start: 8.17, end: 12.69, text: 'Between them they make up everything:\np plus q is one.' },
+  { start: 12.84, end: 17.56, text: 'Every child gets one allele from each parent,\nat random.' },
+  { start: 17.71, end: 25.66, text: 'So draw a square. Along the top, one parent\'s alleles.\nDown the side, the other\'s.' },
+  { start: 25.81, end: 29.44, text: 'Cut where each side splits\ninto p and q.' },
+  { start: 29.59, end: 35.44, text: 'Each piece is one kind of child, and its area\nis how common that kind is.' },
+  { start: 35.59, end: 40.34, text: 'Both parents give A: p times p.\nThat is p squared.' },
+  { start: 40.49, end: 46.79, text: 'One gives A and the other gives a. There are two ways,\nso two rectangles: two p q.' },
+  { start: 46.94, end: 51.44, text: 'Both give little a: q times q.\nThat is q squared.' },
+  { start: 51.59, end: 57.77, text: 'Now count the alleles in all these children.\nEach child carries two.' },
+  { start: 57.92, end: 62.42, text: 'Send every A to one bin,\nand every little a to the other.' },
+  { start: 62.57, end: 67.12, text: 'Out of fifty alleles, thirty are A,\nand twenty are little a.' },
+  { start: 67.27, end: 73.77, text: 'Measure the bins with the same two rulers that\nmeasured the parents: p, and q. They match.' },
+  { start: 73.92, end: 81.42, text: 'The allele frequencies have not changed.\nRandom mating only shuffles them into new pairs.' },
+  { start: 81.57, end: 89.82, text: 'That holds when mating is random, with no selection,\nno mutation, no migration, and a large population.' },
+  { start: 89.97, end: 97.07, text: 'Put the pieces back together: the whole square,\nthe whole population. Area one.' },
+  { start: 97.22, end: 102.47, text: 'So p squared, plus two p q, plus q squared,\nequals one.' },
+  { start: 102.62, end: 111.82, text: 'That is the Hardy-Weinberg equilibrium: p and q stay fixed,\nso these proportions return, generation after generation.' },
+  { start: 111.97, end: 114.47, text: 'Made with Strata.' },
+]).length   // 19
+```
 
 <div class="note"><strong>Check the voice.</strong> Export the cues and run them through a text-to-speech tool before you commit to the times. With the slower <em>af_sarah</em> voice of Kokoro every cue fits with at least 0.29 seconds to spare and no two collide (the longest, the equilibrium, is 8.90 s in a 9.20 s window). The beats above were placed after the cues were timed, not before.</div>
 
@@ -150,7 +585,10 @@ Everything for the count hangs on one group, `Counting` (the bins, the 50 cubes 
 
 <ol class="steps">&#10;		<li>Open the <strong>Render</strong> tab. The Camera Sequence already holds the five shots from step 8.</li>&#10;		<li>Pick 1280 × 720 and 30 fps, and click <strong>Render &amp; Export</strong>. It runs in real time, so about two minutes. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>&#10;		<li>For captions a viewer can switch off, render without the burn and add the .srt as a soft track afterwards: <code>ffmpeg -i film.mp4 -i film.srt -c copy -c:s mov_text -metadata:s:s:0 language=eng film-subs.mp4</code>.</li>&#10;	</ol>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">&#10;		<figcaption>114 seconds in: the last cut, to the end card.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/hw-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">
+<figcaption>114 seconds in: the last cut, to the end card.</figcaption>
+</figure>
 
 <div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
 
@@ -166,7 +604,36 @@ Everything for the count hangs on one group, `Counting` (the bins, the 50 cubes 
 
 <p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S(&#39;#id&#39;)</code>, <code>$S(&#39;.class&#39;)</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. The four frame bars are now <code>FrameEdgeBottom</code>, <code>FrameEdgeTop</code>, <code>FrameEdgeLeft</code> and <code>FrameEdgeRight</code>, and each bin&#39;s three boxes <code>binBigA_floor</code>, <code>_left</code>, <code>_right</code> (and the same for <code>binLittleA</code>); <code>$S(&#39;.frameedge&#39;)</code> still selects the bars because the table gives each of them that class.</p>
 
-<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)&#10;// and a class; classes are what make the scene queryable: $S(&#39;.tile&#39;), $S(&#39;.bin&#39;), $S(&#39;.label&#39;). The table&#39;s first column is the names it covers, the second the classes it gives;&#10;// an object can match several rows, and anything left without a class is listed and the block stops.&#10;for (const e of scene.getObjectByName(&#39;Frame&#39;).children) {              // the four frame bars, named by the side they are on&#10;  const p = e.position;&#10;  e.name = &#39;FrameEdge&#39; + (Math.abs(p.x) &gt; Math.abs(p.y) ? (p.x &lt; 0 ? &#39;Left&#39; : &#39;Right&#39;) : (p.y &lt; 0 ? &#39;Bottom&#39; : &#39;Top&#39;));&#10;}&#10;for (const bin of [&#39;binBigA&#39;, &#39;binLittleA&#39;]) {                           // each bin&#39;s three boxes: a floor and two sides&#10;  for (const m of scene.getObjectByName(bin).children) {&#10;    if (m.name) continue;&#10;    m.name = bin + (m.position.y &lt; -1 ? &#39;_floor&#39; : m.position.x &lt; 0 ? &#39;_left&#39; : &#39;_right&#39;);&#10;  }&#10;}&#10;const rules = [&#10;  [/^(Room|Wall|Floor)$/, [&#39;environment&#39;]], [/Light$/, [&#39;light&#39;]], [/^g-(pp|pq1|pq2|qq)\.\d+\.\d+$/, [&#39;tile&#39;]],&#10;  [/^Frame/, [&#39;frame&#39;]], [/^FrameEdge/, [&#39;frameedge&#39;]], [/^cam/, [&#39;camera&#39;]], [/^callcard$/, [&#39;card&#39;]],&#10;  [/^Counting$/, [&#39;counting&#39;]], [/^bin/, [&#39;bin&#39;]], [/^(pPrime|qPrime|assume_\d+)$/, [&#39;label&#39;]]&#10;];&#10;const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === &#39;object&#39;) ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs&#10;const left = [];&#10;scene.traverse(o =&gt; {&#10;  if (o === scene || o.name.startsWith(&#39;__&#39;)) return;&#10;  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);&#10;  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || &#39;(unnamed)&#39;); return; }&#10;  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];&#10;});&#10;if (left.length) throw new Error(left.length + &#39; objects have no class: &#39; + left.slice(0, 12).join(&#39;, &#39;));&#10;requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+```javascript
+// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.tile'), $S('.bin'), $S('.label'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+for (const e of scene.getObjectByName('Frame').children) {              // the four frame bars, named by the side they are on
+  const p = e.position;
+  e.name = 'FrameEdge' + (Math.abs(p.x) > Math.abs(p.y) ? (p.x < 0 ? 'Left' : 'Right') : (p.y < 0 ? 'Bottom' : 'Top'));
+}
+for (const bin of ['binBigA', 'binLittleA']) {                           // each bin's three boxes: a floor and two sides
+  for (const m of scene.getObjectByName(bin).children) {
+    if (m.name) continue;
+    m.name = bin + (m.position.y < -1 ? '_floor' : m.position.x < 0 ? '_left' : '_right');
+  }
+}
+const rules = [
+  [/^(Room|Wall|Floor)$/, ['environment']], [/Light$/, ['light']], [/^g-(pp|pq1|pq2|qq)\.\d+\.\d+$/, ['tile']],
+  [/^Frame/, ['frame']], [/^FrameEdge/, ['frameedge']], [/^cam/, ['camera']], [/^callcard$/, ['card']],
+  [/^Counting$/, ['counting']], [/^bin/, ['bin']], [/^(pPrime|qPrime|assume_\d+)$/, ['label']]
+];
+const classesOf = c => Array.isArray(c) ? c : (c && typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o => {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) => re.test(o.name)).flatMap(([, c]) => c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless
+```
 
 <div class="note" id="film-contract"><strong>The film&#39;s contract.</strong> <em>Units:</em> the square is 5 × 5 tiles, <em>p = 3</em> and <em>q = 2</em> tiles, so every frequency is a count of tiles out of 25 (0.36, 0.48, 0.16) and the alleles 30 A and 20 a out of 50. <em>Assumptions:</em> one gene with two alleles, random mating, a large (effectively infinite) population, no mutation, no selection, no migration, no drift; under these the proportions recur every generation. <em>Render:</em> a render was run and published (<code>renders/projectile</code> in <code>tejaswigowda/test1</code>): 1280 × 720 at 30 fps, video only, made before the narration of step 14 existed. A 1080p60 render with the narration has to be made and published again. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 

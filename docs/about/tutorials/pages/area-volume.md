@@ -34,7 +34,41 @@ The cameras cut at 39.4, 75.6 and 95.8 s. Everything below is a paste into the S
 
 <p class="lede">The room of the other shorts, with the floor at <em>y</em> = 0 so that the cubes stand on it, and a wall a little behind them for the shadows. The wall is only 26 wide, so the end camera does not see it edge-on.</p>
 
-<pre><code>// a room around the scene, a floor under the cubes and a wall just behind them, for the shadows to land on&#10;const room = new Mesh(new BoxGeometry(80, 40, 80),&#10;  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));&#10;room.name = &#39;Room&#39;;&#10;room.position.set(0, 2, 0);&#10;room.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, room));&#10;&#10;const wall = new Mesh(new PlaneGeometry(26, 30), new MeshStandardMaterial({ color: 0x303b92, roughness: 0.95, metalness: 0 }));&#10;wall.name = &#39;Wall&#39;;&#10;wall.position.set(0, 6, -2.6);                          // a little behind the back of the cubes; only 26 wide, so the end camera does not see it edge-on&#10;wall.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, wall));&#10;&#10;const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));&#10;floor.name = &#39;Floor&#39;;&#10;floor.rotation.x = -Math.PI / 2;                        // the cubes stand on it: y = 0&#10;floor.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, floor));&#10;&#10;// one key light up and to the right, in front of the cubes, so shadows fall down and to the left; one soft fill&#10;const key = new PointLight(0xfff1dd, 4.5, 0, 0);&#10;key.name = &#39;KeyLight&#39;;&#10;key.position.set(7, 11, 11);&#10;key.castShadow = true;&#10;key.shadow.mapSize.set(2048, 2048);&#10;key.shadow.bias = -0.0004;&#10;key.shadow.intensity = 0.6;&#10;key.shadow.radius = 4;&#10;key.shadow.camera.near = 0.5;&#10;key.shadow.camera.far = 90;&#10;editor.execute(new AddObjectCommand(editor, key));&#10;editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: &#39;FillLight&#39; })));</code></pre>
+```javascript
+// a room around the scene, a floor under the cubes and a wall just behind them, for the shadows to land on
+const room = new Mesh(new BoxGeometry(80, 40, 80),
+  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(0, 2, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+const wall = new Mesh(new PlaneGeometry(26, 30), new MeshStandardMaterial({ color: 0x303b92, roughness: 0.95, metalness: 0 }));
+wall.name = 'Wall';
+wall.position.set(0, 6, -2.6);                          // a little behind the back of the cubes; only 26 wide, so the end camera does not see it edge-on
+wall.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, wall));
+
+const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;                        // the cubes stand on it: y = 0
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// one key light up and to the right, in front of the cubes, so shadows fall down and to the left; one soft fill
+const key = new PointLight(0xfff1dd, 4.5, 0, 0);
+key.name = 'KeyLight';
+key.position.set(7, 11, 11);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 90;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));
+```
 
 <h2><span class="step">3</span> One cube, three sizes</h2>
 
@@ -42,47 +76,196 @@ The cameras cut at 39.4, 75.6 and 95.8 s. Everything below is a paste into the S
 
 Each cube also gets a _skin_: a slightly larger, see-through coral box around it. The three skins share one material (opacity 0.22), and each starts collapsed (scale 0.001) and _inflates_ when the voice says _surface_, so the surface is something you can see, not just a number. Cubes, skins and the membrane appear by _growing_ (the cubes out of the floor) and go by shrinking, because a shared material cannot fade one mesh without fading every mesh that holds it. The block ends by classing the unit cubes of each cube (`u1`, `u2`, `u3`), the 26 outer ones of the big cube (`outer3`) and the skins (`skin`), and returns their counts: 3, 17 and 55 are the numbers of _nodes_ (a group's class also matches what is inside it, and each unit cube's black border is a child), not of cubes: 1 + 1 skin + 1 border, 8 + 8 borders + 1, 27 + 27 + 1.
 
-<pre><code>// one cube, three sizes: sides 1, 2 and 3 are built from 1, 8 and 27 unit cubes, side by side on the floor.&#10;// Every unit cube has a black border, so the faces of a big cube are visibly a grid of unit squares: that grid is the surface area.&#10;const GAPT = 0.06, AQUA = 0x14e0c8, GOLD = 0xffb703, CORAL = 0xff4d6a;&#10;const unit = new BoxGeometry(1 - GAPT, 1 - GAPT, 1 - GAPT);          // one shared geometry&#10;const SIDES = [[1, -3.75], [2, -0.75], [3, 2.75]];                    // side, and the x of the middle of the cube&#10;&#10;// The palette: every material of the film, made once. A mesh is given one of these, never a new one, so the whole scene has ten&#10;// (these seven, the room, the wall, the floor and the end card): the serializer and the glTF exporter share by object identity.&#10;// A material belongs to every mesh that holds it, so what fades has its own: the 26 outer cubes of the big cube fade to glass&#10;// (aquaBig), the small cubes do not (aquaSmall). Everything else grows and shrinks, or cuts, instead of fading.&#10;const make = (color, intensity, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: 0.5, metalness: 0.1, ...extra });&#10;globalThis.PAL = {&#10;  aquaSmall: make(AQUA, 0.25), aquaBig: make(AQUA, 0.25),&#10;  gold: make(GOLD, 0.5),                                              // the middle cube and the gold labels&#10;  skin: make(CORAL, 0.25, { transparent: true, opacity: 0.22, depthWrite: false }),&#10;  panel: make(0xa78bfa, 0.3),&#10;  white: make(0xffffff, 0.7)&#10;};&#10;&#10;for (const [s, cx] of SIDES) {&#10;  const cube = new Group();&#10;  cube.name = &#39;c&#39; + s;&#10;  cube.position.set(cx, 0, 0);&#10;  cube.scale.setScalar(0.001);                                        // each cube grows out of the floor at its moment&#10;  for (let i = 0; i &lt; s; i++) for (let j = 0; j &lt; s; j++) for (let k = 0; k &lt; s; k++) {&#10;    const core = s === 3 &amp;&amp; i === 1 &amp;&amp; j === 1 &amp;&amp; k === 1;           // the one tile in the middle of the 3-cube&#10;    const tile = new Mesh(unit, core ? PAL.gold : s === 3 ? PAL.aquaBig : PAL.aquaSmall);&#10;    tile.name = `t${s}_${i}_${j}_${k}`;&#10;    tile.position.set(i + 0.5 - s / 2, j + 0.5, k + 0.5 - s / 2);    // relative to the cube&#39;s group, standing on y = 0&#10;    tile.castShadow = tile.receiveShadow = true;&#10;    tile.userData.hasEdgeOutline = true;                              // a black border, drawn by the viewport&#10;    tile.userData.home = tile.position.toArray();                     // where it sits in the whole cube&#10;    cube.add(tile);&#10;  }&#10;  // the skin: a thin coral shell around the cube, see-through, shared by the three; collapsed (scale 0.001) until its moment&#10;  const skin = new Mesh(new BoxGeometry(s + 0.1, s + 0.1, s + 0.1), PAL.skin);&#10;  skin.name = &#39;skin&#39; + s;&#10;  skin.scale.setScalar(0.001);&#10;  skin.position.set(0, s / 2, 0);&#10;  skin.castShadow = false;&#10;  cube.add(skin);&#10;  editor.execute(new AddObjectCommand(editor, cube));&#10;}&#10;// classes: the unit cubes by cube (a class on a group also matches what is inside it, so tiles are counted by name)&#10;$S(&#39;#c1 &gt; *&#39;).addClass(&#39;u1&#39;); $S(&#39;#c2 &gt; *&#39;).addClass(&#39;u2&#39;); $S(&#39;#c3 &gt; *&#39;).addClass(&#39;u3&#39;);&#10;$S(&#39;.u3&#39;).nodes.filter(n =&gt; n.name.startsWith(&#39;t3_&#39;) &amp;&amp; n.name !== &#39;t3_1_1_1&#39;).forEach(n =&gt; $S(&#39;#&#39; + n.name).addClass(&#39;outer3&#39;));&#10;$S(&#39;#skin1, #skin2, #skin3&#39;).addClass(&#39;skin&#39;);&#10;[$S(&#39;.u1&#39;).nodes.length, $S(&#39;.u2&#39;).nodes.length, $S(&#39;.u3&#39;).nodes.length]</code></pre>
+```javascript
+// one cube, three sizes: sides 1, 2 and 3 are built from 1, 8 and 27 unit cubes, side by side on the floor.
+// Every unit cube has a black border, so the faces of a big cube are visibly a grid of unit squares: that grid is the surface area.
+const GAPT = 0.06, AQUA = 0x14e0c8, GOLD = 0xffb703, CORAL = 0xff4d6a;
+const unit = new BoxGeometry(1 - GAPT, 1 - GAPT, 1 - GAPT);          // one shared geometry
+const SIDES = [[1, -3.75], [2, -0.75], [3, 2.75]];                    // side, and the x of the middle of the cube
+
+// The palette: every material of the film, made once. A mesh is given one of these, never a new one, so the whole scene has ten
+// (these seven, the room, the wall, the floor and the end card): the serializer and the glTF exporter share by object identity.
+// A material belongs to every mesh that holds it, so what fades has its own: the 26 outer cubes of the big cube fade to glass
+// (aquaBig), the small cubes do not (aquaSmall). Everything else grows and shrinks, or cuts, instead of fading.
+const make = (color, intensity, extra = {}) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: 0.5, metalness: 0.1, ...extra });
+globalThis.PAL = {
+  aquaSmall: make(AQUA, 0.25), aquaBig: make(AQUA, 0.25),
+  gold: make(GOLD, 0.5),                                              // the middle cube and the gold labels
+  skin: make(CORAL, 0.25, { transparent: true, opacity: 0.22, depthWrite: false }),
+  panel: make(0xa78bfa, 0.3),
+  white: make(0xffffff, 0.7)
+};
+
+for (const [s, cx] of SIDES) {
+  const cube = new Group();
+  cube.name = 'c' + s;
+  cube.position.set(cx, 0, 0);
+  cube.scale.setScalar(0.001);                                        // each cube grows out of the floor at its moment
+  for (let i = 0; i < s; i++) for (let j = 0; j < s; j++) for (let k = 0; k < s; k++) {
+    const core = s === 3 && i === 1 && j === 1 && k === 1;           // the one tile in the middle of the 3-cube
+    const tile = new Mesh(unit, core ? PAL.gold : s === 3 ? PAL.aquaBig : PAL.aquaSmall);
+    tile.name = `t${s}_${i}_${j}_${k}`;
+    tile.position.set(i + 0.5 - s / 2, j + 0.5, k + 0.5 - s / 2);    // relative to the cube's group, standing on y = 0
+    tile.castShadow = tile.receiveShadow = true;
+    tile.userData.hasEdgeOutline = true;                              // a black border, drawn by the viewport
+    tile.userData.home = tile.position.toArray();                     // where it sits in the whole cube
+    cube.add(tile);
+  }
+  // the skin: a thin coral shell around the cube, see-through, shared by the three; collapsed (scale 0.001) until its moment
+  const skin = new Mesh(new BoxGeometry(s + 0.1, s + 0.1, s + 0.1), PAL.skin);
+  skin.name = 'skin' + s;
+  skin.scale.setScalar(0.001);
+  skin.position.set(0, s / 2, 0);
+  skin.castShadow = false;
+  cube.add(skin);
+  editor.execute(new AddObjectCommand(editor, cube));
+}
+// classes: the unit cubes by cube (a class on a group also matches what is inside it, so tiles are counted by name)
+$S('#c1 > *').addClass('u1'); $S('#c2 > *').addClass('u2'); $S('#c3 > *').addClass('u3');
+$S('.u3').nodes.filter(n => n.name.startsWith('t3_') && n.name !== 't3_1_1_1').forEach(n => $S('#' + n.name).addClass('outer3'));
+$S('#skin1, #skin2, #skin3').addClass('skin');
+[$S('.u1').nodes.length, $S('.u2').nodes.length, $S('.u3').nodes.length]
+```
 
 <h2><span class="step">4</span> A membrane</h2>
 
 <p class="lede">The folded surface is six flat panels, side by side along <em>x</em>, each 1.5 long and 4 deep, floating at <em>y</em> = 2.4. When they fold, panels alternate up and down, so six panels become a zigzag, like the cristae of a mitochondrion or a folded alveolar wall. They share one material, and are collapsed (scale 0.001) at first: they grow in step 11.</p>
 
-<pre><code>// a membrane: a flat sheet of 6 thin panels, side by side, that will fold like a concertina (a crista, an alveolar wall).&#10;const L = 1.5, N = 6, Y0 = 2.4;&#10;for (let i = 0; i &lt; N; i++) {&#10;  const panel = new Mesh(new BoxGeometry(L - 0.04, 0.12, 4), PAL.panel);       // the six share one material&#10;  panel.name = &#39;panel&#39; + i;&#10;  panel.position.set(-N * L / 2 + L * (i + 0.5), Y0, 0);             // flat: end to end, along x&#10;  panel.scale.setScalar(0.001);                                       // collapsed until the sheet appears&#10;  panel.castShadow = panel.receiveShadow = true;&#10;  panel.userData.hasEdgeOutline = true;&#10;  editor.execute(new AddObjectCommand(editor, panel));&#10;}&#10;$S(&#39;#panel0, #panel1, #panel2, #panel3, #panel4, #panel5&#39;).addClass(&#39;sheet&#39;).nodes.length    // 6</code></pre>
+```javascript
+// a membrane: a flat sheet of 6 thin panels, side by side, that will fold like a concertina (a crista, an alveolar wall).
+const L = 1.5, N = 6, Y0 = 2.4;
+for (let i = 0; i < N; i++) {
+  const panel = new Mesh(new BoxGeometry(L - 0.04, 0.12, 4), PAL.panel);       // the six share one material
+  panel.name = 'panel' + i;
+  panel.position.set(-N * L / 2 + L * (i + 0.5), Y0, 0);             // flat: end to end, along x
+  panel.scale.setScalar(0.001);                                       // collapsed until the sheet appears
+  panel.castShadow = panel.receiveShadow = true;
+  panel.userData.hasEdgeOutline = true;
+  editor.execute(new AddObjectCommand(editor, panel));
+}
+$S('#panel0, #panel1, #panel2, #panel3, #panel4, #panel5').addClass('sheet').nodes.length    // 6
+```
 
 <h2><span class="step">5</span> Four cameras</h2>
 
 <p class="lede">The usual <code>orbit</code> helper writes smooth camera keys. The first camera films the row of cubes, the second is a little closer for the x-ray and the cutting, and the third is lower and further to the side so the folds of the membrane show against the wall. The cuts sit on the cues (39.4 s, <em>surface grows with the square</em>; 75.6 s, <em>life uses this trick</em>).</p>
 
-<pre><code>// four cameras: the cubes, a closer one for the cutting, a third for the membrane, and one for the end card&#10;function addCamera(name, fov) {&#10;  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);&#10;  cam.name = name;&#10;  editor.execute(new AddObjectCommand(editor, cam));&#10;  return cam;&#10;}&#10;&#10;// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds&#10;function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 4) {&#10;  const n = Math.max(1, Math.round((t1 - t0) / step));&#10;  const keys = [];&#10;  for (let i = 0; i &lt;= n; i++) {&#10;    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);&#10;    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });&#10;  }&#10;  $S(&#39;#&#39; + cam.name).setKeys(keys, { smooth: true });&#10;  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts&#10;  cam.lookAt(...aim);&#10;}&#10;&#10;const camA = addCamera(&#39;camA&#39;, 40), camB = addCamera(&#39;camB&#39;, 40), camC = addCamera(&#39;camC&#39;, 40), end = addCamera(&#39;camCard&#39;, 50);&#10;orbit(camA, 0.001, 39.37, -12, 10, 14.5, 4.2, 4, [0, 1.9, 0]);          // the row of cubes, a slow push round&#10;orbit(camB, 39.37, 75.6, 10, -8, 13.5, 4, 4, [0, 1.9, 0]);        // the x-ray and the cutting&#10;orbit(camC, 75.6, 95.82, -20, 8, 12.5, 4.6, 4, [0, 2.4, 0]);        // the membrane, from the side and above&#10;end.position.set(14.6, 4, 0);                                              // faces the end card, which hangs on the right-hand wall&#10;end.lookAt(30, 4, 0);</code></pre>
+```javascript
+// four cameras: the cubes, a closer one for the cutting, a third for the membrane, and one for the end card
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+
+// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds
+function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 4) {
+  const n = Math.max(1, Math.round((t1 - t0) / step));
+  const keys = [];
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);
+    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });
+  }
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+}
+
+const camA = addCamera('camA', 40), camB = addCamera('camB', 40), camC = addCamera('camC', 40), end = addCamera('camCard', 50);
+orbit(camA, 0.001, 39.37, -12, 10, 14.5, 4.2, 4, [0, 1.9, 0]);          // the row of cubes, a slow push round
+orbit(camB, 39.37, 75.6, 10, -8, 13.5, 4, 4, [0, 1.9, 0]);        // the x-ray and the cutting
+orbit(camC, 75.6, 95.82, -20, 8, 12.5, 4.6, 4, [0, 2.4, 0]);        // the membrane, from the side and above
+end.position.set(14.6, 4, 0);                                              // faces the end card, which hangs on the right-hand wall
+end.lookAt(30, 4, 0);
+```
 
 <h2><span class="step">6</span> The labels</h2>
 
 <p class="lede">Open <strong>Stencils → Mesh → Text</strong> and click it <em>once</em>; the next block copies that one label for the others, so they share its font. There are five: <code>readout</code> (white, top left) for the numbers of the moment, <code>note</code> (gold, under it) for the biology, and <code>r1</code>, <code>r2</code>, <code>r3</code> (large gold digits over the cubes, at heights that follow the cubes: 1.7, 2.7, 3.7). The readout is left-aligned and its text only grows to the right, so it does not need centring; each digit is centred over its cube by moving it left by half its width (0.83 at scale 1, so 0.41).</p>
 
-<pre><code>// every label is a copy of the one Text stencil, so they share its font. A label&#39;s text begins at its own origin: the readout is&#10;// left-aligned, so its text can change without moving; the single big digits are centred by moving them left by half their width.&#10;const tpl = $S(&#39;#Text&#39;).nodes[0];&#10;const WHITE = PAL.white, GOLD = PAL.gold;                       // shared materials: a label never gets a copy of its own&#10;let first = true;&#10;function label(name, material, x, y, z, scale) {&#10;  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);&#10;  m.name = name;&#10;  m.material = material;&#10;  m.scale.setScalar(scale);&#10;  m.position.set(x, y, z);&#10;  m.userData.textShadow = true;&#10;  m.castShadow = false;&#10;  if (!first) editor.execute(new AddObjectCommand(editor, m));&#10;  first = false;&#10;  return m;&#10;}&#10;label(&#39;readout&#39;, WHITE, -6.2, 5.7, 0, 0.55);          // the numbers of the moment: side, surface area, volume, ratio&#10;label(&#39;note&#39;, GOLD, -6.2, 4.9, 0, 0.5);               // the biology&#10;label(&#39;r1&#39;, GOLD, -3.75 - 0.41, 1.7, 1.6, 1);         // the ratio, over each cube: 6, 3, 2 (a digit is 0.83 wide at scale 1)&#10;label(&#39;r2&#39;, GOLD, -0.75 - 0.41, 2.7, 1.6, 1);&#10;label(&#39;r3&#39;, GOLD, 2.75 - 0.41, 3.7, 1.6, 1);&#10;$S(&#39;#r1, #r2, #r3&#39;).addClass(&#39;ratio&#39;);&#10;$S(&#39;#readout, #note, #r1, #r2, #r3&#39;).nodes.length      // 5</code></pre>
+```javascript
+// every label is a copy of the one Text stencil, so they share its font. A label's text begins at its own origin: the readout is
+// left-aligned, so its text can change without moving; the single big digits are centred by moving them left by half their width.
+const tpl = $S('#Text').nodes[0];
+const WHITE = PAL.white, GOLD = PAL.gold;                       // shared materials: a label never gets a copy of its own
+let first = true;
+function label(name, material, x, y, z, scale) {
+  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);
+  m.name = name;
+  m.material = material;
+  m.scale.setScalar(scale);
+  m.position.set(x, y, z);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  if (!first) editor.execute(new AddObjectCommand(editor, m));
+  first = false;
+  return m;
+}
+label('readout', WHITE, -6.2, 5.7, 0, 0.55);          // the numbers of the moment: side, surface area, volume, ratio
+label('note', GOLD, -6.2, 4.9, 0, 0.5);               // the biology
+label('r1', GOLD, -3.75 - 0.41, 1.7, 1.6, 1);         // the ratio, over each cube: 6, 3, 2 (a digit is 0.83 wide at scale 1)
+label('r2', GOLD, -0.75 - 0.41, 2.7, 1.6, 1);
+label('r3', GOLD, 2.75 - 0.41, 3.7, 1.6, 1);
+$S('#r1, #r2, #r3').addClass('ratio');
+$S('#readout, #note, #r1, #r2, #r3').nodes.length      // 5
+```
 
 <h2><span class="step">7</span> The end card</h2>
 
 <p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it. This block makes it landscape, hangs it on the right-hand wall (x = 30) at the height of the end camera, 4 units, turns it to face the camera and makes it invisible until its fade-in.</p>
 
-<pre><code>// the end card: the Call card stencil, landscape, hung on the right-hand wall (at the cubes&#39; eye level, above the floor) and facing the end camera&#10;const card = $S(&#39;#callcard&#39;).nodes[0];&#10;card.userData.width = 3.2;&#10;card.userData.height = 1.8;&#10;card.geometry = new PlaneGeometry(3.2, 1.8);&#10;$S(&#39;#callcard&#39;).moveTo(30, 4, 0).scaleTo(8);&#10;card.rotation.set(0, -Math.PI / 2, 0);&#10;card.material.opacity = 0;</code></pre>
+```javascript
+// the end card: the Call card stencil, landscape, hung on the right-hand wall (at the cubes' eye level, above the floor) and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(30, 4, 0).scaleTo(8);
+card.rotation.set(0, -Math.PI / 2, 0);
+card.material.opacity = 0;
+```
 
 <h2><span class="step">8</span> The camera sequence</h2>
 
 <p class="lede">One assignment to <code>scene.userData.renderShots</code>, as in the other shorts (in the Render tab it is <strong>+ Add Shot</strong> four times). <code>editor.work.touch()</code> tells the unsaved-work guard that the scene changed.</p>
 
-<pre><code>// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)&#10;const cams = Object.fromEntries([&#39;camA&#39;, &#39;camB&#39;, &#39;camC&#39;, &#39;camCard&#39;].map(n =&gt; [n, $S(&#39;#&#39; + n).nodes[0]]));&#10;const cuts = [[0, &#39;camA&#39;], [39.37, &#39;camB&#39;], [75.6, &#39;camC&#39;], [95.82, &#39;camCard&#39;]];&#10;editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({&#10;  id: &#39;shot-&#39; + name, at, camera: cams[name].uuid, transition: i === 0 ? &#39;cut&#39; : &#39;fade&#39;, transitionDur: 0.6&#10;}));&#10;editor.work.touch();&#10;editor.scene.userData.renderShots.length      // 4</code></pre>
+```javascript
+// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)
+const cams = Object.fromEntries(['camA', 'camB', 'camC', 'camCard'].map(n => [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camA'], [39.37, 'camB'], [75.6, 'camC'], [95.82, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) => ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 4
+```
 
 <h2><span class="step">9</span> The cubes grow, and the skin shows</h2>
 
 <p class="lede">The cubes come in one at a time (each grows from the floor, <code>size(&#39;#c1&#39;, t, 1, 800, &#39;ease-out&#39;)</code>) on the cues <em>start with a cube</em>, <em>double the side</em> and <em>triple it</em>. Two seconds into each cue, as the voice says <em>surface</em>, the skin inflates around the cube over 0.6 s. The coral shell is the point of the film: look at how much of a small cube is skin, and how much less of a big one.</p>
 
-<pre><code>// one cube at three sizes, each at its moment: the cube, its skin (a coral shell: the surface), and the ratio over it&#10;// (a cube grows out of the floor and its skin inflates around it: the cubes and skins share materials, so they cannot fade one at a time)&#10;globalThis.size = (sel, at, to, ms, ease) =&gt; $S(sel).at(at).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, ms, ease);&#10;size(&#39;#c1&#39;, 6.0, 1, 800, &#39;ease-out&#39;);&#10;size(&#39;#skin1&#39;, 9.95, 1, 600, &#39;ease-out&#39;);&#10;size(&#39;#c2&#39;, 19.0, 1, 800, &#39;ease-out&#39;);&#10;size(&#39;#skin2&#39;, 21.3, 1, 600, &#39;ease-out&#39;);&#10;size(&#39;#c3&#39;, 29.27, 1, 800, &#39;ease-out&#39;);&#10;size(&#39;#skin3&#39;, 31.57, 1, 600, &#39;ease-out&#39;);</code></pre>
+```javascript
+// one cube at three sizes, each at its moment: the cube, its skin (a coral shell: the surface), and the ratio over it
+// (a cube grows out of the floor and its skin inflates around it: the cubes and skins share materials, so they cannot fade one at a time)
+globalThis.size = (sel, at, to, ms, ease) => $S(sel).at(at).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, ms, ease);
+size('#c1', 6.0, 1, 800, 'ease-out');
+size('#skin1', 9.95, 1, 600, 'ease-out');
+size('#c2', 19.0, 1, 800, 'ease-out');
+size('#skin2', 21.3, 1, 600, 'ease-out');
+size('#c3', 29.27, 1, 800, 'ease-out');
+size('#skin3', 31.57, 1, 600, 'ease-out');
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-one.png" alt="A single small cube on the floor of the room, wrapped in a thin coral shell, with the title Surface area over volume above it.">&#10;		<figcaption>12 seconds in: the unit cube, and its skin.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-one.png" alt="A single small cube on the floor of the room, wrapped in a thin coral shell, with the title Surface area over volume above it.">
+<figcaption>12 seconds in: the unit cube, and its skin.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-three.png" alt="Three cubes in a row of increasing size, each with a coral skin: a single cube, a 2 by 2 by 2 block and a 3 by 3 by 3 block, with the digits 6 and 3 over the first two, and the readout side 3, SA 54, V 27.">&#10;		<figcaption>34 seconds in: side 1, 2 and 3. The ratios 6 and 3 are written over the first two; the voice is on the third.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-three.png" alt="Three cubes in a row of increasing size, each with a coral skin: a single cube, a 2 by 2 by 2 block and a 3 by 3 by 3 block, with the digits 6 and 3 over the first two, and the readout side 3, SA 54, V 27.">
+<figcaption>34 seconds in: side 1, 2 and 3. The ratios 6 and 3 are written over the first two; the voice is on the third.</figcaption>
+</figure>
 
 <h2><span class="step">10</span> The middle starves, and the cell divides</h2>
 
@@ -90,35 +273,130 @@ Each cube also gets a _skin_: a slightly larger, see-through coral box around it
 
 <div class="note"><strong>Where do 90 and 126 come from?</strong> A slab is 3 × 3 × 1: 2 × 9 + 4 × 3 = 30. Three slabs: 90. A bar is 3 × 1 × 1: 2 × 1 + 4 × 3 = 14. Nine bars: 126. Each cut adds two faces per piece, and the surface only goes up.</div>
 
-<pre><code>// &quot;the middle starves&quot;: the 26 outer cubes of the big cube turn to glass, and the one gold cube in the middle is all that is left&#10;$S(&#39;.outer3&#39;).at(53.17).fade(1, 0.15, 0.6);&#10;$S(&#39;.outer3&#39;).at(57.92).fade(0.15, 1, 0.5);&#10;size(&#39;#skin3&#39;, 57.92, 0.001, 600, &#39;ease-in&#39;);&#10;&#10;// the cell divides: the small cubes and their skins go, the big cube slides to the middle, then it is cut&#10;size(&#39;#c1&#39;, 57.92, 0.001, 800, &#39;ease-in&#39;);&#10;size(&#39;#c2&#39;, 57.92, 0.001, 800, &#39;ease-in&#39;);&#10;$S(&#39;#c3&#39;).at(57.92).animate({ to: { positionX: 0 } }, 1500, &#39;ease-in-out&#39;);&#10;$S(&#39;#r3&#39;).at(57.92).animate({ to: { positionX: -0.41 } }, 1500, &#39;ease-in-out&#39;);&#10;&#10;// each cut moves every unit cube a little away from its neighbours along one more axis: slabs (y), then bars (y and z), then cubes (x, y and z)&#10;const G = 0.8, GY = 0.55;&#10;const stage = (n, at) =&gt; {&#10;  for (let i = 0; i &lt; 3; i++) for (let j = 0; j &lt; 3; j++) for (let k = 0; k &lt; 3; k++) {&#10;    const [x, y, z] = [i + 0.5 - 1.5, j + 0.5, k + 0.5 - 1.5];&#10;    const to = { positionX: x + (n &gt;= 3 ? G * (i - 1) : 0), positionY: y + (n &gt;= 1 ? GY * j : 0), positionZ: z + (n &gt;= 2 ? G * (k - 1) : 0) };&#10;    $S(`#t3_${i}_${j}_${k}`).at(at).animate({ to }, 1300, &#39;ease-in-out&#39;);&#10;  }&#10;};&#10;stage(1, 60.32);&#10;stage(2, 61.92);&#10;stage(3, 63.42);</code></pre>
+```javascript
+// "the middle starves": the 26 outer cubes of the big cube turn to glass, and the one gold cube in the middle is all that is left
+$S('.outer3').at(53.17).fade(1, 0.15, 0.6);
+$S('.outer3').at(57.92).fade(0.15, 1, 0.5);
+size('#skin3', 57.92, 0.001, 600, 'ease-in');
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-xray.png" alt="The big cube seen as glass with a gold cube at its centre and a coral shell around it; two smaller cubes stand to its left with the numbers 6 and 3 over them.">&#10;		<figcaption>54 seconds in: the middle of the big cube, the one gold cube; everything else has gone to glass.</figcaption>&#10;	</figure>
+// the cell divides: the small cubes and their skins go, the big cube slides to the middle, then it is cut
+size('#c1', 57.92, 0.001, 800, 'ease-in');
+size('#c2', 57.92, 0.001, 800, 'ease-in');
+$S('#c3').at(57.92).animate({ to: { positionX: 0 } }, 1500, 'ease-in-out');
+$S('#r3').at(57.92).animate({ to: { positionX: -0.41 } }, 1500, 'ease-in-out');
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-slabs.png" alt="The big cube cut into three horizontal slabs that have moved apart vertically.">&#10;		<figcaption>61.5 seconds in: the first cut, three slabs.</figcaption>&#10;	</figure>
+// each cut moves every unit cube a little away from its neighbours along one more axis: slabs (y), then bars (y and z), then cubes (x, y and z)
+const G = 0.8, GY = 0.55;
+const stage = (n, at) => {
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) {
+    const [x, y, z] = [i + 0.5 - 1.5, j + 0.5, k + 0.5 - 1.5];
+    const to = { positionX: x + (n >= 3 ? G * (i - 1) : 0), positionY: y + (n >= 1 ? GY * j : 0), positionZ: z + (n >= 2 ? G * (k - 1) : 0) };
+    $S(`#t3_${i}_${j}_${k}`).at(at).animate({ to }, 1300, 'ease-in-out');
+  }
+};
+stage(1, 60.32);
+stage(2, 61.92);
+stage(3, 63.42);
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-cubes.png" alt="The 27 unit cubes of the big cube separated in all three directions, with the readout 27 cubes, SA 162, V 27.">&#10;		<figcaption>70 seconds in: 27 cubes, SA 162.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-xray.png" alt="The big cube seen as glass with a gold cube at its centre and a coral shell around it; two smaller cubes stand to its left with the numbers 6 and 3 over them.">
+<figcaption>54 seconds in: the middle of the big cube, the one gold cube; everything else has gone to glass.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-slabs.png" alt="The big cube cut into three horizontal slabs that have moved apart vertically.">
+<figcaption>61.5 seconds in: the first cut, three slabs.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-cubes.png" alt="The 27 unit cubes of the big cube separated in all three directions, with the readout 27 cubes, SA 162, V 27.">
+<figcaption>70 seconds in: 27 cubes, SA 162.</figcaption>
+</figure>
 
 <h2><span class="step">11</span> The fold</h2>
 
 <p class="lede">The cubes are gone and a flat membrane appears (its six panels grow, <code>size</code> again), as the voice says <em>life uses this trick everywhere</em>. It folds twice, at 79.8 s and 85.6 s, to 60° and to 78°. <code>pose(deg)</code> works out where each of the six panels sits when the zigzag is folded at that angle: panel <em>i</em> is tilted by ±<em>deg</em> (alternately up and down) and moved so that it hangs from the end of the one before it. At 78° the six panels cover about a fifth of the floor they covered when flat (the horizontal extent of a panel is cos <em>deg</em> of its length), and none of the membrane has been lost.</p>
 
-<pre><code>// the membrane: a flat sheet appears, then folds like a concertina: the same sheet, a smaller footprint&#10;const L = 1.5, N = 6, Y0 = 2.4;&#10;const pose = deg =&gt; {                                  // where every panel sits when the sheet is folded at +/- deg&#10;  const a = THREE.MathUtils.degToRad(deg), c = Math.cos(a) * L, s = Math.sin(a) * L;&#10;  return Array.from({ length: N }, (_, i) =&gt; {&#10;    const up = i % 2 === 0 ? 1 : -1;&#10;    const x0 = -N * c / 2 + i * c, y0 = i % 2 === 0 ? 0 : s;           // where this panel starts&#10;    return { x: x0 + c / 2, y: Y0 - s / 2 + y0 + up * s / 2, rot: up * deg };&#10;  });&#10;};&#10;for (let i = 0; i &lt; 6; i++) size(&#39;#panel&#39; + i, 76.2, 1, 800, &#39;ease-out&#39;);     // the panels share one material, so they grow instead of fading in&#10;const fold = (deg, at, ms) =&gt; pose(deg).forEach((p, i) =&gt;&#10;  $S(&#39;#panel&#39; + i).at(at).animate({ to: { positionX: p.x, positionY: p.y, rotation: [0, 0, p.rot] } }, ms, &#39;ease-in-out&#39;));&#10;fold(60, 79.8, 2000);&#10;fold(78, 85.57, 2000);&#10;// the cubes are gone, the sheet takes over&#10;size(&#39;#c3&#39;, 75.6, 0.001, 800, &#39;ease-in&#39;);</code></pre>
+```javascript
+// the membrane: a flat sheet appears, then folds like a concertina: the same sheet, a smaller footprint
+const L = 1.5, N = 6, Y0 = 2.4;
+const pose = deg => {                                  // where every panel sits when the sheet is folded at +/- deg
+  const a = THREE.MathUtils.degToRad(deg), c = Math.cos(a) * L, s = Math.sin(a) * L;
+  return Array.from({ length: N }, (_, i) => {
+    const up = i % 2 === 0 ? 1 : -1;
+    const x0 = -N * c / 2 + i * c, y0 = i % 2 === 0 ? 0 : s;           // where this panel starts
+    return { x: x0 + c / 2, y: Y0 - s / 2 + y0 + up * s / 2, rot: up * deg };
+  });
+};
+for (let i = 0; i < 6; i++) size('#panel' + i, 76.2, 1, 800, 'ease-out');     // the panels share one material, so they grow instead of fading in
+const fold = (deg, at, ms) => pose(deg).forEach((p, i) =>
+  $S('#panel' + i).at(at).animate({ to: { positionX: p.x, positionY: p.y, rotation: [0, 0, p.rot] } }, ms, 'ease-in-out'));
+fold(60, 79.8, 2000);
+fold(78, 85.57, 2000);
+// the cubes are gone, the sheet takes over
+size('#c3', 75.6, 0.001, 800, 'ease-in');
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-sheet.png" alt="A flat strip of six violet panels floating above the floor of the room, under the caption one membrane, flat.">&#10;		<figcaption>78 seconds in: the membrane, flat.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-sheet.png" alt="A flat strip of six violet panels floating above the floor of the room, under the caption one membrane, flat.">
+<figcaption>78 seconds in: the membrane, flat.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-folded.png" alt="The same six panels folded into a tall zigzag, much narrower than before, under the captions folded: a fifth of the footprint and lungs: alveoli.">&#10;		<figcaption>87 seconds in: the same membrane, folded, and the biology in gold.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-folded.png" alt="The same six panels folded into a tall zigzag, much narrower than before, under the captions folded: a fifth of the footprint and lungs: alveoli.">
+<figcaption>87 seconds in: the same membrane, folded, and the biology in gold.</figcaption>
+</figure>
 
 <h2><span class="step">12</span> The readout, and the biology</h2>
 
 <p class="lede">The readout and the gold note change with the voice. Each <code>say</code> is one <code>change</code>: the readout, the only white label, cross-fades; the gold ones (the note and the three digits) share a material with the middle cube, so they cut; the ratios <em>6</em>, <em>3</em> and <em>2</em> over the cubes come in on the cues that say them (<em>surface to volume</em>) and go when the cell divides; the <em>6</em> comes back over the 27 cubes at 73 s. The end card fades in as the last camera arrives.</p>
 
-<pre><code>// the readout and the biology note change with the voice&#10;// the readout is the only white label, so it can cross-fade; the gold ones share a material with the middle cube, so they cut&#10;const say = (sel, at, text) =&gt; $S(sel).at(at).change(text, sel === &#39;#readout&#39; ? { transition: &#39;fade&#39;, dur: 300 } : {});&#10;$S(&#39;#readout, #note, .ratio&#39;).at(0).change(&#39;&#39;);&#10;say(&#39;#readout&#39;, 0.8, &#39;Surface area / volume&#39;);&#10;say(&#39;#readout&#39;, 9.95, &#39;side 1   SA 6   V 1&#39;);    say(&#39;#r1&#39;, 16.25, &#39;6&#39;);   say(&#39;#readout&#39;, 16.25, &#39;side 1   SA 6   V 1   SA/V = 6&#39;);&#10;say(&#39;#readout&#39;, 21.3, &#39;side 2   SA 24   V 8&#39;);   say(&#39;#r2&#39;, 26.52, &#39;3&#39;);   say(&#39;#readout&#39;, 26.52, &#39;side 2   SA 24   V 8   SA/V = 3&#39;);&#10;say(&#39;#readout&#39;, 31.57, &#39;side 3   SA 54   V 27&#39;);  say(&#39;#r3&#39;, 36.72, &#39;2&#39;);   say(&#39;#readout&#39;, 36.72, &#39;side 3   SA 54   V 27   SA/V = 2&#39;);&#10;say(&#39;#r1&#39;, 57.92, &#39;&#39;);  say(&#39;#r2&#39;, 57.92, &#39;&#39;);  say(&#39;#r3&#39;, 57.92, &#39;&#39;);&#10;say(&#39;#readout&#39;, 60.32, &#39;3 slabs   SA 90   V 27   SA/V = 3.3&#39;);&#10;say(&#39;#readout&#39;, 61.92, &#39;9 bars   SA 126   V 27   SA/V = 4.7&#39;);&#10;say(&#39;#readout&#39;, 63.42, &#39;27 cubes   SA 162   V 27&#39;);&#10;say(&#39;#r3&#39;, 73.15, &#39;6&#39;);  say(&#39;#readout&#39;, 73.15, &#39;27 cubes   SA 162   V 27   SA/V = 6&#39;);&#10;say(&#39;#r3&#39;, 75.6, &#39;&#39;);&#10;say(&#39;#readout&#39;, 75.6, &#39;one membrane, flat&#39;);&#10;say(&#39;#readout&#39;, 79.8, &#39;the same membrane, folded&#39;);&#10;say(&#39;#readout&#39;, 85.57, &#39;folded: a fifth of the footprint&#39;);&#10;say(&#39;#note&#39;, 79.2, &#39;mitochondria: cristae&#39;);&#10;say(&#39;#note&#39;, 83.97, &#39;lungs: alveoli&#39;);&#10;say(&#39;#note&#39;, 90.77, &#39;small, or folded&#39;);&#10;// the end card fades in as the last camera arrives&#10;$S(&#39;#callcard&#39;).at(95.82 + 0.2).fadeIn(2.5);</code></pre>
+```javascript
+// the readout and the biology note change with the voice
+// the readout is the only white label, so it can cross-fade; the gold ones share a material with the middle cube, so they cut
+const say = (sel, at, text) => $S(sel).at(at).change(text, sel === '#readout' ? { transition: 'fade', dur: 300 } : {});
+$S('#readout, #note, .ratio').at(0).change('');
+say('#readout', 0.8, 'Surface area / volume');
+say('#readout', 9.95, 'side 1   SA 6   V 1');    say('#r1', 16.25, '6');   say('#readout', 16.25, 'side 1   SA 6   V 1   SA/V = 6');
+say('#readout', 21.3, 'side 2   SA 24   V 8');   say('#r2', 26.52, '3');   say('#readout', 26.52, 'side 2   SA 24   V 8   SA/V = 3');
+say('#readout', 31.57, 'side 3   SA 54   V 27');  say('#r3', 36.72, '2');   say('#readout', 36.72, 'side 3   SA 54   V 27   SA/V = 2');
+say('#r1', 57.92, '');  say('#r2', 57.92, '');  say('#r3', 57.92, '');
+say('#readout', 60.32, '3 slabs   SA 90   V 27   SA/V = 3.3');
+say('#readout', 61.92, '9 bars   SA 126   V 27   SA/V = 4.7');
+say('#readout', 63.42, '27 cubes   SA 162   V 27');
+say('#r3', 73.15, '6');  say('#readout', 73.15, '27 cubes   SA 162   V 27   SA/V = 6');
+say('#r3', 75.6, '');
+say('#readout', 75.6, 'one membrane, flat');
+say('#readout', 79.8, 'the same membrane, folded');
+say('#readout', 85.57, 'folded: a fifth of the footprint');
+say('#note', 79.2, 'mitochondria: cristae');
+say('#note', 83.97, 'lungs: alveoli');
+say('#note', 90.77, 'small, or folded');
+// the end card fades in as the last camera arrives
+$S('#callcard').at(95.82 + 0.2).fadeIn(2.5);
+```
 
 <h2><span class="step">13</span> Subtitles</h2>
 
 <p class="lede">Twelve cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the other shorts. They are written to be read aloud, and numbers are digits here (the voice reads <em>54</em> as <em>fifty-four</em>), because this film is about numbers. The beats above were placed after the cues were timed.</p>
 
-<pre><code>setSubtitles([&#10;  { start: 0.8, end: 9.6, text: &#39;Why are cells so small? It comes down to geometry.\nStart with a cube, one unit on a side.&#39; },&#10;  { start: 9.75, end: 18.75, text: &#39;Six faces of one square each: surface 6.\nVolume 1. Surface to volume: 6.&#39; },&#10;  { start: 18.9, end: 29.02, text: &#39;Double the side: each face is 4 squares, so\nsurface 24. Volume 8. Surface to volume: 3.&#39; },&#10;  { start: 29.17, end: 39.22, text: &#39;Triple it: each face is 9 squares, so surface\n54. Volume 27. Surface to volume: 2.&#39; },&#10;  { start: 39.37, end: 48.82, text: &#39;Surface grows with the square of the side, volume with the cube. So the\nbigger it is, the less skin it has for each bit of inside.&#39; },&#10;  { start: 48.97, end: 57.77, text: &#39;A cell lives through its skin: food and oxygen come in,\nwaste goes out. Too big, and the middle starves.&#39; },&#10;  { start: 57.92, end: 66.0, text: &#39;So cells divide. Cut the big cube into slabs,\nthen bars, then 27 small cubes.&#39; },&#10;  { start: 66.15, end: 75.45, text: &#39;The volume is still 27, but the surface is now\n162. Surface to volume: 6 again.&#39; },&#10;  { start: 75.6, end: 83.82, text: &#39;Life uses this trick everywhere. Inside a\nmitochondrion, folds called cristae pack in membrane.&#39; },&#10;  { start: 83.97, end: 90.62, text: &#39;In the lungs, millions of tiny alveoli give a\nsurface of about 70 square metres.&#39; },&#10;  { start: 90.77, end: 95.77, text: &#39;Small, or folded: that is how living\nthings get enough surface.&#39; },&#10;  { start: 95.92, end: 98.42, text: &#39;Made with Strata.&#39; },&#10;]).length   // 12</code></pre>
+```javascript
+setSubtitles([
+  { start: 0.8, end: 9.6, text: 'Why are cells so small? It comes down to geometry.\nStart with a cube, one unit on a side.' },
+  { start: 9.75, end: 18.75, text: 'Six faces of one square each: surface 6.\nVolume 1. Surface to volume: 6.' },
+  { start: 18.9, end: 29.02, text: 'Double the side: each face is 4 squares, so\nsurface 24. Volume 8. Surface to volume: 3.' },
+  { start: 29.17, end: 39.22, text: 'Triple it: each face is 9 squares, so surface\n54. Volume 27. Surface to volume: 2.' },
+  { start: 39.37, end: 48.82, text: 'Surface grows with the square of the side, volume with the cube. So the\nbigger it is, the less skin it has for each bit of inside.' },
+  { start: 48.97, end: 57.77, text: 'A cell lives through its skin: food and oxygen come in,\nwaste goes out. Too big, and the middle starves.' },
+  { start: 57.92, end: 66.0, text: 'So cells divide. Cut the big cube into slabs,\nthen bars, then 27 small cubes.' },
+  { start: 66.15, end: 75.45, text: 'The volume is still 27, but the surface is now\n162. Surface to volume: 6 again.' },
+  { start: 75.6, end: 83.82, text: 'Life uses this trick everywhere. Inside a\nmitochondrion, folds called cristae pack in membrane.' },
+  { start: 83.97, end: 90.62, text: 'In the lungs, millions of tiny alveoli give a\nsurface of about 70 square metres.' },
+  { start: 90.77, end: 95.77, text: 'Small, or folded: that is how living\nthings get enough surface.' },
+  { start: 95.92, end: 98.42, text: 'Made with Strata.' },
+]).length   // 12
+```
 
 <div class="note"><strong>Check the voice.</strong> With the slower <em>af_sarah</em> voice of Kokoro every cue fits with at least 0.3 seconds to spare (the longest, <em>triple it</em>, is 9.75 s in a 10.05 s window).</div>
 
@@ -126,7 +404,10 @@ Each cube also gets a _skin_: a slightly larger, see-through coral box around it
 
 <ol class="steps">&#10;		<li>Open the <strong>Render</strong> tab. The Camera Sequence already holds the four shots from step 8.</li>&#10;		<li>Pick 1280 × 720 and 30 fps, and click <strong>Render &amp; Export</strong>. It runs in real time, so about a minute and three quarters. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>&#10;		<li>For captions a viewer can switch off, render without the burn and add the .srt as a soft track afterwards: <code>ffmpeg -i film.mp4 -i film.srt -c copy -c:s mov_text -metadata:s:s:0 language=eng film-subs.mp4</code>.</li>&#10;	</ol>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/av-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">&#10;		<figcaption>100 seconds in: the last cut, to the end card.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/av-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">
+<figcaption>100 seconds in: the last cut, to the end card.</figcaption>
+</figure>
 
 <div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
 
@@ -142,7 +423,25 @@ Each cube also gets a _skin_: a slightly larger, see-through coral box around it
 
 <p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S(&#39;#id&#39;)</code>, <code>$S(&#39;.class&#39;)</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. Nothing needed renaming; the table gives the classes.</p>
 
-<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)&#10;// and a class; classes are what make the scene queryable: $S(&#39;.block&#39;), $S(&#39;.label&#39;), $S(&#39;.environment&#39;). The table&#39;s first column is the names it covers, the second the classes it gives;&#10;// an object can match several rows, and anything left without a class is listed and the block stops.&#10;const rules = [&#10;  [/^(Room|Wall|Floor)$/, [&#39;environment&#39;]], [/Light$/, [&#39;light&#39;]], [/^c\d$/, [&#39;block&#39;]],&#10;  [/^(readout|note)$/, [&#39;label&#39;]], [/^cam/, [&#39;camera&#39;]], [/^callcard$/, [&#39;card&#39;]]&#10;];&#10;const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === &#39;object&#39;) ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs&#10;const left = [];&#10;scene.traverse(o =&gt; {&#10;  if (o === scene || o.name.startsWith(&#39;__&#39;)) return;&#10;  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);&#10;  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || &#39;(unnamed)&#39;); return; }&#10;  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];&#10;});&#10;if (left.length) throw new Error(left.length + &#39; objects have no class: &#39; + left.slice(0, 12).join(&#39;, &#39;));&#10;requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+```javascript
+// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.block'), $S('.label'), $S('.environment'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+const rules = [
+  [/^(Room|Wall|Floor)$/, ['environment']], [/Light$/, ['light']], [/^c\d$/, ['block']],
+  [/^(readout|note)$/, ['label']], [/^cam/, ['camera']], [/^callcard$/, ['card']]
+];
+const classesOf = c => Array.isArray(c) ? c : (c && typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o => {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) => re.test(o.name)).flatMap(([, c]) => c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless
+```
 
 <div class="note" id="film-contract"><strong>The film&#39;s contract.</strong> <em>Units:</em> unit-cube widths: the ratios 6, 3 and 2 are <em>per unit-cube width</em>, and <em>SA / V ∝ 1 / s</em> holds in any units. <em>Assumptions:</em> the cells are idealised cubes with an exact grid of unit cubes; cristae and alveoli illustrate the idea and are not measurements of real membranes. <em>Render:</em> a render was run and published (<code>renders/projectile</code> in <code>tejaswigowda/test1</code>): 1280 × 720 at 30 fps, video only, made before the narration of step 14 existed. A 1080p60 render with the narration has to be made and published again. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 

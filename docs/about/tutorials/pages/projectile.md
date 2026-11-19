@@ -32,13 +32,135 @@ The units are scene units in slow motion (so that a flight lasts a few seconds):
 
 <p class="lede">The ten materials of the film are made once, here, and every mesh that uses a colour is handed the same one: aqua is the sideways motion, coral is the up and down, gold is the path, purple is gravity, silver is the ball. A shared material cannot fade one mesh without fading all of them, so this film reveals things by <em>growing</em> them from a scale of 0.001 and removes them by shrinking. The floor has a grid of lines every unit and a heavier one every five, so the equal steps can be counted.</p>
 
-<pre><code>// The palette: every material of the film, made once and handed to every mesh that uses it (ten in all, with the room, the floor and the end card).&#10;// aqua = the sideways motion, coral = the up and down motion, gold = the path they make, purple = gravity, silver = the ball.&#10;const mat = (color, k = 0.4, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });&#10;globalThis.PAL = {&#10;  silver: new MeshStandardMaterial({ color: 0xe8ecff, emissive: 0x9aa6ff, emissiveIntensity: 0.3, roughness: 0.3, metalness: 0.25 }),&#10;  aqua: mat(0x14e0c8), coral: mat(0xff4d6a), gold: mat(0xffb703, 0.55), purple: mat(0xa78bfa, 0.45),&#10;  white: mat(0xffffff, 0.7), grid: mat(0x6a7cf0, 0.55)&#10;};&#10;&#10;// a room around the scene and a floor under it, for the shadows to land on&#10;const room = new Mesh(new BoxGeometry(80, 40, 80), new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));&#10;room.name = &#39;Room&#39;;&#10;room.position.set(10, 12, 0);&#10;room.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, room));&#10;&#10;const floor = new Mesh(new PlaneGeometry(80, 40), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));&#10;floor.name = &#39;Floor&#39;;&#10;floor.rotation.x = -Math.PI / 2;&#10;floor.position.set(10, 0, 0);&#10;floor.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, floor));&#10;&#10;// graph paper on the floor: a line every unit along x and z, a heavier one every five&#10;const grid = new Group();&#10;grid.name = &#39;Grid&#39;;&#10;const lineX = new BoxGeometry(1, 1, 1);                          // one unit cube, stretched per line&#10;for (let x = -5; x &lt;= 30; x++) {&#10;  const major = x % 5 === 0;&#10;  const m = new Mesh(lineX, PAL.grid);&#10;  m.name = &#39;gridX&#39; + String(x + 5).padStart(2, &#39;0&#39;);&#10;  m.scale.set(major ? 0.07 : 0.03, 0.02, 14);&#10;  m.position.set(x, 0.012, 0);&#10;  grid.add(m);&#10;}&#10;for (let z = -7; z &lt;= 7; z++) {&#10;  const major = z % 5 === 0;&#10;  const m = new Mesh(lineX, PAL.grid);&#10;  m.name = &#39;gridZ&#39; + String(z + 7).padStart(2, &#39;0&#39;);&#10;  m.scale.set(35, 0.02, major ? 0.07 : 0.03);&#10;  m.position.set(12.5, 0.012, z);&#10;  grid.add(m);&#10;}&#10;editor.execute(new AddObjectCommand(editor, grid));&#10;&#10;// one key light up and in front, so every shadow falls on the floor behind the ball&#39;s path; one soft fill&#10;const key = new PointLight(0xfff1dd, 4.5, 0, 0);&#10;key.name = &#39;KeyLight&#39;;&#10;key.position.set(9, 22, 16);&#10;key.castShadow = true;&#10;key.shadow.mapSize.set(2048, 2048);&#10;key.shadow.bias = -0.0004;&#10;key.shadow.intensity = 0.6;&#10;key.shadow.radius = 4;&#10;key.shadow.camera.near = 0.5;&#10;key.shadow.camera.far = 120;&#10;editor.execute(new AddObjectCommand(editor, key));&#10;editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: &#39;FillLight&#39; })));&#10;grid.children.length      // 51</code></pre>
+```javascript
+// The palette: every material of the film, made once and handed to every mesh that uses it (ten in all, with the room, the floor and the end card).
+// aqua = the sideways motion, coral = the up and down motion, gold = the path they make, purple = gravity, silver = the ball.
+const mat = (color, k = 0.4, extra = {}) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });
+globalThis.PAL = {
+  silver: new MeshStandardMaterial({ color: 0xe8ecff, emissive: 0x9aa6ff, emissiveIntensity: 0.3, roughness: 0.3, metalness: 0.25 }),
+  aqua: mat(0x14e0c8), coral: mat(0xff4d6a), gold: mat(0xffb703, 0.55), purple: mat(0xa78bfa, 0.45),
+  white: mat(0xffffff, 0.7), grid: mat(0x6a7cf0, 0.55)
+};
+
+// a room around the scene and a floor under it, for the shadows to land on
+const room = new Mesh(new BoxGeometry(80, 40, 80), new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(10, 12, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+const floor = new Mesh(new PlaneGeometry(80, 40), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(10, 0, 0);
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// graph paper on the floor: a line every unit along x and z, a heavier one every five
+const grid = new Group();
+grid.name = 'Grid';
+const lineX = new BoxGeometry(1, 1, 1);                          // one unit cube, stretched per line
+for (let x = -5; x <= 30; x++) {
+  const major = x % 5 === 0;
+  const m = new Mesh(lineX, PAL.grid);
+  m.name = 'gridX' + String(x + 5).padStart(2, '0');
+  m.scale.set(major ? 0.07 : 0.03, 0.02, 14);
+  m.position.set(x, 0.012, 0);
+  grid.add(m);
+}
+for (let z = -7; z <= 7; z++) {
+  const major = z % 5 === 0;
+  const m = new Mesh(lineX, PAL.grid);
+  m.name = 'gridZ' + String(z + 7).padStart(2, '0');
+  m.scale.set(35, 0.02, major ? 0.07 : 0.03);
+  m.position.set(12.5, 0.012, z);
+  grid.add(m);
+}
+editor.execute(new AddObjectCommand(editor, grid));
+
+// one key light up and in front, so every shadow falls on the floor behind the ball's path; one soft fill
+const key = new PointLight(0xfff1dd, 4.5, 0, 0);
+key.name = 'KeyLight';
+key.position.set(9, 22, 16);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 120;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));
+grid.children.length      // 51
+```
 
 <h2><span class="step">3</span> The launcher, the pole and the ground line</h2>
 
 <p class="lede">The ball starts on the ground, so it also lands on it, which is what makes 30° and 60° land in the same place. The cannon has three barrels (30° and 60° wait at a scale of 0.001 until the angle comparison). The pole and the ground line also start collapsed; each is a group positioned at its foot or its start, so it grows from there.</p>
 
-<pre><code>// The launcher: a base and three barrels on a pivot at ground level (the ball starts on the ground, so it also lands on it),&#10;// the pole that will show the up and down motion alone, and the ground line that will show the sideways motion alone.&#10;// Everything that appears later starts collapsed (scale 0.001) and grows at its moment.&#10;const pivotY = 0.25;                                              // the ball&#39;s radius: a ball on the ground has its centre this high&#10;&#10;const base = new Mesh(new BoxGeometry(2, 0.5, 1.4), PAL.purple);&#10;base.name = &#39;CannonBase&#39;;&#10;base.position.set(-0.7, 0.25, 0);&#10;base.castShadow = base.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, base));&#10;&#10;const barrelGeometry = new CylinderGeometry(0.2, 0.25, 1.4, 24);&#10;barrelGeometry.rotateZ(-Math.PI / 2);                             // lie along +x ...&#10;barrelGeometry.translate(0.7, 0, 0);                              // ... starting at the pivot&#10;for (const deg of [30, 45, 60]) {&#10;  const barrel = new Group();&#10;  barrel.name = &#39;barrel&#39; + deg;&#10;  barrel.position.set(0, pivotY, 0);&#10;  barrel.rotation.z = THREE.MathUtils.degToRad(deg);&#10;  const tube = new Mesh(barrelGeometry, PAL.silver);&#10;  tube.castShadow = true;&#10;  tube.name = &#39;barrelTube&#39; + deg;&#10;  barrel.add(tube);&#10;  if (deg !== 45) barrel.scale.setScalar(0.001);                  // the 30 and 60 degree barrels come in for the angle comparison&#10;  editor.execute(new AddObjectCommand(editor, barrel));&#10;}&#10;&#10;// the pole, 7.6 tall, with a tick every unit: it grows upward from its foot at x = -3&#10;const pole = new Group();&#10;pole.name = &#39;pole&#39;;&#10;pole.position.set(-3, 0, 0);&#10;const rod = new Mesh(new BoxGeometry(0.12, 7.6, 0.12), PAL.coral);&#10;rod.name = &#39;poleRod&#39;;&#10;rod.position.y = 3.8;&#10;pole.add(rod);&#10;const poleTick = new BoxGeometry(0.45, 0.04, 0.04), groundTick = new BoxGeometry(0.04, 0.05, 0.6);&#10;for (let y = 1; y &lt;= 7; y++) {&#10;  const tick = new Mesh(poleTick, PAL.white);&#10;  tick.name = &#39;poleTick&#39; + y;&#10;  tick.position.y = y;&#10;  pole.add(tick);&#10;}&#10;pole.scale.setScalar(0.001);&#10;editor.execute(new AddObjectCommand(editor, pole));&#10;&#10;// the ground line, 28 long, with a tick every five: it grows to the right from the cannon&#10;const ground = new Group();&#10;ground.name = &#39;groundLine&#39;;&#10;const bar = new Mesh(new BoxGeometry(28, 0.06, 0.16), PAL.aqua);&#10;bar.name = &#39;groundBar&#39;;&#10;bar.position.set(14, 0.04, 0);&#10;ground.add(bar);&#10;for (let x = 5; x &lt;= 25; x += 5) {&#10;  const tick = new Mesh(groundTick, PAL.white);&#10;  tick.name = &#39;groundTick&#39; + x;&#10;  tick.position.set(x, 0.05, 0);&#10;  ground.add(tick);&#10;}&#10;ground.scale.setScalar(0.001);&#10;editor.execute(new AddObjectCommand(editor, ground));&#10;$S(&#39;#barrel30, #barrel45, #barrel60&#39;).nodes.length   // 3</code></pre>
+```javascript
+// The launcher: a base and three barrels on a pivot at ground level (the ball starts on the ground, so it also lands on it),
+// the pole that will show the up and down motion alone, and the ground line that will show the sideways motion alone.
+// Everything that appears later starts collapsed (scale 0.001) and grows at its moment.
+const pivotY = 0.25;                                              // the ball's radius: a ball on the ground has its centre this high
+
+const base = new Mesh(new BoxGeometry(2, 0.5, 1.4), PAL.purple);
+base.name = 'CannonBase';
+base.position.set(-0.7, 0.25, 0);
+base.castShadow = base.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, base));
+
+const barrelGeometry = new CylinderGeometry(0.2, 0.25, 1.4, 24);
+barrelGeometry.rotateZ(-Math.PI / 2);                             // lie along +x ...
+barrelGeometry.translate(0.7, 0, 0);                              // ... starting at the pivot
+for (const deg of [30, 45, 60]) {
+  const barrel = new Group();
+  barrel.name = 'barrel' + deg;
+  barrel.position.set(0, pivotY, 0);
+  barrel.rotation.z = THREE.MathUtils.degToRad(deg);
+  const tube = new Mesh(barrelGeometry, PAL.silver);
+  tube.castShadow = true;
+  tube.name = 'barrelTube' + deg;
+  barrel.add(tube);
+  if (deg !== 45) barrel.scale.setScalar(0.001);                  // the 30 and 60 degree barrels come in for the angle comparison
+  editor.execute(new AddObjectCommand(editor, barrel));
+}
+
+// the pole, 7.6 tall, with a tick every unit: it grows upward from its foot at x = -3
+const pole = new Group();
+pole.name = 'pole';
+pole.position.set(-3, 0, 0);
+const rod = new Mesh(new BoxGeometry(0.12, 7.6, 0.12), PAL.coral);
+rod.name = 'poleRod';
+rod.position.y = 3.8;
+pole.add(rod);
+const poleTick = new BoxGeometry(0.45, 0.04, 0.04), groundTick = new BoxGeometry(0.04, 0.05, 0.6);
+for (let y = 1; y <= 7; y++) {
+  const tick = new Mesh(poleTick, PAL.white);
+  tick.name = 'poleTick' + y;
+  tick.position.y = y;
+  pole.add(tick);
+}
+pole.scale.setScalar(0.001);
+editor.execute(new AddObjectCommand(editor, pole));
+
+// the ground line, 28 long, with a tick every five: it grows to the right from the cannon
+const ground = new Group();
+ground.name = 'groundLine';
+const bar = new Mesh(new BoxGeometry(28, 0.06, 0.16), PAL.aqua);
+bar.name = 'groundBar';
+bar.position.set(14, 0.04, 0);
+ground.add(bar);
+for (let x = 5; x <= 25; x += 5) {
+  const tick = new Mesh(groundTick, PAL.white);
+  tick.name = 'groundTick' + x;
+  tick.position.set(x, 0.05, 0);
+  ground.add(tick);
+}
+ground.scale.setScalar(0.001);
+editor.execute(new AddObjectCommand(editor, ground));
+$S('#barrel30, #barrel45, #barrel60').nodes.length   // 3
+```
 
 <h2><span class="step">4</span> The physics, written as two tracks</h2>
 
@@ -46,93 +168,501 @@ The units are scene units in slow motion (so that a flight lasts a few seconds):
 
 Every animation is queued with its time (`ev`) and written in time order at the very end (`flush`), so no object's track is ever written out of order. The same block makes the arrows that ride on the ball: the aqua one never changes, the coral up arrow shortens evenly to nothing at the top and the down arrow lengthens evenly from nothing, the purple one (gravity) never changes. It also builds the trail, a gold dot every tenth of a second along the exact path, each popping in as the ball reaches it.
 
-<pre><code>// The physics, and the three balls with everything that rides on them.&#10;// A flight is two independent motions: x = vx t (nothing pushes sideways) and y = r + vy t - g t^2 / 2 (gravity pulls down).&#10;// Scene units, in slow motion: g = 2.5, a base speed of 6.32 (so a 45 degree launch has vx = vy = 4.47 and lands 16 away).&#10;const PH = globalThis.PH = { G: 2.5, RAD: 0.25, V: 6.32, K: 0.55, STEP: 0.1 };&#10;PH.flight = (deg, mul = 1) =&gt; {&#10;  const a = THREE.MathUtils.degToRad(deg), s = PH.V * mul, vx = s * Math.cos(a), vy = s * Math.sin(a), rise = vy / PH.G;&#10;  return { vx, vy, rise, time: 2 * rise, range: vx * 2 * rise, top: PH.RAD + vy * vy / (2 * PH.G) };&#10;};&#10;PH.at = (f, t) =&gt; [f.vx * t, PH.RAD + f.vy * t - 0.5 * PH.G * t * t];             // where the ball is, t seconds after launch&#10;// the rise slows down evenly (a quadratic ease-out) and the fall speeds up evenly (a quadratic ease-in), written as the cubic Beziers that are exactly those parabolas&#10;PH.RISE = &#39;cubic-bezier(0.3333,0.6667,0.6667,1)&#39;;&#10;PH.FALL = &#39;cubic-bezier(0.3333,0,0.6667,0.3333)&#39;;&#10;&#10;// every animation is queued with its time and run in time order at the very end (flush), so no track is ever written out of order&#10;globalThis.EV = [];&#10;globalThis.ev = (t, fn) =&gt; EV.push([t, fn, EV.length]);&#10;globalThis.flush = () =&gt; { EV.sort((a, b) =&gt; a[0] - b[0] || a[2] - b[2]); EV.forEach(([, fn]) =&gt; fn()); return EV.length; };&#10;globalThis.grow = (sel, t, to, dur = 500) =&gt; ev(t, () =&gt; $S(sel).at(t).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, dur, to &gt; 0.5 ? &#39;ease-out&#39; : &#39;ease-in&#39;));&#10;const add = o =&gt; { editor.execute(new AddObjectCommand(editor, o)); return o; };&#10;&#10;// a ball is two nested groups, so that x and y are tracks of two different objects: b0 slides along x, b0y (inside it) goes up and down&#10;PH.ball = name =&gt; {&#10;  const outer = new Group(); outer.name = name; outer.scale.setScalar(0.001);&#10;  const inner = new Group(); inner.name = name + &#39;y&#39;; inner.position.y = PH.RAD;&#10;  const m = new Mesh(new SphereGeometry(PH.RAD, 32, 20), PAL.silver);&#10;  m.name = name + &#39;_sphere&#39;;&#10;  m.castShadow = true;&#10;  inner.add(m); outer.add(inner);&#10;  return [add(outer), inner];&#10;};&#10;const [b0, b0y] = PH.ball(&#39;b0&#39;);&#10;PH.ball(&#39;b1&#39;); PH.ball(&#39;b2&#39;);&#10;&#10;// an arrow: a shaft and a head, pointing up from the ball&#39;s centre, starting a little outside it; its length is the shaft&#39;s scale&#10;const shaftGeometry = new CylinderGeometry(0.07, 0.07, 1, 12), headGeometry = new ConeGeometry(0.17, 0.4, 16);&#10;const O = 0.3;                                                   // the gap between the ball&#39;s centre and the start of an arrow&#10;PH.arrow = (name, material, len, parent, rotZ = 0, x = 0) =&gt; {&#10;  const g = new Group(); g.name = name; g.rotation.z = THREE.MathUtils.degToRad(rotZ); g.position.x = x;&#10;  const s = new Mesh(shaftGeometry, material), h = new Mesh(headGeometry, material);&#10;  s.name = name + &#39;_s&#39;; h.name = name + &#39;_h&#39;;&#10;  s.scale.y = Math.max(len - 0.4, 0.001); s.position.y = O + s.scale.y / 2;&#10;  h.position.y = O + Math.max(len - 0.4, 0) + 0.2;&#10;  g.add(s, h); parent.add(g);&#10;  return g;&#10;};&#10;&#10;const f45 = PH.flight(45);&#10;const LX = PH.K * f45.vx, LY = PH.K * f45.vy, LG = 1.3;          // arrow lengths: sideways speed, up speed, and gravity (which has its own, fixed length)&#10;// sideways: aqua, never changes&#10;const arrX = new Group(); arrX.name = &#39;arrX&#39;; arrX.scale.setScalar(0.001); b0y.add(arrX);&#10;PH.arrow(&#39;arrXa&#39;, PAL.aqua, LX, arrX, -90);&#10;// up and down: coral, an up arrow that shortens on the way up and a down arrow that lengthens on the way down&#10;const arrV = new Group(); arrV.name = &#39;arrV&#39;; arrV.scale.setScalar(0.001); b0y.add(arrV);&#10;PH.arrow(&#39;arrU&#39;, PAL.coral, LY, arrV, 0);&#10;PH.arrow(&#39;arrD&#39;, PAL.coral, 0.4, arrV, 180);&#10;$S(&#39;#arrD_s, #arrD_h&#39;).nodes.forEach(n =&gt; n.scale.setScalar(0.001));&#10;// gravity: purple, always the same, always down, to the left of the ball&#10;const arrG = new Group(); arrG.name = &#39;arrG&#39;; arrG.scale.setScalar(0.001); b0y.add(arrG);&#10;PH.arrow(&#39;arrGa&#39;, PAL.purple, LG, arrG, 180, -0.6);&#10;PH.LX = LX; PH.LY = LY;&#10;&#10;// the two shadows: an aqua one that slides along the ground (only the sideways motion), a coral one that rides the pole (only the up and down)&#10;const sh = (name, x, y, mat, r, sx, sy, sz) =&gt; {&#10;  const g = new Group(); g.name = name; g.position.set(x, y, 0); g.scale.setScalar(0.001);&#10;  const m = new Mesh(new SphereGeometry(r, 24, 16), mat); m.name = name + &#39;_sphere&#39;; m.scale.set(sx, sy, sz); m.castShadow = false;&#10;  g.add(m);&#10;  return add(g);&#10;};&#10;sh(&#39;shX&#39;, 0, 0.13, PAL.aqua, PH.RAD, 1.05, 0.5, 1.05);&#10;sh(&#39;shY&#39;, -3, PH.RAD, PAL.coral, 0.3, 1, 1, 1);&#10;&#10;// One launch. `first` skips the shrink-and-jump back to the cannon. `follow` and `arrows` are the things that ride along this time.&#10;// The ball (and its followers) shrink where they landed, jump back to the cannon while hidden, grow there, then fly.&#10;PH.launch = ({ id = &#39;b0&#39;, t0, deg = 45, mul = 1, first = false, follow = [], arrows = [], trail = null, dot = null }) =&gt; {&#10;  const f = PH.flight(deg, mul), land = t0 + f.time, ball = &#39;#&#39; + id, inner = &#39;#&#39; + id + &#39;y&#39;;&#10;  if (!first) {&#10;    grow(ball, t0 - 0.85, 0.001, 300);&#10;    ev(t0 - 0.5, () =&gt; $S(ball).at(t0 - 0.5).animate({ to: { positionX: 0 } }, 50, &#39;linear&#39;));&#10;  }&#10;  grow(ball, t0 - 0.4, 1, 350);&#10;  ev(t0, () =&gt; $S(ball).at(t0).animate({ to: { positionX: f.range } }, f.time * 1000, &#39;linear&#39;));&#10;  ev(t0, () =&gt; $S(inner).at(t0).animate({ to: { positionY: f.top } }, f.rise * 1000, PH.RISE));&#10;  ev(t0 + f.rise, () =&gt; $S(inner).at(t0 + f.rise).animate({ to: { positionY: PH.RAD } }, f.rise * 1000, PH.FALL));&#10;  for (const s of follow) {&#10;    const sel = &#39;#&#39; + s;&#10;    if (s === &#39;shX&#39;) {&#10;      ev(t0 - 0.5, () =&gt; $S(sel).at(t0 - 0.5).animate({ to: { positionX: 0 } }, 50, &#39;linear&#39;));&#10;      ev(t0, () =&gt; $S(sel).at(t0).animate({ to: { positionX: f.range } }, f.time * 1000, &#39;linear&#39;));&#10;    } else {&#10;      ev(t0, () =&gt; $S(sel).at(t0).animate({ to: { positionY: f.top } }, f.rise * 1000, PH.RISE));&#10;      ev(t0 + f.rise, () =&gt; $S(sel).at(t0 + f.rise).animate({ to: { positionY: PH.RAD } }, f.rise * 1000, PH.FALL));&#10;    }&#10;    grow(sel, t0 - 0.4, 1, 350);&#10;    grow(sel, land + 0.2, 0.001, 300);&#10;  }&#10;  for (const a of arrows) {&#10;    grow(&#39;#&#39; + a, t0 - 0.4, 1, 350);&#10;    grow(&#39;#&#39; + a, land + 0.2, 0.001, 300);&#10;  }&#10;  if (arrows.includes(&#39;arrV&#39;)) {&#10;    // the up arrow shortens evenly to nothing at the top, and the down arrow lengthens evenly from nothing: the vertical speed changes by the same amount every second&#10;    const lin = (sel, at, dur, to) =&gt; ev(at, () =&gt; $S(sel).at(at).animate({ to }, dur * 1000, &#39;linear&#39;));&#10;    const up = PH.LY - 0.4, dn = PH.LY - 0.4;&#10;    ev(t0 - 0.5, () =&gt; {&#10;      $S(&#39;#arrU_s&#39;).at(t0 - 0.5).animate({ to: { scaleY: up, positionY: O + up / 2 } }, 50, &#39;linear&#39;);&#10;      $S(&#39;#arrU_h&#39;).at(t0 - 0.5).animate({ to: { positionY: O + up + 0.2, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 50, &#39;linear&#39;);&#10;      $S(&#39;#arrD_s&#39;).at(t0 - 0.5).animate({ to: { scaleY: 0.001, positionY: O } }, 50, &#39;linear&#39;);&#10;      $S(&#39;#arrD_h&#39;).at(t0 - 0.5).animate({ to: { positionY: O + 0.2, scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 50, &#39;linear&#39;);&#10;    });&#10;    lin(&#39;#arrU_s&#39;, t0, f.rise, { scaleY: 0.001, positionY: O });&#10;    lin(&#39;#arrU_h&#39;, t0, f.rise, { positionY: O + 0.2 });&#10;    ev(t0 + f.rise - 0.3, () =&gt; $S(&#39;#arrU_h&#39;).at(t0 + f.rise - 0.3).animate({ to: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 300, &#39;linear&#39;));&#10;    lin(&#39;#arrD_s&#39;, t0 + f.rise, f.rise, { scaleY: dn, positionY: O + dn / 2 });&#10;    lin(&#39;#arrD_h&#39;, t0 + f.rise, f.rise, { positionY: O + dn + 0.2 });&#10;    ev(t0 + f.rise, () =&gt; $S(&#39;#arrD_h&#39;).at(t0 + f.rise).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 300, &#39;linear&#39;));&#10;  }&#10;  if (trail) PH.trail(trail, dot || PAL.gold, t0, f);&#10;  return f;&#10;};&#10;&#10;// the trail: a gold dot every tenth of a second along the exact path, each popping in as the ball reaches it; one group per path, so a whole path can be collapsed&#10;PH.dotGeometry = new SphereGeometry(0.09, 12, 8);&#10;PH.trail = (name, material, t0, f) =&gt; {&#10;  const g = new Group(); g.name = name;&#10;  const n = Math.floor(f.time / PH.STEP + 1e-9);&#10;  for (let k = 1; k &lt;= n + 1; k++) {&#10;    const t = Math.min(k * PH.STEP, f.time), [x, y] = PH.at(f, t);&#10;    const d = new Mesh(PH.dotGeometry, material);&#10;    d.name = name + &#39;_&#39; + String(k).padStart(2, &#39;0&#39;);&#10;    d.position.set(x, y, 0); d.scale.setScalar(0.001);&#10;    g.add(d);&#10;    ev(t0 + t, () =&gt; $S(&#39;#&#39; + d.name).at(t0 + t).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 150, &#39;ease-out&#39;));&#10;  }&#10;  add(g);&#10;  return g;&#10;};&#10;`${$S(&#39;#b0, #b1, #b2&#39;).nodes.length} balls, ${$S(&#39;#arrU_s, #arrD_s, #arrXa_s, #arrGa_s&#39;).nodes.length} shafts`</code></pre>
+```javascript
+// The physics, and the three balls with everything that rides on them.
+// A flight is two independent motions: x = vx t (nothing pushes sideways) and y = r + vy t - g t^2 / 2 (gravity pulls down).
+// Scene units, in slow motion: g = 2.5, a base speed of 6.32 (so a 45 degree launch has vx = vy = 4.47 and lands 16 away).
+const PH = globalThis.PH = { G: 2.5, RAD: 0.25, V: 6.32, K: 0.55, STEP: 0.1 };
+PH.flight = (deg, mul = 1) => {
+  const a = THREE.MathUtils.degToRad(deg), s = PH.V * mul, vx = s * Math.cos(a), vy = s * Math.sin(a), rise = vy / PH.G;
+  return { vx, vy, rise, time: 2 * rise, range: vx * 2 * rise, top: PH.RAD + vy * vy / (2 * PH.G) };
+};
+PH.at = (f, t) => [f.vx * t, PH.RAD + f.vy * t - 0.5 * PH.G * t * t];             // where the ball is, t seconds after launch
+// the rise slows down evenly (a quadratic ease-out) and the fall speeds up evenly (a quadratic ease-in), written as the cubic Beziers that are exactly those parabolas
+PH.RISE = 'cubic-bezier(0.3333,0.6667,0.6667,1)';
+PH.FALL = 'cubic-bezier(0.3333,0,0.6667,0.3333)';
+
+// every animation is queued with its time and run in time order at the very end (flush), so no track is ever written out of order
+globalThis.EV = [];
+globalThis.ev = (t, fn) => EV.push([t, fn, EV.length]);
+globalThis.flush = () => { EV.sort((a, b) => a[0] - b[0] || a[2] - b[2]); EV.forEach(([, fn]) => fn()); return EV.length; };
+globalThis.grow = (sel, t, to, dur = 500) => ev(t, () => $S(sel).at(t).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, dur, to > 0.5 ? 'ease-out' : 'ease-in'));
+const add = o => { editor.execute(new AddObjectCommand(editor, o)); return o; };
+
+// a ball is two nested groups, so that x and y are tracks of two different objects: b0 slides along x, b0y (inside it) goes up and down
+PH.ball = name => {
+  const outer = new Group(); outer.name = name; outer.scale.setScalar(0.001);
+  const inner = new Group(); inner.name = name + 'y'; inner.position.y = PH.RAD;
+  const m = new Mesh(new SphereGeometry(PH.RAD, 32, 20), PAL.silver);
+  m.name = name + '_sphere';
+  m.castShadow = true;
+  inner.add(m); outer.add(inner);
+  return [add(outer), inner];
+};
+const [b0, b0y] = PH.ball('b0');
+PH.ball('b1'); PH.ball('b2');
+
+// an arrow: a shaft and a head, pointing up from the ball's centre, starting a little outside it; its length is the shaft's scale
+const shaftGeometry = new CylinderGeometry(0.07, 0.07, 1, 12), headGeometry = new ConeGeometry(0.17, 0.4, 16);
+const O = 0.3;                                                   // the gap between the ball's centre and the start of an arrow
+PH.arrow = (name, material, len, parent, rotZ = 0, x = 0) => {
+  const g = new Group(); g.name = name; g.rotation.z = THREE.MathUtils.degToRad(rotZ); g.position.x = x;
+  const s = new Mesh(shaftGeometry, material), h = new Mesh(headGeometry, material);
+  s.name = name + '_s'; h.name = name + '_h';
+  s.scale.y = Math.max(len - 0.4, 0.001); s.position.y = O + s.scale.y / 2;
+  h.position.y = O + Math.max(len - 0.4, 0) + 0.2;
+  g.add(s, h); parent.add(g);
+  return g;
+};
+
+const f45 = PH.flight(45);
+const LX = PH.K * f45.vx, LY = PH.K * f45.vy, LG = 1.3;          // arrow lengths: sideways speed, up speed, and gravity (which has its own, fixed length)
+// sideways: aqua, never changes
+const arrX = new Group(); arrX.name = 'arrX'; arrX.scale.setScalar(0.001); b0y.add(arrX);
+PH.arrow('arrXa', PAL.aqua, LX, arrX, -90);
+// up and down: coral, an up arrow that shortens on the way up and a down arrow that lengthens on the way down
+const arrV = new Group(); arrV.name = 'arrV'; arrV.scale.setScalar(0.001); b0y.add(arrV);
+PH.arrow('arrU', PAL.coral, LY, arrV, 0);
+PH.arrow('arrD', PAL.coral, 0.4, arrV, 180);
+$S('#arrD_s, #arrD_h').nodes.forEach(n => n.scale.setScalar(0.001));
+// gravity: purple, always the same, always down, to the left of the ball
+const arrG = new Group(); arrG.name = 'arrG'; arrG.scale.setScalar(0.001); b0y.add(arrG);
+PH.arrow('arrGa', PAL.purple, LG, arrG, 180, -0.6);
+PH.LX = LX; PH.LY = LY;
+
+// the two shadows: an aqua one that slides along the ground (only the sideways motion), a coral one that rides the pole (only the up and down)
+const sh = (name, x, y, mat, r, sx, sy, sz) => {
+  const g = new Group(); g.name = name; g.position.set(x, y, 0); g.scale.setScalar(0.001);
+  const m = new Mesh(new SphereGeometry(r, 24, 16), mat); m.name = name + '_sphere'; m.scale.set(sx, sy, sz); m.castShadow = false;
+  g.add(m);
+  return add(g);
+};
+sh('shX', 0, 0.13, PAL.aqua, PH.RAD, 1.05, 0.5, 1.05);
+sh('shY', -3, PH.RAD, PAL.coral, 0.3, 1, 1, 1);
+
+// One launch. `first` skips the shrink-and-jump back to the cannon. `follow` and `arrows` are the things that ride along this time.
+// The ball (and its followers) shrink where they landed, jump back to the cannon while hidden, grow there, then fly.
+PH.launch = ({ id = 'b0', t0, deg = 45, mul = 1, first = false, follow = [], arrows = [], trail = null, dot = null }) => {
+  const f = PH.flight(deg, mul), land = t0 + f.time, ball = '#' + id, inner = '#' + id + 'y';
+  if (!first) {
+    grow(ball, t0 - 0.85, 0.001, 300);
+    ev(t0 - 0.5, () => $S(ball).at(t0 - 0.5).animate({ to: { positionX: 0 } }, 50, 'linear'));
+  }
+  grow(ball, t0 - 0.4, 1, 350);
+  ev(t0, () => $S(ball).at(t0).animate({ to: { positionX: f.range } }, f.time * 1000, 'linear'));
+  ev(t0, () => $S(inner).at(t0).animate({ to: { positionY: f.top } }, f.rise * 1000, PH.RISE));
+  ev(t0 + f.rise, () => $S(inner).at(t0 + f.rise).animate({ to: { positionY: PH.RAD } }, f.rise * 1000, PH.FALL));
+  for (const s of follow) {
+    const sel = '#' + s;
+    if (s === 'shX') {
+      ev(t0 - 0.5, () => $S(sel).at(t0 - 0.5).animate({ to: { positionX: 0 } }, 50, 'linear'));
+      ev(t0, () => $S(sel).at(t0).animate({ to: { positionX: f.range } }, f.time * 1000, 'linear'));
+    } else {
+      ev(t0, () => $S(sel).at(t0).animate({ to: { positionY: f.top } }, f.rise * 1000, PH.RISE));
+      ev(t0 + f.rise, () => $S(sel).at(t0 + f.rise).animate({ to: { positionY: PH.RAD } }, f.rise * 1000, PH.FALL));
+    }
+    grow(sel, t0 - 0.4, 1, 350);
+    grow(sel, land + 0.2, 0.001, 300);
+  }
+  for (const a of arrows) {
+    grow('#' + a, t0 - 0.4, 1, 350);
+    grow('#' + a, land + 0.2, 0.001, 300);
+  }
+  if (arrows.includes('arrV')) {
+    // the up arrow shortens evenly to nothing at the top, and the down arrow lengthens evenly from nothing: the vertical speed changes by the same amount every second
+    const lin = (sel, at, dur, to) => ev(at, () => $S(sel).at(at).animate({ to }, dur * 1000, 'linear'));
+    const up = PH.LY - 0.4, dn = PH.LY - 0.4;
+    ev(t0 - 0.5, () => {
+      $S('#arrU_s').at(t0 - 0.5).animate({ to: { scaleY: up, positionY: O + up / 2 } }, 50, 'linear');
+      $S('#arrU_h').at(t0 - 0.5).animate({ to: { positionY: O + up + 0.2, scaleX: 1, scaleY: 1, scaleZ: 1 } }, 50, 'linear');
+      $S('#arrD_s').at(t0 - 0.5).animate({ to: { scaleY: 0.001, positionY: O } }, 50, 'linear');
+      $S('#arrD_h').at(t0 - 0.5).animate({ to: { positionY: O + 0.2, scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 50, 'linear');
+    });
+    lin('#arrU_s', t0, f.rise, { scaleY: 0.001, positionY: O });
+    lin('#arrU_h', t0, f.rise, { positionY: O + 0.2 });
+    ev(t0 + f.rise - 0.3, () => $S('#arrU_h').at(t0 + f.rise - 0.3).animate({ to: { scaleX: 0.001, scaleY: 0.001, scaleZ: 0.001 } }, 300, 'linear'));
+    lin('#arrD_s', t0 + f.rise, f.rise, { scaleY: dn, positionY: O + dn / 2 });
+    lin('#arrD_h', t0 + f.rise, f.rise, { positionY: O + dn + 0.2 });
+    ev(t0 + f.rise, () => $S('#arrD_h').at(t0 + f.rise).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 300, 'linear'));
+  }
+  if (trail) PH.trail(trail, dot || PAL.gold, t0, f);
+  return f;
+};
+
+// the trail: a gold dot every tenth of a second along the exact path, each popping in as the ball reaches it; one group per path, so a whole path can be collapsed
+PH.dotGeometry = new SphereGeometry(0.09, 12, 8);
+PH.trail = (name, material, t0, f) => {
+  const g = new Group(); g.name = name;
+  const n = Math.floor(f.time / PH.STEP + 1e-9);
+  for (let k = 1; k <= n + 1; k++) {
+    const t = Math.min(k * PH.STEP, f.time), [x, y] = PH.at(f, t);
+    const d = new Mesh(PH.dotGeometry, material);
+    d.name = name + '_' + String(k).padStart(2, '0');
+    d.position.set(x, y, 0); d.scale.setScalar(0.001);
+    g.add(d);
+    ev(t0 + t, () => $S('#' + d.name).at(t0 + t).animate({ to: { scaleX: 1, scaleY: 1, scaleZ: 1 } }, 150, 'ease-out'));
+  }
+  add(g);
+  return g;
+};
+`${$S('#b0, #b1, #b2').nodes.length} balls, ${$S('#arrU_s, #arrD_s, #arrXa_s, #arrGa_s').nodes.length} shafts`
+```
 
 <h2><span class="step">5</span> Eight cameras</h2>
 
 <p class="lede">One camera per idea: a side view, one from above for the sideways motion, one from the left for the pole, an orbit (azimuth −78° to +70°), a head-on view for the ghosts, a wide one for the angles and speeds, a second orbit, and the end card. The <code>orbit()</code> helper takes a centre, so the camera circles the path rather than the origin. The block ends by putting the cuts in order.</p>
 
-<pre><code>// eight cameras, one per idea: the side view, from above (the sideways motion), from the left (the up and down), an orbit round the path,&#10;// a head-on view for the ghosts, a wide one for the three angles and speeds, a second orbit, and the end card&#10;function addCamera(name, fov) {&#10;  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);&#10;  cam.name = name;&#10;  editor.execute(new AddObjectCommand(editor, cam));&#10;  return cam;&#10;}&#10;&#10;// a move around a centre: azimuth in degrees (0 = straight in front, looking along -z), a radius and a height, one key every `step` seconds&#10;globalThis.orbit = (cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 4, center = [0, 0, 0]) =&gt; {&#10;  const n = Math.max(1, Math.round((t1 - t0) / step));&#10;  const keys = [];&#10;  for (let i = 0; i &lt;= n; i++) {&#10;    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);&#10;    keys.push({ t: t0 + (t1 - t0) * u, pos: [center[0] + radius * Math.sin(az), y0 + (y1 - y0) * u, center[2] + radius * Math.cos(az)], lookAt: aim });&#10;  }&#10;  $S(&#39;#&#39; + cam.name).setKeys(keys, { smooth: true });&#10;  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts&#10;  cam.lookAt(...aim);&#10;};&#10;&#10;const camA = addCamera(&#39;camA&#39;, 40), camTop = addCamera(&#39;camTop&#39;, 40), camPole = addCamera(&#39;camPole&#39;, 40), camOrbit = addCamera(&#39;camOrbit&#39;, 40);&#10;const camGhost = addCamera(&#39;camGhost&#39;, 40), camCompare = addCamera(&#39;camCompare&#39;, 40), camOrbit2 = addCamera(&#39;camOrbit2&#39;, 40), end = addCamera(&#39;camCard&#39;, 50);&#10;orbit(camA, 0.001, 10.0, -6, 6, 25, 4.5, 5, [8, 3, 0], 5, [8, 0, 0]);&#10;orbit(camTop, 10.0, 20.3, -10, 10, 15, 21, 20, [8, 0, 0], 5, [8, 0, 0]);&#10;orbit(camPole, 20.3, 34.7, -52, -30, 22, 6, 7, [3, 3.5, 0], 5, [2, 0, 0]);&#10;orbit(camOrbit, 34.7, 43.3, -78, 70, 27, 7, 10, [8, 2, 0], 3, [8, 0, 0]);&#10;orbit(camGhost, 43.3, 51.6, -8, 8, 24, 6.5, 6.5, [8, 3.2, 0], 4, [8, 0, 0]);&#10;orbit(camCompare, 51.6, 70.5, -6, 6, 31, 8, 9, [12, 3, 0], 6, [12, 0, 0]);&#10;orbit(camOrbit2, 70.5, 76.5, 60, -30, 28, 8, 8, [8, 2, 0], 3, [8, 0, 0]);&#10;end.position.set(33.4, 8, 0);                                         // faces the end card, which hangs on the far wall&#10;end.lookAt(48, 8, 0);&#10;&#10;const cams = Object.fromEntries([&#39;camA&#39;, &#39;camTop&#39;, &#39;camPole&#39;, &#39;camOrbit&#39;, &#39;camGhost&#39;, &#39;camCompare&#39;, &#39;camOrbit2&#39;, &#39;camCard&#39;].map(n =&gt; [n, $S(&#39;#&#39; + n).nodes[0]]));&#10;const cuts = [[0, &#39;camA&#39;], [10.0, &#39;camTop&#39;], [20.3, &#39;camPole&#39;], [34.7, &#39;camOrbit&#39;], [43.3, &#39;camGhost&#39;], [51.6, &#39;camCompare&#39;], [70.5, &#39;camOrbit2&#39;], [76.5, &#39;camCard&#39;]];&#10;editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({&#10;  id: &#39;shot-&#39; + name, at, camera: cams[name].uuid, transition: i === 0 ? &#39;cut&#39; : &#39;fade&#39;, transitionDur: 0.6&#10;}));&#10;editor.work.touch();&#10;editor.scene.userData.renderShots.length      // 8</code></pre>
+```javascript
+// eight cameras, one per idea: the side view, from above (the sideways motion), from the left (the up and down), an orbit round the path,
+// a head-on view for the ghosts, a wide one for the three angles and speeds, a second orbit, and the end card
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+
+// a move around a centre: azimuth in degrees (0 = straight in front, looking along -z), a radius and a height, one key every `step` seconds
+globalThis.orbit = (cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 4, center = [0, 0, 0]) => {
+  const n = Math.max(1, Math.round((t1 - t0) / step));
+  const keys = [];
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);
+    keys.push({ t: t0 + (t1 - t0) * u, pos: [center[0] + radius * Math.sin(az), y0 + (y1 - y0) * u, center[2] + radius * Math.cos(az)], lookAt: aim });
+  }
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+};
+
+const camA = addCamera('camA', 40), camTop = addCamera('camTop', 40), camPole = addCamera('camPole', 40), camOrbit = addCamera('camOrbit', 40);
+const camGhost = addCamera('camGhost', 40), camCompare = addCamera('camCompare', 40), camOrbit2 = addCamera('camOrbit2', 40), end = addCamera('camCard', 50);
+orbit(camA, 0.001, 10.0, -6, 6, 25, 4.5, 5, [8, 3, 0], 5, [8, 0, 0]);
+orbit(camTop, 10.0, 20.3, -10, 10, 15, 21, 20, [8, 0, 0], 5, [8, 0, 0]);
+orbit(camPole, 20.3, 34.7, -52, -30, 22, 6, 7, [3, 3.5, 0], 5, [2, 0, 0]);
+orbit(camOrbit, 34.7, 43.3, -78, 70, 27, 7, 10, [8, 2, 0], 3, [8, 0, 0]);
+orbit(camGhost, 43.3, 51.6, -8, 8, 24, 6.5, 6.5, [8, 3.2, 0], 4, [8, 0, 0]);
+orbit(camCompare, 51.6, 70.5, -6, 6, 31, 8, 9, [12, 3, 0], 6, [12, 0, 0]);
+orbit(camOrbit2, 70.5, 76.5, 60, -30, 28, 8, 8, [8, 2, 0], 3, [8, 0, 0]);
+end.position.set(33.4, 8, 0);                                         // faces the end card, which hangs on the far wall
+end.lookAt(48, 8, 0);
+
+const cams = Object.fromEntries(['camA', 'camTop', 'camPole', 'camOrbit', 'camGhost', 'camCompare', 'camOrbit2', 'camCard'].map(n => [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camA'], [10.0, 'camTop'], [20.3, 'camPole'], [34.7, 'camOrbit'], [43.3, 'camGhost'], [51.6, 'camCompare'], [70.5, 'camOrbit2'], [76.5, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) => ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 8
+```
 
 <h2><span class="step">6</span> The labels</h2>
 
 <p class="lede">Click the <strong>Text</strong> stencil (Stencils tab) once, and then paste this. Every label is a copy of that stencil, left-aligned; widths come from the font. Two of them have a twist: the <em>equal steps</em> label lies flat on the floor, so it reads from above, and the <em>gravity</em> label is a child of the gravity arrow, so it travels with it. The words are shown and cleared in step 10.</p>
 
-<pre><code>// every label is a copy of the one Text stencil, so they share its font; they share a material per colour too, so each label cuts in (and out)&#10;// rather than fading, because a shared material cannot fade one label without fading them all. A label&#39;s text begins at its own origin, left-aligned:&#10;// widths come from the font (units of the font size, at scale 1), so a label is centred by subtracting half its width.&#10;const tpl = $S(&#39;#Text&#39;).nodes[0];&#10;let first = true;&#10;globalThis.label = (name, material, x, y, z, scale, opt = {}) =&gt; {&#10;  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);&#10;  m.name = name;&#10;  m.material = material;&#10;  m.scale.setScalar(scale);&#10;  m.position.set(x, y, z);&#10;  m.rotation.set(opt.rx || 0, opt.ry || 0, 0);&#10;  m.userData.textShadow = true;&#10;  m.castShadow = false;&#10;  if (opt.parent) opt.parent.add(m); else if (!first) editor.execute(new AddObjectCommand(editor, m));&#10;  first = false;&#10;  ev(0, () =&gt; $S(&#39;#&#39; + name).at(0).change(&#39;&#39;));&#10;  return m;&#10;};&#10;// show a label&#39;s text at one time and clear it at another&#10;globalThis.say = (name, text, from, to) =&gt; {&#10;  ev(from, () =&gt; $S(&#39;#&#39; + name).at(from).change(text));&#10;  ev(to, () =&gt; $S(&#39;#&#39; + name).at(to).change(&#39;&#39;));&#10;};&#10;&#10;// camera A (the first cue): where it lands&#10;label(&#39;lnd&#39;, PAL.white, 14.1, 1.3, 0.3, 0.8);&#10;// cue 2: the two kinds of motion, named by their colour&#10;label(&#39;acr&#39;, PAL.aqua, 10.7, 0.5, 1.4, 0.8);&#10;label(&#39;ud&#39;, PAL.coral, -8.2, 6.9, 0, 0.75);&#10;// cue 3, seen from above: lying on the floor in front of the ground line&#10;label(&#39;eq&#39;, PAL.aqua, 4, 0.06, 3.4, 1.0, { rx: -Math.PI / 2 });&#10;// cue 4: beside the gravity arrow, so it travels with it; turned toward the left-hand camera&#10;label(&#39;grav&#39;, PAL.purple, -3.4, -1.1, 0, 0.55, { ry: -0.65, parent: $S(&#39;#arrG&#39;).nodes[0] });&#10;// cue 5: over the top of the path&#10;label(&#39;zero&#39;, PAL.coral, 4.6, 5.3, 0, 0.7, { ry: -0.65 });&#10;// cue 8: each angle over the top of its own path&#10;label(&#39;a30&#39;, PAL.white, 5.95, 2.7, 0, 0.9);&#10;label(&#39;a45&#39;, PAL.white, 7.05, 4.7, 0, 0.9);&#10;label(&#39;a60&#39;, PAL.white, 5.95, 6.7, 0, 0.9);&#10;// cues 9 and 10: at the landing marks, in front of them&#10;label(&#39;same&#39;, PAL.white, 9.8, 0.35, 3.2, 1.1);&#10;label(&#39;slow&#39;, PAL.white, 6.5, 0.35, 3.2, 1.1);&#10;label(&#39;fast&#39;, PAL.white, 22.8, 0.35, 3.2, 1.1);&#10;$S(&#39;#lnd, #acr, #ud, #eq, #grav, #zero, #a30, #a45, #a60, #same, #slow, #fast&#39;).nodes.length      // 12</code></pre>
+```javascript
+// every label is a copy of the one Text stencil, so they share its font; they share a material per colour too, so each label cuts in (and out)
+// rather than fading, because a shared material cannot fade one label without fading them all. A label's text begins at its own origin, left-aligned:
+// widths come from the font (units of the font size, at scale 1), so a label is centred by subtracting half its width.
+const tpl = $S('#Text').nodes[0];
+let first = true;
+globalThis.label = (name, material, x, y, z, scale, opt = {}) => {
+  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);
+  m.name = name;
+  m.material = material;
+  m.scale.setScalar(scale);
+  m.position.set(x, y, z);
+  m.rotation.set(opt.rx || 0, opt.ry || 0, 0);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  if (opt.parent) opt.parent.add(m); else if (!first) editor.execute(new AddObjectCommand(editor, m));
+  first = false;
+  ev(0, () => $S('#' + name).at(0).change(''));
+  return m;
+};
+// show a label's text at one time and clear it at another
+globalThis.say = (name, text, from, to) => {
+  ev(from, () => $S('#' + name).at(from).change(text));
+  ev(to, () => $S('#' + name).at(to).change(''));
+};
+
+// camera A (the first cue): where it lands
+label('lnd', PAL.white, 14.1, 1.3, 0.3, 0.8);
+// cue 2: the two kinds of motion, named by their colour
+label('acr', PAL.aqua, 10.7, 0.5, 1.4, 0.8);
+label('ud', PAL.coral, -8.2, 6.9, 0, 0.75);
+// cue 3, seen from above: lying on the floor in front of the ground line
+label('eq', PAL.aqua, 4, 0.06, 3.4, 1.0, { rx: -Math.PI / 2 });
+// cue 4: beside the gravity arrow, so it travels with it; turned toward the left-hand camera
+label('grav', PAL.purple, -3.4, -1.1, 0, 0.55, { ry: -0.65, parent: $S('#arrG').nodes[0] });
+// cue 5: over the top of the path
+label('zero', PAL.coral, 4.6, 5.3, 0, 0.7, { ry: -0.65 });
+// cue 8: each angle over the top of its own path
+label('a30', PAL.white, 5.95, 2.7, 0, 0.9);
+label('a45', PAL.white, 7.05, 4.7, 0, 0.9);
+label('a60', PAL.white, 5.95, 6.7, 0, 0.9);
+// cues 9 and 10: at the landing marks, in front of them
+label('same', PAL.white, 9.8, 0.35, 3.2, 1.1);
+label('slow', PAL.white, 6.5, 0.35, 3.2, 1.1);
+label('fast', PAL.white, 22.8, 0.35, 3.2, 1.1);
+$S('#lnd, #acr, #ud, #eq, #grav, #zero, #a30, #a45, #a60, #same, #slow, #fast').nodes.length      // 12
+```
 
 <h2><span class="step">7</span> The end card</h2>
 
 <p class="lede">Click the <strong>Call card</strong> stencil, then paste. It is hung on the far wall, facing the last camera.</p>
 
-<pre><code>// the end card: the Call card stencil, landscape, hung on the far wall and facing the end camera&#10;const card = $S(&#39;#callcard&#39;).nodes[0];&#10;card.userData.width = 3.2;&#10;card.userData.height = 1.8;&#10;card.geometry = new PlaneGeometry(3.2, 1.8);&#10;$S(&#39;#callcard&#39;).moveTo(48, 8, 0).scaleTo(8);&#10;card.rotation.set(0, -Math.PI / 2, 0);&#10;card.material.opacity = 0;</code></pre>
+```javascript
+// the end card: the Call card stencil, landscape, hung on the far wall and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(48, 8, 0).scaleTo(8);
+card.rotation.set(0, -Math.PI / 2, 0);
+card.material.opacity = 0;
+```
 
 <h2><span class="step">8</span> The launches</h2>
 
 <p class="lede">Every flight of the film, in one place. A launch shrinks the ball where it landed, hides the jump back to the cannon, and grows it there, so the ball never slides back. <code>follow</code> names the shadows that ride along and <code>arrows</code> the arrows. The ball <code>b0</code> is always the 45° ball; <code>b1</code> and <code>b2</code> join it for the angles and the speeds.</p>
 
-<pre><code>// the launch schedule: every flight of the film. b0 is always the 45 degree ball; b1 and b2 join for the angles and the speeds.&#10;const ALL = [&#39;arrX&#39;, &#39;arrV&#39;, &#39;arrG&#39;];&#10;PH.launch({ t0: 1.1, first: true, trail: &#39;trail45&#39; });                                           // cue 1: one launch, one curve&#10;PH.launch({ t0: 11.2, follow: [&#39;shX&#39;], arrows: [&#39;arrX&#39;] });                                      // cue 3: the sideways motion alone&#10;PH.launch({ t0: 16.0, follow: [&#39;shX&#39;], arrows: [&#39;arrX&#39;] });&#10;PH.launch({ t0: 21.3, follow: [&#39;shY&#39;], arrows: ALL });                                           // cue 4: the up and down motion, and gravity&#10;PH.launch({ t0: 28.55, follow: [&#39;shY&#39;], arrows: ALL });                                          // cue 5: slows, stops, speeds up&#10;PH.launch({ t0: 35.1, follow: [&#39;shX&#39;, &#39;shY&#39;] });                                                 // cue 6: the orbit, both shadows&#10;PH.launch({ t0: 39.55, follow: [&#39;shX&#39;, &#39;shY&#39;] });&#10;PH.launch({ t0: 44.15 });                                                                        // cue 7: put them back together (the ghosts)&#10;// cue 8: three angles at once (the barrels for 30 and 60 come in just before)&#10;PH.launch({ id: &#39;b1&#39;, t0: 52.8, deg: 30, first: true, trail: &#39;trail30&#39; });&#10;PH.launch({ t0: 52.8 });&#10;PH.launch({ id: &#39;b2&#39;, t0: 52.8, deg: 60, first: true, trail: &#39;trail60&#39; });&#10;// cue 10: three speeds at once, all at 45 degrees&#10;PH.launch({ id: &#39;b1&#39;, t0: 64.9, mul: 0.75, trail: &#39;trailSlow&#39; });&#10;PH.launch({ t0: 64.9 });&#10;PH.launch({ id: &#39;b2&#39;, t0: 64.9, mul: 1.25, trail: &#39;trailFast&#39; });&#10;// cue 11: the orbit again, both shadows live&#10;PH.launch({ t0: 70.9, follow: [&#39;shX&#39;, &#39;shY&#39;] });&#10;EV.length</code></pre>
+```javascript
+// the launch schedule: every flight of the film. b0 is always the 45 degree ball; b1 and b2 join for the angles and the speeds.
+const ALL = ['arrX', 'arrV', 'arrG'];
+PH.launch({ t0: 1.1, first: true, trail: 'trail45' });                                           // cue 1: one launch, one curve
+PH.launch({ t0: 11.2, follow: ['shX'], arrows: ['arrX'] });                                      // cue 3: the sideways motion alone
+PH.launch({ t0: 16.0, follow: ['shX'], arrows: ['arrX'] });
+PH.launch({ t0: 21.3, follow: ['shY'], arrows: ALL });                                           // cue 4: the up and down motion, and gravity
+PH.launch({ t0: 28.55, follow: ['shY'], arrows: ALL });                                          // cue 5: slows, stops, speeds up
+PH.launch({ t0: 35.1, follow: ['shX', 'shY'] });                                                 // cue 6: the orbit, both shadows
+PH.launch({ t0: 39.55, follow: ['shX', 'shY'] });
+PH.launch({ t0: 44.15 });                                                                        // cue 7: put them back together (the ghosts)
+// cue 8: three angles at once (the barrels for 30 and 60 come in just before)
+PH.launch({ id: 'b1', t0: 52.8, deg: 30, first: true, trail: 'trail30' });
+PH.launch({ t0: 52.8 });
+PH.launch({ id: 'b2', t0: 52.8, deg: 60, first: true, trail: 'trail60' });
+// cue 10: three speeds at once, all at 45 degrees
+PH.launch({ id: 'b1', t0: 64.9, mul: 0.75, trail: 'trailSlow' });
+PH.launch({ t0: 64.9 });
+PH.launch({ id: 'b2', t0: 64.9, mul: 1.25, trail: 'trailFast' });
+// cue 11: the orbit again, both shadows live
+PH.launch({ t0: 70.9, follow: ['shX', 'shY'] });
+EV.length
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-launch.png" alt="A silver ball in flight above a purple cannon on a grid floor, with a dotted gold trail behind it.">&#10;		<figcaption>2.6 seconds in: the first launch, and its trail.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-launch.png" alt="A silver ball in flight above a purple cannon on a grid floor, with a dotted gold trail behind it.">
+<figcaption>2.6 seconds in: the first launch, and its trail.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-two.png" alt="The cannon, a coral pole on its left and an aqua line along the floor, with the labels up and down, across and landing, and the ball landing in a gold ring.">&#10;		<figcaption>9 seconds in: the two motions, named by colour.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-two.png" alt="The cannon, a coral pole on its left and an aqua line along the floor, with the labels up and down, across and landing, and the ball landing in a gold ring.">
+<figcaption>9 seconds in: the two motions, named by colour.</figcaption>
+</figure>
 
 <h2><span class="step">9</span> Rings, beads and ghosts</h2>
 
 <p class="lede">The marks the film leaves behind. A gold ring where each flight lands. An aqua bead on the ground for every 0.45 s of flight (equal steps) and a coral bead on the pole (steps that shrink toward the top and grow again). And seven ghost balls, each with a line down to the ground and an arrow triple: the aqua sideways arrow, the coral up-or-down arrow, and the gold arrow along the curve, the third being the sum of the other two.</p>
 
-<pre><code>// the marks left behind: landing rings, the beads each shadow leaves (equal steps along the ground, unequal steps up the pole), and the ghost balls with their arrows&#10;const add = o =&gt; { editor.execute(new AddObjectCommand(editor, o)); return o; };&#10;const f45 = PH.flight(45), DT = 0.45;&#10;&#10;// landing rings, flat on the ground, popping in as the ball comes down&#10;const ringGeometry = new TorusGeometry(0.6, 0.07, 8, 40);&#10;const ring = (name, x, at) =&gt; {&#10;  const g = new Group(); g.name = name; g.position.set(x, 0.06, 0); g.scale.setScalar(0.001);&#10;  const m = new Mesh(ringGeometry, PAL.gold); m.name = name + &#39;_torus&#39;; m.rotation.x = -Math.PI / 2;&#10;  g.add(m); add(g);&#10;  grow(&#39;#&#39; + name, at, 1, 400);&#10;};&#10;const f30 = PH.flight(30), fs = PH.flight(45, 0.75), ff = PH.flight(45, 1.25);&#10;ring(&#39;ring45&#39;, f45.range, 1.1 + f45.time);&#10;ring(&#39;ring3060&#39;, f30.range, 52.8 + f30.time);&#10;ring(&#39;ringSlow&#39;, fs.range, 64.9 + fs.time);&#10;ring(&#39;ringFast&#39;, ff.range, 64.9 + ff.time);&#10;&#10;// seven ghosts, every 0.45 s of flight; a bead on the ground under each, a bead on the pole beside each, and a ghost ball with its three arrows&#10;const ghostGeometry = new SphereGeometry(PH.RAD, 24, 16), bead = new SphereGeometry(0.15, 16, 12), dropGeometry = new BoxGeometry(0.04, 1, 0.04), K = 0.35;&#10;for (let k = 1; k &lt;= 7; k++) {&#10;  const t = DT * k, [x, y] = PH.at(f45, t), vy = f45.vy - PH.G * t;&#10;  const bx = new Mesh(bead, PAL.aqua); bx.name = &#39;tx_&#39; + k; bx.position.set(x, 0.1, 0.12); bx.scale.setScalar(0.001); add(bx);&#10;  const by = new Mesh(bead, PAL.coral); by.name = &#39;ty_&#39; + k; by.position.set(-3, y, 0.12); by.scale.setScalar(0.001); add(by);&#10;  grow(&#39;#tx_&#39; + k, 11.2 + t, 1, 200);        // as the ball passes, in cue 3&#10;  grow(&#39;#ty_&#39; + k, 21.3 + t, 1, 200);        // as the ball passes, in cue 4&#10;  grow(&#39;#tx_&#39; + k, 51.925, 0.001, 500);&#10;  grow(&#39;#ty_&#39; + k, 51.925, 0.001, 500);&#10;&#10;  const gh = new Group(); gh.name = &#39;gh_&#39; + k; gh.position.set(x, y, 0); gh.scale.setScalar(0.001);&#10;  const ball = new Mesh(ghostGeometry, PAL.silver); ball.name = &#39;gh_&#39; + k + &#39;_ball&#39;; ball.castShadow = true; gh.add(ball);&#10;  const drop = new Mesh(dropGeometry, PAL.white); drop.name = &#39;gh_&#39; + k + &#39;_drop&#39;; drop.scale.y = y; drop.position.y = -y / 2; gh.add(drop);&#10;  const ga = new Group(); ga.name = &#39;ga_&#39; + k; ga.scale.setScalar(0.001); gh.add(ga);&#10;  PH.arrow(&#39;gx_&#39; + k, PAL.aqua, K * f45.vx, ga, -90);&#10;  if (Math.abs(vy) &gt; 0.5) PH.arrow(&#39;gy_&#39; + k, PAL.coral, K * Math.abs(vy), ga, vy &gt; 0 ? 0 : 180);&#10;  PH.arrow(&#39;gr_&#39; + k, PAL.gold, K * Math.hypot(f45.vx, vy), ga, -THREE.MathUtils.radToDeg(Math.atan2(f45.vx, vy)));&#10;  add(gh);&#10;  grow(&#39;#gh_&#39; + k, 44.15 + t, 1, 250);                 // the ghost appears as the ball passes&#10;  grow(&#39;#ga_&#39; + k, 48.0 + 0.4 * (k - 1), 1, 350);      // then its arrows, one ghost at a time&#10;  grow(&#39;#gh_&#39; + k, 51.925, 0.001, 500);&#10;}&#10;&#10;// the pole and the ground line: in cue 2, gone for the angles and speeds, back for the last orbit&#10;grow(&#39;#groundLine&#39;, 6.4, 1, 800);&#10;grow(&#39;#pole&#39;, 7.8, 1, 800);&#10;grow(&#39;#groundLine&#39;, 51.925, 0.001, 500);&#10;grow(&#39;#pole&#39;, 51.925, 0.001, 500);&#10;grow(&#39;#groundLine&#39;, 70.4, 1, 700);&#10;grow(&#39;#pole&#39;, 70.4, 1, 700);&#10;&#10;// the barrels for 30 and 60 degrees, only for cue 8 and 9&#10;for (const b of [&#39;#barrel30&#39;, &#39;#barrel60&#39;]) { grow(b, 52.0, 1, 600); grow(b, 64.0, 0.001, 500); }&#10;// the 30 and 60 degree paths go before the speeds come in&#10;for (const b of [&#39;#trail30&#39;, &#39;#trail60&#39;, &#39;#ring3060&#39;]) grow(b, 64.0, 0.001, 600);&#10;$S(&#39;#ring45, #ring3060, #ringSlow, #ringFast, #gh_7, #tx_7, #ty_7&#39;).nodes.length      // 7</code></pre>
+```javascript
+// the marks left behind: landing rings, the beads each shadow leaves (equal steps along the ground, unequal steps up the pole), and the ghost balls with their arrows
+const add = o => { editor.execute(new AddObjectCommand(editor, o)); return o; };
+const f45 = PH.flight(45), DT = 0.45;
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-steps.png" alt="The floor seen from above at an angle, with an aqua line, aqua beads at equal spacing, a dotted gold arc, a ball, and the words equal steps.">&#10;		<figcaption>14 seconds in: from above, the beads are equally spaced.</figcaption>&#10;	</figure>
+// landing rings, flat on the ground, popping in as the ball comes down
+const ringGeometry = new TorusGeometry(0.6, 0.07, 8, 40);
+const ring = (name, x, at) => {
+  const g = new Group(); g.name = name; g.position.set(x, 0.06, 0); g.scale.setScalar(0.001);
+  const m = new Mesh(ringGeometry, PAL.gold); m.name = name + '_torus'; m.rotation.x = -Math.PI / 2;
+  g.add(m); add(g);
+  grow('#' + name, at, 1, 400);
+};
+const f30 = PH.flight(30), fs = PH.flight(45, 0.75), ff = PH.flight(45, 1.25);
+ring('ring45', f45.range, 1.1 + f45.time);
+ring('ring3060', f30.range, 52.8 + f30.time);
+ring('ringSlow', fs.range, 64.9 + fs.time);
+ring('ringFast', ff.range, 64.9 + ff.time);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-pole.png" alt="A tall coral pole with coral beads on it, a gold arc, an aqua line along the floor, a ball with a small coral arrow above it and a purple arrow below, and the word gravity.">&#10;		<figcaption>24 seconds in: from the left, the beads on the pole bunch up near the top.</figcaption>&#10;	</figure>
+// seven ghosts, every 0.45 s of flight; a bead on the ground under each, a bead on the pole beside each, and a ghost ball with its three arrows
+const ghostGeometry = new SphereGeometry(PH.RAD, 24, 16), bead = new SphereGeometry(0.15, 16, 12), dropGeometry = new BoxGeometry(0.04, 1, 0.04), K = 0.35;
+for (let k = 1; k <= 7; k++) {
+  const t = DT * k, [x, y] = PH.at(f45, t), vy = f45.vy - PH.G * t;
+  const bx = new Mesh(bead, PAL.aqua); bx.name = 'tx_' + k; bx.position.set(x, 0.1, 0.12); bx.scale.setScalar(0.001); add(bx);
+  const by = new Mesh(bead, PAL.coral); by.name = 'ty_' + k; by.position.set(-3, y, 0.12); by.scale.setScalar(0.001); add(by);
+  grow('#tx_' + k, 11.2 + t, 1, 200);        // as the ball passes, in cue 3
+  grow('#ty_' + k, 21.3 + t, 1, 200);        // as the ball passes, in cue 4
+  grow('#tx_' + k, 51.925, 0.001, 500);
+  grow('#ty_' + k, 51.925, 0.001, 500);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-top.png" alt="A ball at the top of its arc with the words zero at the top above it.">&#10;		<figcaption>30.5 seconds in: at the top the up arrow has shrunk to nothing.</figcaption>&#10;	</figure>
+  const gh = new Group(); gh.name = 'gh_' + k; gh.position.set(x, y, 0); gh.scale.setScalar(0.001);
+  const ball = new Mesh(ghostGeometry, PAL.silver); ball.name = 'gh_' + k + '_ball'; ball.castShadow = true; gh.add(ball);
+  const drop = new Mesh(dropGeometry, PAL.white); drop.name = 'gh_' + k + '_drop'; drop.scale.y = y; drop.position.y = -y / 2; gh.add(drop);
+  const ga = new Group(); ga.name = 'ga_' + k; ga.scale.setScalar(0.001); gh.add(ga);
+  PH.arrow('gx_' + k, PAL.aqua, K * f45.vx, ga, -90);
+  if (Math.abs(vy) > 0.5) PH.arrow('gy_' + k, PAL.coral, K * Math.abs(vy), ga, vy > 0 ? 0 : 180);
+  PH.arrow('gr_' + k, PAL.gold, K * Math.hypot(f45.vx, vy), ga, -THREE.MathUtils.radToDeg(Math.atan2(f45.vx, vy)));
+  add(gh);
+  grow('#gh_' + k, 44.15 + t, 1, 250);                 // the ghost appears as the ball passes
+  grow('#ga_' + k, 48.0 + 0.4 * (k - 1), 1, 350);      // then its arrows, one ghost at a time
+  grow('#gh_' + k, 51.925, 0.001, 500);
+}
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-orbit.png" alt="The path seen from a high angle behind the cannon, the pole at left, beads along the ground and on the pole.">&#10;		<figcaption>38 seconds in: the orbit, with both shadows live.</figcaption>&#10;	</figure>
+// the pole and the ground line: in cue 2, gone for the angles and speeds, back for the last orbit
+grow('#groundLine', 6.4, 1, 800);
+grow('#pole', 7.8, 1, 800);
+grow('#groundLine', 51.925, 0.001, 500);
+grow('#pole', 51.925, 0.001, 500);
+grow('#groundLine', 70.4, 1, 700);
+grow('#pole', 70.4, 1, 700);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-ghosts.png" alt="Seven ghost balls along the arc, each with a vertical line to the ground and three arrows: aqua pointing right, coral pointing up or down, and gold along the curve.">&#10;		<figcaption>49.5 seconds in: at every moment, sideways + up and down = along the curve.</figcaption>&#10;	</figure>
+// the barrels for 30 and 60 degrees, only for cue 8 and 9
+for (const b of ['#barrel30', '#barrel60']) { grow(b, 52.0, 1, 600); grow(b, 64.0, 0.001, 500); }
+// the 30 and 60 degree paths go before the speeds come in
+for (const b of ['#trail30', '#trail60', '#ring3060']) grow(b, 64.0, 0.001, 600);
+$S('#ring45, #ring3060, #ringSlow, #ringFast, #gh_7, #tx_7, #ty_7').nodes.length      // 7
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-steps.png" alt="The floor seen from above at an angle, with an aqua line, aqua beads at equal spacing, a dotted gold arc, a ball, and the words equal steps.">
+<figcaption>14 seconds in: from above, the beads are equally spaced.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-pole.png" alt="A tall coral pole with coral beads on it, a gold arc, an aqua line along the floor, a ball with a small coral arrow above it and a purple arrow below, and the word gravity.">
+<figcaption>24 seconds in: from the left, the beads on the pole bunch up near the top.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-top.png" alt="A ball at the top of its arc with the words zero at the top above it.">
+<figcaption>30.5 seconds in: at the top the up arrow has shrunk to nothing.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-orbit.png" alt="The path seen from a high angle behind the cannon, the pole at left, beads along the ground and on the pole.">
+<figcaption>38 seconds in: the orbit, with both shadows live.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-ghosts.png" alt="Seven ghost balls along the arc, each with a vertical line to the ground and three arrows: aqua pointing right, coral pointing up or down, and gold along the curve.">
+<figcaption>49.5 seconds in: at every moment, sideways + up and down = along the curve.</figcaption>
+</figure>
 
 <h2><span class="step">10</span> The words</h2>
 
 <p class="lede">Each label&#39;s text is set at its cue and cleared when it has done its job. Every label has one change track, so a text never fights another.</p>
 
-<pre><code>// the words on the screen, in the order the voice says them&#10;say(&#39;lnd&#39;, &#39;landing&#39;, 4.9, 6.4);&#10;say(&#39;acr&#39;, &#39;across&#39;, 6.5, 10.0);&#10;say(&#39;ud&#39;, &#39;up and down&#39;, 7.9, 10.0);&#10;say(&#39;eq&#39;, &#39;equal steps&#39;, 12.6, 20.0);&#10;say(&#39;grav&#39;, &#39;gravity&#39;, 21.8, 34.5);&#10;say(&#39;zero&#39;, &#39;zero at the top&#39;, 30.0, 33.6);&#10;say(&#39;a30&#39;, &#39;30°&#39;, 52.4, 56.8);&#10;say(&#39;a45&#39;, &#39;45°&#39;, 52.4, 56.8);&#10;say(&#39;a60&#39;, &#39;60°&#39;, 52.4, 56.8);&#10;say(&#39;same&#39;, &#39;30° and 60°&#39;, 57.0, 63.9);&#10;say(&#39;slow&#39;, &#39;slower&#39;, 67.6, 70.4);&#10;say(&#39;fast&#39;, &#39;faster&#39;, 69.4, 70.4);&#10;// the end card fades in as the last camera arrives&#10;ev(76.7, () =&gt; $S(&#39;#callcard&#39;).at(76.7).fadeIn(2.0));</code></pre>
+```javascript
+// the words on the screen, in the order the voice says them
+say('lnd', 'landing', 4.9, 6.4);
+say('acr', 'across', 6.5, 10.0);
+say('ud', 'up and down', 7.9, 10.0);
+say('eq', 'equal steps', 12.6, 20.0);
+say('grav', 'gravity', 21.8, 34.5);
+say('zero', 'zero at the top', 30.0, 33.6);
+say('a30', '30°', 52.4, 56.8);
+say('a45', '45°', 52.4, 56.8);
+say('a60', '60°', 52.4, 56.8);
+say('same', '30° and 60°', 57.0, 63.9);
+say('slow', 'slower', 67.6, 70.4);
+say('fast', 'faster', 69.4, 70.4);
+// the end card fades in as the last camera arrives
+ev(76.7, () => $S('#callcard').at(76.7).fadeIn(2.0));
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-angles.png" alt="Three dotted arcs of different heights from one cannon, labelled 60, 45 and 30 degrees.">&#10;		<figcaption>55 seconds in: three angles, three curves.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-angles.png" alt="Three dotted arcs of different heights from one cannon, labelled 60, 45 and 30 degrees.">
+<figcaption>55 seconds in: three angles, three curves.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-same.png" alt="Three arcs from one cannon; the 30 and 60 degree arcs come down in the same place, under the words 30 and 60 degrees.">&#10;		<figcaption>58.5 seconds in: 30° and 60° land in the same place.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-same.png" alt="Three arcs from one cannon; the 30 and 60 degree arcs come down in the same place, under the words 30 and 60 degrees.">
+<figcaption>58.5 seconds in: 30° and 60° land in the same place.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-speeds.png" alt="Three arcs at 45 degrees of increasing size, with the words slower and faster under the first and last rings.">&#10;		<figcaption>67 seconds in: the same two motions, faster: the whole curve scales.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-speeds.png" alt="Three arcs at 45 degrees of increasing size, with the words slower and faster under the first and last rings.">
+<figcaption>67 seconds in: the same two motions, faster: the whole curve scales.</figcaption>
+</figure>
 
 <h2><span class="step">11</span> Subtitles</h2>
 
 <p class="lede">Twelve cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the other shorts. The cues were run through a speech synthesizer (Kokoro, <em>af_sarah</em>) and each cue gets its measured length plus 0.3 seconds, with a gap before the next, so no two ever overlap.</p>
 
-<pre><code>setSubtitles([&#10;  { start: 0.8, end: 4.65, text: &#39;Launch a ball at an angle,\nand it flies in a curve.&#39; },&#10;  { start: 5.1, end: 9.85, text: &#39;That one curve is really two simple\nmotions, happening at once.&#39; },&#10;  { start: 10.3, end: 20.125, text: &#39;Across the ground, nothing pushes the ball sideways, so its\nhorizontal speed never changes. Equal steps, in equal times.&#39; },&#10;  { start: 20.575, end: 27.7, text: &#39;Up and down, gravity pulls on the ball, so its vertical\nspeed changes by the same amount every second.&#39; },&#10;  { start: 28.15, end: 34.5, text: &#39;It slows on the way up, stops for an instant at\nthe top, then speeds up on the way down.&#39; },&#10;  { start: 34.95, end: 43.1, text: &#39;Now orbit the path. The ground sees only the sideways\nmotion, and the pole sees only the up and down.&#39; },&#10;  { start: 43.55, end: 51.475, text: &#39;Put the two back together: at every moment, a sideways step\nplus an up and down step makes one step along the curve.&#39; },&#10;  { start: 51.925, end: 56.525, text: &#39;Change the angle, and the same two\nmotions make a different curve.&#39; },&#10;  { start: 56.975, end: 63.675, text: &#39;Thirty and sixty degrees land in the same\nplace. Forty-five degrees goes farthest.&#39; },&#10;  { start: 64.125, end: 69.65, text: &#39;Change the speed, and the whole curve\nscales: faster means higher and farther.&#39; },&#10;  { start: 70.1, end: 76.4, text: &#39;Independent components combine into\none path. That is the whole idea.&#39; },&#10;  { start: 76.85, end: 79.05, text: &#39;Made with Strata.&#39; },&#10;]).length   // 12</code></pre>
+```javascript
+setSubtitles([
+  { start: 0.8, end: 4.65, text: 'Launch a ball at an angle,\nand it flies in a curve.' },
+  { start: 5.1, end: 9.85, text: 'That one curve is really two simple\nmotions, happening at once.' },
+  { start: 10.3, end: 20.125, text: 'Across the ground, nothing pushes the ball sideways, so its\nhorizontal speed never changes. Equal steps, in equal times.' },
+  { start: 20.575, end: 27.7, text: 'Up and down, gravity pulls on the ball, so its vertical\nspeed changes by the same amount every second.' },
+  { start: 28.15, end: 34.5, text: 'It slows on the way up, stops for an instant at\nthe top, then speeds up on the way down.' },
+  { start: 34.95, end: 43.1, text: 'Now orbit the path. The ground sees only the sideways\nmotion, and the pole sees only the up and down.' },
+  { start: 43.55, end: 51.475, text: 'Put the two back together: at every moment, a sideways step\nplus an up and down step makes one step along the curve.' },
+  { start: 51.925, end: 56.525, text: 'Change the angle, and the same two\nmotions make a different curve.' },
+  { start: 56.975, end: 63.675, text: 'Thirty and sixty degrees land in the same\nplace. Forty-five degrees goes farthest.' },
+  { start: 64.125, end: 69.65, text: 'Change the speed, and the whole curve\nscales: faster means higher and farther.' },
+  { start: 70.1, end: 76.4, text: 'Independent components combine into\none path. That is the whole idea.' },
+  { start: 76.85, end: 79.05, text: 'Made with Strata.' },
+]).length   // 12
+```
 
 <h2><span class="step">12</span> Write the animation</h2>
 
 <p class="lede">One last block. Every animation queued above is written now, in time order.</p>
 
-<pre><code>// every animation of the film is written now, in time order&#10;flush()</code></pre>
+```javascript
+// every animation of the film is written now, in time order
+flush()
+```
 
 <h2><span class="step">13</span> Name and class everything</h2>
 
 <p class="lede">The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S(&#39;#b0&#39;)</code>, <code>$S(&#39;.trail-dot&#39;)</code>, an AI edit or a tutorial step cannot reach it. Every object was named where it was created (a grid line is <code>gridX07</code>, a tick on the pole <code>poleTick3</code>, the ball inside <code>b0</code> is <code>b0_sphere</code>: one template string in the loop that makes them), so this last block only adds the classes, from one table, and then calls <code>requireLabels(true)</code>. That marks the scene: from now on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. Objects the engine makes itself (the dark shadow of each text label, whose names start with <code>__</code>) are exempt.</p>
 
-<pre><code>// Every object has a name (set where it is created) and now a class. Classes are what make the scene queryable: $S(&#39;.arrow&#39;), $S(&#39;.trail-dot&#39;), $S(&#39;.sideways&#39;).&#10;// One table, first column the names it covers, second the classes it gives; an object can match several rows. Anything left without a class is listed and the block stops.&#10;const rules = [&#10;  [/^(Room|Floor)$/, [&#39;environment&#39;]], [/^(Grid|grid[XZ]\d+)$/, [&#39;environment&#39;, &#39;grid&#39;]], [/Light$/, [&#39;light&#39;]],&#10;  [/^(CannonBase|barrel\d+|barrelTube\d+)$/, [&#39;cannon&#39;]], [/^barrel\d+$/, [&#39;barrel&#39;]],&#10;  [/^(pole|poleRod|poleTick\d+)$/, [&#39;pole&#39;]], [/^(groundLine|groundBar|groundTick\d+)$/, [&#39;ground-line&#39;]],&#10;  [/^b[012](y|_sphere)?$/, [&#39;ball&#39;]],&#10;  [/^(arr[XVGUD]|gx_|gy_|gr_)/, [&#39;arrow&#39;]], [/^(arrX|gx_)/, [&#39;sideways&#39;]], [/^(arrV|arrU|arrD|gy_)/, [&#39;vertical&#39;]], [/^arrG/, [&#39;gravity&#39;]], [/^gr_/, [&#39;resultant&#39;]],&#10;  [/^sh[XY]/, [&#39;shadow&#39;]], [/^shX/, [&#39;sideways&#39;]], [/^shY/, [&#39;vertical&#39;]],&#10;  [/^trail\w+$/, [&#39;trail&#39;]], [/^trail\w+_\d+$/, [&#39;trail-dot&#39;]],&#10;  [/^ring/, [&#39;landing-ring&#39;]], [/^(gh_|ga_)/, [&#39;ghost&#39;]], [/^t[xy]_\d+$/, [&#39;bead&#39;]],&#10;  [/^(lnd|acr|ud|eq|grav|zero|a30|a45|a60|same|slow|fast)$/, [&#39;label&#39;]],&#10;  [/^cam/, [&#39;camera&#39;]], [/^callcard$/, [&#39;card&#39;]]&#10;];&#10;const left = [];&#10;scene.traverse(o =&gt; {&#10;  if (o === scene || o.name.startsWith(&#39;__&#39;)) return;&#10;  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);&#10;  if (add.length === 0) { left.push(o.name || &#39;(unnamed)&#39;); return; }&#10;  o.userData.customClasses = [...new Set([...(o.userData.customClasses || []), ...add])];&#10;});&#10;if (left.length) throw new Error(left.length + &#39; objects have no class: &#39; + left.slice(0, 12).join(&#39;, &#39;));&#10;requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+```javascript
+// Every object has a name (set where it is created) and now a class. Classes are what make the scene queryable: $S('.arrow'), $S('.trail-dot'), $S('.sideways').
+// One table, first column the names it covers, second the classes it gives; an object can match several rows. Anything left without a class is listed and the block stops.
+const rules = [
+  [/^(Room|Floor)$/, ['environment']], [/^(Grid|grid[XZ]\d+)$/, ['environment', 'grid']], [/Light$/, ['light']],
+  [/^(CannonBase|barrel\d+|barrelTube\d+)$/, ['cannon']], [/^barrel\d+$/, ['barrel']],
+  [/^(pole|poleRod|poleTick\d+)$/, ['pole']], [/^(groundLine|groundBar|groundTick\d+)$/, ['ground-line']],
+  [/^b[012](y|_sphere)?$/, ['ball']],
+  [/^(arr[XVGUD]|gx_|gy_|gr_)/, ['arrow']], [/^(arrX|gx_)/, ['sideways']], [/^(arrV|arrU|arrD|gy_)/, ['vertical']], [/^arrG/, ['gravity']], [/^gr_/, ['resultant']],
+  [/^sh[XY]/, ['shadow']], [/^shX/, ['sideways']], [/^shY/, ['vertical']],
+  [/^trail\w+$/, ['trail']], [/^trail\w+_\d+$/, ['trail-dot']],
+  [/^ring/, ['landing-ring']], [/^(gh_|ga_)/, ['ghost']], [/^t[xy]_\d+$/, ['bead']],
+  [/^(lnd|acr|ud|eq|grav|zero|a30|a45|a60|same|slow|fast)$/, ['label']],
+  [/^cam/, ['camera']], [/^callcard$/, ['card']]
+];
+const left = [];
+scene.traverse(o => {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) => re.test(o.name)).flatMap(([, c]) => c);
+  if (add.length === 0) { left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...(o.userData.customClasses || []), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless
+```
 
 <h2><span class="step">14</span> The narration</h2>
 
 <p class="lede">The twelve subtitle cues were written to be read aloud. A voice track made from them with <a href="https://dub.webcli.app/">dub.webcli.app</a> (every cue placed at its start time in one WAV, voice <em>af_sarah</em>, 79 s, no cue overlaps another) is committed beside the scene as <code>audio/projectile.wav</code>, and this one-line block tells the scene to carry it: the path is relative to the scene file&#39;s folder in the repo. When the render is published (Render tab, Publish), the track is encoded once as AAC and every video rung references it through an HLS audio group.</p>
 
-<pre><code>// The narration the published render carries: the voice track made from the subtitles (a WAV with every cue at its start time, from dub.webcli.app),&#10;// stored in the repo beside the scene. The path is relative to the scene file&#39;s folder.&#10;setRenderAudio(&#39;audio/projectile.wav&#39;, { language: &#39;en&#39;, label: &#39;English&#39; })</code></pre>
+```javascript
+// The narration the published render carries: the voice track made from the subtitles (a WAV with every cue at its start time, from dub.webcli.app),
+// stored in the repo beside the scene. The path is relative to the scene file's folder.
+setRenderAudio('audio/projectile.wav', { language: 'en', label: 'English' })
+```
 
 <h2><span class="step">15</span> Render it</h2>
 
 <ol class="steps">&#10;		<li>Open the <strong>Render</strong> tab and its <strong>Video</strong> sub-tab. The Camera Sequence already holds the eight shots from step 5.</li>&#10;		<li>Choose <strong>Render (offline)</strong>, 1920 × 1080 at 60 fps, and click <strong>Render</strong>. Every frame is drawn and captured at its exact timeline time, so the result is the same on a fast or a slow machine. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>&#10;	</ol>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">&#10;		<figcaption>78 seconds in: the last cut, to the end card.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pj-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">
+<figcaption>78 seconds in: the last cut, to the end card.</figcaption>
+</figure>
 
 <div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
 

@@ -32,15 +32,92 @@ The cameras cut at 10, 18.2, 34.3 and 46.5 s. Everything below is a paste into t
 
 <p class="lede">The same trick as in the Pythagorean short: a box seen from the inside is a room with four walls, so every camera has a wall behind the blocks. This time there is also a floor, just under the cube, for the shadows to land on, and the key light sits up and to the right, so the blocks throw their shadows to the left and back. The fill light is a <code>HemisphereLight</code>; the Shell does not have that class as a bare name, so it is written <code>THREE.HemisphereLight</code>.</p>
 
-<pre><code>// a room around the scene: walls, ceiling and floor in one box seen from the inside&#10;const room = new Mesh(new BoxGeometry(80, 40, 80),&#10;  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));&#10;room.name = &#39;Room&#39;;&#10;room.position.set(0, 2, 0);&#10;room.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, room));&#10;&#10;// a floor just under the cube, so the shadows have somewhere to land&#10;const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));&#10;floor.name = &#39;Floor&#39;;&#10;floor.rotation.x = -Math.PI / 2;&#10;floor.position.y = -3;&#10;floor.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, floor));&#10;&#10;// one key light up and to the right, one soft fill&#10;const key = new PointLight(0xfff1dd, 5.5, 0, 0);&#10;key.name = &#39;KeyLight&#39;;&#10;key.position.set(7, 11, 9);&#10;key.castShadow = true;&#10;key.shadow.mapSize.set(2048, 2048);&#10;key.shadow.bias = -0.0004;&#10;key.shadow.intensity = 0.6;&#10;key.shadow.radius = 4;&#10;key.shadow.camera.near = 0.5;&#10;key.shadow.camera.far = 90;&#10;editor.execute(new AddObjectCommand(editor, key));&#10;editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: &#39;FillLight&#39; })));</code></pre>
+```javascript
+// a room around the scene: walls, ceiling and floor in one box seen from the inside
+const room = new Mesh(new BoxGeometry(80, 40, 80),
+  new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(0, 2, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+// a floor just under the cube, so the shadows have somewhere to land
+const floor = new Mesh(new PlaneGeometry(60, 60), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -3;
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// one key light up and to the right, one soft fill
+const key = new PointLight(0xfff1dd, 5.5, 0, 0);
+key.name = 'KeyLight';
+key.position.set(7, 11, 9);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 90;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));
+```
 
 <h2><span class="step">3</span> The eight blocks</h2>
 
 <p class="lede">One loop builds all eight, and they are built where they belong, so the cube is whole from the start. The blocks of one kind live in one group (<code>g-a3</code>, <code>g-a2b</code>, <code>g-ab2</code>, <code>g-b3</code>, each at the middle of its blocks and with the blocks placed relative to it), so that later the whole kind can fly, shrink and turn as one body; each block remembers where it sits in the cube (<code>userData.home</code>), for the way back. A block&#39;s name says what it is: <code>a3</code>, <code>b3</code>, <code>a2b-x</code> (the slab whose short side, <em>b</em>, runs along x), <code>ab2-x</code> (the bar whose long side runs along x). The trick is <code>span(len)</code>: along each axis the long part sits at the low end of the big cube and the short part at the high end, so a block&#39;s position follows from its three lengths. Every block gets its own material, so that it can fade on its own, and a black border (<code>hasEdgeOutline</code>), which is what keeps neighbouring blocks of the same colour apart.</p>
 
-<pre><code>// (a + b)^3 = a^3 + 3a^2b + 3ab^2 + b^3: a big cube whose side is cut into a long part (a) and a short part (b)&#10;// is cut by those cuts into 8 blocks of 4 kinds. a is drawn 3 long and b 2 long; the film never says so.&#10;const A = 3, B = 2, H = (A + B) / 2, GAP = 0.05;&#10;const COLOR = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };&#10;const span = len =&gt; (len === A ? [-H, -H + A] : [-H + A, H]);       // an a-length sits at the low end of its axis, a b-length at the high end&#10;&#10;// name, kind, then the length of the block along x, y and z&#10;const PIECES = [&#10;  [&#39;a3&#39;, &#39;a3&#39;, A, A, A],&#10;  [&#39;a2b-x&#39;, &#39;a2b&#39;, B, A, A], [&#39;a2b-y&#39;, &#39;a2b&#39;, A, B, A], [&#39;a2b-z&#39;, &#39;a2b&#39;, A, A, B],      // three slabs: a x a x b&#10;  [&#39;ab2-x&#39;, &#39;ab2&#39;, A, B, B], [&#39;ab2-y&#39;, &#39;ab2&#39;, B, A, B], [&#39;ab2-z&#39;, &#39;ab2&#39;, B, B, A],      // three bars: a x b x b&#10;  [&#39;b3&#39;, &#39;b3&#39;, B, B, B]&#10;];&#10;// each kind lives in its own group, so that later the whole kind can move, shrink and turn as one piece.&#10;// A group sits at the middle of its blocks, and the blocks inside it are placed relative to that middle.&#10;const boxes = PIECES.map(([name, kind, lx, ly, lz]) =&gt; ({ name, kind, lx, ly, lz, x: span(lx), y: span(ly), z: span(lz) }));&#10;const KINDS = [&#39;a3&#39;, &#39;a2b&#39;, &#39;ab2&#39;, &#39;b3&#39;];&#10;for (const kind of KINDS) {&#10;  const mine = boxes.filter(b =&gt; b.kind === kind);&#10;  const lo = [0, 1, 2].map(i =&gt; Math.min(...mine.map(b =&gt; [b.x, b.y, b.z][i][0])));&#10;  const hi = [0, 1, 2].map(i =&gt; Math.max(...mine.map(b =&gt; [b.x, b.y, b.z][i][1])));&#10;  const centre = lo.map((v, i) =&gt; (v + hi[i]) / 2);&#10;  const group = new Group();&#10;  group.name = &#39;g-&#39; + kind;&#10;  group.position.set(...centre);&#10;  const color = COLOR[kind];&#10;  for (const b of mine) {&#10;    const block = new Mesh(new BoxGeometry(b.lx - GAP, b.ly - GAP, b.lz - GAP),&#10;      new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, roughness: 0.5, metalness: 0.1 }));&#10;    block.name = b.name;&#10;    block.position.set((b.x[0] + b.x[1]) / 2 - centre[0], (b.y[0] + b.y[1]) / 2 - centre[1], (b.z[0] + b.z[1]) / 2 - centre[2]);&#10;    block.userData.home = block.position.toArray();       // where it sits in the whole cube, for the way back&#10;    block.castShadow = block.receiveShadow = true;&#10;    block.userData.hasEdgeOutline = true;                  // a black border, drawn by the viewport&#10;    group.add(block);&#10;  }&#10;  editor.execute(new AddObjectCommand(editor, group));&#10;}&#10;$S(&#39;#a3&#39;).addClass(&#39;a3&#39;);&#10;$S(&#39;#b3&#39;).addClass(&#39;b3&#39;);&#10;$S(&#39;#a2b-x, #a2b-y, #a2b-z&#39;).addClass(&#39;a2b&#39;);&#10;$S(&#39;#ab2-x, #ab2-y, #ab2-z&#39;).addClass(&#39;ab2&#39;);&#10;$S(&#39;.a3, .a2b, .ab2, .b3&#39;).addClass(&#39;piece&#39;).nodes.length      // 8</code></pre>
+```javascript
+// (a + b)^3 = a^3 + 3a^2b + 3ab^2 + b^3: a big cube whose side is cut into a long part (a) and a short part (b)
+// is cut by those cuts into 8 blocks of 4 kinds. a is drawn 3 long and b 2 long; the film never says so.
+const A = 3, B = 2, H = (A + B) / 2, GAP = 0.05;
+const COLOR = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };
+const span = len => (len === A ? [-H, -H + A] : [-H + A, H]);       // an a-length sits at the low end of its axis, a b-length at the high end
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-whole.png" alt="The whole cube seen from the front left: gold slabs, violet bars, an aqua corner on the top, with white edges and the title (a + b) cubed above it.">&#10;		<figcaption>2 seconds in: the cube is whole. Four colours, one for each kind of block.</figcaption>&#10;	</figure>
+// name, kind, then the length of the block along x, y and z
+const PIECES = [
+  ['a3', 'a3', A, A, A],
+  ['a2b-x', 'a2b', B, A, A], ['a2b-y', 'a2b', A, B, A], ['a2b-z', 'a2b', A, A, B],      // three slabs: a x a x b
+  ['ab2-x', 'ab2', A, B, B], ['ab2-y', 'ab2', B, A, B], ['ab2-z', 'ab2', B, B, A],      // three bars: a x b x b
+  ['b3', 'b3', B, B, B]
+];
+// each kind lives in its own group, so that later the whole kind can move, shrink and turn as one piece.
+// A group sits at the middle of its blocks, and the blocks inside it are placed relative to that middle.
+const boxes = PIECES.map(([name, kind, lx, ly, lz]) => ({ name, kind, lx, ly, lz, x: span(lx), y: span(ly), z: span(lz) }));
+const KINDS = ['a3', 'a2b', 'ab2', 'b3'];
+for (const kind of KINDS) {
+  const mine = boxes.filter(b => b.kind === kind);
+  const lo = [0, 1, 2].map(i => Math.min(...mine.map(b => [b.x, b.y, b.z][i][0])));
+  const hi = [0, 1, 2].map(i => Math.max(...mine.map(b => [b.x, b.y, b.z][i][1])));
+  const centre = lo.map((v, i) => (v + hi[i]) / 2);
+  const group = new Group();
+  group.name = 'g-' + kind;
+  group.position.set(...centre);
+  const color = COLOR[kind];
+  for (const b of mine) {
+    const block = new Mesh(new BoxGeometry(b.lx - GAP, b.ly - GAP, b.lz - GAP),
+      new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, roughness: 0.5, metalness: 0.1 }));
+    block.name = b.name;
+    block.position.set((b.x[0] + b.x[1]) / 2 - centre[0], (b.y[0] + b.y[1]) / 2 - centre[1], (b.z[0] + b.z[1]) / 2 - centre[2]);
+    block.userData.home = block.position.toArray();       // where it sits in the whole cube, for the way back
+    block.castShadow = block.receiveShadow = true;
+    block.userData.hasEdgeOutline = true;                  // a black border, drawn by the viewport
+    group.add(block);
+  }
+  editor.execute(new AddObjectCommand(editor, group));
+}
+$S('#a3').addClass('a3');
+$S('#b3').addClass('b3');
+$S('#a2b-x, #a2b-y, #a2b-z').addClass('a2b');
+$S('#ab2-x, #ab2-y, #ab2-z').addClass('ab2');
+$S('.a3, .a2b, .ab2, .b3').addClass('piece').nodes.length      // 8
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-whole.png" alt="The whole cube seen from the front left: gold slabs, violet bars, an aqua corner on the top, with white edges and the title (a + b) cubed above it.">
+<figcaption>2 seconds in: the cube is whole. Four colours, one for each kind of block.</figcaption>
+</figure>
 
 Each kind also gets a class, so that later one line can address all three slabs (`.a2b`) or all three bars (`.ab2`).
 
@@ -48,15 +125,75 @@ Each kind also gets a class, so that later one line can address all three slabs 
 
 <p class="lede">A frame of twelve thin white boxes marks the edges of the big cube. It is what the explosion leaves behind, a faint reminder of the whole. Under the front edge a ruler shows the split of one side: <em>a</em> in coral, the colour of the <em>a</em>-cube, and <em>b</em> in aqua, the colour of the <em>b</em>-cube, so the two lengths carry their colours into the cubes made of them.</p>
 
-<pre><code>// the target: a glass cube with bright edges, and a ruler under it that shows how its side splits into a and b&#10;const edge = (w, h, d, x, y, z) =&gt; {&#10;  const m = new Mesh(new BoxGeometry(w, h, d), new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.9 }));&#10;  m.name = &#39;FrameEdge&#39;;&#10;  m.position.set(x, y, z);&#10;  return m;&#10;};&#10;const frame = new Group();&#10;frame.name = &#39;Frame&#39;;&#10;const t = 0.06, h = 2.5;&#10;for (const y of [-h, h]) for (const z of [-h, h]) frame.add(edge(5 + t, t, t, 0, y, z));   // 4 edges along x&#10;for (const x of [-h, h]) for (const z of [-h, h]) frame.add(edge(t, 5 + t, t, x, 0, z));   // 4 along y&#10;for (const x of [-h, h]) for (const y of [-h, h]) frame.add(edge(t, t, 5 + t, x, y, 0));   // 4 along z&#10;editor.execute(new AddObjectCommand(editor, frame));&#10;$S(&#39;#Frame &gt; *&#39;).addClass(&#39;frameedge&#39;);&#10;&#10;// the ruler: a in coral (the colour of the a-cube), b in aqua (the b-cube), end to end along the front bottom edge&#10;const bar = (len, x, color, name) =&gt; {&#10;  const m = new Mesh(new BoxGeometry(len - 0.06, 0.2, 0.2), new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 }));&#10;  m.name = name;&#10;  m.position.set(x, -2.85, 2.5);&#10;  return m;&#10;};&#10;editor.execute(new AddObjectCommand(editor, bar(3, -1, 0xff4d6a, &#39;RulerA&#39;)));&#10;editor.execute(new AddObjectCommand(editor, bar(2, 1.5, 0x14e0c8, &#39;RulerB&#39;)));&#10;$S(&#39;#RulerA, #RulerB&#39;).addClass(&#39;ruler&#39;);</code></pre>
+```javascript
+// the target: a glass cube with bright edges, and a ruler under it that shows how its side splits into a and b
+const edge = (w, h, d, x, y, z) => {
+  const m = new Mesh(new BoxGeometry(w, h, d), new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.9 }));
+  m.name = 'FrameEdge';
+  m.position.set(x, y, z);
+  return m;
+};
+const frame = new Group();
+frame.name = 'Frame';
+const t = 0.06, h = 2.5;
+for (const y of [-h, h]) for (const z of [-h, h]) frame.add(edge(5 + t, t, t, 0, y, z));   // 4 edges along x
+for (const x of [-h, h]) for (const z of [-h, h]) frame.add(edge(t, 5 + t, t, x, 0, z));   // 4 along y
+for (const x of [-h, h]) for (const y of [-h, h]) frame.add(edge(t, t, 5 + t, x, y, 0));   // 4 along z
+editor.execute(new AddObjectCommand(editor, frame));
+$S('#Frame > *').addClass('frameedge');
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-ruler.png" alt="The whole cube with a coral and an aqua ruler along its front bottom edge, and the title above.">&#10;		<figcaption>7.4 seconds in: the ruler splits the side into a (coral) and b (aqua).</figcaption>&#10;	</figure>
+// the ruler: a in coral (the colour of the a-cube), b in aqua (the b-cube), end to end along the front bottom edge
+const bar = (len, x, color, name) => {
+  const m = new Mesh(new BoxGeometry(len - 0.06, 0.2, 0.2), new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.4 }));
+  m.name = name;
+  m.position.set(x, -2.85, 2.5);
+  return m;
+};
+editor.execute(new AddObjectCommand(editor, bar(3, -1, 0xff4d6a, 'RulerA')));
+editor.execute(new AddObjectCommand(editor, bar(2, 1.5, 0x14e0c8, 'RulerB')));
+$S('#RulerA, #RulerB').addClass('ruler');
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-ruler.png" alt="The whole cube with a coral and an aqua ruler along its front bottom edge, and the title above.">
+<figcaption>7.4 seconds in: the ruler splits the side into a (coral) and b (aqua).</figcaption>
+</figure>
 
 <h2><span class="step">5</span> Five cameras</h2>
 
 <p class="lede">A shot camera is an ordinary camera with a track of keys: <code>$S(&#39;#camHero&#39;).setKeys([{ t, pos, lookAt }, …], { smooth: true })</code> plays one smooth curve through them (see <a href="https://strataeditor.dev/guides/CAMERA_PATHS.md">Editing camera moves</a>). Writing keys by hand is tedious, so <code>orbit</code> writes them: azimuth, radius and height from the start to the end of a move, aimed at a point, one key every few seconds. There are four working cameras and the end-card camera: a slow <em>hero</em> view of the whole cube, a <em>low</em> view for the explosion (it has to be further back, since the blocks fly out), and two <em>front</em> views for the row, aimed at the row and its equation. They all stay in the front half-circle (azimuth −30° to 40°), because the equation is a row of text that faces the front, and it would shrink to a sliver from the side.</p>
 
-<pre><code>// five cameras: a slow hero view of the whole cube, a low view for the explosion, two front views for the rows, and one for the end card&#10;function addCamera(name, fov) {&#10;  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);&#10;  cam.name = name;&#10;  editor.execute(new AddObjectCommand(editor, cam));&#10;  return cam;&#10;}&#10;&#10;// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds&#10;function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 3) {&#10;  const n = Math.max(1, Math.round((t1 - t0) / step));&#10;  const keys = [];&#10;  for (let i = 0; i &lt;= n; i++) {&#10;    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);&#10;    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });&#10;  }&#10;  $S(&#39;#&#39; + cam.name).setKeys(keys, { smooth: true });&#10;  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts&#10;  cam.lookAt(...aim);&#10;}&#10;&#10;const hero = addCamera(&#39;camHero&#39;, 40), low = addCamera(&#39;camLow&#39;, 40), front = addCamera(&#39;camFront&#39;, 40);&#10;const last = addCamera(&#39;camFinal&#39;, 40), end = addCamera(&#39;camCard&#39;, 50);&#10;orbit(hero, 0.001, 10, 15, 40, 15.5, 6.5, 5.5, [0, 1.4, 0]);      // round the front corner of the whole cube&#10;orbit(low, 10, 18.2, -30, -12, 20, 0.5, 2, [0, 1, 0]);            // from the left and low, while the blocks fly apart&#10;orbit(front, 18.2, 34.3, 12, -6, 16, 4, 3, [1.5, 2.6, 0], 4);      // from the front, aimed at the row of blocks and its equation&#10;orbit(last, 34.3, 46.5, -6, 0, 14.5, 3, 3, [1.5, 2.6, 0], 4);&#10;end.position.set(14.6, 0.5, 0);                                   // faces the end card, which hangs on the right-hand wall&#10;end.lookAt(30, 0.5, 0);</code></pre>
+```javascript
+// five cameras: a slow hero view of the whole cube, a low view for the explosion, two front views for the rows, and one for the end card
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+
+// a move around a point: azimuth in degrees (0 = straight in front), a radius and a height, one key every `step` seconds
+function orbit(cam, t0, t1, az0, az1, radius, y0, y1, aim, step = 3) {
+  const n = Math.max(1, Math.round((t1 - t0) / step));
+  const keys = [];
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);
+    keys.push({ t: t0 + (t1 - t0) * u, pos: [radius * Math.sin(az), y0 + (y1 - y0) * u, radius * Math.cos(az)], lookAt: aim });
+  }
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+}
+
+const hero = addCamera('camHero', 40), low = addCamera('camLow', 40), front = addCamera('camFront', 40);
+const last = addCamera('camFinal', 40), end = addCamera('camCard', 50);
+orbit(hero, 0.001, 10, 15, 40, 15.5, 6.5, 5.5, [0, 1.4, 0]);      // round the front corner of the whole cube
+orbit(low, 10, 18.2, -30, -12, 20, 0.5, 2, [0, 1, 0]);            // from the left and low, while the blocks fly apart
+orbit(front, 18.2, 34.3, 12, -6, 16, 4, 3, [1.5, 2.6, 0], 4);      // from the front, aimed at the row of blocks and its equation
+orbit(last, 34.3, 46.5, -6, 0, 14.5, 3, 3, [1.5, 2.6, 0], 4);
+end.position.set(14.6, 0.5, 0);                                   // faces the end card, which hangs on the right-hand wall
+end.lookAt(30, 0.5, 0);
+```
 
 Before its first key a camera waits where its `position` and `lookAt` say, so each one is also placed at the start of its move.
 
@@ -66,19 +203,60 @@ Before its first key a camera waits where its `position` and `lookAt` say, so ea
 
 A label's text begins at the label's own origin, so each label's `x` is where its text starts. The widths come from the font (the sum of the glyph advances, in units of the font size, times the label's scale): _(a + b)³_ is 4.72 wide, _=_ and _+_ 0.83, _a³_ 1.35, _3a²b_ and _3ab²_ 3.00, _b³_ 1.39. At a scale of 0.6 and a gap of 0.45 between labels the row is 13.7 wide, which fits in the frame of every camera, and the first label starts at −6.83.
 
-<pre><code>// the equation, as nine labels in a row above the cube: each term in the colour of its pieces.&#10;// Text starts at a label&#39;s own origin, so each label&#39;s x is where its text begins: the widths come from the font.&#10;const tpl = $S(&#39;#Text&#39;).nodes[0];&#10;tpl.material.emissiveIntensity = 0.7;&#10;const WHITE = 0xffffff, C = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };&#10;const ROW = [                              // name, colour, x where the text begins&#10;  [&#39;lead&#39;, WHITE, -6.83], [&#39;eq&#39;, WHITE, -3.55], [&#39;tA&#39;, C.a3, -2.6], [&#39;p1&#39;, WHITE, -1.34], [&#39;tB&#39;, C.a2b, -0.39],&#10;  [&#39;p2&#39;, WHITE, 1.86], [&#39;tC&#39;, C.ab2, 2.8], [&#39;p3&#39;, WHITE, 5.05], [&#39;tD&#39;, C.b3, 6.0]&#10;];&#10;for (const [name, color, x] of ROW) {&#10;  const label = name === &#39;lead&#39; ? tpl : new Mesh(tpl.geometry.clone(), tpl.material.clone());&#10;  label.name = name;&#10;  label.material.color = new Color(color);&#10;  label.material.emissive = new Color(color);&#10;  label.material.emissiveIntensity = 0.7;&#10;  label.scale.setScalar(0.6);&#10;  label.position.set(x, 4.4, 0);&#10;  label.userData.textShadow = true;&#10;  label.castShadow = false;&#10;  if (name !== &#39;lead&#39;) editor.execute(new AddObjectCommand(editor, label));&#10;}&#10;$S(&#39;#lead, #eq, #tA, #p1, #tB, #p2, #tC, #p3, #tD&#39;).addClass(&#39;term&#39;).nodes.length      // 9</code></pre>
+```javascript
+// the equation, as nine labels in a row above the cube: each term in the colour of its pieces.
+// Text starts at a label's own origin, so each label's x is where its text begins: the widths come from the font.
+const tpl = $S('#Text').nodes[0];
+tpl.material.emissiveIntensity = 0.7;
+const WHITE = 0xffffff, C = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };
+const ROW = [                              // name, colour, x where the text begins
+  ['lead', WHITE, -6.83], ['eq', WHITE, -3.55], ['tA', C.a3, -2.6], ['p1', WHITE, -1.34], ['tB', C.a2b, -0.39],
+  ['p2', WHITE, 1.86], ['tC', C.ab2, 2.8], ['p3', WHITE, 5.05], ['tD', C.b3, 6.0]
+];
+for (const [name, color, x] of ROW) {
+  const label = name === 'lead' ? tpl : new Mesh(tpl.geometry.clone(), tpl.material.clone());
+  label.name = name;
+  label.material.color = new Color(color);
+  label.material.emissive = new Color(color);
+  label.material.emissiveIntensity = 0.7;
+  label.scale.setScalar(0.6);
+  label.position.set(x, 4.4, 0);
+  label.userData.textShadow = true;
+  label.castShadow = false;
+  if (name !== 'lead') editor.execute(new AddObjectCommand(editor, label));
+}
+$S('#lead, #eq, #tA, #p1, #tB, #p2, #tC, #p3, #tD').addClass('term').nodes.length      // 9
+```
 
 <h2><span class="step">7</span> The end card</h2>
 
 <p class="lede">Open <strong>Stencils → Mesh → Call card</strong> and click it. It is a plane that embeds the current <a href="https://strataeditor.dev/about/callcard/">/about/callcard</a> live. This block makes it landscape, hangs it on the right-hand wall (x = 30), turns it to face the end camera (a mesh&#39;s front is its local +Z, so a quarter turn about Y does it) and makes it invisible until its fade-in.</p>
 
-<pre><code>// the end card: the Call card stencil, landscape, hung on the right-hand wall and facing the end camera&#10;const card = $S(&#39;#callcard&#39;).nodes[0];&#10;card.userData.width = 3.2;&#10;card.userData.height = 1.8;&#10;card.geometry = new PlaneGeometry(3.2, 1.8);&#10;$S(&#39;#callcard&#39;).moveTo(30, 0.5, 0).scaleTo(8);&#10;card.rotation.set(0, -Math.PI / 2, 0);&#10;card.material.opacity = 0;</code></pre>
+```javascript
+// the end card: the Call card stencil, landscape, hung on the right-hand wall and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(30, 0.5, 0).scaleTo(8);
+card.rotation.set(0, -Math.PI / 2, 0);
+card.material.opacity = 0;
+```
 
 <h2><span class="step">8</span> The camera sequence</h2>
 
 <p class="lede">The cameras exist, but nothing says which one is filming when. That is the Render tab&#39;s <strong>Camera Sequence</strong>, which the scene keeps in <code>scene.userData.renderShots</code>: a list of shots, each a camera and the time it takes over, entered with a <code>&#39;cut&#39;</code> or a <code>&#39;fade&#39;</code> of <code>transitionDur</code> seconds. In the Render tab it is <strong>+ Add Shot</strong> five times; from the Shell it is one assignment. <code>editor.work.touch()</code> tells the unsaved-work guard that the scene changed.</p>
 
-<pre><code>// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)&#10;const cams = Object.fromEntries([&#39;camHero&#39;, &#39;camLow&#39;, &#39;camFront&#39;, &#39;camFinal&#39;, &#39;camCard&#39;].map(n =&gt; [n, $S(&#39;#&#39; + n).nodes[0]]));&#10;const cuts = [[0, &#39;camHero&#39;], [10, &#39;camLow&#39;], [18.2, &#39;camFront&#39;], [34.3, &#39;camFinal&#39;], [46.5, &#39;camCard&#39;]];&#10;editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({&#10;  id: &#39;shot-&#39; + name, at, camera: cams[name].uuid, transition: i === 0 ? &#39;cut&#39; : &#39;fade&#39;, transitionDur: 0.6&#10;}));&#10;editor.work.touch();&#10;editor.scene.userData.renderShots.length      // 5</code></pre>
+```javascript
+// the camera sequence: which camera takes over when, and how (a cross-fade into every shot but the first)
+const cams = Object.fromEntries(['camHero', 'camLow', 'camFront', 'camFinal', 'camCard'].map(n => [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camHero'], [10, 'camLow'], [18.2, 'camFront'], [34.3, 'camFinal'], [46.5, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) => ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 5
+```
 
 <h2><span class="step">9</span> The cuts, and the cube falls apart</h2>
 
@@ -86,11 +264,52 @@ A label's text begins at the label's own origin, so each label's `x` is where it
 
 At 10.4 s the cube comes apart. Because the blocks rest where they belong, the timeline only has to move them away: each block `animate`s to a point 1.6 units further out along each axis, towards the low side where its length on that axis is _a_ and towards the high side where it is _b_ (`SIGN`): the coral cube goes towards the low corner, the aqua cube towards the high one, and each slab and bar towards the side on which it was cut. The easing is `'ease-out'`, so they burst out and settle.
 
-<pre><code>// a and b: the ruler under the cube, and gone again before the cuts&#10;$S(&#39;#RulerA&#39;).at(5.8).fadeIn(0.8);&#10;$S(&#39;#RulerB&#39;).at(6.8).fadeIn(0.8);&#10;$S(&#39;.ruler&#39;).at(8).fadeOut(0.6);&#10;&#10;// three cutting planes, one per axis, at the place where each side splits into a and b (0.5 from the middle).&#10;// They fade in one after the other, a little bigger than the cube so that they show around it, and go as the cube comes apart.&#10;const plane = (name, rx, ry) =&gt; {&#10;  const m = new Mesh(new PlaneGeometry(6.6, 6.6), new MeshStandardMaterial({ color: 0xbfe9ff, emissive: 0x7fd4ff, emissiveIntensity: 0.6, side: THREE.DoubleSide, transparent: true, opacity: 0 }));   // invisible until its fade-in&#10;  m.name = name;&#10;  m.rotation.set(rx, ry, 0);&#10;  m.castShadow = false;&#10;  editor.execute(new AddObjectCommand(editor, m));&#10;  return m;&#10;};&#10;const CUT = 0.5;&#10;plane(&#39;cutX&#39;, 0, Math.PI / 2).position.set(CUT, 0, 0);&#10;plane(&#39;cutY&#39;, Math.PI / 2, 0).position.set(0, CUT, 0);&#10;plane(&#39;cutZ&#39;, 0, 0).position.set(0, 0, CUT);&#10;$S(&#39;#cutX, #cutY, #cutZ&#39;).addClass(&#39;cut&#39;);&#10;[&#39;#cutX&#39;, &#39;#cutY&#39;, &#39;#cutZ&#39;].forEach((s, i) =&gt; { $S(s).at(8.3 + 0.6 * i).fade(0, 0.3, 0.5); $S(s).at(11.4).fade(0.3, 0, 0.6); });&#10;&#10;// the explosion: each block steps away from where it was, towards the side where it was cut&#10;// (+ where its length is b, - where it is a). Positions are local to the block&#39;s group, and every&#10;// group sits at the middle of its blocks, so every block moves by the same amount in the world.&#10;const NAMES = [&#39;a3&#39;, &#39;a2b-x&#39;, &#39;a2b-y&#39;, &#39;a2b-z&#39;, &#39;ab2-x&#39;, &#39;ab2-y&#39;, &#39;ab2-z&#39;, &#39;b3&#39;];&#10;const HOME = Object.fromEntries(NAMES.map(n =&gt; [n, $S(&#39;#&#39; + n).nodes[0].position.toArray()]));&#10;const SIGN = { a3: [-1, -1, -1], &#39;a2b-x&#39;: [1, -1, -1], &#39;a2b-y&#39;: [-1, 1, -1], &#39;a2b-z&#39;: [-1, -1, 1],&#10;  &#39;ab2-x&#39;: [-1, 1, 1], &#39;ab2-y&#39;: [1, -1, 1], &#39;ab2-z&#39;: [1, 1, -1], b3: [1, 1, 1] };&#10;const STEP = 1.6;&#10;for (const n of NAMES) {&#10;  const [x, y, z] = HOME[n].map((v, i) =&gt; v + SIGN[n][i] * STEP);&#10;  $S(&#39;#&#39; + n).at(10.4).animate({ to: { positionX: x, positionY: y, positionZ: z } }, 2200, &#39;ease-out&#39;);&#10;}</code></pre>
+```javascript
+// a and b: the ruler under the cube, and gone again before the cuts
+$S('#RulerA').at(5.8).fadeIn(0.8);
+$S('#RulerB').at(6.8).fadeIn(0.8);
+$S('.ruler').at(8).fadeOut(0.6);
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-cuts.png" alt="The whole cube with three pale-blue planes through it, one along each axis, and the title above.">&#10;		<figcaption>9.4 seconds in: the three cutting planes, where each side splits into a and b.</figcaption>&#10;	</figure>
+// three cutting planes, one per axis, at the place where each side splits into a and b (0.5 from the middle).
+// They fade in one after the other, a little bigger than the cube so that they show around it, and go as the cube comes apart.
+const plane = (name, rx, ry) => {
+  const m = new Mesh(new PlaneGeometry(6.6, 6.6), new MeshStandardMaterial({ color: 0xbfe9ff, emissive: 0x7fd4ff, emissiveIntensity: 0.6, side: THREE.DoubleSide, transparent: true, opacity: 0 }));   // invisible until its fade-in
+  m.name = name;
+  m.rotation.set(rx, ry, 0);
+  m.castShadow = false;
+  editor.execute(new AddObjectCommand(editor, m));
+  return m;
+};
+const CUT = 0.5;
+plane('cutX', 0, Math.PI / 2).position.set(CUT, 0, 0);
+plane('cutY', Math.PI / 2, 0).position.set(0, CUT, 0);
+plane('cutZ', 0, 0).position.set(0, 0, CUT);
+$S('#cutX, #cutY, #cutZ').addClass('cut');
+['#cutX', '#cutY', '#cutZ'].forEach((s, i) => { $S(s).at(8.3 + 0.6 * i).fade(0, 0.3, 0.5); $S(s).at(11.4).fade(0.3, 0, 0.6); });
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-explode.png" alt="The eight blocks floating apart with white lines between them, seen from low on the left; the title (a + b) cubed above.">&#10;		<figcaption>12.5 seconds in, through the low camera: the eight blocks have stepped apart; the faint lines are the edges of the glass cube.</figcaption>&#10;	</figure>
+// the explosion: each block steps away from where it was, towards the side where it was cut
+// (+ where its length is b, - where it is a). Positions are local to the block's group, and every
+// group sits at the middle of its blocks, so every block moves by the same amount in the world.
+const NAMES = ['a3', 'a2b-x', 'a2b-y', 'a2b-z', 'ab2-x', 'ab2-y', 'ab2-z', 'b3'];
+const HOME = Object.fromEntries(NAMES.map(n => [n, $S('#' + n).nodes[0].position.toArray()]));
+const SIGN = { a3: [-1, -1, -1], 'a2b-x': [1, -1, -1], 'a2b-y': [-1, 1, -1], 'a2b-z': [-1, -1, 1],
+  'ab2-x': [-1, 1, 1], 'ab2-y': [1, -1, 1], 'ab2-z': [1, 1, -1], b3: [1, 1, 1] };
+const STEP = 1.6;
+for (const n of NAMES) {
+  const [x, y, z] = HOME[n].map((v, i) => v + SIGN[n][i] * STEP);
+  $S('#' + n).at(10.4).animate({ to: { positionX: x, positionY: y, positionZ: z } }, 2200, 'ease-out');
+}
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-cuts.png" alt="The whole cube with three pale-blue planes through it, one along each axis, and the title above.">
+<figcaption>9.4 seconds in: the three cutting planes, where each side splits into a and b.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-explode.png" alt="The eight blocks floating apart with white lines between them, seen from low on the left; the title (a + b) cubed above.">
+<figcaption>12.5 seconds in, through the low camera: the eight blocks have stepped apart; the faint lines are the edges of the glass cube.</figcaption>
+</figure>
 
 <h2><span class="step">10</span> Like goes with like</h2>
 
@@ -98,19 +317,74 @@ At 10.4 s the cube comes apart. Because the blocks rest where they belong, the t
 
 A faint ghost of each kind appears at its landing place a second before the blocks arrive (a copy of the group, with its own materials, fading to 18% and gone as the real blocks land), so the eye is there first. The glass cube's edges fade out as the first kind leaves.
 
-<pre><code>// then like goes with like: each kind, as one group, flies to its place under its own term of the equation, smaller,&#10;// while its blocks close up again into the shape they had in the cube (three slabs meet along their edges, so do the bars).&#10;// A faint ghost of the kind shows where it will land, so the eye is there before the blocks are.&#10;const S = 0.4, Y = 2.3;&#10;const TARGET = { a3: [-2.2, Y], a2b: [0.5, Y], ab2: [3.7, Y], b3: [6.4, Y] };     // the middle of each term of the equation&#10;const AT = { a3: 20.4, a2b: 25.6, ab2: 30.6, b3: 35.7 };                           // a second after the term appears&#10;const COLOR = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };&#10;const home = {};&#10;for (const kind of Object.keys(TARGET)) {&#10;  const group = $S(&#39;#g-&#39; + kind).nodes[0];&#10;  const ghost = group.clone();                                  // a copy of the whole kind, with its own materials&#10;  ghost.name = &#39;ghost-&#39; + kind;&#10;  ghost.position.set(TARGET[kind][0], TARGET[kind][1], 0);&#10;  ghost.scale.setScalar(S);&#10;  ghost.traverse(o =&gt; {&#10;    if (!o.isMesh) return;&#10;    o.name = &#39;ghost-&#39; + o.name;&#10;    o.material = new MeshStandardMaterial({ color: COLOR[kind], emissive: COLOR[kind], emissiveIntensity: 0.25, transparent: true, opacity: 0 });&#10;    o.castShadow = false;&#10;  });&#10;  editor.execute(new AddObjectCommand(editor, ghost));&#10;  $S(&#39;#ghost-&#39; + kind + &#39; &gt; *&#39;).addClass(&#39;ghost&#39;);&#10;&#10;  const t = AT[kind];&#10;  $S(&#39;#ghost-&#39; + kind + &#39; &gt; *&#39;).at(t - 1).fade(0, 0.18, 0.6);&#10;  $S(&#39;#g-&#39; + kind).at(t).animate({ to: { positionX: TARGET[kind][0], positionY: TARGET[kind][1], positionZ: 0, scaleX: S, scaleY: S, scaleZ: S } }, 1800, &#39;ease-in-out&#39;);&#10;  for (const block of group.children) {                         // close up again, in the group&#39;s own frame&#10;    const [x, y, z] = block.userData.home;&#10;    $S(&#39;#&#39; + block.name).at(t).animate({ to: { positionX: x, positionY: y, positionZ: z } }, 1800, &#39;ease-in-out&#39;);&#10;  }&#10;  $S(&#39;#ghost-&#39; + kind + &#39; &gt; *&#39;).at(t + 1.8).fade(0.18, 0, 0.5);&#10;}&#10;&#10;// the glass cube stays faint after the cut, and is gone once the blocks are on their way&#10;$S(&#39;.frameedge&#39;).at(10.4).fade(1, 0.3, 0.6);&#10;$S(&#39;.frameedge&#39;).at(19).fade(0.3, 0, 1);</code></pre>
+```javascript
+// then like goes with like: each kind, as one group, flies to its place under its own term of the equation, smaller,
+// while its blocks close up again into the shape they had in the cube (three slabs meet along their edges, so do the bars).
+// A faint ghost of the kind shows where it will land, so the eye is there before the blocks are.
+const S = 0.4, Y = 2.3;
+const TARGET = { a3: [-2.2, Y], a2b: [0.5, Y], ab2: [3.7, Y], b3: [6.4, Y] };     // the middle of each term of the equation
+const AT = { a3: 20.4, a2b: 25.6, ab2: 30.6, b3: 35.7 };                           // a second after the term appears
+const COLOR = { a3: 0xff4d6a, a2b: 0xffb703, ab2: 0xa78bfa, b3: 0x14e0c8 };
+const home = {};
+for (const kind of Object.keys(TARGET)) {
+  const group = $S('#g-' + kind).nodes[0];
+  const ghost = group.clone();                                  // a copy of the whole kind, with its own materials
+  ghost.name = 'ghost-' + kind;
+  ghost.position.set(TARGET[kind][0], TARGET[kind][1], 0);
+  ghost.scale.setScalar(S);
+  ghost.traverse(o => {
+    if (!o.isMesh) return;
+    o.name = 'ghost-' + o.name;
+    o.material = new MeshStandardMaterial({ color: COLOR[kind], emissive: COLOR[kind], emissiveIntensity: 0.25, transparent: true, opacity: 0 });
+    o.castShadow = false;
+  });
+  editor.execute(new AddObjectCommand(editor, ghost));
+  $S('#ghost-' + kind + ' > *').addClass('ghost');
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-flight.png" alt="The equation beginning under the title; the large violet bars wait at the left, the aqua cube at the right, and the coral cube and a gold slab are in front.">&#10;		<figcaption>22 seconds in, through the front camera: the first kind has landed under its term and the others are waiting.</figcaption>&#10;	</figure>
+  const t = AT[kind];
+  $S('#ghost-' + kind + ' > *').at(t - 1).fade(0, 0.18, 0.6);
+  $S('#g-' + kind).at(t).animate({ to: { positionX: TARGET[kind][0], positionY: TARGET[kind][1], positionZ: 0, scaleX: S, scaleY: S, scaleZ: S } }, 1800, 'ease-in-out');
+  for (const block of group.children) {                         // close up again, in the group's own frame
+    const [x, y, z] = block.userData.home;
+    $S('#' + block.name).at(t).animate({ to: { positionX: x, positionY: y, positionZ: z } }, 1800, 'ease-in-out');
+  }
+  $S('#ghost-' + kind + ' > *').at(t + 1.8).fade(0.18, 0, 0.5);
+}
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-rows.png" alt="Under the equation a small coral cube, and three gold slabs closed up into an L-shape, each below its term; the aqua cube is still arriving at the right.">&#10;		<figcaption>28 seconds in: the slabs have closed up into the shape they made inside the cube, under 3a²b.</figcaption>&#10;	</figure>
+// the glass cube stays faint after the cut, and is gone once the blocks are on their way
+$S('.frameedge').at(10.4).fade(1, 0.3, 0.6);
+$S('.frameedge').at(19).fade(0.3, 0, 1);
+```
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-flight.png" alt="The equation beginning under the title; the large violet bars wait at the left, the aqua cube at the right, and the coral cube and a gold slab are in front.">
+<figcaption>22 seconds in, through the front camera: the first kind has landed under its term and the others are waiting.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-rows.png" alt="Under the equation a small coral cube, and three gold slabs closed up into an L-shape, each below its term; the aqua cube is still arriving at the right.">
+<figcaption>28 seconds in: the slabs have closed up into the shape they made inside the cube, under 3a²b.</figcaption>
+</figure>
 
 <h2><span class="step">11</span> The x-ray</h2>
 
 <p class="lede">Transparency lets the viewer match blocks to terms. While the equation is read out, one kind of block at a time stays solid and the rest turn to glass (<code>.fade(from, to, seconds)</code>, to 15% opacity). A kind turns to glass when it stops being the topic and solid again when it is the topic, so each kind has one or two glass windows. The windows are timed to the cue: <em>a³</em> first (40 to 41 s), then <em>3a²b</em>, then <em>3ab²</em>, then <em>b³</em>, and everything is solid again at 45.8 s. The four groups also turn slowly through 40° about the vertical axis from 37.8 s, so the glass is seen from more than one side.</p>
 
-<pre><code>// x-ray, while the equation is read out: everything but the term being read turns to glass&#10;const ghost = (sel, from, to) =&gt; { $S(sel).at(from).fade(1, 0.15, 0.5); $S(sel).at(to).fade(0.15, 1, 0.5); };&#10;ghost(&#39;.a2b&#39;, 40, 41);   ghost(&#39;.a2b&#39;, 42.7, 45.8);     // 3a^2b is the topic from 41 to 42.7&#10;ghost(&#39;.ab2&#39;, 40, 42.7); ghost(&#39;.ab2&#39;, 44.4, 45.8);     // 3ab^2 from 42.7 to 44.4&#10;ghost(&#39;.b3&#39;, 40, 44.4);                                  // b^3 from 44.4 to the end&#10;ghost(&#39;.a3&#39;, 41, 45.8);                                  // a^3 first, from 40 to 41&#10;// and the groups turn a little, so the glass can be seen through from more than one side&#10;[&#39;#g-a3&#39;, &#39;#g-a2b&#39;, &#39;#g-ab2&#39;, &#39;#g-b3&#39;].forEach(g =&gt; $S(g).at(37.8).animate({ to: { rotation: [0, 40, 0] } }, 8000, &#39;ease-in-out&#39;));</code></pre>
+```javascript
+// x-ray, while the equation is read out: everything but the term being read turns to glass
+const ghost = (sel, from, to) => { $S(sel).at(from).fade(1, 0.15, 0.5); $S(sel).at(to).fade(0.15, 1, 0.5); };
+ghost('.a2b', 40, 41);   ghost('.a2b', 42.7, 45.8);     // 3a^2b is the topic from 41 to 42.7
+ghost('.ab2', 40, 42.7); ghost('.ab2', 44.4, 45.8);     // 3ab^2 from 42.7 to 44.4
+ghost('.b3', 40, 44.4);                                  // b^3 from 44.4 to the end
+ghost('.a3', 41, 45.8);                                  // a^3 first, from 40 to 41
+// and the groups turn a little, so the glass can be seen through from more than one side
+['#g-a3', '#g-a2b', '#g-ab2', '#g-b3'].forEach(g => $S(g).at(37.8).animate({ to: { rotation: [0, 40, 0] } }, 8000, 'ease-in-out'));
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-xray.png" alt="The row of blocks with the coral cube solid and all the others turned to see-through glass, under the complete equation.">&#10;		<figcaption>44 seconds in: only the aqua cube is solid, and the other kinds are glass.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-xray.png" alt="The row of blocks with the coral cube solid and all the others turned to see-through glass, under the complete equation.">
+<figcaption>44 seconds in: only the aqua cube is solid, and the other kinds are glass.</figcaption>
+</figure>
 
 <div class="note"><strong>Glass and shadows.</strong> Two details are the editor&#39;s, not yours. A block at 15% opacity would still throw a full, solid shadow (the shadow pass ignores opacity), so a mesh stops casting its shadow when it is less than half there and casts again when it is more than half there; the same rule keeps a block that has not faded in yet from leaving a ghost shadow on the wall. And a block&#39;s black border fades with the block, so that a glass block is not a solid black wire cube. Neither is saved in the scene: the file keeps <code>castShadow</code> as you set it.</div>
 
@@ -118,13 +392,37 @@ A faint ghost of each kind appears at its landing place a second before the bloc
 
 <p class="lede">Every label starts empty (<code>change(&#39;&#39;)</code> at 0 s) and a term appears at the moment its blocks start to fly, with the usual cross-fade: the title at 0.8 s, then <em>= a³</em>, <em>+ 3a²b</em>, <em>+ 3ab²</em> and <em>+ b³</em>. The end card fades in as the last camera arrives.</p>
 
-<pre><code>// the equation grows with the rows: each term appears as its blocks start to fly&#10;const show = (sel, at, text) =&gt; $S(sel).at(at).change(text, { transition: &#39;fade&#39;, dur: 300 });&#10;$S(&#39;.term&#39;).at(0).change(&#39;&#39;);&#10;show(&#39;#lead&#39;, 0.8, &#39;(a + b)³&#39;);&#10;show(&#39;#eq&#39;, 19.4, &#39;=&#39;);      show(&#39;#tA&#39;, 19.4, &#39;a³&#39;);&#10;show(&#39;#p1&#39;, 24.6, &#39;+&#39;);      show(&#39;#tB&#39;, 24.6, &#39;3a²b&#39;);&#10;show(&#39;#p2&#39;, 29.6, &#39;+&#39;);      show(&#39;#tC&#39;, 29.6, &#39;3ab²&#39;);&#10;show(&#39;#p3&#39;, 34.7, &#39;+&#39;);      show(&#39;#tD&#39;, 34.7, &#39;b³&#39;);&#10;// the end card fades in as the last camera arrives&#10;$S(&#39;#callcard&#39;).at(46.7).fadeIn(2.5);</code></pre>
+```javascript
+// the equation grows with the rows: each term appears as its blocks start to fly
+const show = (sel, at, text) => $S(sel).at(at).change(text, { transition: 'fade', dur: 300 });
+$S('.term').at(0).change('');
+show('#lead', 0.8, '(a + b)³');
+show('#eq', 19.4, '=');      show('#tA', 19.4, 'a³');
+show('#p1', 24.6, '+');      show('#tB', 24.6, '3a²b');
+show('#p2', 29.6, '+');      show('#tC', 29.6, '3ab²');
+show('#p3', 34.7, '+');      show('#tD', 34.7, 'b³');
+// the end card fades in as the last camera arrives
+$S('#callcard').at(46.7).fadeIn(2.5);
+```
 
 <h2><span class="step">13</span> Subtitles</h2>
 
 <p class="lede">Ten cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the Pythagorean short&#39;s. They are written to be read aloud: no digits, and every symbol spelled the way it is said. The long cue is the equation, and the x-ray windows above sit on its words.</p>
 
-<pre><code>setSubtitles([&#10;  { start: 0.8, end: 5.1, text: &#39;What is the volume of a cube\nwhose side is a plus b?&#39; },&#10;  { start: 5.4, end: 9.7, text: &#39;Cut every side into two parts:\na, and b.&#39; },&#10;  { start: 10.0, end: 14.7, text: &#39;Cut along those parts,\nand the cube falls into eight blocks.&#39; },&#10;  { start: 15.0, end: 18.0, text: &#39;The blocks come in four kinds.&#39; },&#10;  { start: 18.2, end: 24.0, text: &#39;Put like with like. First, one cube\nwith side a: a cubed.&#39; },&#10;  { start: 24.2, end: 29.0, text: &#39;Next, three slabs, each a by a by b:\nthree a squared b.&#39; },&#10;  { start: 29.2, end: 34.1, text: &#39;Then three bars, each a by b by b:\nthree a b squared.&#39; },&#10;  { start: 34.3, end: 38.2, text: &#39;And one small cube with side b:\nb cubed.&#39; },&#10;  { start: 38.4, end: 45.6, text: &#39;So a plus b, cubed, equals a cubed, plus three a squared b,\nplus three a b squared, plus b cubed.&#39; },&#10;  { start: 47.1, end: 49.5, text: &#39;Made with Strata.&#39; },&#10;]).length   // 10</code></pre>
+```javascript
+setSubtitles([
+  { start: 0.8, end: 5.1, text: 'What is the volume of a cube\nwhose side is a plus b?' },
+  { start: 5.4, end: 9.7, text: 'Cut every side into two parts:\na, and b.' },
+  { start: 10.0, end: 14.7, text: 'Cut along those parts,\nand the cube falls into eight blocks.' },
+  { start: 15.0, end: 18.0, text: 'The blocks come in four kinds.' },
+  { start: 18.2, end: 24.0, text: 'Put like with like. First, one cube\nwith side a: a cubed.' },
+  { start: 24.2, end: 29.0, text: 'Next, three slabs, each a by a by b:\nthree a squared b.' },
+  { start: 29.2, end: 34.1, text: 'Then three bars, each a by b by b:\nthree a b squared.' },
+  { start: 34.3, end: 38.2, text: 'And one small cube with side b:\nb cubed.' },
+  { start: 38.4, end: 45.6, text: 'So a plus b, cubed, equals a cubed, plus three a squared b,\nplus three a b squared, plus b cubed.' },
+  { start: 47.1, end: 49.5, text: 'Made with Strata.' },
+]).length   // 10
+```
 
 <div class="note"><strong>Check the voice.</strong> Export the cues (<code>exportSrt()</code>, or <strong>Export .srt</strong> in the Render tab) and run them through a text-to-speech tool before you commit to the times. With the slower <em>af_sarah</em> voice of Kokoro every cue fits with at least 0.2 seconds to spare (the longest, the equation, is 6.95 s long in a 7.2 s window); a faster voice fits too. A cue that does not fit is a timing problem, so move the beat it describes, as the Pythagorean short does, rather than shortening the words.</div>
 
@@ -132,7 +430,10 @@ A faint ghost of each kind appears at its landing place a second before the bloc
 
 <ol class="steps">&#10;		<li>Open the <strong>Render</strong> tab. The Camera Sequence already holds the five shots from step 8.</li>&#10;		<li>Pick 1280 × 720 and 30 fps, and click <strong>Render &amp; Export</strong>. It runs in real time, so about 50 seconds. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>&#10;		<li>For captions a viewer can switch off, render without the burn and add the .srt as a soft track afterwards: <code>ffmpeg -i film.mp4 -i film.srt -c copy -c:s mov_text -metadata:s:s:0 language=eng film-subs.mp4</code>.</li>&#10;	</ol>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">&#10;		<figcaption>48 seconds in: the last cut, to the end card.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/ab3-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">
+<figcaption>48 seconds in: the last cut, to the end card.</figcaption>
+</figure>
 
 <div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
 
@@ -146,7 +447,33 @@ A faint ghost of each kind appears at its landing place a second before the bloc
 
 <p class="lede">This scene was first published before every object had to be named and classed, so this last block was added afterwards; paste it after all the others. The film is only <em>addressable</em> if every object has a name an author chose and at least one class: otherwise <code>$S(&#39;#id&#39;)</code>, <code>$S(&#39;.class&#39;)</code>, an AI edit or a tutorial step cannot reach it. The block names the few objects the build left anonymous or shared (from where they sit), gives every object its classes from one table, and calls <code>requireLabels(true)</code>: from then on a commit is <em>refused</em> while any object is unnamed, duplicated or without a class, and <code>lint()</code> lists what is wrong. The twelve frame bars are now <code>FrameEdgeX_ym_zm</code> and so on (the axis a bar runs along, then the side it sits on), and the single box inside <code>ghost-a3</code> and <code>ghost-b3</code>, which shared its group&#39;s name, is <code>-m</code>; <code>$S(&#39;.frameedge&#39;)</code> still selects the bars because the table gives each of them that class.</p>
 
-<pre><code>// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)&#10;// and a class; classes are what make the scene queryable: $S(&#39;.piece&#39;), $S(&#39;.ghost&#39;), $S(&#39;.frameedge&#39;). The table&#39;s first column is the names it covers, the second the classes it gives;&#10;// an object can match several rows, and anything left without a class is listed and the block stops.&#10;for (const e of scene.getObjectByName(&#39;Frame&#39;).children) {              // the twelve cube edges, named by the axis they run along and the two sides they sit on&#10;  const p = e.position.toArray(), axis = p.findIndex(v =&gt; Math.abs(v) &lt; 1e-6);&#10;  e.name = &#39;FrameEdge&#39; + &#39;XYZ&#39;[axis] + [0, 1, 2].filter(i =&gt; i !== axis).map(i =&gt; &#39;_&#39; + &#39;xyz&#39;[i] + (p[i] &lt; 0 ? &#39;m&#39; : &#39;p&#39;)).join(&#39;&#39;);&#10;}&#10;for (const name of [&#39;ghost-a3&#39;, &#39;ghost-b3&#39;]) {                           // the single box inside these two ghosts had its group&#39;s name&#10;  const group = scene.getObjectByName(name);&#10;  if (group.children[0].name === name) group.children[0].name = name + &#39;-m&#39;;&#10;}&#10;const rules = [&#10;  [/^(Room|Floor)$/, [&#39;environment&#39;]], [/Light$/, [&#39;light&#39;]], [/^g-/, [&#39;piece&#39;]], [/^Frame$/, [&#39;frame&#39;]],&#10;  [/^FrameEdge/, [&#39;frame&#39;, &#39;frameedge&#39;]], [/^cam/, [&#39;camera&#39;]], [/^callcard$/, [&#39;card&#39;]], [/^ghost-/, [&#39;ghost&#39;]]&#10;];&#10;const classesOf = c =&gt; Array.isArray(c) ? c : (c &amp;&amp; typeof c === &#39;object&#39;) ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs&#10;const left = [];&#10;scene.traverse(o =&gt; {&#10;  if (o === scene || o.name.startsWith(&#39;__&#39;)) return;&#10;  const add = rules.filter(([re]) =&gt; re.test(o.name)).flatMap(([, c]) =&gt; c);&#10;  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || &#39;(unnamed)&#39;); return; }&#10;  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];&#10;});&#10;if (left.length) throw new Error(left.length + &#39; objects have no class: &#39; + left.slice(0, 12).join(&#39;, &#39;));&#10;requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless</code></pre>
+```javascript
+// Names and classes for the whole scene. Every object gets an author name (the ones the build left anonymous or shared are named here, from where they sit)
+// and a class; classes are what make the scene queryable: $S('.piece'), $S('.ghost'), $S('.frameedge'). The table's first column is the names it covers, the second the classes it gives;
+// an object can match several rows, and anything left without a class is listed and the block stops.
+for (const e of scene.getObjectByName('Frame').children) {              // the twelve cube edges, named by the axis they run along and the two sides they sit on
+  const p = e.position.toArray(), axis = p.findIndex(v => Math.abs(v) < 1e-6);
+  e.name = 'FrameEdge' + 'XYZ'[axis] + [0, 1, 2].filter(i => i !== axis).map(i => '_' + 'xyz'[i] + (p[i] < 0 ? 'm' : 'p')).join('');
+}
+for (const name of ['ghost-a3', 'ghost-b3']) {                           // the single box inside these two ghosts had its group's name
+  const group = scene.getObjectByName(name);
+  if (group.children[0].name === name) group.children[0].name = name + '-m';
+}
+const rules = [
+  [/^(Room|Floor)$/, ['environment']], [/Light$/, ['light']], [/^g-/, ['piece']], [/^Frame$/, ['frame']],
+  [/^FrameEdge/, ['frame', 'frameedge']], [/^cam/, ['camera']], [/^callcard$/, ['card']], [/^ghost-/, ['ghost']]
+];
+const classesOf = c => Array.isArray(c) ? c : (c && typeof c === 'object') ? Object.values(c) : [];      // older scenes stored an empty {} where a class list belongs
+const left = [];
+scene.traverse(o => {
+  if (o === scene || o.name.startsWith('__')) return;
+  const add = rules.filter(([re]) => re.test(o.name)).flatMap(([, c]) => c);
+  if (add.length === 0) { if (classesOf(o.userData.customClasses).length === 0) left.push(o.name || '(unnamed)'); return; }
+  o.userData.customClasses = [...new Set([...classesOf(o.userData.customClasses), ...add])];
+});
+if (left.length) throw new Error(left.length + ' objects have no class: ' + left.slice(0, 12).join(', '));
+requireLabels(true)      // from here on a commit is refused while anything is unnamed, duplicated or classless
+```
 
 <div class="note" id="film-contract"><strong>The film&#39;s contract.</strong> <em>Units:</em> none: the lengths are symbolic. <em>a</em> and <em>b</em> are drawn at one fixed ratio; the identity does not depend on it. <em>Assumptions:</em> <em>a</em> and <em>b</em> are positive lengths, so the cube of side <em>a + b</em> can be cut at <em>a</em> along each edge into eight blocks; this one cutting argument is the proof for lengths of that kind. <em>Render:</em> a render was run and published (<code>renders/projectile</code> in <code>tejaswigowda/test1</code>): 1280 × 720 at 30 fps, video only, made before the narration of step 14 existed. A 1080p60 render with the narration has to be made and published again. <em>Addressable:</em> every object in the scene file has a name and at least one class, and the scene is marked with <code>requireLabels</code>, so a commit with an unnamed, duplicated or classless object is refused; <code>lint()</code> in the Shell lists any.</div>
 

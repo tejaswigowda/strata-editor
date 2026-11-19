@@ -34,93 +34,558 @@ The plan for the clock, with the times the voice sets (the cues were timed first
 
 <p class="lede">The ten materials of the film are made once, here, and every mesh that uses a colour is handed the same one: blue is the crankshaft, steel the piston, rod and flywheel, gold the leverage, coral the dead centers, aqua distances and paths, purple the frame, and the glass of the cylinder is one transparent material. A shared material cannot fade one mesh without fading all of them, so this film reveals things by <em>growing</em> them from a scale of 0.001. The block also fixes the two lengths, <code>K.R</code> and <code>K.L</code>, that everything else is computed from.</p>
 
-<pre><code>// The palette: every material of the film, made once and handed to every mesh that uses it (ten in all, with the room, the floor and the end card).&#10;// blue = the crankshaft, steel = the piston, rod and flywheel, gold = the leverage, coral = the dead centers, aqua = distances and paths, purple = the frame.&#10;const mat = (color, k = 0.4, extra = {}) =&gt; new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });&#10;globalThis.PAL = {&#10;  steel: new MeshStandardMaterial({ color: 0xd6dcf5, emissive: 0x9aa6ff, emissiveIntensity: 0.08, roughness: 0.35, metalness: 0.25 }),&#10;  blue: mat(0x2f8fff, 0.12),&#10;  glass: new MeshStandardMaterial({ color: 0x9ad0ff, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),&#10;  aqua: mat(0x14e0c8), coral: mat(0xff4d6a), gold: mat(0xffb703, 0.55), purple: mat(0xa78bfa, 0.45), white: mat(0xffffff, 0.7)&#10;};&#10;// the crank radius and the rod length, in scene units (a rod three times the crank, like many engines); the floor is 2.6 below the shaft&#10;globalThis.K = { R: 1.2, L: 3.6, FLOOR: -2.6, Z: 0.95 };&#10;&#10;// a room around the scene and a floor under it, for the shadows to land on&#10;const room = new Mesh(new BoxGeometry(80, 40, 80), new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));&#10;room.name = &#39;Room&#39;;&#10;room.position.set(2, 12, 0);&#10;room.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, room));&#10;&#10;const floor = new Mesh(new PlaneGeometry(80, 40), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));&#10;floor.name = &#39;Floor&#39;;&#10;floor.rotation.x = -Math.PI / 2;&#10;floor.position.set(2, K.FLOOR, 0);&#10;floor.receiveShadow = true;&#10;editor.execute(new AddObjectCommand(editor, floor));&#10;&#10;// one key light up and in front, so every shadow falls on the floor behind the parts; one soft fill&#10;const key = new PointLight(0xfff1dd, 5, 0, 0);&#10;key.name = &#39;KeyLight&#39;;&#10;key.position.set(3, 12, 13);&#10;key.castShadow = true;&#10;key.shadow.mapSize.set(2048, 2048);&#10;key.shadow.bias = -0.0004;&#10;key.shadow.intensity = 0.6;&#10;key.shadow.radius = 4;&#10;key.shadow.camera.near = 0.5;&#10;key.shadow.camera.far = 120;&#10;editor.execute(new AddObjectCommand(editor, key));&#10;editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: &#39;FillLight&#39; })));&#10;Object.keys(PAL).length      // 8</code></pre>
+```javascript
+// The palette: every material of the film, made once and handed to every mesh that uses it (ten in all, with the room, the floor and the end card).
+// blue = the crankshaft, steel = the piston, rod and flywheel, gold = the leverage, coral = the dead centers, aqua = distances and paths, purple = the frame.
+const mat = (color, k = 0.4, extra = {}) => new MeshStandardMaterial({ color, emissive: color, emissiveIntensity: k, roughness: 0.5, metalness: 0.1, ...extra });
+globalThis.PAL = {
+  steel: new MeshStandardMaterial({ color: 0xd6dcf5, emissive: 0x9aa6ff, emissiveIntensity: 0.08, roughness: 0.35, metalness: 0.25 }),
+  blue: mat(0x2f8fff, 0.12),
+  glass: new MeshStandardMaterial({ color: 0x9ad0ff, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
+  aqua: mat(0x14e0c8), coral: mat(0xff4d6a), gold: mat(0xffb703, 0.55), purple: mat(0xa78bfa, 0.45), white: mat(0xffffff, 0.7)
+};
+// the crank radius and the rod length, in scene units (a rod three times the crank, like many engines); the floor is 2.6 below the shaft
+globalThis.K = { R: 1.2, L: 3.6, FLOOR: -2.6, Z: 0.95 };
+
+// a room around the scene and a floor under it, for the shadows to land on
+const room = new Mesh(new BoxGeometry(80, 40, 80), new MeshStandardMaterial({ color: 0x2b3680, roughness: 0.95, metalness: 0, side: THREE.BackSide }));
+room.name = 'Room';
+room.position.set(2, 12, 0);
+room.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, room));
+
+const floor = new Mesh(new PlaneGeometry(80, 40), new MeshStandardMaterial({ color: 0x232d70, roughness: 0.9, metalness: 0 }));
+floor.name = 'Floor';
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(2, K.FLOOR, 0);
+floor.receiveShadow = true;
+editor.execute(new AddObjectCommand(editor, floor));
+
+// one key light up and in front, so every shadow falls on the floor behind the parts; one soft fill
+const key = new PointLight(0xfff1dd, 5, 0, 0);
+key.name = 'KeyLight';
+key.position.set(3, 12, 13);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.intensity = 0.6;
+key.shadow.radius = 4;
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 120;
+editor.execute(new AddObjectCommand(editor, key));
+editor.execute(new AddObjectCommand(editor, Object.assign(new THREE.HemisphereLight(0xdde6ff, 0x6a78c8, 1.2), { name: 'FillLight' })));
+Object.keys(PAL).length      // 8
+```
 
 <h2><span class="step">3</span> The frame, the rings and the paths</h2>
 
 <p class="lede">The cylinder lies along +x and the crank turns about the z axis through the origin, so the whole linkage moves in the plane <em>z = 0</em>. Seen from the front, that plane is flat; the point of the orbit cameras is what the front hides. The glass tube is open at both ends so the rod can swing out of it, and there is one bearing pillar, behind the crank, so nothing stands in front of it. The dead-center rings sit where the piston&#39;s crown is at each dead center, and the stroke bracket joins them. The pin&#39;s circle and the piston&#39;s line are drawn slightly in front of the parts (<code>z = 0.95</code>) so they stay visible.</p>
 
-<pre><code>// The frame: a glass cylinder (open at both ends, so the rod can swing out of it), two cradles that hold it and a bearing pillar behind the crank that holds the shaft.&#10;// The cylinder lies along +x, the crank turns about the z axis through the origin, so the whole linkage moves in the plane z = 0 and the camera, looking along -z, sees it flat;&#10;// orbiting shows what the flat view hides: the crank has two webs, the pin sits between them, and everything has a depth.&#10;const frame = new Group();&#10;frame.name = &#39;frame&#39;;&#10;frame.scale.setScalar(0.001);&#10;&#10;const tubeGeometry = new CylinderGeometry(0.95, 0.95, 4.6, 48, 1, true);&#10;tubeGeometry.rotateZ(Math.PI / 2);                    // lie along x&#10;const tube = new Mesh(tubeGeometry, PAL.glass);&#10;tube.name = &#39;tube&#39;;&#10;tube.position.set(3.7, 0, 0);                         // from x = 1.4 to 6.0&#10;frame.add(tube);&#10;&#10;const cradleGeometry = new BoxGeometry(0.4, 1.65, 1.8);&#10;for (const [i, x] of [2.0, 5.6].entries()) {&#10;  const c = new Mesh(cradleGeometry, PAL.purple);&#10;  c.name = &#39;cradle&#39; + (i + 1);&#10;  c.position.set(x, -0.95 - 0.825, 0);&#10;  c.castShadow = c.receiveShadow = true;&#10;  frame.add(c);&#10;}&#10;const pillarGeometry = new BoxGeometry(1.0, 2.15, 0.5);&#10;for (const z of [-1.55]) {                            // one behind the crank, so it never hides it&#10;  const p = new Mesh(pillarGeometry, PAL.purple);&#10;  p.name = &#39;pillar&#39;;&#10;  p.position.set(0, -0.45 - 1.075, z);&#10;  p.castShadow = p.receiveShadow = true;&#10;  frame.add(p);&#10;}&#10;editor.execute(new AddObjectCommand(editor, frame));&#10;&#10;// the dead-center rings (at the piston&#39;s crown: 5.6 at the top, 3.2 at the bottom) and the halfway ring (4.4), around the glass&#10;const ringGeometry = new TorusGeometry(1.02, 0.045, 8, 48);&#10;ringGeometry.rotateY(Math.PI / 2);                    // a ring around the x axis&#10;globalThis.ringAt = (name, x, mat) =&gt; {&#10;  const g = new Group(); g.name = name; g.position.set(x, 0, 0); g.scale.setScalar(0.001);&#10;  const torus = new Mesh(ringGeometry, mat); torus.name = name + &#39;_torus&#39;;&#10;  g.add(torus);&#10;  editor.execute(new AddObjectCommand(editor, g));&#10;};&#10;ringAt(&#39;ringTop&#39;, 5.6, PAL.coral);&#10;ringAt(&#39;ringBottom&#39;, 3.2, PAL.coral);&#10;ringAt(&#39;ringHalf&#39;, 4.4, PAL.aqua);&#10;&#10;// the stroke: a bracket under the cylinder from one ring to the other&#10;const bracket = new Group();&#10;bracket.name = &#39;bracket&#39;;&#10;bracket.scale.setScalar(0.001);&#10;bracket.position.set(4.4, -1.4, K.Z);&#10;const barG = new BoxGeometry(2.4, 0.07, 0.07), tickG = new BoxGeometry(0.07, 0.5, 0.07);&#10;const bar = new Mesh(barG, PAL.aqua); bar.name = &#39;bracketBar&#39;;&#10;bracket.add(bar);&#10;for (const [i, dx] of [-1.2, 1.2].entries()) { const t = new Mesh(tickG, PAL.aqua); t.name = &#39;bracketTick&#39; + (i + 1); t.position.x = dx; bracket.add(t); }&#10;editor.execute(new AddObjectCommand(editor, bracket));&#10;&#10;// the two paths of cue 2: the pin&#39;s circle (radius = the crank), and the piston&#39;s line; both in front of the parts so they stay visible&#10;const circle = new Group();&#10;circle.name = &#39;pinCircle&#39;;&#10;circle.position.set(0, 0, K.Z);&#10;circle.scale.setScalar(0.001);&#10;const circleTorus = new Mesh(new TorusGeometry(K.R, 0.04, 8, 72), PAL.aqua); circleTorus.name = &#39;pinCircle_torus&#39;;&#10;circle.add(circleTorus);&#10;editor.execute(new AddObjectCommand(editor, circle));&#10;const line = new Group();&#10;line.name = &#39;pathLine&#39;;&#10;line.position.set(3.4, 0, K.Z);&#10;line.scale.setScalar(0.001);&#10;const lineBar = new Mesh(new BoxGeometry(6.8, 0.045, 0.045), PAL.aqua); lineBar.name = &#39;pathLine_bar&#39;;&#10;line.add(lineBar);&#10;editor.execute(new AddObjectCommand(editor, line));&#10;&#10;// the vertical through the shaft, for the leverage construction (cue 9)&#10;const axis = new Group();&#10;axis.name = &#39;axis&#39;;&#10;axis.position.set(0, 0, K.Z);&#10;axis.scale.setScalar(0.001);&#10;const axisBar = new Mesh(new BoxGeometry(0.04, 4.4, 0.04), PAL.white); axisBar.name = &#39;axis_bar&#39;;&#10;axis.add(axisBar);&#10;editor.execute(new AddObjectCommand(editor, axis));&#10;$S(&#39;#frame, #ringTop, #ringBottom, #ringHalf, #bracket, #pinCircle, #pathLine, #axis&#39;).nodes.length      // 8</code></pre>
+```javascript
+// The frame: a glass cylinder (open at both ends, so the rod can swing out of it), two cradles that hold it and a bearing pillar behind the crank that holds the shaft.
+// The cylinder lies along +x, the crank turns about the z axis through the origin, so the whole linkage moves in the plane z = 0 and the camera, looking along -z, sees it flat;
+// orbiting shows what the flat view hides: the crank has two webs, the pin sits between them, and everything has a depth.
+const frame = new Group();
+frame.name = 'frame';
+frame.scale.setScalar(0.001);
+
+const tubeGeometry = new CylinderGeometry(0.95, 0.95, 4.6, 48, 1, true);
+tubeGeometry.rotateZ(Math.PI / 2);                    // lie along x
+const tube = new Mesh(tubeGeometry, PAL.glass);
+tube.name = 'tube';
+tube.position.set(3.7, 0, 0);                         // from x = 1.4 to 6.0
+frame.add(tube);
+
+const cradleGeometry = new BoxGeometry(0.4, 1.65, 1.8);
+for (const [i, x] of [2.0, 5.6].entries()) {
+  const c = new Mesh(cradleGeometry, PAL.purple);
+  c.name = 'cradle' + (i + 1);
+  c.position.set(x, -0.95 - 0.825, 0);
+  c.castShadow = c.receiveShadow = true;
+  frame.add(c);
+}
+const pillarGeometry = new BoxGeometry(1.0, 2.15, 0.5);
+for (const z of [-1.55]) {                            // one behind the crank, so it never hides it
+  const p = new Mesh(pillarGeometry, PAL.purple);
+  p.name = 'pillar';
+  p.position.set(0, -0.45 - 1.075, z);
+  p.castShadow = p.receiveShadow = true;
+  frame.add(p);
+}
+editor.execute(new AddObjectCommand(editor, frame));
+
+// the dead-center rings (at the piston's crown: 5.6 at the top, 3.2 at the bottom) and the halfway ring (4.4), around the glass
+const ringGeometry = new TorusGeometry(1.02, 0.045, 8, 48);
+ringGeometry.rotateY(Math.PI / 2);                    // a ring around the x axis
+globalThis.ringAt = (name, x, mat) => {
+  const g = new Group(); g.name = name; g.position.set(x, 0, 0); g.scale.setScalar(0.001);
+  const torus = new Mesh(ringGeometry, mat); torus.name = name + '_torus';
+  g.add(torus);
+  editor.execute(new AddObjectCommand(editor, g));
+};
+ringAt('ringTop', 5.6, PAL.coral);
+ringAt('ringBottom', 3.2, PAL.coral);
+ringAt('ringHalf', 4.4, PAL.aqua);
+
+// the stroke: a bracket under the cylinder from one ring to the other
+const bracket = new Group();
+bracket.name = 'bracket';
+bracket.scale.setScalar(0.001);
+bracket.position.set(4.4, -1.4, K.Z);
+const barG = new BoxGeometry(2.4, 0.07, 0.07), tickG = new BoxGeometry(0.07, 0.5, 0.07);
+const bar = new Mesh(barG, PAL.aqua); bar.name = 'bracketBar';
+bracket.add(bar);
+for (const [i, dx] of [-1.2, 1.2].entries()) { const t = new Mesh(tickG, PAL.aqua); t.name = 'bracketTick' + (i + 1); t.position.x = dx; bracket.add(t); }
+editor.execute(new AddObjectCommand(editor, bracket));
+
+// the two paths of cue 2: the pin's circle (radius = the crank), and the piston's line; both in front of the parts so they stay visible
+const circle = new Group();
+circle.name = 'pinCircle';
+circle.position.set(0, 0, K.Z);
+circle.scale.setScalar(0.001);
+const circleTorus = new Mesh(new TorusGeometry(K.R, 0.04, 8, 72), PAL.aqua); circleTorus.name = 'pinCircle_torus';
+circle.add(circleTorus);
+editor.execute(new AddObjectCommand(editor, circle));
+const line = new Group();
+line.name = 'pathLine';
+line.position.set(3.4, 0, K.Z);
+line.scale.setScalar(0.001);
+const lineBar = new Mesh(new BoxGeometry(6.8, 0.045, 0.045), PAL.aqua); lineBar.name = 'pathLine_bar';
+line.add(lineBar);
+editor.execute(new AddObjectCommand(editor, line));
+
+// the vertical through the shaft, for the leverage construction (cue 9)
+const axis = new Group();
+axis.name = 'axis';
+axis.position.set(0, 0, K.Z);
+axis.scale.setScalar(0.001);
+const axisBar = new Mesh(new BoxGeometry(0.04, 4.4, 0.04), PAL.white); axisBar.name = 'axis_bar';
+axis.add(axisBar);
+editor.execute(new AddObjectCommand(editor, axis));
+$S('#frame, #ringTop, #ringBottom, #ringHalf, #bracket, #pinCircle, #pathLine, #axis').nodes.length      // 8
+```
 
 <h2><span class="step">4</span> The three moving parts</h2>
 
 <p class="lede">All three are drawn at top dead center. The crank has a shaft along z, <em>two webs</em> (each with a boss for the pin and a counterweight on the far side) and a pin between them: this is the out-of-plane geometry the front view hides. The rod is a shank between a small end and a big end, drawn pointing back along −x from the piston, so rotating the rod&#39;s group about the piston pin tilts it the right way. The piston carries the purple arrow for the steady push. The gold parts for the leverage (the stretched line on the rod, the gap and its marker) are built here, hidden, and used in cue 9.</p>
 
-<pre><code>// The three moving parts, each a group, all drawn at the top dead center (crank pin at angle 0, on the +x axis).&#10;// crank: shaft, two webs with a boss for the pin and a counterweight on the far side, the pin between the webs, and (cue 11) a flywheel behind.&#10;// rod: a shank between a small end (on the piston) and a big end (on the crank pin), drawn pointing back along -x from the piston.&#10;// piston: a body with two rings, and (cue 9) the arrow that stands for a steady push.&#10;const add = o =&gt; { editor.execute(new AddObjectCommand(editor, o)); return o; };&#10;const cyl = (r, h, axis = &#39;z&#39;) =&gt; { const g = new CylinderGeometry(r, r, h, 40); if (axis === &#39;z&#39;) g.rotateX(Math.PI / 2); if (axis === &#39;x&#39;) g.rotateZ(Math.PI / 2); return g; };&#10;// a named mesh at a position that casts and receives shadows&#10;const part = (name, geometry, material, x = 0, y = 0, z = 0) =&gt; { const m = new Mesh(geometry, material); m.name = name; m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; };&#10;&#10;const crank = new Group();&#10;crank.name = &#39;crank&#39;;&#10;crank.scale.setScalar(0.001);&#10;crank.add(part(&#39;crankShaft&#39;, cyl(0.35, 4.7), PAL.blue, 0, 0, -0.45));                // the main shaft&#10;const webBar = new BoxGeometry(2.1, 0.8, 0.26), boss = cyl(0.5, 0.26), weight = cyl(0.85, 0.26);&#10;for (const [side, z] of [[&#39;Back&#39;, -0.62], [&#39;Front&#39;, 0.62]]) {&#10;  const web = new Group();&#10;  web.name = &#39;crankWeb&#39; + side;&#10;  web.position.z = z;&#10;  web.add(part(&#39;crankWeb&#39; + side + &#39;Bar&#39;, webBar, PAL.blue, 0.15), part(&#39;crankWeb&#39; + side + &#39;Boss&#39;, boss, PAL.blue, K.R), part(&#39;crankWeb&#39; + side + &#39;Weight&#39;, weight, PAL.blue, -0.8));&#10;  crank.add(web);&#10;}&#10;crank.add(part(&#39;crankPin&#39;, cyl(0.26, 1.5), PAL.blue, K.R));                  // the crank pin&#10;const fly = new Group();&#10;fly.name = &#39;fly&#39;;&#10;fly.position.z = -2.6;&#10;fly.scale.setScalar(0.001);&#10;fly.add(part(&#39;flyDisc&#39;, cyl(1.9, 0.3), PAL.steel), part(&#39;flyHub&#39;, cyl(0.45, 0.4), PAL.white), part(&#39;flyMark&#39;, new BoxGeometry(0.5, 0.35, 0.34), PAL.white, 1.65));&#10;crank.add(fly);&#10;add(crank);&#10;&#10;const rod = new Group();&#10;rod.name = &#39;rod&#39;;&#10;rod.position.set(K.R + K.L, 0, 0);&#10;rod.scale.setScalar(0.001);&#10;rod.add(part(&#39;rodShank&#39;, new BoxGeometry(3.0, 0.34, 0.3), PAL.steel, -1.7), part(&#39;rodSmallEnd&#39;, cyl(0.3, 0.5), PAL.steel), part(&#39;rodBigEnd&#39;, cyl(0.5, 0.8), PAL.steel, -K.L));&#10;// the rod&#39;s line, in gold, drawn in front of everything and stretched to wherever it meets the vertical through the shaft (cue 9)&#10;const ext = new Group();&#10;ext.name = &#39;ext&#39;;&#10;ext.position.z = K.Z + 0.03;&#10;ext.scale.set(0.001, 1, 1);&#10;const extGeometry = new BoxGeometry(1, 0.07, 0.07);&#10;extGeometry.translate(-0.5, 0, 0);&#10;const extLine = new Mesh(extGeometry, PAL.gold); extLine.name = &#39;extLine&#39;;&#10;ext.add(extLine);&#10;rod.add(ext);&#10;add(rod);&#10;&#10;const piston = new Group();&#10;piston.name = &#39;piston&#39;;&#10;piston.position.set(K.R + K.L, 0, 0);&#10;piston.scale.setScalar(0.001);&#10;piston.add(part(&#39;pistonBody&#39;, cyl(0.85, 1.2, &#39;x&#39;), PAL.steel, 0.2));&#10;for (const [i, x] of [0.6, 0.42].entries()) piston.add(part(&#39;pistonRing&#39; + (i + 1), cyl(0.88, 0.07, &#39;x&#39;), PAL.steel, x));&#10;// the steady push: a purple arrow pointing at the crown (it is built pointing up, then turned to point back along -x), its base 2 units beyond it&#10;const push = new Group();&#10;push.name = &#39;push&#39;;&#10;push.position.set(3.0, 0, 0);&#10;push.rotation.z = Math.PI / 2;&#10;push.scale.setScalar(0.001);&#10;const shaft = new Mesh(new CylinderGeometry(0.09, 0.09, 1.6, 16), PAL.purple);&#10;shaft.name = &#39;pushShaft&#39;;&#10;shaft.position.y = 0.8;&#10;const head = new Mesh(new ConeGeometry(0.22, 0.4, 20), PAL.purple);&#10;head.name = &#39;pushHead&#39;;&#10;head.position.y = 1.8;&#10;push.add(shaft, head);&#10;piston.add(push);&#10;add(piston);&#10;&#10;// the leverage, in gold, on the vertical through the shaft: a marker where the rod&#39;s line crosses it, and the gap from the shaft to the marker&#10;const gap = new Group();&#10;gap.name = &#39;gap&#39;;&#10;gap.position.set(0, K.R / 2, K.Z + 0.03);&#10;gap.scale.set(1, 0.001, 1);&#10;const gapBar = new Mesh(new BoxGeometry(0.16, 1, 0.16), PAL.gold); gapBar.name = &#39;gapBar&#39;;&#10;gap.add(gapBar);&#10;add(gap);&#10;const imark = new Group();&#10;imark.name = &#39;imark&#39;;&#10;imark.position.set(0, K.R, K.Z + 0.03);&#10;imark.scale.setScalar(0.001);&#10;const imarkSphere = new Mesh(new SphereGeometry(0.2, 20, 14), PAL.gold); imarkSphere.name = &#39;imarkSphere&#39;;&#10;imark.add(imarkSphere);&#10;add(imark);&#10;$S(&#39;#crank, #rod, #piston, #fly, #push, #ext, #gap, #imark&#39;).nodes.length      // 8</code></pre>
+```javascript
+// The three moving parts, each a group, all drawn at the top dead center (crank pin at angle 0, on the +x axis).
+// crank: shaft, two webs with a boss for the pin and a counterweight on the far side, the pin between the webs, and (cue 11) a flywheel behind.
+// rod: a shank between a small end (on the piston) and a big end (on the crank pin), drawn pointing back along -x from the piston.
+// piston: a body with two rings, and (cue 9) the arrow that stands for a steady push.
+const add = o => { editor.execute(new AddObjectCommand(editor, o)); return o; };
+const cyl = (r, h, axis = 'z') => { const g = new CylinderGeometry(r, r, h, 40); if (axis === 'z') g.rotateX(Math.PI / 2); if (axis === 'x') g.rotateZ(Math.PI / 2); return g; };
+// a named mesh at a position that casts and receives shadows
+const part = (name, geometry, material, x = 0, y = 0, z = 0) => { const m = new Mesh(geometry, material); m.name = name; m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m; };
+
+const crank = new Group();
+crank.name = 'crank';
+crank.scale.setScalar(0.001);
+crank.add(part('crankShaft', cyl(0.35, 4.7), PAL.blue, 0, 0, -0.45));                // the main shaft
+const webBar = new BoxGeometry(2.1, 0.8, 0.26), boss = cyl(0.5, 0.26), weight = cyl(0.85, 0.26);
+for (const [side, z] of [['Back', -0.62], ['Front', 0.62]]) {
+  const web = new Group();
+  web.name = 'crankWeb' + side;
+  web.position.z = z;
+  web.add(part('crankWeb' + side + 'Bar', webBar, PAL.blue, 0.15), part('crankWeb' + side + 'Boss', boss, PAL.blue, K.R), part('crankWeb' + side + 'Weight', weight, PAL.blue, -0.8));
+  crank.add(web);
+}
+crank.add(part('crankPin', cyl(0.26, 1.5), PAL.blue, K.R));                  // the crank pin
+const fly = new Group();
+fly.name = 'fly';
+fly.position.z = -2.6;
+fly.scale.setScalar(0.001);
+fly.add(part('flyDisc', cyl(1.9, 0.3), PAL.steel), part('flyHub', cyl(0.45, 0.4), PAL.white), part('flyMark', new BoxGeometry(0.5, 0.35, 0.34), PAL.white, 1.65));
+crank.add(fly);
+add(crank);
+
+const rod = new Group();
+rod.name = 'rod';
+rod.position.set(K.R + K.L, 0, 0);
+rod.scale.setScalar(0.001);
+rod.add(part('rodShank', new BoxGeometry(3.0, 0.34, 0.3), PAL.steel, -1.7), part('rodSmallEnd', cyl(0.3, 0.5), PAL.steel), part('rodBigEnd', cyl(0.5, 0.8), PAL.steel, -K.L));
+// the rod's line, in gold, drawn in front of everything and stretched to wherever it meets the vertical through the shaft (cue 9)
+const ext = new Group();
+ext.name = 'ext';
+ext.position.z = K.Z + 0.03;
+ext.scale.set(0.001, 1, 1);
+const extGeometry = new BoxGeometry(1, 0.07, 0.07);
+extGeometry.translate(-0.5, 0, 0);
+const extLine = new Mesh(extGeometry, PAL.gold); extLine.name = 'extLine';
+ext.add(extLine);
+rod.add(ext);
+add(rod);
+
+const piston = new Group();
+piston.name = 'piston';
+piston.position.set(K.R + K.L, 0, 0);
+piston.scale.setScalar(0.001);
+piston.add(part('pistonBody', cyl(0.85, 1.2, 'x'), PAL.steel, 0.2));
+for (const [i, x] of [0.6, 0.42].entries()) piston.add(part('pistonRing' + (i + 1), cyl(0.88, 0.07, 'x'), PAL.steel, x));
+// the steady push: a purple arrow pointing at the crown (it is built pointing up, then turned to point back along -x), its base 2 units beyond it
+const push = new Group();
+push.name = 'push';
+push.position.set(3.0, 0, 0);
+push.rotation.z = Math.PI / 2;
+push.scale.setScalar(0.001);
+const shaft = new Mesh(new CylinderGeometry(0.09, 0.09, 1.6, 16), PAL.purple);
+shaft.name = 'pushShaft';
+shaft.position.y = 0.8;
+const head = new Mesh(new ConeGeometry(0.22, 0.4, 20), PAL.purple);
+head.name = 'pushHead';
+head.position.y = 1.8;
+push.add(shaft, head);
+piston.add(push);
+add(piston);
+
+// the leverage, in gold, on the vertical through the shaft: a marker where the rod's line crosses it, and the gap from the shaft to the marker
+const gap = new Group();
+gap.name = 'gap';
+gap.position.set(0, K.R / 2, K.Z + 0.03);
+gap.scale.set(1, 0.001, 1);
+const gapBar = new Mesh(new BoxGeometry(0.16, 1, 0.16), PAL.gold); gapBar.name = 'gapBar';
+gap.add(gapBar);
+add(gap);
+const imark = new Group();
+imark.name = 'imark';
+imark.position.set(0, K.R, K.Z + 0.03);
+imark.scale.setScalar(0.001);
+const imarkSphere = new Mesh(new SphereGeometry(0.2, 20, 14), PAL.gold); imarkSphere.name = 'imarkSphere';
+imark.add(imarkSphere);
+add(imark);
+$S('#crank, #rod, #piston, #fly, #push, #ext, #gap, #imark').nodes.length      // 8
+```
 
 <h2><span class="step">5</span> The kinematics, written as tracks</h2>
 
 <p class="lede">The film&#39;s motion is not simulated; it is <em>drawn from the formulas</em>. <code>KIN(θ)</code> returns the piston position, the rod tilt, and the gap. <code>spin()</code> turns the crank from one angle to another at a steady speed (one animation, so the crank angle is exact at every moment), and writes the piston and the rod every 10 degrees of the turn, each as a straight line between two samples; a straight line between two samples 10° apart is off by under 0.005. Every animation is queued with its time (<code>ev</code>) and written in time order at the end (<code>flush</code>), so no object&#39;s track is ever written out of order.</p>
 
-<pre><code>// The kinematics, and the machinery that writes it into the timeline.&#10;// With the crank at angle t (from the top dead center), the pin is at (R cos t, R sin t), the piston at x = R cos t + sqrt(L^2 - R^2 sin^2 t),&#10;// and the rod is tilted by f = asin(R sin t / L). The rod&#39;s line, extended to the vertical through the shaft, meets it at y = x tan f:&#10;// that length is the mechanical advantage (turning torque per unit of push), because torque x angular speed = push x piston speed, and |dx/dt| = |x tan f| angular speed.&#10;const D2R = Math.PI / 180, { R, L } = K;&#10;globalThis.KIN = (deg) =&gt; {&#10;  const t = deg * D2R, s = R * Math.sin(t) / L, f = Math.asin(s), x = R * Math.cos(t) + Math.sqrt(L * L - R * R * Math.sin(t) ** 2);&#10;  return { x, phi: f / D2R, I: x * Math.tan(f), ext: x / Math.cos(f) };&#10;};&#10;&#10;// every animation is queued with its time and run in time order at the very end (flush), so no track is ever written out of order&#10;globalThis.EV = [];&#10;globalThis.ev = (t, fn) =&gt; EV.push([t, fn, EV.length]);&#10;globalThis.flush = () =&gt; { EV.sort((a, b) =&gt; a[0] - b[0] || a[2] - b[2]); EV.forEach(([, fn]) =&gt; fn()); return EV.length; };&#10;globalThis.grow = (sel, t, to, dur = 500) =&gt; ev(t, () =&gt; $S(sel).at(t).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, dur, to &gt; 0.5 ? &#39;ease-out&#39; : &#39;ease-in&#39;));&#10;&#10;// a turn of the crank: from time t0 to t1, from angle a0 to a1 (degrees, counter-clockwise seen from the front), at a steady speed.&#10;// The crank is one animation; the piston and the rod are written every 10 degrees (a straight line between two samples is off by under 0.005); `lever` adds the gold parts.&#10;globalThis.THETA = 0;&#10;globalThis.spin = (t0, t1, a1, lever = false) =&gt; {&#10;  const a0 = THETA, n = Math.max(1, Math.ceil(Math.abs(a1 - a0) / 10)), dt = (t1 - t0) / n;&#10;  ev(t0, () =&gt; $S(&#39;#crank&#39;).at(t0).animate({ rotateZ: a1 - a0 }, (t1 - t0) * 1000, &#39;linear&#39;));&#10;  for (let k = 1; k &lt;= n; k++) {&#10;    const ts = t0 + (k - 1) * dt, k1 = KIN(a0 + (a1 - a0) * k / n), ms = dt * 1000;&#10;    ev(ts, () =&gt; {&#10;      $S(&#39;#piston&#39;).at(ts).animate({ to: { positionX: k1.x } }, ms, &#39;linear&#39;);&#10;      $S(&#39;#rod&#39;).at(ts).animate({ to: { positionX: k1.x, rotation: [0, 0, -k1.phi] } }, ms, &#39;linear&#39;);&#10;    });&#10;    if (lever) ev(ts, () =&gt; {&#10;      $S(&#39;#ext&#39;).at(ts).animate({ to: { scaleX: k1.ext } }, ms, &#39;linear&#39;);&#10;      $S(&#39;#gap&#39;).at(ts).animate({ to: { positionY: k1.I / 2, scaleY: Math.max(Math.abs(k1.I), 0.001) } }, ms, &#39;linear&#39;);&#10;      $S(&#39;#imark&#39;).at(ts).animate({ to: { positionY: k1.I } }, ms, &#39;linear&#39;);&#10;    });&#10;  }&#10;  THETA = a1;&#10;  return { t0, t1, a0, a1 };&#10;};&#10;// the time at which a turn passes an angle&#10;globalThis.timeAt = (s, deg) =&gt; s.t0 + (deg - s.a0) / (s.a1 - s.a0) * (s.t1 - s.t0);&#10;const k0 = KIN(0);&#10;`${k0.x.toFixed(2)} ${KIN(180).x.toFixed(2)} ${KIN(90).x.toFixed(3)} ${KIN(90).I.toFixed(3)}`      // 4.80 2.40 3.394 1.200</code></pre>
+```javascript
+// The kinematics, and the machinery that writes it into the timeline.
+// With the crank at angle t (from the top dead center), the pin is at (R cos t, R sin t), the piston at x = R cos t + sqrt(L^2 - R^2 sin^2 t),
+// and the rod is tilted by f = asin(R sin t / L). The rod's line, extended to the vertical through the shaft, meets it at y = x tan f:
+// that length is the mechanical advantage (turning torque per unit of push), because torque x angular speed = push x piston speed, and |dx/dt| = |x tan f| angular speed.
+const D2R = Math.PI / 180, { R, L } = K;
+globalThis.KIN = (deg) => {
+  const t = deg * D2R, s = R * Math.sin(t) / L, f = Math.asin(s), x = R * Math.cos(t) + Math.sqrt(L * L - R * R * Math.sin(t) ** 2);
+  return { x, phi: f / D2R, I: x * Math.tan(f), ext: x / Math.cos(f) };
+};
+
+// every animation is queued with its time and run in time order at the very end (flush), so no track is ever written out of order
+globalThis.EV = [];
+globalThis.ev = (t, fn) => EV.push([t, fn, EV.length]);
+globalThis.flush = () => { EV.sort((a, b) => a[0] - b[0] || a[2] - b[2]); EV.forEach(([, fn]) => fn()); return EV.length; };
+globalThis.grow = (sel, t, to, dur = 500) => ev(t, () => $S(sel).at(t).animate({ to: { scaleX: to, scaleY: to, scaleZ: to } }, dur, to > 0.5 ? 'ease-out' : 'ease-in'));
+
+// a turn of the crank: from time t0 to t1, from angle a0 to a1 (degrees, counter-clockwise seen from the front), at a steady speed.
+// The crank is one animation; the piston and the rod are written every 10 degrees (a straight line between two samples is off by under 0.005); `lever` adds the gold parts.
+globalThis.THETA = 0;
+globalThis.spin = (t0, t1, a1, lever = false) => {
+  const a0 = THETA, n = Math.max(1, Math.ceil(Math.abs(a1 - a0) / 10)), dt = (t1 - t0) / n;
+  ev(t0, () => $S('#crank').at(t0).animate({ rotateZ: a1 - a0 }, (t1 - t0) * 1000, 'linear'));
+  for (let k = 1; k <= n; k++) {
+    const ts = t0 + (k - 1) * dt, k1 = KIN(a0 + (a1 - a0) * k / n), ms = dt * 1000;
+    ev(ts, () => {
+      $S('#piston').at(ts).animate({ to: { positionX: k1.x } }, ms, 'linear');
+      $S('#rod').at(ts).animate({ to: { positionX: k1.x, rotation: [0, 0, -k1.phi] } }, ms, 'linear');
+    });
+    if (lever) ev(ts, () => {
+      $S('#ext').at(ts).animate({ to: { scaleX: k1.ext } }, ms, 'linear');
+      $S('#gap').at(ts).animate({ to: { positionY: k1.I / 2, scaleY: Math.max(Math.abs(k1.I), 0.001) } }, ms, 'linear');
+      $S('#imark').at(ts).animate({ to: { positionY: k1.I } }, ms, 'linear');
+    });
+  }
+  THETA = a1;
+  return { t0, t1, a0, a1 };
+};
+// the time at which a turn passes an angle
+globalThis.timeAt = (s, deg) => s.t0 + (deg - s.a0) / (s.a1 - s.a0) * (s.t1 - s.t0);
+const k0 = KIN(0);
+`${k0.x.toFixed(2)} ${KIN(180).x.toFixed(2)} ${KIN(90).x.toFixed(3)} ${KIN(90).I.toFixed(3)}`      // 4.80 2.40 3.394 1.200
+```
 
 <h2><span class="step">6</span> The labels</h2>
 
 <p class="lede">Click the <strong>Text</strong> stencil (Stencils tab) once, and then paste this. Every label is a copy of that stencil, left-aligned; widths come from the font. Two of them (<em>piston</em> and <em>steady push</em>) are children of the piston and one (<em>rod</em>) a child of the rod, so they travel with their part. The words are shown and cleared in step 9.</p>
 
-<pre><code>// every label is a copy of the one Text stencil, so they share its font; they share a material per colour too, so each label cuts in (and out)&#10;// rather than fading, because a shared material cannot fade one label without fading them all. A label&#39;s text begins at its own origin, left-aligned:&#10;// widths come from the font (units of the font size, at scale 1), so a label is centred by subtracting half its width.&#10;// Two labels are children of a moving part, so they travel with it.&#10;const tpl = $S(&#39;#Text&#39;).nodes[0];&#10;let first = true;&#10;globalThis.label = (name, material, x, y, z, scale, parent) =&gt; {&#10;  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);&#10;  m.name = name;&#10;  m.material = material;&#10;  m.scale.setScalar(scale);&#10;  m.position.set(x, y, z);&#10;  m.userData.textShadow = true;&#10;  m.castShadow = false;&#10;  if (parent) parent.add(m); else if (!first) editor.execute(new AddObjectCommand(editor, m));&#10;  first = false;&#10;  ev(0, () =&gt; $S(&#39;#&#39; + name).at(0).change(&#39;&#39;));&#10;  return m;&#10;};&#10;// show a label&#39;s text at one time and clear it at another&#10;globalThis.say = (name, text, from, to) =&gt; {&#10;  ev(from, () =&gt; $S(&#39;#&#39; + name).at(from).change(text));&#10;  if (to !== undefined) ev(to, () =&gt; $S(&#39;#&#39; + name).at(to).change(&#39;&#39;));&#10;};&#10;const W = PAL.white, G = PAL.gold, C = PAL.coral, A = PAL.aqua, Z = 1.1;&#10;label(&#39;ang&#39;, W, -2.7, 2.3, Z, 0.42);                                   // the crank angle, in the corner&#10;label(&#39;lev&#39;, G, -2.7, 1.85, Z, 0.42);                                  // the leverage, under it&#10;label(&#39;lbCrank&#39;, W, -1.5, 1.45, Z, 0.42);                              // cue 1: the three parts&#10;label(&#39;lbPiston&#39;, W, -0.85, 1.3, Z, 0.42, $S(&#39;#piston&#39;).nodes[0]);&#10;label(&#39;lbRod&#39;, W, -2.6, 0.32, Z, 0.42, $S(&#39;#rod&#39;).nodes[0]);&#10;label(&#39;lbPush&#39;, W, -0.85, 1.3, Z, 0.42, $S(&#39;#piston&#39;).nodes[0]);       // cue 9: over the piston, where its name was&#10;label(&#39;tdc&#39;, C, 3.2, 1.25, Z, 0.38);                                   // cue 5: the dead centers, over and under their rings&#10;label(&#39;bdc&#39;, C, 1.2, -1.7, Z, 0.38);&#10;label(&#39;stk&#39;, A, 2.35, -2.1, Z, 0.42);                                  // cue 6: the stroke, under its bracket&#10;label(&#39;half&#39;, A, 3.4, 1.25, Z, 0.38);                                  // cue 7: halfway&#10;label(&#39;circ&#39;, A, -3.5, -0.1, Z, 0.42);                                 // cue 12&#10;label(&#39;lblLine&#39;, A, 6.3, 0.2, Z, 0.42);&#10;$S(&#39;#ang, #lev, #lbCrank, #lbPiston, #lbRod, #lbPush, #tdc, #bdc, #stk, #half, #circ, #lblLine&#39;).nodes.length      // 12</code></pre>
+```javascript
+// every label is a copy of the one Text stencil, so they share its font; they share a material per colour too, so each label cuts in (and out)
+// rather than fading, because a shared material cannot fade one label without fading them all. A label's text begins at its own origin, left-aligned:
+// widths come from the font (units of the font size, at scale 1), so a label is centred by subtracting half its width.
+// Two labels are children of a moving part, so they travel with it.
+const tpl = $S('#Text').nodes[0];
+let first = true;
+globalThis.label = (name, material, x, y, z, scale, parent) => {
+  const m = first ? tpl : new Mesh(tpl.geometry.clone(), material);
+  m.name = name;
+  m.material = material;
+  m.scale.setScalar(scale);
+  m.position.set(x, y, z);
+  m.userData.textShadow = true;
+  m.castShadow = false;
+  if (parent) parent.add(m); else if (!first) editor.execute(new AddObjectCommand(editor, m));
+  first = false;
+  ev(0, () => $S('#' + name).at(0).change(''));
+  return m;
+};
+// show a label's text at one time and clear it at another
+globalThis.say = (name, text, from, to) => {
+  ev(from, () => $S('#' + name).at(from).change(text));
+  if (to !== undefined) ev(to, () => $S('#' + name).at(to).change(''));
+};
+const W = PAL.white, G = PAL.gold, C = PAL.coral, A = PAL.aqua, Z = 1.1;
+label('ang', W, -2.7, 2.3, Z, 0.42);                                   // the crank angle, in the corner
+label('lev', G, -2.7, 1.85, Z, 0.42);                                  // the leverage, under it
+label('lbCrank', W, -1.5, 1.45, Z, 0.42);                              // cue 1: the three parts
+label('lbPiston', W, -0.85, 1.3, Z, 0.42, $S('#piston').nodes[0]);
+label('lbRod', W, -2.6, 0.32, Z, 0.42, $S('#rod').nodes[0]);
+label('lbPush', W, -0.85, 1.3, Z, 0.42, $S('#piston').nodes[0]);       // cue 9: over the piston, where its name was
+label('tdc', C, 3.2, 1.25, Z, 0.38);                                   // cue 5: the dead centers, over and under their rings
+label('bdc', C, 1.2, -1.7, Z, 0.38);
+label('stk', A, 2.35, -2.1, Z, 0.42);                                  // cue 6: the stroke, under its bracket
+label('half', A, 3.4, 1.25, Z, 0.38);                                  // cue 7: halfway
+label('circ', A, -3.5, -0.1, Z, 0.42);                                 // cue 12
+label('lblLine', A, 6.3, 0.2, Z, 0.42);
+$S('#ang, #lev, #lbCrank, #lbPiston, #lbRod, #lbPush, #tdc, #bdc, #stk, #half, #circ, #lblLine').nodes.length      // 12
+```
 
 <h2><span class="step">7</span> The end card</h2>
 
 <p class="lede">Click the <strong>Call card</strong> stencil, then paste. It is hung on the far wall, facing the last camera.</p>
 
-<pre><code>// the end card: the Call card stencil, landscape, hung on the far wall and facing the end camera&#10;const card = $S(&#39;#callcard&#39;).nodes[0];&#10;card.userData.width = 3.2;&#10;card.userData.height = 1.8;&#10;card.geometry = new PlaneGeometry(3.2, 1.8);&#10;$S(&#39;#callcard&#39;).moveTo(36, 1, 0).scaleTo(8);&#10;card.rotation.set(0, -Math.PI / 2, 0);&#10;card.material.opacity = 0;</code></pre>
+```javascript
+// the end card: the Call card stencil, landscape, hung on the far wall and facing the end camera
+const card = $S('#callcard').nodes[0];
+card.userData.width = 3.2;
+card.userData.height = 1.8;
+card.geometry = new PlaneGeometry(3.2, 1.8);
+$S('#callcard').moveTo(36, 1, 0).scaleTo(8);
+card.rotation.set(0, -Math.PI / 2, 0);
+card.material.opacity = 0;
+```
 
 <h2><span class="step">8</span> Five cameras</h2>
 
 <p class="lede">A gentle drift in front for the parts and the first turns; an orbit that swings from the front to the side while the crank turns once (the 3D advantage: you see the two webs, the pin between them, and the rod stay in one plane); a closer camera for the leverage; a wider one for the flywheel; and the end card. The block ends by putting the cuts in order.</p>
 
-<pre><code>// five cameras: a gentle drift in front for the parts and the first turns, an orbit round the assembly, a closer one for the leverage,&#10;// a wider one for the flywheel and the summary, and the end card&#10;function addCamera(name, fov) {&#10;  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);&#10;  cam.name = name;&#10;  editor.execute(new AddObjectCommand(editor, cam));&#10;  return cam;&#10;}&#10;// a move around a centre: azimuth in degrees (0 = straight in front, looking along -z), a radius and a height, one key every `step` seconds&#10;globalThis.orbit = (cam, t0, t1, az0, az1, radius, y0, y1, aim, step, center) =&gt; {&#10;  const n = Math.max(1, Math.round((t1 - t0) / step));&#10;  const keys = [];&#10;  for (let i = 0; i &lt;= n; i++) {&#10;    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);&#10;    keys.push({ t: t0 + (t1 - t0) * u, pos: [center[0] + radius * Math.sin(az), y0 + (y1 - y0) * u, center[2] + radius * Math.cos(az)], lookAt: aim });&#10;  }&#10;  $S(&#39;#&#39; + cam.name).setKeys(keys, { smooth: true });&#10;  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts&#10;  cam.lookAt(...aim);&#10;};&#10;const camMain = addCamera(&#39;camMain&#39;, 40), camOrbit = addCamera(&#39;camOrbit&#39;, 40), camLever = addCamera(&#39;camLever&#39;, 40), camFly = addCamera(&#39;camFly&#39;, 40), end = addCamera(&#39;camCard&#39;, 50);&#10;orbit(camMain, 0.001, 57.0, -5, 5, 9.5, 0.5, 1.0, [2.2, 0.1, 0], 8, [2.2, 0, 0]);&#10;orbit(camOrbit, 56.9, 66.6, -15, 70, 10, 1.0, 3.5, [2.2, -0.2, 0], 3, [2.2, 0, 0]);&#10;orbit(camLever, 66.5, 85.5, -3, 3, 10.3, 0.4, 0.4, [1.9, 0.1, 0], 6, [1.9, 0, 0]);&#10;orbit(camFly, 85.45, 100.8, 28, 10, 11.5, 2.2, 1.5, [1.6, 0, -0.3], 5, [1.6, 0, 0]);&#10;end.position.set(21, 1, 0);                                           // faces the end card, which hangs on the far wall&#10;end.lookAt(36, 1, 0);&#10;&#10;const cams = Object.fromEntries([&#39;camMain&#39;, &#39;camOrbit&#39;, &#39;camLever&#39;, &#39;camFly&#39;, &#39;camCard&#39;].map(n =&gt; [n, $S(&#39;#&#39; + n).nodes[0]]));&#10;const cuts = [[0, &#39;camMain&#39;], [56.9, &#39;camOrbit&#39;], [66.5, &#39;camLever&#39;], [85.45, &#39;camFly&#39;], [100.65, &#39;camCard&#39;]];&#10;editor.scene.userData.renderShots = cuts.map(([at, name], i) =&gt; ({&#10;  id: &#39;shot-&#39; + name, at, camera: cams[name].uuid, transition: i === 0 ? &#39;cut&#39; : &#39;fade&#39;, transitionDur: 0.6&#10;}));&#10;editor.work.touch();&#10;editor.scene.userData.renderShots.length      // 5</code></pre>
+```javascript
+// five cameras: a gentle drift in front for the parts and the first turns, an orbit round the assembly, a closer one for the leverage,
+// a wider one for the flywheel and the summary, and the end card
+function addCamera(name, fov) {
+  const cam = new THREE.PerspectiveCamera(fov, 16 / 9, 0.1, 400);
+  cam.name = name;
+  editor.execute(new AddObjectCommand(editor, cam));
+  return cam;
+}
+// a move around a centre: azimuth in degrees (0 = straight in front, looking along -z), a radius and a height, one key every `step` seconds
+globalThis.orbit = (cam, t0, t1, az0, az1, radius, y0, y1, aim, step, center) => {
+  const n = Math.max(1, Math.round((t1 - t0) / step));
+  const keys = [];
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, az = THREE.MathUtils.degToRad(az0 + (az1 - az0) * u);
+    keys.push({ t: t0 + (t1 - t0) * u, pos: [center[0] + radius * Math.sin(az), y0 + (y1 - y0) * u, center[2] + radius * Math.cos(az)], lookAt: aim });
+  }
+  $S('#' + cam.name).setKeys(keys, { smooth: true });
+  cam.position.set(...keys[0].pos);           // where the camera waits before its move starts
+  cam.lookAt(...aim);
+};
+const camMain = addCamera('camMain', 40), camOrbit = addCamera('camOrbit', 40), camLever = addCamera('camLever', 40), camFly = addCamera('camFly', 40), end = addCamera('camCard', 50);
+orbit(camMain, 0.001, 57.0, -5, 5, 9.5, 0.5, 1.0, [2.2, 0.1, 0], 8, [2.2, 0, 0]);
+orbit(camOrbit, 56.9, 66.6, -15, 70, 10, 1.0, 3.5, [2.2, -0.2, 0], 3, [2.2, 0, 0]);
+orbit(camLever, 66.5, 85.5, -3, 3, 10.3, 0.4, 0.4, [1.9, 0.1, 0], 6, [1.9, 0, 0]);
+orbit(camFly, 85.45, 100.8, 28, 10, 11.5, 2.2, 1.5, [1.6, 0, -0.3], 5, [1.6, 0, 0]);
+end.position.set(21, 1, 0);                                           // faces the end card, which hangs on the far wall
+end.lookAt(36, 1, 0);
+
+const cams = Object.fromEntries(['camMain', 'camOrbit', 'camLever', 'camFly', 'camCard'].map(n => [n, $S('#' + n).nodes[0]]));
+const cuts = [[0, 'camMain'], [56.9, 'camOrbit'], [66.5, 'camLever'], [85.45, 'camFly'], [100.65, 'camCard']];
+editor.scene.userData.renderShots = cuts.map(([at, name], i) => ({
+  id: 'shot-' + name, at, camera: cams[name].uuid, transition: i === 0 ? 'cut' : 'fade', transitionDur: 0.6
+}));
+editor.work.touch();
+editor.scene.userData.renderShots.length      // 5
+```
 
 <h2><span class="step">9</span> The film</h2>
 
 <p class="lede">Every beat in one place, on the voice&#39;s cues. The crank angle and the leverage are written in the corner every 30°. In cue 9 the rod&#39;s gold line <em>stretches</em> from the piston to the vertical through the shaft, the marker appears where it crosses, and the gap grows from the shaft to the marker. From cue 10 on, <code>spin(..., true)</code> keeps all three gold parts exact while the crank turns.</p>
 
-<pre><code>// the film: when each part appears, when the crank turns, and what is written on the screen, all on the voice&#39;s cues&#10;const S = [0.8, 9.225, 18.975, 24.85, 34.425, 41.175, 48.25, 56.925, 66.725, 76.075, 85.6, 92.5, 100.725];&#10;// the angle readout, and (when `lever` is on) the leverage readout, change at every 30 degrees of a turn&#10;const readout = (s, lever) =&gt; {&#10;  for (let a = Math.ceil((s.a0 + 1e-6) / 30) * 30; a &lt;= s.a1 + 1e-6; a += 30) {&#10;    const t = timeAt(s, a);&#10;    say(&#39;ang&#39;, &#39;crank &#39; + (a % 360) + &#39;°&#39;, t);&#10;    if (lever) say(&#39;lev&#39;, &#39;leverage &#39; + (Math.abs(KIN(a).I) / K.R).toFixed(2) + &#39; r&#39;, t);&#10;  }&#10;};&#10;&#10;// cue 1: the frame, then the three parts, then their names as the voice says them&#10;grow(&#39;#frame&#39;, 1.0, 1, 800);&#10;grow(&#39;#crank&#39;, 1.8, 1, 700);&#10;grow(&#39;#rod&#39;, 2.6, 1, 700);&#10;grow(&#39;#piston&#39;, 3.4, 1, 700);&#10;say(&#39;lbPiston&#39;, &#39;piston&#39;, 6.1, 18.8);&#10;say(&#39;lbRod&#39;, &#39;rod&#39;, 6.9, 18.8);&#10;say(&#39;lbCrank&#39;, &#39;crankshaft&#39;, 8.4, 18.8);&#10;// cue 2: the piston&#39;s line, the pin&#39;s circle&#10;grow(&#39;#pathLine&#39;, 10.9, 1, 700);&#10;grow(&#39;#pinCircle&#39;, 14.0, 1, 700);&#10;// cues 3 and 4: one full turn, slowly&#10;say(&#39;ang&#39;, &#39;crank 0°&#39;, 19.0);&#10;readout(spin(19.3, 33.7, 360));&#10;// cue 5: the dead centers&#10;grow(&#39;#ringTop&#39;, 36.9, 1, 500);&#10;say(&#39;tdc&#39;, &#39;top dead center&#39;, 36.9, 41.2);&#10;readout(spin(38.0, 40.4, 540));&#10;grow(&#39;#ringBottom&#39;, 39.9, 1, 500);&#10;say(&#39;bdc&#39;, &#39;bottom dead center&#39;, 39.9, 41.2);&#10;// cue 6: the stroke&#10;grow(&#39;#bracket&#39;, 41.7, 1, 600);&#10;say(&#39;stk&#39;, &#39;stroke 2r&#39;, 44.2, 48.1);&#10;grow(&#39;#bracket&#39;, 48.1, 0.001, 400);&#10;// cue 7: more than half in the first quarter turn&#10;readout(spin(48.5, 52.0, 720));&#10;grow(&#39;#ringHalf&#39;, 52.6, 1, 500);&#10;readout(spin(52.4, 54.8, 810));&#10;say(&#39;half&#39;, &#39;halfway&#39;, 54.9, 56.9);&#10;grow(&#39;#ringHalf&#39;, 56.9, 0.001, 400);&#10;// cue 8: a full turn while the camera orbits (no readout, which would turn edge-on)&#10;say(&#39;ang&#39;, &#39;&#39;, 56.9);&#10;spin(57.2, 66.2, 1170);&#10;// cue 9: a steady push, then the rod&#39;s line, then the gap&#10;say(&#39;ang&#39;, &#39;crank 90°&#39;, 66.8);&#10;grow(&#39;#push&#39;, 67.1, 1, 600);&#10;say(&#39;lbPush&#39;, &#39;steady push&#39;, 67.6);&#10;grow(&#39;#axis&#39;, 69.8, 1, 500);&#10;ev(70.2, () =&gt; $S(&#39;#ext&#39;).at(70.2).animate({ to: { scaleX: KIN(90).ext } }, 1200, &#39;ease-out&#39;));&#10;grow(&#39;#imark&#39;, 71.5, 1, 400);&#10;ev(72.4, () =&gt; $S(&#39;#gap&#39;).at(72.4).animate({ to: { positionY: KIN(90).I / 2, scaleY: KIN(90).I } }, 600, &#39;ease-out&#39;));&#10;say(&#39;lev&#39;, &#39;leverage 1.00 r&#39;, 73.0);&#10;// cue 10: to the bottom dead center and the leverage goes to zero; then on to the middle of the stroke&#10;readout(spin(76.4, 79.2, 1260, true), true);&#10;readout(spin(81.4, 84.6, 1350, true), true);&#10;// cue 11: the push goes, the flywheel comes, the crank keeps turning&#10;grow(&#39;#push&#39;, 85.5, 0.001, 400);&#10;say(&#39;lbPush&#39;, &#39;&#39;, 85.5);&#10;grow(&#39;#fly&#39;, 86.0, 1, 900);&#10;readout(spin(85.9, 100.4, 1785, true), true);&#10;// cue 12: the three ideas of the summary&#10;say(&#39;circ&#39;, &#39;circle&#39;, 93.9, 100.6);&#10;say(&#39;lblLine&#39;, &#39;line&#39;, 95.0, 100.6);&#10;say(&#39;lbRod&#39;, &#39;rod&#39;, 96.3, 100.6);&#10;// the end card&#10;ev(100.8, () =&gt; $S(&#39;#callcard&#39;).at(100.8).fadeIn(2.0));&#10;EV.length</code></pre>
+```javascript
+// the film: when each part appears, when the crank turns, and what is written on the screen, all on the voice's cues
+const S = [0.8, 9.225, 18.975, 24.85, 34.425, 41.175, 48.25, 56.925, 66.725, 76.075, 85.6, 92.5, 100.725];
+// the angle readout, and (when `lever` is on) the leverage readout, change at every 30 degrees of a turn
+const readout = (s, lever) => {
+  for (let a = Math.ceil((s.a0 + 1e-6) / 30) * 30; a <= s.a1 + 1e-6; a += 30) {
+    const t = timeAt(s, a);
+    say('ang', 'crank ' + (a % 360) + '°', t);
+    if (lever) say('lev', 'leverage ' + (Math.abs(KIN(a).I) / K.R).toFixed(2) + ' r', t);
+  }
+};
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-parts.png" alt="A glass cylinder on two purple cradles, a blue crank on the left, a steel rod and a piston inside the cylinder, with the labels crankshaft, rod and piston.">&#10;		<figcaption>8 seconds in: the three parts, named.</figcaption>&#10;	</figure>
+// cue 1: the frame, then the three parts, then their names as the voice says them
+grow('#frame', 1.0, 1, 800);
+grow('#crank', 1.8, 1, 700);
+grow('#rod', 2.6, 1, 700);
+grow('#piston', 3.4, 1, 700);
+say('lbPiston', 'piston', 6.1, 18.8);
+say('lbRod', 'rod', 6.9, 18.8);
+say('lbCrank', 'crankshaft', 8.4, 18.8);
+// cue 2: the piston's line, the pin's circle
+grow('#pathLine', 10.9, 1, 700);
+grow('#pinCircle', 14.0, 1, 700);
+// cues 3 and 4: one full turn, slowly
+say('ang', 'crank 0°', 19.0);
+readout(spin(19.3, 33.7, 360));
+// cue 5: the dead centers
+grow('#ringTop', 36.9, 1, 500);
+say('tdc', 'top dead center', 36.9, 41.2);
+readout(spin(38.0, 40.4, 540));
+grow('#ringBottom', 39.9, 1, 500);
+say('bdc', 'bottom dead center', 39.9, 41.2);
+// cue 6: the stroke
+grow('#bracket', 41.7, 1, 600);
+say('stk', 'stroke 2r', 44.2, 48.1);
+grow('#bracket', 48.1, 0.001, 400);
+// cue 7: more than half in the first quarter turn
+readout(spin(48.5, 52.0, 720));
+grow('#ringHalf', 52.6, 1, 500);
+readout(spin(52.4, 54.8, 810));
+say('half', 'halfway', 54.9, 56.9);
+grow('#ringHalf', 56.9, 0.001, 400);
+// cue 8: a full turn while the camera orbits (no readout, which would turn edge-on)
+say('ang', '', 56.9);
+spin(57.2, 66.2, 1170);
+// cue 9: a steady push, then the rod's line, then the gap
+say('ang', 'crank 90°', 66.8);
+grow('#push', 67.1, 1, 600);
+say('lbPush', 'steady push', 67.6);
+grow('#axis', 69.8, 1, 500);
+ev(70.2, () => $S('#ext').at(70.2).animate({ to: { scaleX: KIN(90).ext } }, 1200, 'ease-out'));
+grow('#imark', 71.5, 1, 400);
+ev(72.4, () => $S('#gap').at(72.4).animate({ to: { positionY: KIN(90).I / 2, scaleY: KIN(90).I } }, 600, 'ease-out'));
+say('lev', 'leverage 1.00 r', 73.0);
+// cue 10: to the bottom dead center and the leverage goes to zero; then on to the middle of the stroke
+readout(spin(76.4, 79.2, 1260, true), true);
+readout(spin(81.4, 84.6, 1350, true), true);
+// cue 11: the push goes, the flywheel comes, the crank keeps turning
+grow('#push', 85.5, 0.001, 400);
+say('lbPush', '', 85.5);
+grow('#fly', 86.0, 1, 900);
+readout(spin(85.9, 100.4, 1785, true), true);
+// cue 12: the three ideas of the summary
+say('circ', 'circle', 93.9, 100.6);
+say('lblLine', 'line', 95.0, 100.6);
+say('lbRod', 'rod', 96.3, 100.6);
+// the end card
+ev(100.8, () => $S('#callcard').at(100.8).fadeIn(2.0));
+EV.length
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-turn.png" alt="The crank at 60 degrees, the rod tilted from the crank pin to the piston, with a green circle round the crank and the readout crank 60 degrees.">&#10;		<figcaption>22 seconds in: the crank turning, the piston held to its line.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-parts.png" alt="A glass cylinder on two purple cradles, a blue crank on the left, a steel rod and a piston inside the cylinder, with the labels crankshaft, rod and piston.">
+<figcaption>8 seconds in: the three parts, named.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-top.png" alt="The piston at the end of the cylinder, the crank pointing straight at it, a red ring at the piston crown and the words top dead center.">&#10;		<figcaption>38 seconds in: top dead center.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-turn.png" alt="The crank at 60 degrees, the rod tilted from the crank pin to the piston, with a green circle round the crank and the readout crank 60 degrees.">
+<figcaption>22 seconds in: the crank turning, the piston held to its line.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-bottom.png" alt="The crank pointing away from the piston, which is at the other end of its travel, with two red rings and the words bottom dead center.">&#10;		<figcaption>40.5 seconds in: bottom dead center.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-top.png" alt="The piston at the end of the cylinder, the crank pointing straight at it, a red ring at the piston crown and the words top dead center.">
+<figcaption>38 seconds in: top dead center.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-stroke.png" alt="A green bracket under the cylinder between the two red rings, labelled stroke 2r.">&#10;		<figcaption>45 seconds in: the stroke is twice the crank radius.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-bottom.png" alt="The crank pointing away from the piston, which is at the other end of its travel, with two red rings and the words bottom dead center.">
+<figcaption>40.5 seconds in: bottom dead center.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-half.png" alt="The crank pointing up, the piston already past a green ring in the middle of its stroke, with the word halfway.">&#10;		<figcaption>55.5 seconds in: a quarter turn from the top, the piston is already past halfway.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-stroke.png" alt="A green bracket under the cylinder between the two red rings, labelled stroke 2r.">
+<figcaption>45 seconds in: the stroke is twice the crank radius.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-orbit.png" alt="The assembly seen from the side and above, the crank webs and pin and the glass cylinder in perspective.">&#10;		<figcaption>61 seconds in: the orbit.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-half.png" alt="The crank pointing up, the piston already past a green ring in the middle of its stroke, with the word halfway.">
+<figcaption>55.5 seconds in: a quarter turn from the top, the piston is already past halfway.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-end.png" alt="The assembly seen almost along its axis: the circle, the crank and the cylinder with its rings in perspective.">&#10;		<figcaption>64 seconds in: the orbit has swung almost to the axis.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-orbit.png" alt="The assembly seen from the side and above, the crank webs and pin and the glass cylinder in perspective.">
+<figcaption>61 seconds in: the orbit.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-lever.png" alt="The crank pointing up, a gold line along the rod continuing to a gold marker on a white vertical through the shaft, a gold bar from the shaft to the marker, and the readout leverage 1.00 r.">&#10;		<figcaption>73.8 seconds in: the gold gap is the leverage, exactly r at 90 degrees.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-end.png" alt="The assembly seen almost along its axis: the circle, the crank and the cylinder with its rings in perspective.">
+<figcaption>64 seconds in: the orbit has swung almost to the axis.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-zero.png" alt="The crank pointing away from the piston; the gold line runs straight through the shaft, with no gap; readout leverage 0.00 r.">&#10;		<figcaption>80 seconds in: at bottom dead center the rod’s line runs through the shaft: zero leverage.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-lever.png" alt="The crank pointing up, a gold line along the rod continuing to a gold marker on a white vertical through the shaft, a gold bar from the shaft to the marker, and the readout leverage 1.00 r.">
+<figcaption>73.8 seconds in: the gold gap is the leverage, exactly r at 90 degrees.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-max.png" alt="The crank pointing down and slightly toward the piston; the gold line crosses the vertical below the shaft, with a gold bar down to the marker; readout leverage 0.35 r.">&#10;		<figcaption>83.5 seconds in: the gap opens again on the other side (the readout shows its size).</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-zero.png" alt="The crank pointing away from the piston; the gold line runs straight through the shaft, with no gap; readout leverage 0.00 r.">
+<figcaption>80 seconds in: at bottom dead center the rod’s line runs through the shaft: zero leverage.</figcaption>
+</figure>
+
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-max.png" alt="The crank pointing down and slightly toward the piston; the gold line crosses the vertical below the shaft, with a gold bar down to the marker; readout leverage 0.35 r.">
+<figcaption>83.5 seconds in: the gap opens again on the other side (the readout shows its size).</figcaption>
+</figure>
 
 <h2><span class="step">10</span> Subtitles</h2>
 
 <p class="lede">Thirteen cues, kept on the scene (<code>scene.userData.renderSubtitles</code>) like the other shorts. The cues were run through a speech synthesizer (Kokoro, <em>af_sarah</em>) and each cue gets its measured length plus 0.3 seconds, with a gap before the next, so no two ever overlap.</p>
 
-<pre><code>setSubtitles([&#10;  { start: 0.8, end: 8.775, text: &#39;An engine turns a straight push into a spin, with just three\nparts: a piston, a connecting rod, and a crankshaft.&#39; },&#10;  { start: 9.225, end: 18.525, text: &#39;The piston can only slide along its cylinder. The crank can\nonly turn about its shaft. The rod ties the two together.&#39; },&#10;  { start: 18.975, end: 24.4, text: &#39;Turn the crank one full revolution, and\nthe piston goes out and back, once.&#39; },&#10;  { start: 24.85, end: 33.975, text: &#39;The crank pin travels in a circle. The piston is held to\na straight line. A rod of fixed length joins them.&#39; },&#10;  { start: 34.425, end: 40.725, text: &#39;Where the piston turns around are the dead\ncenters: top dead center, and bottom dead center.&#39; },&#10;  { start: 41.175, end: 47.8, text: &#39;The distance between them is the stroke. It\nis exactly twice the crank\&#39;s radius.&#39; },&#10;  { start: 48.25, end: 56.475, text: &#39;Notice the piston is not simple back and forth. A\nquarter turn from the top, it is already past halfway.&#39; },&#10;  { start: 56.925, end: 66.275, text: &#39;Now orbit the assembly. The crank pin sits between two webs, the\nrod wraps the pin, and the piston turns on the other end.&#39; },&#10;  { start: 66.725, end: 75.625, text: &#39;Push the piston with a steady force. Extend the rod\&#39;s line to\nthe shaft: the gold gap is the leverage the crank gets.&#39; },&#10;  { start: 76.075, end: 85.15, text: &#39;At a dead center, the line runs straight through the shaft, and the\nleverage is zero. Near the middle of the stroke, it is the greatest.&#39; },&#10;  { start: 85.6, end: 92.05, text: &#39;That is why an engine needs a heavy flywheel: its\nweight carries the crank through the dead centers.&#39; },&#10;  { start: 92.5, end: 100.275, text: &#39;Crank-slider kinematics: a circle, a line, and a\nrod of fixed length. Everything else follows.&#39; },&#10;  { start: 100.725, end: 102.925, text: &#39;Made with Strata.&#39; },&#10;]).length   // 13</code></pre>
+```javascript
+setSubtitles([
+  { start: 0.8, end: 8.775, text: 'An engine turns a straight push into a spin, with just three\nparts: a piston, a connecting rod, and a crankshaft.' },
+  { start: 9.225, end: 18.525, text: 'The piston can only slide along its cylinder. The crank can\nonly turn about its shaft. The rod ties the two together.' },
+  { start: 18.975, end: 24.4, text: 'Turn the crank one full revolution, and\nthe piston goes out and back, once.' },
+  { start: 24.85, end: 33.975, text: 'The crank pin travels in a circle. The piston is held to\na straight line. A rod of fixed length joins them.' },
+  { start: 34.425, end: 40.725, text: 'Where the piston turns around are the dead\ncenters: top dead center, and bottom dead center.' },
+  { start: 41.175, end: 47.8, text: 'The distance between them is the stroke. It\nis exactly twice the crank\'s radius.' },
+  { start: 48.25, end: 56.475, text: 'Notice the piston is not simple back and forth. A\nquarter turn from the top, it is already past halfway.' },
+  { start: 56.925, end: 66.275, text: 'Now orbit the assembly. The crank pin sits between two webs, the\nrod wraps the pin, and the piston turns on the other end.' },
+  { start: 66.725, end: 75.625, text: 'Push the piston with a steady force. Extend the rod\'s line to\nthe shaft: the gold gap is the leverage the crank gets.' },
+  { start: 76.075, end: 85.15, text: 'At a dead center, the line runs straight through the shaft, and the\nleverage is zero. Near the middle of the stroke, it is the greatest.' },
+  { start: 85.6, end: 92.05, text: 'That is why an engine needs a heavy flywheel: its\nweight carries the crank through the dead centers.' },
+  { start: 92.5, end: 100.275, text: 'Crank-slider kinematics: a circle, a line, and a\nrod of fixed length. Everything else follows.' },
+  { start: 100.725, end: 102.925, text: 'Made with Strata.' },
+]).length   // 13
+```
 
 <h2><span class="step">11</span> Write the animation</h2>
 
 <p class="lede">One last block. Every animation queued above is written now, in time order.</p>
 
-<pre><code>// every animation of the film is written now, in time order&#10;flush()</code></pre>
+```javascript
+// every animation of the film is written now, in time order
+flush()
+```
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-fly.png" alt="A steel flywheel on the shaft behind the crank, with the readouts crank 30 degrees and leverage 0.65 r.">&#10;		<figcaption>90 seconds in: the flywheel, which carries the crank through the dead centers.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-fly.png" alt="A steel flywheel on the shaft behind the crank, with the readouts crank 30 degrees and leverage 0.65 r.">
+<figcaption>90 seconds in: the flywheel, which carries the crank through the dead centers.</figcaption>
+</figure>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-sum.png" alt="The assembly from a high angle with the labels circle and line, and the readouts crank 210 degrees and leverage 0.35 r.">&#10;		<figcaption>96 seconds in: a circle, a line, and a rod of fixed length.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-sum.png" alt="The assembly from a high angle with the labels circle and line, and the readouts crank 210 degrees and leverage 0.35 r.">
+<figcaption>96 seconds in: a circle, a line, and a rod of fixed length.</figcaption>
+</figure>
 
 <h2><span class="step">12</span> Render it</h2>
 
 <ol class="steps">&#10;		<li>Open the <strong>Render</strong> tab and its <strong>Video</strong> sub-tab. The Camera Sequence already holds the five shots from step 8.</li>&#10;		<li>Choose <strong>Render (offline)</strong>, 1920 × 1080 at 60 fps, and click <strong>Render</strong>. Every frame is drawn and captured at its exact timeline time, so the result is the same on a fast or a slow machine. Tick <strong>Hard-burn</strong> to draw the subtitles into the picture, and keep <strong>Also export a matching .srt</strong>.</li>&#10;	</ol>
 
-<figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">&#10;		<figcaption>102 seconds in: the last cut, to the end card.</figcaption>&#10;	</figure>
+<figure>
+<img src="https://strataeditor.dev/about/tutorials/screenshots/pi-card.png" alt="The end card on the wall: the line The idea outlasts the engine, Made with Strata, and a QR code.">
+<figcaption>102 seconds in: the last cut, to the end card.</figcaption>
+</figure>
 
 <div class="note"><strong>Everything above is git-versioned.</strong> Commit from the Git tab whenever you like: the geometry, the timeline, the camera sequence and the subtitles all live in the scene file.</div>
 
