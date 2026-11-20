@@ -64,6 +64,45 @@
 		]
 	},
 	{
+		"title": "FutureFlux: From a Mesa heat map to a tree-shade proposal",
+		"href": "futureflux-mesa.html",
+		"group": "Scenes",
+		"thumb": "screenshots/thumbs/futureflux-mesa.jpg",
+		"blurb": "Build a bilingual Mesa surface-heat tour from mapped geometry and Landsat observations, then stage proposed tree shade and animate the camera.",
+		"desc": "Build a Mesa heat tour in Strata: map the site, compare Landsat samples, stage tree shade, animate cameras, and add bilingual subtitles.",
+		"contributors": [
+			{ "name": "Tejaswi Gowda", "role": "script", "url": "https://tejaswigowda.com/" },
+			{ "name": "Tejaswi Gowda", "role": "scene", "url": "https://tejaswigowda.com/" }
+		],
+		"assets": [
+			{
+				"name": "City of Mesa GIS",
+				"source": "https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/",
+				"licence": "City of Mesa Data Terms of Use License Agreement; see dataset-specific notices",
+				"attribution": "City of Mesa GIS paths, Enterprise GIS building footprint, city boundary, and neighborhood records."
+			},
+			{
+				"name": "OpenStreetMap",
+				"source": "https://www.openstreetmap.org/copyright",
+				"licence": "Open Database License (ODbL)",
+				"attribution": "© OpenStreetMap contributors; separately attributed context."
+			},
+			{
+				"name": "USGS Landsat 9 Collection 2 Level-2",
+				"source": "https://doi.org/10.5066/P9OGBGM6",
+				"licence": "USGS public domain",
+				"attribution": "Historical land-surface-temperature observations; not a cooling model."
+			}
+		],
+		"tools": [
+			{ "name": "Three.js", "licence": "MIT", "url": "https://threejs.org/" },
+			{ "name": "Playwright", "licence": "Apache-2.0", "url": "https://playwright.dev/" },
+			{ "name": "dub.webcli.app", "licence": "GPL-3.0", "url": "https://dub.webcli.app/" },
+			{ "name": "whisper.webcli.app", "licence": "not stated in the demo provenance", "url": "https://whisper.webcli.app/" },
+			{ "name": "Qwen2.5-Coder-1.5B-Instruct", "licence": "Apache-2.0", "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct" }
+		]
+	},
+	{
 		"title": "Make a Pythagorean-theorem short",
 		"href": "makeshort.html",
 		"group": "Animation and rendering",
