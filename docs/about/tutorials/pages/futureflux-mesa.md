@@ -5,6 +5,10 @@ status: published
 description: "Build a Mesa heat tour in Strata: map the site, compare Landsat samples, stage tree shade, animate cameras, and add bilingual subtitles."
 ---
 
+<div class="strata-tutorial-gis-walkway-shade"></div>
+<h1>FutureFlux: From a Mesa heat map to a tree-shade proposal</h1>
+<p class="tagline">Build a 48-second heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, camera moves, and bilingual subtitles.</p>
+
 [All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html)
 
 Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. No model or speech tool is needed for steps 1–7.
@@ -29,11 +33,15 @@ Use one shared 40–60 °C palette (green → yellow → red). Keep the source c
 
 **Human check:** Toggle each heat group and compare its edges with mapped context. Identical temperatures must get identical colors. At Alta Mesa, orbit at a shallow angle and make sure water does not flicker against the ground. The water-only depth fix should not affect the heat layer.
 
+<figure><img src="./screenshots/futureflux-city.webp" alt="Mesa city boundary with the study area marked" width="1600" height="900"><figcaption>The opening uses Mesa’s municipal boundary to locate the study area before the camera moves toward Encanto.</figcaption></figure>
+
 ## 3. Lay out the route and measure it
 
 Order the route **Encanto → Alta Mesa → Red Mountain**. Draw a red double-headed arrow between each pair of sample centers. Compute horizontal distance in local meters with `Math.hypot(b.x - a.x, b.z - a.z)` and divide by `1609.344` for miles. Place the text where it will be readable during the camera pullbacks.
 
 **Human check:** Look for **1.48 miles** between Encanto and Alta Mesa and **2.56 miles** between Alta Mesa and Red Mountain. Both should say straight-line distance, not imply a walkable route. Red Mountain is the design site, not the hottest observation.
+
+<figure><img src="./screenshots/futureflux-route.webp" alt="Three heat samples connected by red distance arrows on the Mesa map" width="1600" height="900"><figcaption>The comparison view uses one temperature palette across Encanto, Alta Mesa, and Red Mountain. The arrows show straight-line distances.</figcaption></figure>
 
 ## 4. Finish the center and stage the trees
 
@@ -50,6 +58,9 @@ Use a separate shadow receiver over the Red Mountain heat surface so the colored
 Tree canopies block direct sunlight, so shaded pavement absorbs less solar energy and can stay cooler than pavement in full sun. The scene shows where shade increases; it does not calculate how many degrees the surface cools.
 
 **Human check:** Compare 36 s and 45 s from the same walkway camera. There should be more visible shade at 45 s, but the Landsat layer and its 51.5 °C sample should be unchanged. The green indicator must not resemble a new temperature reading.
+
+<figure><img src="./screenshots/futureflux-before.webp" alt="Red Mountain walkway and center before the proposed trees appear" width="1600" height="900"><figcaption>37 s · The Red Mountain walkway before proposed planting, with the baseline scene and historical heat overlay.</figcaption></figure>
+<figure><img src="./screenshots/futureflux-shade.webp" alt="Same Red Mountain walkway with proposed mesquites along the left side" width="1600" height="900"><figcaption>45 s · The same camera after all 18 proposed mesquites appear. This illustrates the planting and canopy coverage, not a measured temperature drop.</figcaption></figure>
 
 ## 6. Animate and check the three shots
 
@@ -74,6 +85,8 @@ In **Render → Video**, leave **Skip First** at **None** for timing to line up.
 - [City of Mesa Open Data Terms](https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/) — City of Mesa GIS, including Enterprise GIS building footprints. Preserve City credit and any dataset-specific notices.
 - [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright) — separately attributed context under ODbL.
 - [USGS Landsat 9 Collection 2 Level-2](https://doi.org/10.5066/P9OGBGM6) — historical land-surface-temperature observations; not a cooling model.
+
+<section class="credits" id="credits"><h2>Credits and licences</h2><h3>People</h3><ul><li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script, scene)</span></li></ul><h3>Assets</h3><ul><li><a href="https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/">City of Mesa GIS</a>: City of Mesa GIS paths, Enterprise GIS building footprint, city boundary, and neighborhood records. <span class="lic">Licence: City of Mesa Data Terms of Use License Agreement; see dataset-specific notices.</span></li><li><a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>: © OpenStreetMap contributors; separately attributed context. <span class="lic">Licence: Open Database License (ODbL).</span></li><li><a href="https://doi.org/10.5066/P9OGBGM6">USGS Landsat 9 Collection 2 Level-2</a>: Historical land-surface-temperature observations; not a cooling model. <span class="lic">Licence: USGS public domain.</span></li></ul><h3>Tools</h3><ul><li><a href="https://threejs.org/">Three.js</a> <span class="lic">(MIT)</span></li><li><a href="https://playwright.dev/">Playwright</a> <span class="lic">(Apache-2.0)</span></li><li><a href="https://dub.webcli.app/">dub.webcli.app</a> <span class="lic">(GPL-3.0)</span></li><li><a href="https://whisper.webcli.app/">whisper.webcli.app</a> <span class="lic">(not stated in the demo provenance)</span></li><li><a href="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct">Qwen2.5-Coder-1.5B-Instruct</a> <span class="lic">(Apache-2.0)</span></li></ul></section>
 
 ## 8. Optional: Playwright harness for distributed decision-making and suggestions
 
