@@ -50,6 +50,11 @@
       "title": "Build a fighting-game arena scene"
     },
     {
+      "slug": "futureflux-mesa",
+      "path": "futureflux-mesa.html",
+      "title": "FutureFlux: From a Mesa heat map to a tree-shade proposal"
+    },
+    {
       "slug": "gis-walkway-shade",
       "path": "gis-walkway-shade.html",
       "title": "Build a GIS-grounded scene by hand"
