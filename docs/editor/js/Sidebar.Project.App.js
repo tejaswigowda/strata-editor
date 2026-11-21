@@ -89,7 +89,17 @@ function SidebarProjectApp( editor ) {
 
 		//
 
-		let output = editor.toJSON();
+		let output;
+		try {
+
+			output = editor.sceneForSave();
+
+		} catch ( error ) {
+
+			alert( error.message );
+			return;
+
+		}
 		output.metadata.type = 'App';
 		delete output.history;
 

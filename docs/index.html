@@ -221,8 +221,19 @@
 
 						if ( state !== undefined ) {
 
-							await editor.fromJSON( state );
-							editor.work.restored();
+							try {
+
+								await editor.fromJSON( state );
+								editor.work.restored();
+
+							} catch ( error ) {
+
+								console.error( error );
+								alert( error.message );
+								await editor.work.bootDone();
+								return; // Preserve the rejected autosave for repair.
+
+							}
 
 						} else {
 

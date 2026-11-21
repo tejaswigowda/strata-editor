@@ -740,6 +740,7 @@ export async function loadSceneFromRepo( editor, { onStatus = () => {} } = {} ) 
 
 	onStatus( 0.5, 'Fetching assets…' );
 	await cancellable( internalizeFromGit( json, parsed, resolved.ref, cfg.pat, 'authoring' ) );
+	editor.validateSceneForLoad( json );
 
 	setLoadCancellable( false ); // from here the scene is being replaced: too late to back out
 	onStatus( 0.85, 'Applying scene…' );
@@ -820,7 +821,7 @@ export async function commitSceneToRepo( editor, message, { onProgress = () => {
 	// (SceneQuantize.js, lossy + deterministic) — never pretty-printed: it is
 	// megabytes of baked float arrays, and $chunked splits it on byte boundaries
 	// anyway, so line diffs were never usable.
-	const { json, assets } = await externalizeScene( quantizeSceneJSON( editor.toJSON() ) );
+	const { json, assets } = await externalizeScene( editor.validateSceneForLoad( quantizeSceneJSON( editor.sceneForSave() ), 'save' ) );
 	const sceneBytes = new TextEncoder().encode( JSON.stringify( json ) );
 
 	const files = [];
@@ -1276,6 +1277,7 @@ export async function loadSceneFromHash( editor ) {
 		stage = 'fetching assets';
 		setLoadProgress( 0.5, 'Fetching assets…' );
 		await cancellable( internalizeFromGit( json, parsed, resolved.ref, existingPat, mode, ! editor.storageFree ) );
+		editor.validateSceneForLoad( json );
 
 		stage = 'applying the scene';
 		setLoadCancellable( false ); // from here the scene is being replaced: too late to back out

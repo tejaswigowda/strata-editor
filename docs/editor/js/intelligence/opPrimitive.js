@@ -39,6 +39,9 @@ import { SetPositionCommand } from '../commands/SetPositionCommand.js';
 import { SetRotationCommand } from '../commands/SetRotationCommand.js';
 import { SetScaleCommand } from '../commands/SetScaleCommand.js';
 import { hasClass, normalizeClassName, toClassSet } from './classDerive.js';
+import { MIN_SCALE, REFUSAL_CODES, checkQuaternion, checkScale, refuse } from './opRefusals.js';
+
+export { REFUSAL_CODES };
 
 // ── The single op vocabulary definition ──────────────────────────────────────
 // Drives: model tool-list, decoding grammar, dispatcher, and human sugar.
@@ -48,11 +51,11 @@ export const OP_VOCABULARY = {
 	// ── Edit ops (command-backed, guarded) ──
 	recolor:     { kind: 'edit', args: { color: 'color' },                          summary: 'set base color (tints if textured)' },
 	scale:       { kind: 'edit', args: { factor: 'number', axis: 'axis?' },         summary: 'scale uniformly or on one axis' },
-	move:        { kind: 'edit', args: { dx: 'number', dy: 'number', dz: 'number' }, summary: 'translate by offset (grounded y>=0)' },
+	move:        { kind: 'edit', args: { dx: 'number?', dy: 'number?', dz: 'number?' }, summary: 'translate by offset (grounded y>=0)' },
 	rotate:      { kind: 'edit', args: { axis: 'axis', degrees: 'number' },         summary: '⚠️  INSTANT rotation ONLY (NOT animated) — never use for "animate" requests. For animation, use addSpinClip() instead.' },
 	delete:      { kind: 'edit', args: {},                                          summary: 'remove nodes (merged-mesh parts fail gracefully)' },
-	duplicate:   { kind: 'edit', args: { dx: 'number', dy: 'number', dz: 'number' }, summary: 'clone with offset' },
-	retexture:   { kind: 'edit', args: { texture: 'string' },                       summary: 'apply a named/procedural texture map' },
+	duplicate:   { kind: 'edit', args: { dx: 'number?', dy: 'number?', dz: 'number?' }, summary: 'clone with offset' },
+	retexture:   { kind: 'edit', args: { texture: 'texture' },                      summary: 'apply a loaded Three.js texture' },
 	setMaterial: { kind: 'edit', args: { props: 'object' },                         summary: 'replace material with props' },
 	setOpacity:  { kind: 'edit', args: { value: 'number' },                         summary: 'set transparency (0–1)' },
 	setVisible:  { kind: 'edit', args: { visible: 'boolean' },                      summary: 'set visibility' },
@@ -161,7 +164,30 @@ const ANIM_OPS = new Set( Object.keys( OP_VOCABULARY ).filter( k => OP_VOCABULAR
 // Ops that are edits (delegate to editOps with {op,selector,args} shape).
 const EDIT_OPS = new Set( Object.keys( OP_VOCABULARY ).filter( k => OP_VOCABULARY[ k ].kind === 'edit' ) );
 
-export const OP_TYPES = Object.keys( OP_VOCABULARY );
+export const OP_TYPES = Object.freeze( Object.keys( OP_VOCABULARY ) );
+
+for ( const [ type, entry ] of Object.entries( OP_VOCABULARY ) ) {
+
+	entry.domains = Object.freeze( Object.fromEntries( Object.entries( entry.args ).map( ( [ arg, declaration ] ) => {
+
+		const domain = { type: declaration.replace( /\?$/, '' ), optional: declaration.endsWith( '?' ) };
+		if ( domain.type === 'number' ) domain.finite = true;
+		if ( domain.type === 'axis' ) domain.values = Object.freeze( [ 'x', 'y', 'z' ] );
+		if ( arg === 'factor' && ( type === 'scale' || type === 'scaleTo' ) ) domain.minimumMagnitude = MIN_SCALE;
+		if ( entry.kind === 'anim' && arg === 'duration' ) {
+
+			if ( type === 'change' ) domain.minimum = 0; // A cut is an instantaneous text step, not a clip.
+			else domain.exclusiveMinimum = 0;
+
+		}
+		return [ arg, Object.freeze( domain ) ];
+
+	} ) ) );
+	Object.freeze( entry.args );
+	Object.freeze( entry );
+
+}
+Object.freeze( OP_VOCABULARY );
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
@@ -174,7 +200,7 @@ export function validateOpJSON( opJSON ) {
 
 	if ( ! opJSON || typeof opJSON !== 'object' ) return 'op must be an object';
 	if ( typeof opJSON.type !== 'string' ) return 'op.type must be a string';
-	if ( ! OP_VOCABULARY[ opJSON.type ] ) {
+	if ( ! Object.hasOwn( OP_VOCABULARY, opJSON.type ) ) {
 
 		return `op.type "${ opJSON.type }" not in closed set: ${ OP_TYPES.join( ', ' ) }`;
 
@@ -271,12 +297,69 @@ function subsetSanityWarning( editor, type, selector ) {
  * @param {object} opJSON  { type, selector, ...args }
  * @returns {object}  { success, message?, count?, nodes? }
  */
+function prepareOp( opJSON ) {
+
+	const type = typeof opJSON?.type === 'string' ? opJSON.type : 'op';
+	const error = validateOpJSON( opJSON );
+	if ( error ) {
+
+		const argument = ! Object.hasOwn( OP_VOCABULARY, type ) ? 'type' : type === 'raw' && typeof opJSON?.code !== 'string' ? 'code' : 'selector';
+		return refuse( 'ARGUMENT_INVALID', type, argument, opJSON?.[ argument ], null, 'is invalid' );
+
+	}
+	const definition = OP_VOCABULARY[ type ];
+	const args = { ...opJSON };
+	for ( const [ name, domain ] of Object.entries( definition.domains ) ) {
+
+		const raw = args[ name ];
+		if ( raw == null && domain.optional ) continue;
+		const value = domain.type === 'number' && typeof raw === 'string' && raw.trim() ? Number( raw ) : raw;
+		if ( domain.type === 'number' && ! Number.isFinite( value ) ) return refuse( 'NUMBER_NOT_FINITE', type, name, raw, domain.minimumMagnitude ?? ( domain.exclusiveMinimum === 0 ? 1 : 0 ), 'must be finite' );
+		if ( domain.minimumMagnitude ) {
+
+			const refusal = checkScale( type, name, value );
+			if ( refusal ) return refusal;
+
+		}
+		if ( domain.exclusiveMinimum === 0 && value <= 0 ) return refuse( 'CLIP_DURATION_INVALID', type, name, value, 0.001, 'must be positive' );
+		if ( domain.minimum === 0 && value < 0 ) return refuse( 'CLIP_DURATION_INVALID', type, name, value, 0, 'must be non-negative' );
+		if ( domain.type === 'axis' && ! domain.values.includes( String( value ).toLowerCase() ) ) return refuse( 'ARGUMENT_INVALID', type, name, raw, 'x', 'must be x, y or z' );
+		if ( domain.type === 'boolean' && typeof value !== 'boolean' ) return refuse( 'ARGUMENT_INVALID', type, name, raw, null, 'must be boolean' );
+		if ( domain.type === 'string' && typeof value !== 'string' ) return refuse( 'ARGUMENT_INVALID', type, name, raw, null, 'must be a string' );
+		if ( domain.type === 'object' && ( ! value || typeof value !== 'object' || Array.isArray( value ) ) ) return refuse( 'ARGUMENT_INVALID', type, name, raw, null, 'must be an object' );
+		if ( domain.type === 'texture' && ! value?.isTexture ) return refuse( 'ARGUMENT_INVALID', type, name, raw, null, 'must be a loaded texture' );
+		if ( domain.type === 'color' && !( typeof value === 'string' && value.trim() ) && ! Number.isFinite( value ) && ! value?.isColor ) return refuse( 'ARGUMENT_INVALID', type, name, raw, null, 'must be a color' );
+		if ( [ 'vec3', 'vector3|string' ].includes( domain.type ) && !( domain.type === 'vector3|string' && typeof value === 'string' && value.trim() )
+			&& !( Array.isArray( value ) && value.length === 3 && value.every( Number.isFinite ) ) ) return refuse( 'ARGUMENT_INVALID', type, name, raw, null, 'must be a finite three-component vector' );
+		args[ name ] = domain.type === 'axis' ? String( value ).toLowerCase() : value;
+
+	}
+	return args;
+
+}
+
 export function op( editor, opJSON ) {
 
-	if ( ! editor || ! editor.scene ) return { success: false, message: 'no editor' };
+	const type = typeof opJSON?.type === 'string' ? opJSON.type : 'op';
+	if ( ! editor?.scene ) return refuse( 'OP_UNAVAILABLE', type, 'editor', null, null, 'requires an open scene' );
+	try {
 
-	const err = validateOpJSON( opJSON );
-	if ( err ) return { success: false, message: `invalid op: ${ err }` };
+		const args = prepareOp( opJSON );
+		if ( args.success === false ) return args;
+		const result = dispatchOp( editor, args );
+		if ( result?.success !== false || result.code ) return result;
+		return { ...result, ...refuse( 'OP_REJECTED', type, 'selector', args.selector, null, `was refused: ${ String( result.message || 'operation rejected' ).replace( /\s+/g, ' ' ) }` ) };
+
+	} catch ( error ) {
+
+		console.error( `op ${ type } failed`, error );
+		return refuse( 'OP_EXECUTION_FAILED', type, 'selector', opJSON?.selector, null, 'could not be processed; see editor diagnostics' );
+
+	}
+
+}
+
+function dispatchOp( editor, opJSON ) {
 
 	const { type, selector } = opJSON;
 
@@ -292,7 +375,7 @@ export function op( editor, opJSON ) {
 	const flag = subsetSanityWarning( editor, type, selector );
 	const withFlag = ( result ) => {
 
-		if ( ! flag || ! result ) return result;
+		if ( ! flag || ! result || result.success === false ) return result;
 		result.flagged = true;
 		result.message = result.message ? `${ flag } ${ result.message }` : flag;
 		return result;
@@ -499,6 +582,18 @@ class ChainableSet {
 	 */
 	_recordAnim( partialOpJSON ) {
 
+		if ( ANIM_OPS.has( partialOpJSON.type ) ) {
+
+			const prepared = prepareOp( { ...partialOpJSON, selector: this.selector } );
+			if ( prepared.success === false ) {
+
+				this._last = prepared;
+				return this;
+
+			}
+			partialOpJSON = prepared;
+
+		}
 		const c = this._ensureChain();
 		const parallel = partialOpJSON._parallel === true;
 		delete partialOpJSON._parallel;
@@ -510,7 +605,13 @@ class ChainableSet {
 
 		const model = TimelineModel.fromJSON( this.editor.timeline ? this.editor.timeline.toJSON() : null );
 		model.addEvent( this.selector, { at, op: type, args: rest, dur } );
-		this.editor.execute( new SetTimelineCommand( this.editor, model.toJSON(), `Timeline: ${ type } ${ this.selector }` ) );
+		const result = this.editor.execute( new SetTimelineCommand( this.editor, model.toJSON(), `Timeline: ${ type } ${ this.selector }` ) );
+		if ( result?.success === false ) {
+
+			this._last = result;
+			return this;
+
+		}
 
 		// jQuery queue: the cursor advances past this op's end (sequential default).
 		c.prevAt = at;
@@ -565,7 +666,7 @@ class ChainableSet {
 
 		}
 
-		const seconds = Math.max( 0, Number( duration ) || 0 ) / 1000;
+		const seconds = Number( duration ) / 1000;
 		return this._recordAnim( { type: 'animate', props, easing, duration: seconds, _parallel: parallel } );
 
 	}
@@ -1176,16 +1277,25 @@ class ChainableSet {
 				if ( prop === 'toString' || prop === Symbol.toPrimitive ) {
 					return () => v ? `${ kind }(${ COMPONENTS.map( c => v[ c ] ).join( ', ' ) })` : `${ kind }(empty)`;
 				}
-				// Reflect any other live property/method (e.g. euler.order, isVector3).
+				// Never bind a mutating Three.js method to the actual live transform.
 				if ( v && prop in v ) {
 					const val = v[ prop ];
-					return ( typeof val === 'function' ) ? val.bind( v ) : val;
+					if ( typeof val !== 'function' ) return val;
+					return ( ...args ) => {
+
+						const snapshot = v.clone();
+						const result = snapshot[ prop ]( ...args );
+						if ( result !== snapshot ) return result;
+						return chain._writeTransform( kind, Object.fromEntries( COMPONENTS.map( c => [ c, snapshot[ c ] ] ) ) );
+
+					};
 				}
 				return undefined;
 			},
 			set( target, prop, value ) {
 				if ( prop === 'x' || prop === 'y' || prop === 'z' || prop === 'w' ) {
-					chain._writeTransform( kind, { [ prop ]: value } );
+					const result = chain._writeTransform( kind, { [ prop ]: value } );
+					if ( result?.success === false ) chain._last = result;
 				}
 				return true;
 			}
@@ -1242,14 +1352,16 @@ class ChainableSet {
 				if ( patch.y !== undefined ) q.y = patch.y;
 				if ( patch.z !== undefined ) q.z = patch.z;
 				if ( patch.w !== undefined ) q.w = patch.w;
-				q.normalize();
+				const refusal = checkQuaternion( 'quaternion', 'quaternion', q.toArray(), node.name || node.uuid );
+				if ( refusal ) return refusal;
 				const e = new THREE.Euler().setFromQuaternion( q, node.rotation.order );
 				cmd = new SetRotationCommand( editor, node, e );
 			}
 			if ( cmd ) cmds.push( cmd );
 		}
 		if ( cmds.length ) {
-			editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+			const result = editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+			if ( result?.success === false ) return result;
 		}
 		return this;
 	}

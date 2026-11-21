@@ -1,3 +1,5 @@
+import { assertLoadableScene } from './intelligence/sceneValidation.js';
+
 function Storage() {
 
 	const indexedDB = window.indexedDB;
@@ -63,6 +65,7 @@ function Storage() {
 
 		set: function ( data ) {
 
+			data = assertLoadableScene( data, 'save' );
 			const start = performance.now();
 
 			const transaction = database.transaction( [ 'states' ], 'readwrite' );

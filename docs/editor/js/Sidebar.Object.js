@@ -873,11 +873,11 @@ function SidebarObject( editor ) {
 
 		if ( targets.length === 1 ) {
 
-			editor.execute( createCommand( targets[ 0 ] ) );
+			return editor.execute( createCommand( targets[ 0 ] ) );
 
 		} else {
 
-			editor.execute( new MultiCmdsCommand( editor, targets.map( createCommand ) ) );
+			return editor.execute( new MultiCmdsCommand( editor, targets.map( createCommand ) ) );
 
 		}
 
@@ -904,9 +904,23 @@ function SidebarObject( editor ) {
 			}
 
 			const newScale = new THREE.Vector3( objectScaleX.getValue(), objectScaleY.getValue(), objectScaleZ.getValue() );
-			if ( object.scale.distanceTo( newScale ) >= 0.01 ) {
+			const changedAxes = [ 'x', 'y', 'z' ].filter( axis => object.scale[ axis ] !== newScale[ axis ] );
+			if ( changedAxes.length ) {
 
-				executeForTargets( getSelectionTargets(), target => new SetScaleCommand( editor, target, newScale.clone() ) );
+				const result = executeForTargets( getSelectionTargets(), target => {
+
+					const scale = target.scale.clone();
+					for ( const axis of changedAxes ) scale[ axis ] = newScale[ axis ];
+					return new SetScaleCommand( editor, target, scale );
+
+				} );
+				if ( result?.success === false ) {
+
+					objectScaleX.setValue( object.scale.x );
+					objectScaleY.setValue( object.scale.y );
+					objectScaleZ.setValue( object.scale.z );
+
+				}
 
 			}
 

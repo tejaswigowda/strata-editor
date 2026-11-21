@@ -372,7 +372,22 @@ function Viewport( editor ) {
 
 			if ( commands.length > 0 ) {
 
-				editor.execute( new MultiCmdsCommand( editor, commands ) );
+				const result = editor.execute( new MultiCmdsCommand( editor, commands ) );
+				if ( result?.success === false ) {
+
+					for ( const selected of selection ) {
+
+						const start = _dragStartLocal.get( selected );
+						if ( ! start ) continue;
+						selected.position.copy( start.position );
+						selected.rotation.copy( start.rotation );
+						selected.scale.copy( start.scale );
+						selected.updateMatrixWorld( true );
+						editor.signals.objectChanged.dispatch( selected );
+
+					}
+
+				}
 
 			}
 
@@ -406,7 +421,14 @@ function Viewport( editor ) {
 
 					if ( ! objectScaleOnDown.equals( object.scale ) ) {
 
-						editor.execute( new SetScaleCommand( editor, object, object.scale, objectScaleOnDown ) );
+						const result = editor.execute( new SetScaleCommand( editor, object, object.scale, objectScaleOnDown ) );
+						if ( result?.success === false ) {
+
+							object.scale.copy( objectScaleOnDown );
+							object.updateMatrixWorld( true );
+							editor.signals.objectChanged.dispatch( object );
+
+						}
 
 					}
 

@@ -1115,7 +1115,12 @@ function Loader( editor ) {
 
 			case 'app':
 
-				editor.fromJSON( data );
+				editor.fromJSON( data ).catch( error => {
+
+					console.error( error );
+					alert( error.message );
+
+				} );
 
 				break;
 

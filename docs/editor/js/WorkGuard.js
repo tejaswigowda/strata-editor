@@ -12,6 +12,7 @@
 
 import { hashWork, createDirtyTracker, decideRecovery, wouldClobberUnsaved, sourceKey, sourceLabel, describeChanges, sourceFile, currentHash } from './workState.js';
 import { WorkStore } from './WorkStore.js';
+import { assertLoadableScene } from './intelligence/sceneValidation.js';
 
 const DEBOUNCE_MS = 1000;
 
@@ -52,6 +53,17 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 
 	function write( json, hash ) {
 
+		try {
+
+			json = assertLoadableScene( json, 'save' );
+
+		} catch ( error ) {
+
+			console.warn( error.message );
+			emit( 'change', status() );
+			return writes;
+
+		}
 		const k = key();
 		const dirty = hash !== tracker.baseline;
 		const record = { key: k, savedAt: dirty ? lastEditAt : Date.now(), hash, baseHash: tracker.baseline, lineage, state: json };
@@ -85,7 +97,19 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 		pending = false;
 		if ( booting || loading ) return writes;
 
-		const { json, hash } = snapshot();
+		let sceneSnapshot;
+		try {
+
+			sceneSnapshot = snapshot();
+
+		} catch ( error ) {
+
+			if ( error.code !== 'SCENE_INVALID' ) throw error;
+			console.warn( error.message );
+			return writes;
+
+		}
+		const { json, hash } = sceneSnapshot;
 		const result = tracker.observe( hash );
 
 		if ( editor.config.getKey( 'autosave' ) === false ) {
@@ -266,7 +290,8 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 
 			if ( tracker.isDirty() ) {
 
-				held = { key: key(), savedAt: lastEditAt, hash, baseHash: tracker.baseline, lineage, state: json };
+				const state = assertLoadableScene( json, 'save' );
+				held = { key: key(), savedAt: lastEditAt, hash, baseHash: tracker.baseline, lineage, state };
 				await store.putRecover( held );
 
 			}
@@ -329,6 +354,7 @@ export function WorkGuard( editor, { getSource = () => null } = {} ) {
 
 		async recover( entry ) {
 
+			editor.validateSceneForLoad( entry.state );
 			loading = true;
 
 			try {

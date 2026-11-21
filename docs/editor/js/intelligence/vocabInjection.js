@@ -5,6 +5,7 @@
 // Result: model emits {op, selector, args} JSON from constrained choices.
 
 import { OP_SCHEMA } from './editOps.js';
+import { MIN_SCALE } from './opRefusals.js';
 import * as selectorEngine from './selectorEngine.js';
 import { deriveClasses, getAllClasses } from './classDerive.js';
 
@@ -123,6 +124,7 @@ Op format: {"op":"<op>", "selector":"<selector>", "args":{...}}
 - op must be one of: ${ops.join(', ')}
 - selector: CSS subset (#id, .class, type, A B, A>B)
 - args: op-specific (e.g., recolor:{color:0xRRGGBB}, scale:{factor:2}, play:{clip:"mocap",at:2,loop:true}, pause:{clip,at}, stop:{clip,at}, seek:{time,clip,at})
+- For the smallest allowed visible transform, use scaleTo:{factor:${MIN_SCALE}}. Do not use zero scale or guess smaller factors. This changes visible dimensions, not geometry payload size.
 
 CRITICAL: Respond ONLY with valid JSON op(s), no other text.
 `.trim();

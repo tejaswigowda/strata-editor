@@ -163,6 +163,31 @@ mirrorMesh(mesh, axis='x')                arrayDuplicate(mesh, count, dx, dy, dz
 subdivide(mesh, iterations=1)             listOps()   // print registered op schema
 ```
 
+### Refusal results and scale limits
+
+Structured `op(...)` calls return `{ success: false, code, op, argument, received, nearest, message }`
+on refusal. Read `OP_VOCABULARY.<op>.domains` before constructing arguments and
+`REFUSAL_CODES` for the enumerable code set. `nearest: null` means there is no
+safe automatic substitution (for example, a missing geometry reference).
+
+```js
+op({ type: 'scaleTo', selector: '#tree4', factor: 0 })  // SCALE_ZERO, nearest: 0.001
+const floor = OP_VOCABULARY.scaleTo.domains.factor.minimumMagnitude
+op({ type: 'scaleTo', selector: '#tree4', factor: floor })
+```
+
+The floor is for visible scale, not file or GPU size. The Object panel and
+Shell transform setter share the command check. A refused batch does not enter
+undo history. Arbitrary JS that writes directly to Three.js is not guarded by
+the op grammar; scene Save, autosave, and Git commit validate independently.
+
+Save and load report invalid transforms, geometry references, and clip tracks
+by object. Non-finite, repeated, or decreasing key times (including collisions
+at Float32 precision) and non-positive clip durations are refused. A two-key
+hold of about 1 ms with identical values is normalized to its first key,
+preserving the clip duration. Longer holds and short keys with different values
+are left unchanged.
+
 ## Scene & UI-to-shell parity
 
 Everything doable in the panels is callable from the shell. Graph mutations go through Commands

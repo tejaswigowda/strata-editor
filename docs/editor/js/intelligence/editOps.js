@@ -14,6 +14,8 @@
 
 import * as selectorEngine from './selectorEngine.js';
 import { numericArgs } from './opArgs.js';
+import { checkScale, refuse } from './opRefusals.js';
+import { op as dispatchEdit } from './opPrimitive.js';
 import { SetMaterialColorCommand } from '../commands/SetMaterialColorCommand.js';
 import { SetMaterialCommand } from '../commands/SetMaterialCommand.js';
 import { SetMaterialValueCommand } from '../commands/SetMaterialValueCommand.js';
@@ -25,7 +27,6 @@ import { SetColorCommand } from '../commands/SetColorCommand.js';
 import { AddObjectCommand } from '../commands/AddObjectCommand.js';
 import { RemoveObjectCommand } from '../commands/RemoveObjectCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
-import { clipControlOp } from './clipControl.js';
 
 // ── Op schema (for constrained decoding / vocab injection) ─────────────────────
 
@@ -467,6 +468,8 @@ export function recolorOp( editor, selector, color ) {
  */
 export function scaleOp( editor, selector, factor, axis = null ) {
 
+	const refusal = checkScale( 'scale', 'factor', factor );
+	if ( refusal ) return refusal;
 	const nodes = selectorEngine.query( editor.scene, selector );
 	if ( nodes.length === 0 ) {
 
@@ -479,13 +482,6 @@ export function scaleOp( editor, selector, factor, axis = null ) {
 	if ( ! checkedScale.ok ) return { success: false, message: `scaleOp: ${ checkedScale.message }` };
 	factor = checkedScale.values.factor;
 
-	const safeFactor = clamp( factor, 0.1, 10 );
-	if ( Math.abs( safeFactor - factor ) > 0.01 ) {
-
-		console.warn( `scaleOp: factor clamped from ${ factor } to ${ safeFactor }` );
-
-	}
-
 	const cmds = [];
 
 	for ( const node of nodes ) {
@@ -495,11 +491,11 @@ export function scaleOp( editor, selector, factor, axis = null ) {
 			const newScale = node.scale.clone();
 			if ( axis && [ 'x', 'y', 'z' ].includes( String( axis ).toLowerCase() ) ) {
 
-				newScale[ String( axis ).toLowerCase() ] *= safeFactor; // single-axis
+				newScale[ String( axis ).toLowerCase() ] *= factor;
 
 			} else {
 
-				newScale.multiplyScalar( safeFactor ); // uniform
+				newScale.multiplyScalar( factor );
 
 			}
 
@@ -514,8 +510,8 @@ export function scaleOp( editor, selector, factor, axis = null ) {
 	}
 
 	if ( cmds.length === 0 ) return { success: false, count: 0 };
-	editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
-	return { success: true, count: cmds.length };
+	const result = editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	return result?.success === false ? result : { success: true, count: cmds.length };
 
 }
 
@@ -573,7 +569,8 @@ export function moveOp( editor, selector, dx, dy, dz ) {
 	}
 
 	if ( cmds.length === 0 ) return { success: false, count: 0 };
-	editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	const result = editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	if ( result?.success === false ) return result;
 	const msg = grounded > 0 ? `${ grounded } node(s) grounded (y≥0)` : null;
 	return { success: true, message: msg, count: cmds.length };
 
@@ -1063,6 +1060,8 @@ export function rotateToOp( editor, selector, x, y, z ) {
  */
 export function scaleToOp( editor, selector, factor ) {
 
+	const refusal = checkScale( 'scaleTo', 'factor', factor );
+	if ( refusal ) return refusal;
 	const nodes = selectorEngine.query( editor.scene, selector );
 	if ( nodes.length === 0 ) {
 
@@ -1071,7 +1070,6 @@ export function scaleToOp( editor, selector, factor ) {
 
 	}
 
-	const safeFactor = clamp( parseFloat( factor ) || 1, 0.01, 100 );
 	const THREE = window.THREE;
 	const cmds = [];
 
@@ -1079,7 +1077,7 @@ export function scaleToOp( editor, selector, factor ) {
 
 		try {
 
-			const newScale = new THREE.Vector3( safeFactor, safeFactor, safeFactor );
+			const newScale = new THREE.Vector3( factor, factor, factor );
 			cmds.push( new SetScaleCommand( editor, node, newScale ) );
 
 		} catch ( e ) {
@@ -1091,8 +1089,8 @@ export function scaleToOp( editor, selector, factor ) {
 	}
 
 	if ( cmds.length === 0 ) return { success: false, count: 0 };
-	editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
-	return { success: true, count: cmds.length };
+	const result = editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+	return result?.success === false ? result : { success: true, count: cmds.length };
 
 }
 
@@ -1129,8 +1127,8 @@ export function resetOp( editor, selector ) {
 	}
 
 	if ( cmds.length === 0 ) return { success: false, count: 0 };
-	editor.execute( new MultiCmdsCommand( editor, cmds ) );
-	return { success: true, count: cmds.length };
+	const result = editor.execute( new MultiCmdsCommand( editor, cmds ) );
+	return result?.success === false ? result : { success: true, count: cmds.length };
 
 }
 
@@ -1189,7 +1187,7 @@ export function lookAtOp( editor, selector, target ) {
 			// Extract quaternion from the matrix
 			const quat = new THREE.Quaternion();
 			quat.setFromRotationMatrix( matrix );
-			cmds.push( new SetRotationCommand( editor, node, quat ) );
+			cmds.push( new SetRotationCommand( editor, node, new THREE.Euler().setFromQuaternion( quat, node.rotation.order ) ) );
 
 		} catch ( e ) {
 
@@ -1200,8 +1198,8 @@ export function lookAtOp( editor, selector, target ) {
 	}
 
 	if ( cmds.length === 0 ) return { success: false, count: 0 };
-	editor.execute( new MultiCmdsCommand( editor, cmds ) );
-	return { success: true, count: cmds.length };
+	const result = editor.execute( new MultiCmdsCommand( editor, cmds ) );
+	return result?.success === false ? result : { success: true, count: cmds.length };
 
 }
 
@@ -1371,103 +1369,9 @@ export function setCameraPropOp( editor, selector, attr, value ) {
  */
 export function executeEditOp( editor, opData ) {
 
-	if ( ! editor || ! editor.scene ) return { success: false, message: 'No editor' };
-
-	const err = validateOp( opData );
-	if ( err ) return { success: false, message: `Invalid op: ${ err }` };
-
-	const { op, selector, args } = opData;
-
-	try {
-
-		switch ( op ) {
-
-			case 'recolor':
-				return recolorOp( editor, selector, args.color );
-			case 'scale':
-				return scaleOp( editor, selector, args.factor, args.axis );
-			case 'move':
-				return moveOp( editor, selector, args.dx, args.dy, args.dz );
-			case 'rotate':
-				return rotateOp( editor, selector, args.axis, args.degrees );
-			case 'delete':
-				return deleteOp( editor, selector );
-			case 'duplicate':
-				return duplicateOp( editor, selector, args.dx, args.dy, args.dz );
-			case 'setMaterial':
-				return setMaterialOp( editor, selector, args.props );
-			case 'setOpacity':
-				return setOpacityOp( editor, selector, args.value );
-			case 'setVisible':
-				return setVisibleOp( editor, selector, args.visible );
-			case 'wireframe':
-				return wireframeOp( editor, selector, args.wireframe );
-			case 'moveTo':
-				return moveToOp( editor, selector, args.x, args.y, args.z );
-			case 'rotateTo':
-				return rotateToOp( editor, selector, args.x, args.y, args.z );
-			case 'scaleTo':
-				return scaleToOp( editor, selector, args.factor );
-			case 'reset':
-				return resetOp( editor, selector );
-			case 'lookAt':
-				return lookAtOp( editor, selector, args.target );
-			case 'castShadow':
-				return setObjectPropOp( editor, selector, 'castShadow', Boolean( args.value ), isMeshOrLight );
-			case 'receiveShadow':
-				return setObjectPropOp( editor, selector, 'receiveShadow', Boolean( args.value ), isMeshNode );
-			case 'frustumCulled':
-				return setObjectPropOp( editor, selector, 'frustumCulled', Boolean( args.value ), isMeshNode );
-			case 'renderOrder':
-				return setObjectPropOp( editor, selector, 'renderOrder', Number( args.value ) || 0, isMeshNode );
-			case 'flatShading':
-				return setMaterialPropOp( editor, selector, 'flatShading', Boolean( args.value ) );
-			case 'metalness':
-				return setMaterialPropOp( editor, selector, 'metalness', Number( args.value ) );
-			case 'roughness':
-				return setMaterialPropOp( editor, selector, 'roughness', Number( args.value ) );
-			case 'emissiveIntensity':
-				return setMaterialPropOp( editor, selector, 'emissiveIntensity', Number( args.value ) );
-			case 'doubleSided':
-				return setMaterialPropOp( editor, selector, 'side', Boolean( args.value ) ? 2 : 0 );
-			case 'emissive':
-				return setMaterialColorOp( editor, selector, 'emissive', args.color );
-			case 'intensity':
-				return setLightPropOp( editor, selector, 'intensity', Number( args.value ) );
-			case 'distance':
-				return setLightPropOp( editor, selector, 'distance', Number( args.value ) );
-			case 'angle':
-				return setLightPropOp( editor, selector, 'angle', Number( args.value ) );
-			case 'penumbra':
-				return setLightPropOp( editor, selector, 'penumbra', Number( args.value ) );
-			case 'decay':
-				return setLightPropOp( editor, selector, 'decay', Number( args.value ) );
-			case 'lightColor':
-				return setLightColorOp( editor, selector, 'color', args.color );
-			case 'groundColor':
-				return setLightColorOp( editor, selector, 'groundColor', args.color );
-			case 'fov':
-				return setCameraPropOp( editor, selector, 'fov', Number( args.value ) );
-			case 'near':
-				return setCameraPropOp( editor, selector, 'near', Number( args.value ) );
-			case 'far':
-				return setCameraPropOp( editor, selector, 'far', Number( args.value ) );
-			// Imported-clip control: same op-JSON args the model fills (clip, at, loop, speed, weight, fade, time).
-			case 'play':
-			case 'pause':
-			case 'stop':
-			case 'seek':
-				return clipControlOp( editor, { type: op, selector, ...args } );
-			default:
-				return { success: false, message: `Unknown op: ${ op }` };
-
-		}
-
-	} catch ( e ) {
-
-		console.error( `Edit op error (${ op }):`, e );
-		return { success: false, message: e.message };
-
-	}
+	const { op, selector, args } = opData || {};
+	if ( ! OP_SCHEMA.properties.op.enum.includes( op ) ) return refuse( 'ARGUMENT_INVALID', 'edit', 'op', op, null, 'must name a registered edit op' );
+	if ( ! args || typeof args !== 'object' || Array.isArray( args ) ) return refuse( 'ARGUMENT_INVALID', op, 'args', args, null, 'must be an object' );
+	return dispatchEdit( editor, { ...args, type: op, selector } );
 
 }

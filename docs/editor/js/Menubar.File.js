@@ -59,22 +59,13 @@ function MenubarFile( editor ) {
 		try {
 
 			const json = JSON.parse( await file.text() );
-
-			async function onEditorCleared() {
-
-				await editor.fromJSON( json );
-
-				editor.signals.editorCleared.remove( onEditorCleared );
-
-			}
-
-			editor.signals.editorCleared.add( onEditorCleared );
-
+			editor.validateSceneForLoad( json );
 			editor.clear();
+			await editor.fromJSON( json );
 
 		} catch ( e ) {
 
-			alert( strings.getKey( 'prompt/file/failedToOpenProject' ) );
+			alert( `${ strings.getKey( 'prompt/file/failedToOpenProject' ) }\n${ e.message }` );
 			console.error( e );
 
 		} finally {
@@ -108,7 +99,17 @@ function MenubarFile( editor ) {
 		.addClass( 'option' )
 		.onClick( function () {
 
-			const json = editor.toJSON();
+			let json;
+			try {
+
+				json = editor.sceneForSave();
+
+			} catch ( error ) {
+
+				alert( error.message );
+				return;
+
+			}
 			const blob = new Blob( [ JSON.stringify( json ) ], { type: 'application/json' } );
 			editor.utils.save( blob, exportNameFor( editor, 'json', { fallback: 'project' } ) );
 			if ( editor.work ) editor.work.markClean();

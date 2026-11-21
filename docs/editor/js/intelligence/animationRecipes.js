@@ -12,6 +12,7 @@
 import * as selectorEngine from './selectorEngine.js';
 import { AddAnimationClipCommand } from '../commands/AddAnimationClipCommand.js';
 import { MultiCmdsCommand } from '../commands/MultiCmdsCommand.js';
+import { SetValueCommand } from '../commands/SetValueCommand.js';
 
 // ── Recipe schema ───────────────────────────────────────────────────────────────
 
@@ -2050,21 +2051,6 @@ export function executeRecipeOp( editor, recipeData ) {
 
 	}
 
-	// Auto-show before entrance animations
-	if ( ENTRANCE_RECIPES.has( recipe ) ) {
-
-		for ( const node of nodes ) {
-
-			if ( ! node.visible ) {
-
-				node.visible = true;
-
-			}
-
-		}
-
-	}
-
 	try {
 
 		let clips = [];
@@ -2091,8 +2077,10 @@ export function executeRecipeOp( editor, recipeData ) {
 		// Register all clips through the command system (one execution surface —
 		// undoable/versioned). Clips target node uuids but register on the scene,
 		// matching the existing addClip path. Batch into one undo for the request.
-		const cmds = clips.map( clip => new AddAnimationClipCommand( editor, clip, editor.scene ) );
-		editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+		const cmds = ENTRANCE_RECIPES.has( recipe ) ? nodes.filter( node => ! node.visible ).map( node => new SetValueCommand( editor, node, 'visible', true ) ) : [];
+		cmds.push( ...clips.map( clip => new AddAnimationClipCommand( editor, clip, editor.scene ) ) );
+		const result = editor.execute( cmds.length === 1 ? cmds[ 0 ] : new MultiCmdsCommand( editor, cmds ) );
+		if ( result?.success === false ) return result;
 
 		return { success: true, count: clips.length };
 

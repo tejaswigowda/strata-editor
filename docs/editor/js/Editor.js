@@ -14,6 +14,8 @@ import { TimelineModel, invalidateRestState, clearRestStateCache, withCanonicalR
 import { syncTimeline } from './intelligence/timelineController.js';
 import { withAuthoredText } from './intelligence/textChange.js';
 import { findSharedMaterials } from './intelligence/editOps.js';
+import { validateCommand } from './intelligence/commandConstraints.js';
+import { assertLoadableScene, assertSceneGraph } from './intelligence/sceneValidation.js';
 import { withoutBakedTextures } from './scene/serialize.js';
 import { applyStoredTheme } from './Theme.js';
 import { settleBakedOutline } from './toon/bakedOutlines.js';
@@ -781,13 +783,35 @@ Editor.prototype = {
 
 	//
 
+	validateSceneForLoad: function ( json, operation = 'load' ) {
+
+		return assertLoadableScene( json, operation );
+
+	},
+
 	fromJSON: async function ( json ) {
 
+		json = assertLoadableScene( json, 'load' );
 		var loader = new THREE.ObjectLoader();
 
 		// A record (scene.userData.record, see export/records.js) is saved without a camera, controls, renderer settings or history: how the last person looked at
 		// it is not part of it, and would put a camera matrix in every diff. Its view is derived from the scene below.
-		var camera = json.camera !== undefined ? await loader.parseAsync( json.camera ) : null;
+		const parse = async ( data, field ) => {
+
+			try {
+
+				return await loader.parseAsync( data );
+
+			} catch ( error ) {
+
+				const root = data?.object;
+				throw new Error( `load: "${ root?.name || root?.uuid || field }" ${ field }.object (got ${ root?.type || 'unknown type' }): ${ error.message }`, { cause: error } );
+
+			}
+
+		};
+		var camera = json.camera !== undefined ? await parse( json.camera, 'camera' ) : null;
+		const scene = await parse( json.scene, 'scene' );
 
 		// `json.camera` is whichever camera the VIEWPORT was looking through at
 		// save time (`viewportCamera.toJSON()` in toJSON()) — that may be a genuine
@@ -817,7 +841,6 @@ Editor.prototype = {
 		if ( this.oplog ) this.oplog.note( 'load' );   // what a loaded scene holds was not written in this log
 		this.scripts = json.scripts;
 
-		const scene = await loader.parseAsync( json.scene );
 		normalizeSkinIndices( scene );
 
 		// Toon materials serialise as standard-material twins (see toon/ToonLook.js);
@@ -919,6 +942,7 @@ Editor.prototype = {
 
 	toJSON: function () {
 
+		assertSceneGraph( this.scene ); // Three.js serializes children recursively.
 		// scripts clean up
 
 		var scene = this.scene;
@@ -967,6 +991,7 @@ Editor.prototype = {
 				toneMapping: this.config.getKey( 'project/renderer/toneMapping' ),
 				toneMappingExposure: this.config.getKey( 'project/renderer/toneMappingExposure' )
 			},
+
 			camera: this.viewportCamera.toJSON(),
 			controls: this.controls.toJSON(),
 			// Serialize the CANONICAL rest state, not whatever transient pose the
@@ -986,6 +1011,12 @@ Editor.prototype = {
 		// A record is saved without how it was last looked at (camera, controls, renderer settings, undo history), so that opening one, orbiting and
 		// saving changes nothing. Its view is derived from the scene on open (frameRecord). See export/records.js.
 		return isRecordScene( this.scene.userData ) ? canonicalForm( json ) : json;
+
+	},
+
+	sceneForSave: function () {
+
+		return assertLoadableScene( this.toJSON(), 'save' );
 
 	},
 
@@ -1013,7 +1044,15 @@ Editor.prototype = {
 
 	execute: function ( cmd, optionalName ) {
 
+		const refusal = validateCommand( cmd );
+		if ( refusal ) {
+
+			console.warn( refusal.message );
+			return refusal;
+
+		}
 		this.history.execute( cmd, optionalName );
+		return { success: true };
 
 	},
 

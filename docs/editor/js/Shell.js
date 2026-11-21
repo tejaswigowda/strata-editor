@@ -58,7 +58,7 @@ import { listClientModels, getClientConfig, isClientModel, makeClientEngine, ope
 import { diagnoseImport, diagnosticMessages } from './import/diagnostics.js';
 import { labelImportedAsset } from './import/labelPass.js';
 import { executeRecipeOp } from './intelligence/animationRecipes.js';
-import { op as runOp, ops as runOps, makeQuery, OP_VOCABULARY } from './intelligence/opPrimitive.js';
+import { op as runOp, ops as runOps, makeQuery, OP_VOCABULARY, REFUSAL_CODES } from './intelligence/opPrimitive.js';
 import { makeMotion } from './intelligence/motionEditOps.js';
 import { makeSegment } from './intelligence/meshSegment.js';
 import { indexSubtree } from './intelligence/descriptors.js';
@@ -2308,6 +2308,7 @@ function Shell( editor ) {
 				holdTimelineAt: ( a, b ) => holdTimelineAt( editor, typeof a === 'number' ? a : b ),
 				// OP_VOCABULARY — the closed op set + typed args (for introspection).
 				OP_VOCABULARY,
+				REFUSAL_CODES,
 
 				// ── Agentic grounding tools (no vision model) ─────────────────────────
 				// findAPI(text) — retrieve REAL API signatures (anti-hallucination)
@@ -3498,7 +3499,7 @@ function Shell( editor ) {
 
 		} finally {
 
-			try { editor.clear(); await editor.fromJSON( _snap ); editor.storage.set( editor.toJSON() ); }
+			try { editor.clear(); await editor.fromJSON( _snap ); editor.storage.set( editor.sceneForSave() ); }
 			catch ( e ) { appendOutput( `eval cleanup (scene restore) failed: ${ e.message }`, 'error' ); }
 
 		}
@@ -4040,7 +4041,7 @@ ${ notes.join( '\n' ) }
 
 				editor.clear();
 				await editor.fromJSON( _sceneSnapshot );
-				editor.storage.set( editor.toJSON() );
+				editor.storage.set( editor.sceneForSave() );
 
 			} catch ( e ) { appendOutput( `eval cleanup (scene restore) failed: ${ e.message }`, 'error' ); }
 
