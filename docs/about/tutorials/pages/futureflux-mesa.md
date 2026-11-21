@@ -15,7 +15,9 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 ### Watch the one-minute short
 
-<figure><video controls playsinline preload="metadata" width="960" height="540" style="display:block;width:100%;height:auto" poster="./screenshots/futureflux-final-walkway.jpg" aria-label="FutureFlux Mesa: one-minute bilingual short"><source src="https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-1min-v1/futureflux-mesa.mp4" type="video/mp4"></video><figcaption>60 seconds, 1080p at 30 fps. English and Spanish captions are visible in the film. <a href="https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-1min-v1/futureflux-mesa.mp4">Download the MP4</a>.</figcaption></figure>
+<div class="wc-embed" title="FutureFlux Mesa one-minute short"><iframe src="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@ac27663268bd3c7105f3de25afea9c0dac86bb84/futureflux-mesa/" title="FutureFlux Mesa one-minute short in the Strata video player" loading="lazy" allow="fullscreen" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@ac27663268bd3c7105f3de25afea9c0dac86bb84/futureflux-mesa/" rel="noopener noreferrer">Open the short in Strata’s video player</a></div>
+
+60 seconds, 1080p at 30 fps. Use the Strata player’s subtitle menu to switch between English and Español. [Download the MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-1min-v1/futureflux-mesa.mp4).
 
 ### Explore the interactive scene
 
@@ -101,7 +103,7 @@ Open **Render → Subtitles** and import timed SRT cues. The bilingual format us
 
 Fade in Strata’s first-party call card and a dark backdrop after the last cue at 48 seconds. Hold the card in the authored timeline through **58 seconds**; Strata adds a **two-second render tail**, for exactly **60 seconds** in the export. The editor loads the current call card live; the offline render bakes that version into the film.
 
-In **Render → Video**, leave **Skip First** at **None**. The one-minute export uses **1080p at 30 fps (1,800 frames)** with both subtitle languages burned in and an SRT sidecar. Use separate SRT files for a player with a language selector. Leave the call card free of overlapping cues so viewers have time to scan the QR code.
+In **Render → Video**, leave **Skip First** at **None**. The one-minute export uses **1080p at 30 fps (1,800 frames)**. The embedded Strata video player offers separate English and Spanish subtitles from the scene’s timed cues. Leave the call card free of overlapping cues so viewers have time to scan the QR code.
 
 **Human check:** Save and reopen a copy. Confirm the three camera beats, embedded textures, tree stages, and caption units. Read the map legend and credits at output size before exporting.
 
