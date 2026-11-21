@@ -27,7 +27,7 @@ The short cut also has a 720p compatibility version for VS Code’s Integrated B
 
 [Open the final Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=ef8f4a5705d49d9bba076f179bf1a94664f6c0db&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export.
 
-To shorten the cut without speeding up the voices, use the longer of the English and Spanish recordings to set each shared cue window, then retime the camera moves, character walks, and tree reveals to match. Each language has **12 cues, with no overlaps or overruns**; the tightest cue has **0.34 seconds** to spare. Both subtitle tracks use the same cue boundaries, and the last cue ends at **0:58.5**, as the walkway camera begins its move up to the rooftop call card.
+To shorten the cut without speeding up the voices, use the longer of the English and Spanish recordings to set each shared cue window, then retime the camera moves, character walks, and tree reveals to match. Each language has **12 cues, with no overlaps or overruns**; the tightest cue has **0.34 seconds** to spare. Both subtitle tracks use the same cue boundaries, and the last cue ends at **0:58.5**, just as the camera begins to rise.
 
 ### Explore the interactive scene
 
@@ -103,7 +103,7 @@ In **Render → Video → Camera Sequence**, use a city opening camera, a compar
 
 The imported meshes initially repeated unreferenced vertices across material groups. Compact each indexed group without changing the geometry it draws, then store in-range facial morph deltas with normalized 16-bit integers. The subsequent optimization reduced character geometry in the saved scene from 64.7 MB to 41.5 MB without removing expressions, textures, or rigs.
 
-<figure><img src="./screenshots/futureflux-final-walkway.jpg" alt="Three walkers in rust, blue, and sage on the Red Mountain walkway" width="960" height="540"><figcaption>1:36 · Maya, Alex, and Jordan walk along the recolored slabs beside the illustrative cooling overlay.</figcaption></figure>
+<figure><img src="./screenshots/futureflux-final-walkway.jpg" alt="Three walkers in rust, blue, and sage on the Red Mountain walkway" width="960" height="540"><figcaption>Maya, Alex, and Jordan walk along the Red Mountain path beside the illustrative cooling overlay.</figcaption></figure>
 
 **Human check:** Scrub several parts of the final shot and rewind. Check for moving knees, opposed arm swing, feet close to the pavement, distinct strides, and no walkers leaving the path. Reopen a copy and check that all three imported clips still target the correct bones.
 
