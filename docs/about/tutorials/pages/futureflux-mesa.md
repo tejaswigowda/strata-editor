@@ -21,7 +21,7 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 The short cut also has a 720p compatibility version for VS Code’s Integrated Browser, with the same audio and subtitle choices.
 
-**1:10.5**, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling. [Watch the 2:01.5 extended cut](https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2f59f7f40d5e42977a842e13421157faa3f1a9d0/flux/).
+**1:10.5**, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling.
 
 <h3 id="short-bilingual-cut">Explore the 1:10.5 bilingual cut in Strata</h3>
 
