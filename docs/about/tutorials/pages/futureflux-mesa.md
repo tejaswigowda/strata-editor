@@ -15,7 +15,7 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 ### Watch the extended cut
 
-<div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2db2c1a258540a9e0fb139cbc181911923ac71be/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
+<div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a39dd46a938551486bfd3b8193ce197d717b22f5/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
 
 2:01.5, 1080p at 30 fps. The narration speaks English and then Spanish in each cue. Use the Strata player’s subtitle menu to choose English or Español. [Download the MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the narration SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
 
