@@ -15,13 +15,13 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 ### Watch the extended cut
 
-<div class="wc-embed" title="FutureFlux Mesa extended cut"><iframe src="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a39dd46a938551486bfd3b8193ce197d717b22f5/futureflux-mesa-extended/" title="FutureFlux Mesa extended cut in the Strata video player" loading="lazy" allow="fullscreen" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a39dd46a938551486bfd3b8193ce197d717b22f5/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
+<div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a39dd46a938551486bfd3b8193ce197d717b22f5/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
 
 2:01.5, 1080p at 30 fps. The narration speaks English and then Spanish in each cue. Use the Strata player’s subtitle menu to choose English or Español. [Download the MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the narration SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
 
 ### Explore the interactive scene
 
-<div class="wc-embed allow-popups" title="Interactive FutureFlux Mesa scene"><iframe src="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=4612f3d48b78f314eb810d5af468ea3cfa143708&amp;play=false&amp;present=true" title="Interactive FutureFlux Mesa scene in Strata" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=4612f3d48b78f314eb810d5af468ea3cfa143708&amp;play=false&amp;present=true" rel="noopener noreferrer">Open the pinned scene in Strata</a></div>
+<div class="wc-embed allow-popups" title="Interactive FutureFlux Mesa scene"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=4612f3d48b78f314eb810d5af468ea3cfa143708&amp;play=false&amp;present=true" rel="noopener noreferrer">Open the pinned scene in Strata</a></div>
 
 The live call card is not available inside the embedded scene. Watch it in the film above or open the pinned scene in Strata to see it there.
 
@@ -93,7 +93,7 @@ In **Render → Video → Camera Sequence**, use a city opening camera, a compar
 
 The imported meshes initially repeated unreferenced vertices across material groups. Compact each indexed group without changing the geometry it draws, then store in-range facial morph deltas with normalized 16-bit integers. The subsequent optimization reduced character geometry in the saved scene from 64.7 MB to 41.5 MB without removing expressions, textures, or rigs.
 
-<figure><img src="./screenshots/futureflux-final-walkway.jpg" alt="Three walkers in rust, blue, and sage on the Red Mountain walkway" width="960" height="540" loading="lazy"><figcaption>1:36 · Maya, Alex, and Jordan walk along the recolored slabs beside the illustrative cooling overlay.</figcaption></figure>
+<figure><img src="./screenshots/futureflux-final-walkway.jpg" alt="Three walkers in rust, blue, and sage on the Red Mountain walkway" width="960" height="540"><figcaption>1:36 · Maya, Alex, and Jordan walk along the recolored slabs beside the illustrative cooling overlay.</figcaption></figure>
 
 **Human check:** Scrub several parts of the final shot and rewind. Check for moving knees, opposed arm swing, feet close to the pavement, distinct strides, and no walkers leaving the path. Reopen a copy and check that all three imported clips still target the correct bones.
 

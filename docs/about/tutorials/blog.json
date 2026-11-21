@@ -3,7 +3,7 @@
   "title": "Strata tutorials",
   "author": "Strata",
   "description": "Step-by-step walkthroughs for building scenes, games, animation and characters with Strata.",
-  "domain": "https://strataeditor.dev/about/tutorials",
+  "domain": "http://strataeditor.dev/docs/about/tutorials",
   "repo": "tejaswigowda/strata-editor/docs/about/tutorials",
   "pagePermalink": "/{slug}.html",
   "search": true,
@@ -35,5 +35,8 @@
       "src": "https://cdn.jsdelivr.net/gh/tejaswigowda/strata-editor@c7d219444c2fcdad0048c894dbcd5aecae97397a/docs/about/tutorials/tutorial-enhancements.js",
       "integrity": "sha384-y1sh6hzXHZjzXM5Q2CYB8PNjm3NYzLLJ8hIAdWxgd1mZgsEU1VFdrcL3474EhSs8"
     }
-  ]
+  ],
+  "customize": {
+    "css": "@media (min-width: 1100px) {\n  html:has(.strata-tutorial-bubble-shooter-scene) main {\n    box-sizing: border-box;\n    width: min(100%, 1160px);\n    max-width: 1160px;\n    padding-right: 320px;\n  }\n  main:has(.strata-tutorial-bubble-shooter-scene) .credits {\n    position: fixed;\n    top: 8vh;\n    right: max(24px, calc((100vw - 1160px) / 2 + 24px));\n    box-sizing: border-box;\n    width: 260px;\n    max-height: 84vh;\n    overflow-y: auto;\n    margin: 0;\n    padding: 1.2rem;\n    border: 1px solid rgba(127, 127, 127, .35);\n    border-radius: 8px;\n    background: rgba(127, 127, 127, .08);\n  }\n}"
+  }
 }

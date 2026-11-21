@@ -2728,3 +2728,25 @@ h1,.page-title,.entry-title,.site-title,.post-title{overflow-wrap:anywhere}
 .page-title,h1.entry-title{font-size:clamp(1.75rem,9vw,2.5rem)}
 ul.posts.cards{grid-template-columns:1fr}
 }
+@media (min-width: 1100px) {
+  html:has(.strata-tutorial-bubble-shooter-scene) main {
+    box-sizing: border-box;
+    width: min(100%, 1160px);
+    max-width: 1160px;
+    padding-right: 320px;
+  }
+  main:has(.strata-tutorial-bubble-shooter-scene) .credits {
+    position: fixed;
+    top: 8vh;
+    right: max(24px, calc((100vw - 1160px) / 2 + 24px));
+    box-sizing: border-box;
+    width: 260px;
+    max-height: 84vh;
+    overflow-y: auto;
+    margin: 0;
+    padding: 1.2rem;
+    border: 1px solid rgba(127, 127, 127, .35);
+    border-radius: 8px;
+    background: rgba(127, 127, 127, .08);
+  }
+}
