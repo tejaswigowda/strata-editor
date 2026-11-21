@@ -2,18 +2,26 @@
 slug: futureflux-mesa
 title: "FutureFlux: From a Mesa heat map to a tree-shade proposal"
 status: published
-description: "Build a Mesa heat tour in Strata: map the site, compare Landsat samples, stage tree shade, animate cameras, and add bilingual subtitles."
+description: "Build a one-minute Mesa heat tour in Strata: compare Landsat samples, stage tree shade, customize VRM walkers, retarget a BVH walk cycle, and add bilingual subtitles."
 ---
 
 <div class="strata-tutorial-gis-walkway-shade"></div>
 <h1>FutureFlux: From a Mesa heat map to a tree-shade proposal</h1>
-<p class="tagline">Build a 48-second heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, camera moves, and bilingual subtitles.</p>
+<p class="tagline">Build a one-minute heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, animated walkers, and bilingual subtitles.</p>
 
 [All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html)
 
-Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. No model or speech tool is needed for steps 1–7.
+Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. No language model or speech tool is needed for steps 1–8.
 
-**Before starting:** Save unrelated work and use a separate Strata project. Open the [pinned Mesa scene](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=2e3481b3e47eda46f8bcb6e2287ae8e6a6c9c39b&play=false) for inspection. This walkthrough describes the finished local 48-second revision; some details differ from the pinned copy. Use the linked base tutorial for complete Shell blocks that construct the original mapped site from an empty scene.
+### Watch the one-minute short
+
+<figure><video controls playsinline preload="metadata" width="960" height="540" style="display:block;width:100%;height:auto" poster="./screenshots/futureflux-final-walkway.jpg" aria-label="FutureFlux Mesa: one-minute bilingual short"><source src="https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-1min-v1/futureflux-mesa.mp4" type="video/mp4"></video><figcaption>60 seconds, 1080p at 30 fps. English and Spanish captions are visible in the film. <a href="https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-1min-v1/futureflux-mesa.mp4">Download the MP4</a>.</figcaption></figure>
+
+### Explore the interactive scene
+
+<div class="wc-embed allow-popups" title="Interactive FutureFlux Mesa scene"><iframe src="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=5253c454ec669b952118c4982767c20ba162834f&amp;play=false&amp;present=true" title="Interactive FutureFlux Mesa scene in Strata" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=5253c454ec669b952118c4982767c20ba162834f&amp;play=false&amp;present=true" rel="noopener noreferrer">Open the pinned scene in Strata</a></div>
+
+**Before starting:** Save unrelated work and use a separate Strata project. The [original Mesa scene](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=2e3481b3e47eda46f8bcb6e2287ae8e6a6c9c39b&play=false) is the older rehearsal fixture, not the finished film. Use the linked base tutorial for complete Shell blocks that construct the original mapped site from an empty scene.
 
 ## 1. Build the site from Mesa GIS
 
@@ -47,7 +55,7 @@ Order the route **Encanto → Alta Mesa → Red Mountain**. Draw a red double-he
 
 Keep the original footprint and 6 m shell. Use repeating albedo, normal, and roughness maps on the stucco and mineral roof. The finished scene uses six embedded 256 × 256 procedural maps and separate glazing, frames, sills, coping, and base trim. These additions provide visual detail; they are illustrative, not survey records.
 
-Use two shared mesquite variants (`tree4` and `tree5`) for the eight baseline trees and eighteen proposed trees. In the finished scene the simplified shared meshes use about 12.4 MB of unique geometry, down from about 36.4 MB; this is a mesh-size reduction, not a reduction in visible tree height. Keep the leaves green and preserve each tree’s position and contact with the ground. Stage the proposed trees as cumulative groups of 3, 8, and 18.
+Use two shared mesquite variants (`tree4` and `tree5`) for the eight baseline trees and eighteen proposed trees. Simplify the shared meshes rather than each instance; in this pass the tree geometry in the saved scene dropped from 51.3 MB to 24.5 MB. Use dark olive-green leaves and warm brown bark, and preserve each tree’s dimensions, position, and contact with the ground. Stage the proposed trees as cumulative groups of 3, 8, and 18.
 
 **Human check:** Reload a saved copy. Trees should not change size, sink into the ground, or appear before their reveal. At eye level the material maps should still load and the façade should not change the mapped footprint.
 
@@ -55,12 +63,12 @@ Use two shared mesquite variants (`tree4` and `tree5`) for the eight baseline tr
 
 Use a separate shadow receiver over the Red Mountain heat surface so the colored layer does not wash out the tree shadows. The walkthrough uses an illustrative light setup, not a dated solar study. Put the qualitative shade-benefit indicator at the top of the walkway view, and turn it green as trees appear. Keep it separate from the historical temperature legend.
 
-Tree canopies block direct sunlight, so shaded pavement absorbs less solar energy and can stay cooler than pavement in full sun. The scene shows where shade increases; it does not calculate how many degrees the surface cools.
+Tree canopies block direct sunlight, so shaded pavement absorbs less solar energy and can stay cooler than pavement in full sun. Add a separate, progressively stronger green overlay and label it **Illustrative cooling · not measured**. A pale stone border above the heat layers helps viewers follow the path while leaving the pavement tint visible. Neither the border nor the overlay changes the Landsat data.
 
 **Human check:** Compare 36 s and 45 s from the same walkway camera. There should be more visible shade at 45 s, but the Landsat layer and its 51.5 °C sample should be unchanged. The green indicator must not resemble a new temperature reading.
 
-<figure><img src="./screenshots/futureflux-before.webp" alt="Red Mountain walkway and center before the proposed trees appear" width="1600" height="900"><figcaption>37 s · The Red Mountain walkway before proposed planting, with the baseline scene and historical heat overlay.</figcaption></figure>
-<figure><img src="./screenshots/futureflux-shade.webp" alt="Same Red Mountain walkway with proposed mesquites along the left side" width="1600" height="900"><figcaption>45 s · The same camera after all 18 proposed mesquites appear. This illustrates the planting and canopy coverage, not a measured temperature drop.</figcaption></figure>
+<figure><img src="./screenshots/futureflux-before.webp" alt="Red Mountain walkway and center before the proposed trees appear" width="1600" height="900"><figcaption>37 s · An earlier preview of the walkway before proposed planting.</figcaption></figure>
+<figure><img src="./screenshots/futureflux-shade.webp" alt="Same Red Mountain walkway with proposed mesquites along the left side" width="1600" height="900"><figcaption>45 s · An earlier preview after all 18 proposed mesquites appear. These two stills predate the final walkers and walkway border.</figcaption></figure>
 
 ## 6. Animate and check the three shots
 
@@ -68,15 +76,30 @@ In **Render → Video → Camera Sequence**, use a city opening camera, a compar
 
 - **0–12 s:** Hold the city view, start the eased push-in at 4 s, fade the title and boundary from 5 to 9 s, and switch cameras at about 9 s. Settle over Encanto at 12 s.
 - **12–36 s:** Hold Encanto, pull back to show the first distance arrow, settle over Alta Mesa at 21 s, and pull back for the second arrow. Reach Red Mountain at 30 s, then descend from 32 to 36 s.
-- **36–48 s:** Hold the walkway framing. Reveal three proposed trees at 38 s, eight total at 41 s, and eighteen at 44 s.
+- **36–48 s:** Glide forward at eye level without changing the lens. Reveal three proposed trees at 38 s, eight total at 41 s, and eighteen at 44 s.
 
 **Human check:** Enable the timeline’s follow-camera checkbox and use **as render**. Scrub backward and forward across the first handoff and all three planting beats. The opening should restore on rewind, the camera should not snap at the switch, and the planting counts should agree with the indicator.
 
-## 7. Add subtitles and verify the saved result
+## 7. Import, customize, and animate the walkers
+
+1. Import the three `.vrm` files into Strata and name their root groups **Maya**, **Alex**, and **Jordan**. Remove the old placeholder bodies and heads only after checking that no timeline track targets them. Place the new roots within the stone borders at human scale.
+2. In **Customize → Wardrobe**, select each avatar by name and use **Recolor** on the existing top and bottom. Maya wears rust and navy, Alex sage and brown, and Jordan blue and charcoal. Recolor the existing garments instead of adding new meshes that would need skin weights.
+3. Parse `walk-cycle.bvh` with Three.js `BVHLoader`. This file has 42 samples at about 24 fps. Map the source joints to the VRoid `J_Bip_` bones: `Hips` to `C_Hips`, `Ab` to `C_Spine`, `LeftShoulder` to `L_UpperArm`, and `LeftHip`, `LeftKnee`, and `LeftAnkle` to `L_UpperLeg`, `L_LowerLeg`, and `L_Foot`, with equivalent right-side mappings. Include spine, collar, head, elbow, and wrist rotation. In this scene the BVH faces +Z while the avatars face local −Z, so convert the rotations with a half-turn about Y. Do not copy the BVH’s joint offsets or its raw hip height over the VRM rest skeleton.
+4. Scale the source’s forward travel using each avatar’s leg length and direct it along the path. Offset the loop phases so their feet do not land together. Sample the shoe meshes when baking to calibrate root height to the pavement, then save the 19 bone-rotation tracks and two root-transform tracks per avatar. The finished clips use the source cycle from **36.25 to 48 seconds**; the closing card covers the motion hold after that. These clips were retargeted directly in Strata with the loader and saved as imported clips, not generated in the Customize tab.
+
+The imported meshes initially repeated unreferenced vertices across material groups. Compact each indexed group without changing the geometry it draws, then store in-range facial morph deltas with normalized 16-bit integers. The subsequent optimization reduced character geometry in the saved scene from 64.7 MB to 41.5 MB without removing expressions, textures, or rigs.
+
+<figure><img src="./screenshots/futureflux-final-walkway.jpg" alt="Three walkers in rust, blue, and sage on the outlined Red Mountain path" width="960" height="540" loading="lazy"><figcaption>42 s · The final render shows the retargeted walkers, the stone border, and the illustrative cooling overlay.</figcaption></figure>
+
+**Human check:** Scrub several parts of the final shot and rewind. Check for moving knees, opposed arm swing, feet close to the pavement, distinct strides, and no walkers leaving the path. Reopen a copy and check that all three imported clips still target the correct bones.
+
+## 8. Add bilingual subtitles, the call card, and export
 
 Open **Render → Subtitles** and import timed SRT cues. The bilingual format uses English first and Spanish second. The three historical samples are **137.3 °F, 120.4 °F, and 124.7 °F** in English and **58,5 °C, 49,1 °C, and 51,5 °C** in Spanish. Close by explaining that the proposed trees provide shade, not a measured temperature drop.
 
-In **Render → Video**, leave **Skip First** at **None** for timing to line up. Select **Also export a matching .srt file** for a sidecar, or hard-burn the bilingual track if both languages should always appear. Use separate SRT files for a player with a language selector. The 48-second cues leave the default two-second render tail uncaptioned.
+Fade in Strata’s first-party call card and a dark backdrop after the last cue at 48 seconds. Hold the card in the authored timeline through **58 seconds**; Strata adds a **two-second render tail**, for exactly **60 seconds** in the export. The editor loads the current call card live; the offline render bakes that version into the film.
+
+In **Render → Video**, leave **Skip First** at **None**. The one-minute export uses **1080p at 30 fps (1,800 frames)** with both subtitle languages burned in and an SRT sidecar. Use separate SRT files for a player with a language selector. Leave the call card free of overlapping cues so viewers have time to scan the QR code.
 
 **Human check:** Save and reopen a copy. Confirm the three camera beats, embedded textures, tree stages, and caption units. Read the map legend and credits at output size before exporting.
 
@@ -88,7 +111,7 @@ In **Render → Video**, leave **Skip First** at **None** for timing to line up.
 
 <section class="credits" id="credits"><h2>Credits and licences</h2><h3>People</h3><ul><li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script, scene)</span></li></ul><h3>Assets</h3><ul><li><a href="https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/">City of Mesa GIS</a>: City of Mesa GIS paths, Enterprise GIS building footprint, city boundary, and neighborhood records. <span class="lic">Licence: City of Mesa Data Terms of Use License Agreement; see dataset-specific notices.</span></li><li><a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>: © OpenStreetMap contributors; separately attributed context. <span class="lic">Licence: Open Database License (ODbL).</span></li><li><a href="https://doi.org/10.5066/P9OGBGM6">USGS Landsat 9 Collection 2 Level-2</a>: Historical land-surface-temperature observations; not a cooling model. <span class="lic">Licence: USGS public domain.</span></li></ul><h3>Tools</h3><ul><li><a href="https://threejs.org/">Three.js</a> <span class="lic">(MIT)</span></li><li><a href="https://playwright.dev/">Playwright</a> <span class="lic">(Apache-2.0)</span></li><li><a href="https://dub.webcli.app/">dub.webcli.app</a> <span class="lic">(GPL-3.0)</span></li><li><a href="https://whisper.webcli.app/">whisper.webcli.app</a> <span class="lic">(not stated in the demo provenance)</span></li><li><a href="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct">Qwen2.5-Coder-1.5B-Instruct</a> <span class="lic">(Apache-2.0)</span></li></ul></section>
 
-## 8. Optional: Playwright harness for distributed decision-making and suggestions
+## 9. Optional: Playwright harness for distributed decision-making and suggestions
 
 Here, **distributed** means different participants and components have different responsibilities. A resident defines the need. A model suggests an operation. The scene host determines what can be executed. The editor records the edit. The current rehearsal is single-operator browser automation, not multiplayer editing, voting, or community approval.
 
