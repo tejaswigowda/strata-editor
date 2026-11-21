@@ -1839,7 +1839,8 @@ function SidebarRender( editor ) {
 		previewWrap.appendChild( outCanvas );
 		previewWrap.style.display = '';
 
-		const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, preserveDrawingBuffer: true } );
+		// Map-scale shots and ground-level shots can share one sequence; keep nearby layers distinct at either scale.
+		const renderer = new THREE.WebGLRenderer( { canvas: glCanvas, antialias: true, preserveDrawingBuffer: true, logarithmicDepthBuffer: ! is360 } );
 		rendererInfo = { renderer: 'WebGLRenderer', device: renderer.capabilities.isWebGL2 ? 'webgl2' : 'webgl' };       // what drew these frames (the live view is WebGPU; the export is not)
 		const output = new LinearOutput( renderer );
 		renderer.setPixelRatio( 1 );
