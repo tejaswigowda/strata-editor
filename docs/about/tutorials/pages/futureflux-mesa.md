@@ -17,7 +17,9 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 **One film, two narration tracks on the same timeline.** Each English line and its Spanish counterpart use the same cue window, not one after the other. Use **Audio** in the upper-right corner to choose **English** or **Español**; only the selected track plays. Use the **subtitles** control to choose either language independently or turn subtitles off.
 
-<div class="wc-embed" title="FutureFlux Mesa short bilingual cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@e8e07b5427b95945caa48cf6e9e7d49004b64fc9/flux/" rel="noopener noreferrer">Open the short cut in Strata’s video player</a></div>
+<div class="wc-embed" title="FutureFlux Mesa short bilingual cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@e611dbf08c800f7c3b09fde0bd62361e302669bb/flux/" rel="noopener noreferrer">Open the short cut in Strata’s video player</a></div>
+
+The short cut also has a 720p compatibility version for VS Code’s Integrated Browser, with the same audio and subtitle choices.
 
 **1:10.5**, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling. [Watch the 2:01.5 extended cut](https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2f59f7f40d5e42977a842e13421157faa3f1a9d0/flux/).
 

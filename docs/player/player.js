@@ -11,6 +11,7 @@ const $ = id => document.getElementById( id );
 const video = $( 'video' ), qualityLabel = $( 'qualityLabel' ), quality = $( 'quality' );
 const audioLabel = $( 'audioLabel' ), audio = $( 'audio' );
 let hls = null;
+let compatibility = null;
 
 // Present mode: just the video (see presentMode in resolve.js). index.html decides it before first paint (the class is on <html>); decided again here on every hash change, since the hash can carry &present=true.
 function framed() { try { return window.self !== window.top; } catch ( e ) { return true; } }     // a cross-origin parent throws: that is a frame
@@ -63,9 +64,11 @@ async function offerPinned( base ) {
 function teardown() {
 
 	if ( hls ) { hls.destroy(); hls = null; }
+	if ( compatibility ) { compatibility.events.abort(); compatibility = null; }
 	if ( job ) job.abort();
 	ctx = null; $( 'dl' ).hidden = true; $( 'dlFiles' ).innerHTML = ''; $( 'dlNote' ).textContent = '';
 	video.removeAttribute( 'src' );
+	video.removeAttribute( 'crossorigin' );
 	video.querySelectorAll( 'track' ).forEach( t => t.remove() );
 	video.removeAttribute( 'poster' );
 	qualityLabel.hidden = true;
@@ -105,6 +108,7 @@ function levelChoices( h ) {
 
 function audioChoices() {
 
+	if ( compatibility ) return;
 	const tracks = hls ? hls.audioTracks : Array.from( video.audioTracks || [] );
 	const active = hls ? hls.audioTrack : tracks.findIndex( track => track.enabled );
 	audio.replaceChildren( ...tracks.map( ( track, i ) => new Option( track.name || track.label || track.lang || track.language || `Track ${ i + 1 }`, String( i ) ) ) );
@@ -117,11 +121,57 @@ audio.addEventListener( 'change', () => {
 
 	const index = Number( audio.value );
 	if ( hls ) hls.audioTrack = index;
+	else if ( compatibility ) compatibility.select( index );
 	else Array.from( video.audioTracks || [] ).forEach( ( track, i ) => { track.enabled = i === index; } );
 
 } );
 
 for ( const event of [ 'addtrack', 'removetrack', 'change' ] ) video.audioTracks?.addEventListener( event, () => { if ( ! hls ) audioChoices(); } );
+
+function playCompatibility( output, base, at, tracks ) {
+
+	if ( ! output?.type || ! video.canPlayType( output.type ) || ! Array.isArray( output.audio ) || ! output.audio.length ) return false;
+	const variants = output.audio;
+	const events = new AbortController();
+	let pending = null;
+	const select = index => {
+
+		if ( ! variants[ index ] ) return;
+		pending ??= { time: video.currentTime, playing: ! video.paused, rate: video.playbackRate };
+		setError( '' );
+		video.src = new URL( variants[ index ].path, base ).href;
+
+	};
+	compatibility = { select, events };
+	video.crossOrigin = 'anonymous'; // Caption requests in the sandboxed tutorial iframe need CORS.
+	video.addEventListener( 'loadedmetadata', () => {
+
+		if ( ! pending ) return;
+		const { time, playing, rate } = pending;
+		pending = null;
+		if ( time > 0 ) video.currentTime = time;
+		if ( rate !== undefined ) video.playbackRate = rate;
+		if ( playing ) video.play().catch( () => syncBigPlay() );
+
+	}, { signal: events.signal } );
+	video.addEventListener( 'error', () => {
+
+		pending = null;
+		setError( 'The compatibility video could not play. Try another audio option or open this render in desktop Chrome or Safari.' );
+
+	}, { signal: events.signal } );
+	audio.replaceChildren( ...variants.map( ( variant, i ) => new Option( variant.name || variant.language || `Track ${ i + 1 }`, String( i ) ) ) );
+	audio.value = '0';
+	audioLabel.hidden = variants.length < 2;
+	qualityLabel.hidden = true;
+	$( 'warn' ).textContent = 'Playing the compatibility video instead of HLS in this browser.';
+	$( 'warn' ).hidden = false;
+	tracks();
+	pending = { time: at, playing: ! video.paused, rate: video.playbackRate };
+	select( 0 );
+	return true;
+
+}
 
 async function play( input ) {
 
@@ -163,8 +213,7 @@ async function play( input ) {
 	// The captions: render.json lists every track (caption_tracks); older renders have just the one path. When the master carries a subtitle group the player lets
 	// the HLS engine show them (a <track> as well would draw every cue twice); otherwise each file is a <track> of its own.
 	const tracks = Array.isArray( outputs.caption_tracks ) && outputs.caption_tracks.length ? outputs.caption_tracks : ( outputs.captions ? [ { path: outputs.captions, language: 'en' } ] : [] );
-	if ( ! tracks.some( t => t.hls ) ) {
-
+	const addCaptions = () => {
 		tracks.forEach( ( tr, i ) => {
 
 			const t = document.createElement( 'track' );
@@ -172,8 +221,9 @@ async function play( input ) {
 			video.appendChild( t );
 
 		} );
-
-	}
+	};
+	const captionsInHls = tracks.some( t => t.hls );
+	if ( ! captionsInHls ) addCaptions();
 	// A link can name a cue (&cue=<id>): go to where it begins. The cue is looked up in the render's own track, by its authored id.
 	let startAt = null;
 	const wantCue = cueParam( { search: location.search, hash: location.hash } );
@@ -196,7 +246,6 @@ async function play( input ) {
 	const native = !! video.canPlayType( 'application/vnd.apple.mpegurl' );
 	const safari = /^((?!chrome|chromium|android).)*safari/i.test( navigator.userAgent );
 	const useHls = !! ( window.Hls && window.Hls.isSupported() ) && ! ( native && safari );
-	if ( ! useHls && ! native ) { setError( 'This browser can play neither native HLS nor hls.js (it needs Media Source Extensions).' ); return; }
 
 	// A CDN serving a freshly published tag can answer 404 for a file that exists, from one edge and not another, and hold that answer longer than hls.js retries
 	// (six times, about 30 s). A 404 or no answer therefore immediately moves playback to the next host that serves the same immutable folder (resolve.js candidateBases: the canonical address, the render's mirrors, the other jsDelivr hostnames),
@@ -204,6 +253,15 @@ async function play( input ) {
 	const hosts = candidateBases( base, rj && rj.publication );
 	const tried = [];
 	ctx = { hosts, good: 0, masterName, scene: sceneName, rj, outputs, tracks };
+	const useCompatibility = at => playCompatibility( outputs.compatibility, base, at, () => { if ( captionsInHls ) addCaptions(); } );
+	if ( ! useHls && ! native ) {
+
+		if ( ! useCompatibility( startAt ) ) setError( 'This browser does not support HLS playback. Open this render in desktop Chrome or Safari.' );
+		loadDownloads();
+		return;
+
+	}
+
 	function start( at, from ) {
 
 		const origin = hosts[ tried.length ], master = origin + masterName;
@@ -249,10 +307,18 @@ async function play( input ) {
 			if ( hls !== mine ) return;
 			const code = data.response && data.response.code !== undefined ? data.response.code : null;
 			if ( ! data.fatal && ! ( ( code === 404 || code === 0 ) && tried.length < hosts.length ) ) return;
+			const position = video.currentTime > 0 ? video.currentTime : resume;
+			hls = null; mine.destroy();
+			if ( data.details === 'manifestIncompatibleCodecsError' || data.details === 'bufferIncompatibleCodecsError' ) {
+
+				if ( ! useCompatibility( position ) ) setError( 'This browser does not support the codecs in this HLS render. Open this render in desktop Chrome or Safari.' );
+				return;
+
+			}
+			if ( data.type === 'mediaError' ) { setError( `The browser could not play the media (${ data.details }). Try desktop Chrome or Safari.` ); return; }
 			const detail = describeFailure( data, master );
-			mine.destroy(); if ( hls === mine ) hls = null;
-			// only a missing answer moves on: a 403 or a decode error would be the same from every host
-			if ( code === 404 || code === 0 || code === null ) failed( detail ); else { setError( detail + ' Is the render published, and has the CDN caught up?' ); offerPinned( base ); }
+			if ( code === 404 || code === 0 || ( code === null && data.type === 'networkError' ) ) failed( detail );
+			else { setError( detail ); if ( code !== null ) offerPinned( base ); }
 
 		} );
 		hls.loadSource( master );

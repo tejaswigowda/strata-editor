@@ -8,7 +8,7 @@ import * as resolve from '../resolve.js';
 const source = readFileSync( new URL( '../player.js', import.meta.url ), 'utf8' ).replace( /^import .*;$/gm, '' );
 const base = 'https://fastly.jsdelivr.net/gh/owner/repo@film/v1/film/';
 
-async function player() {
+async function player( { outputs = {}, canPlayType = () => '' } = {} ) {
 
 	const elements = new Map(), instances = [];
 	const element = id => {
@@ -18,7 +18,7 @@ async function player() {
 			events: {}, children: [],
 			addEventListener( type, handler ) { this.events[ type ] = handler; },
 			replaceChildren( ...children ) { this.children = children; },
-			removeAttribute() {}, querySelectorAll: () => [], canPlayType: () => ''
+			removeAttribute() {}, appendChild( child ) { this.children.push( child ); }, querySelectorAll: () => [], canPlayType
 		} );
 		return elements.get( id );
 
@@ -39,10 +39,10 @@ async function player() {
 	window.self = window.top = window;
 	const context = vm.createContext( {
 		...resolve, window, navigator: { userAgent: 'Chrome' }, location: { search: '', hash: '' },
-		document: { getElementById: element, documentElement: { classList: { toggle() {} }, style: { setProperty() {} } } },
-		innerHeight: 800, addEventListener() {}, URL, AbortSignal,
+		document: { getElementById: element, createElement: tag => ( { tag } ), documentElement: { classList: { toggle() {} }, style: { setProperty() {} } } },
+		innerHeight: 800, addEventListener() {}, URL, AbortController, AbortSignal,
 		Option: class { constructor( text, value ) { Object.assign( this, { text, value } ); } },
-		fetch: async () => ( { ok: true, json: async () => ( {} ), text: async () => '' } ),
+		fetch: async () => ( { ok: true, json: async () => ( { outputs } ), text: async () => '' } ),
 		parseMaster: () => ( { renditions: [] } )
 	} );
 	vm.runInContext( source, context );
@@ -67,6 +67,51 @@ test( 'audio is selectable only when multiple tracks are available', async () =>
 	picker.events.change();
 	assert.equal( hls.audioTrack, 1 );
 	assert.equal( element( 'video' ).currentTime, 0 );
+
+} );
+
+test( 'a fatal codec error does not retry mirrors or blame the CDN', async () => {
+
+	const { instances, element } = await player();
+	instances[ 0 ].error( { fatal: true, type: 'mediaError', details: 'manifestIncompatibleCodecsError' } );
+	assert.equal( instances[ 0 ].destroyed, true );
+	assert.equal( instances.length, 1 );
+	assert.match( element( 'error' ).textContent, /codecs.*Chrome/i );
+	assert.doesNotMatch( element( 'error' ).textContent, /no response|CDN/ );
+
+} );
+
+test( 'the compatibility rendition switches narration without dropping captions or restarting', async () => {
+
+	const { instances, element } = await player( {
+		canPlayType: type => type.startsWith( 'video/mp4' ) ? 'probably' : '',
+		outputs: {
+			compatibility: { type: 'video/mp4; codecs="avc1.64001f, mp4a.6B"', audio: [
+				{ name: 'English', path: 'compatibility/en.mp4' },
+				{ name: 'Español', path: 'compatibility/es.mp4' }
+			] },
+			caption_tracks: [ { language: 'en', path: 'captions.vtt', hls: 'subs/en/index.m3u8' }, { language: 'es', path: 'captions.es.vtt', hls: 'subs/es/index.m3u8' } ]
+		}
+	} );
+	instances[ 0 ].error( { fatal: true, details: 'manifestIncompatibleCodecsError' } );
+	const video = element( 'video' ), picker = element( 'audio' );
+	assert.equal( instances.length, 1 );
+	assert.equal( video.src, base + 'compatibility/en.mp4' );
+	assert.equal( element( 'error' ).textContent, '' );
+	assert.equal( element( 'audioLabel' ).hidden, false );
+	assert.deepEqual( video.children.map( t => t.src ), [ base + 'captions.vtt', base + 'captions.es.vtt' ] );
+	video.events.loadedmetadata();
+	video.currentTime = 21;
+	video.paused = false;
+	video.play = async () => { video.resumed = true; };
+	picker.value = '1';
+	picker.events.change();
+	assert.equal( video.src, base + 'compatibility/es.mp4' );
+	video.currentTime = 0;
+	video.events.loadedmetadata();
+	assert.equal( video.currentTime, 21 );
+	assert.equal( video.resumed, true );
+	assert.equal( video.children.length, 2 );
 
 } );
 
