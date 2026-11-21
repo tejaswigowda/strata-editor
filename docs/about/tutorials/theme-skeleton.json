@@ -1,4 +1,4 @@
 {
-  "html": "<main>{{content}}</main>\n",
+  "html": "<main>{{page-heading}}{{content}}</main>\n",
   "bodyClass": ""
 }

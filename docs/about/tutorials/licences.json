@@ -15,8 +15,8 @@
       "version": "1.0.0",
       "licence": "MIT",
       "repo": "tejaswigowda/strata-editor/docs/about/tutorials/theme",
-      "ref": "c7d219444c2fcdad0048c894dbcd5aecae97397a",
-      "sha256": "1dbdc36ce7594deffc48e27ed3a608ff17dab78174f4c45a19007d50df594b4b",
+      "ref": "c06252981cc747051419bcdbd526732111274bb5",
+      "sha256": "eabd42907dea0dcc0ea961c11ce96e285bb0df023b0a514a60076d3bb7fea3b9",
       "contract": "wordpress-classic",
       "source": "https://github.com/tejaswigowda/strata-editor"
     }
