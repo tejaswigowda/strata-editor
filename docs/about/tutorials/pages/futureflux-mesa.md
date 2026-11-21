@@ -7,7 +7,7 @@ description: "Build a Mesa heat tour in Strata: compare Landsat samples, stage t
 
 <div class="strata-tutorial-gis-walkway-shade"></div>
 <h1>FutureFlux: From a Mesa heat map to a tree-shade proposal</h1>
-<p class="tagline">Build a two-minute heat tour in Strata, from Landsat observations to a tree-shade proposal with animated walkers and independently selectable English and Spanish narration and subtitles.</p>
+<p class="tagline">Build a short heat tour in Strata, from Landsat observations to a tree-shade proposal with animated walkers and independently selectable English and Spanish narration and subtitles.</p>
 
 [All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html) · [Planner guide and shade results](./futureflux-mesa-planner.html)
 
@@ -17,13 +17,13 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 **One film, two narration tracks on the same timeline.** Each English line and its Spanish counterpart use the same cue window, not one after the other. Use **Audio** in the upper-right corner to choose **English** or **Español**; only the selected track plays. Use the **subtitles** control to choose either language independently or turn subtitles off.
 
-<div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2f59f7f40d5e42977a842e13421157faa3f1a9d0/flux/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
+<div class="wc-embed" title="FutureFlux Mesa short bilingual cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@e8e07b5427b95945caa48cf6e9e7d49004b64fc9/flux/" rel="noopener noreferrer">Open the short cut in Strata’s video player</a></div>
 
-2:01.5, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling. [Download the earlier MP4 with consecutive English and Spanish narration](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the source SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
+**1:10.5**, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling. [Watch the 2:01.5 extended cut](https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2f59f7f40d5e42977a842e13421157faa3f1a9d0/flux/).
 
 <h3 id="short-bilingual-cut">Explore the 1:10.5 bilingual cut in Strata</h3>
 
-[Open the shortened Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=5299b449f63df8e902fd0694ef24954239334538&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export. The embedded video above is still the **2:01.5** extended release.
+[Open the shortened Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=5299b449f63df8e902fd0694ef24954239334538&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export.
 
 To shorten the cut without speeding up the voices, use the longer of the English and Spanish recordings to set each shared cue window, then retime the camera moves, character walks, and tree reveals to match. Each language has **12 cues, with no overlaps or overruns**; the tightest cue has **0.34 seconds** to spare. Both subtitle tracks use the same cue boundaries, and the last cue ends at **0:58.5**, as the walkway camera begins its move up to the rooftop call card.
 
@@ -86,9 +86,9 @@ On a copy of the Mesa scene, import `./js/scene/futureFluxSun.js` relative to th
 
 In **Render → Video → Camera Sequence**, use a city opening camera, a comparison camera, and an eye-level walkway camera. Animate the city camera down toward Encanto while fading the city group. Match the first two cameras’ position, aim, and field of view at the handoff so the viewport does not jump even when it is not compositing the export fade.
 
-- **0:00–0:20:** Open over Mesa, then fade to the matched comparison camera at 0:14.5 and push in on Encanto.
-- **0:20–1:18:** Start the site close-ups at 0:20 (Encanto), 0:43 (Alta Mesa), and 1:05.5 (Red Mountain). Keep the site labels readable while both languages are spoken; pull back between sites to show the distance arrows.
-- **1:18–1:49.5:** Glide forward at eye level. Reveal three proposed trees at 1:26.5, eight total at 1:33, and eighteen at 1:40.
+- **0:00–0:12:** Open over Mesa, then fade to the matched comparison camera around 0:08.6 and push in on Encanto.
+- **0:12–0:40.5:** Start the site close-ups at 0:12 (Encanto), 0:23.5 (Alta Mesa), and 0:34.5 (Red Mountain). Keep each label readable through the shared narration window; pull back between sites to show the distance arrows.
+- **0:40.5–0:58.5:** Glide forward at eye level. Reveal three proposed trees at 0:45.5, eight total at 0:49.5, and eighteen at 0:53.5.
 
 **Human check:** Enable the timeline’s follow-camera checkbox and use **as render**. Scrub backward and forward across the first handoff and all three planting beats. The opening should restore on rewind, the camera should not snap at the switch, and the planting counts should agree with the indicator.
 
@@ -109,9 +109,9 @@ The imported meshes initially repeated unreferenced vertices across material gro
 
 Open **Render → Subtitles** and import timed SRT cues. The bilingual format uses English first and Spanish second. The three historical samples are **137.3 °F, 120.4 °F, and 124.7 °F** in English and **58,5 °C, 49,1 °C, and 51,5 °C** in Spanish. Close by explaining that the proposed trees provide shade, not a measured temperature drop.
 
-After the final cue, keep the same walkway camera and crane up to a tight, directly overhead view. Lay Strata’s transparent call card flat on the roof like painted lettering, without a dark backing. Hold the top-down shot from **1:55.5** through the authored end at **1:59.5**. The two-second render tail brings the export to **2:01.5**. The editor loads the call card live; the offline render bakes it into the film.
+After the final cue, keep the same walkway camera and crane up to a tight, directly overhead view. Lay Strata’s transparent call card flat on the roof like painted lettering, without a dark backing. Hold the top-down shot from **1:04.5** through the authored end at **1:08.5**. The two-second render tail brings the export to **1:10.5**. The editor loads the call card live; the offline render bakes it into the film.
 
-In **Render → Video**, leave **Skip First** at **None**. The extended export uses **1080p at 30 fps (3,645 frames)**. Split the source SRT into two languages without changing the cue times. Make one WAV per language, check that each line fits its cue, and upload the English WAV and the Spanish WAV under **Narration audio**, with `es` as the alternate language. Add each SRT separately in the publish panel. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
+In **Render → Video**, leave **Skip First** at **None**. The short export uses **1080p at 30 fps (2,115 frames)**. Make one WAV and one SRT per language using the shared short-cut cue windows. Check that each spoken line fits its cue, then upload the English WAV and the Spanish WAV under **Narration audio**, with `es` as the alternate language. Add each SRT separately in the publish panel. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
 
 **Human check:** Save and reopen a copy. Confirm the three camera beats, embedded textures, tree stages, and caption units. Read the map legend and credits at output size before exporting.
 
