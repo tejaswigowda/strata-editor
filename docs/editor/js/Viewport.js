@@ -1679,6 +1679,14 @@ function Viewport( editor ) {
 		const asRender = editor.viewportShading === 'render';
 		asRenderBadge( asRender );
 
+		// The preview path also needs live card textures, which are not saved with the scene.
+		scene.traverse( function ( o ) {
+
+			const bake = hydrateCallcard( o );
+			if ( bake ) bake.then( render );
+
+		} );
+
 		if ( asRender ) {
 
 			renderAsExport( container.dom.offsetWidth, container.dom.offsetHeight );
@@ -1717,7 +1725,7 @@ function Viewport( editor ) {
 		// missing their texture, then re-render once the (async) bake lands.
 		scene.traverse( function ( o ) {
 
-			const bake = hydrateHtmlEmbed( o ) || hydrateMarkdownEmbed( o ) || hydrateCallcard( o );
+			const bake = hydrateHtmlEmbed( o ) || hydrateMarkdownEmbed( o );
 			if ( bake ) bake.then( render );
 			hydrateEdgeOutline( o );
 
