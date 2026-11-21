@@ -21,6 +21,12 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 2:01.5, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling. [Download the earlier MP4 with consecutive English and Spanish narration](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the source SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
 
+<h3 id="short-bilingual-cut">Explore the 1:10.5 bilingual cut in Strata</h3>
+
+[Open the shortened Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=5299b449f63df8e902fd0694ef24954239334538&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export. The embedded video above is still the **2:01.5** extended release.
+
+To shorten the cut without speeding up the voices, use the longer of the English and Spanish recordings to set each shared cue window, then retime the camera moves, character walks, and tree reveals to match. Each language has **12 cues, with no overlaps or overruns**; the tightest cue has **0.34 seconds** to spare. Both subtitle tracks use the same cue boundaries, and the last cue ends at **0:58.5**, as the walkway camera begins its move up to the rooftop call card.
+
 ### Explore the interactive scene
 
 <div class="wc-embed allow-popups" title="Interactive FutureFlux Mesa scene"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=4612f3d48b78f314eb810d5af468ea3cfa143708&amp;play=false&amp;present=true" rel="noopener noreferrer">Open the pinned scene in Strata</a></div>
