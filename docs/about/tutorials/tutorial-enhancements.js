@@ -24,6 +24,7 @@
 	const style = document.createElement( 'style' );
 	style.textContent = `
 		.strata-brand { float: right; margin: 0 0 0.5em 1.2em; line-height: 0; border-radius: 16px; }
+		.page-heading { clear: none; margin-top: 0; }
 		.strata-brand img { width: 110px; height: 110px; display: block; object-fit: contain; opacity: 0.92; transition: opacity 0.15s, transform 0.15s; }
 		.strata-brand:hover img { opacity: 1; transform: scale( 1.06 ); }
 		.strata-brand:focus-visible { outline: 2px solid #7db2ff; outline-offset: 3px; }
