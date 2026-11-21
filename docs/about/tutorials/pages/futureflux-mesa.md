@@ -21,6 +21,8 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 <div class="wc-embed allow-popups" title="Interactive FutureFlux Mesa scene"><iframe src="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=5253c454ec669b952118c4982767c20ba162834f&amp;play=false&amp;present=true" title="Interactive FutureFlux Mesa scene in Strata" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=5253c454ec669b952118c4982767c20ba162834f&amp;play=false&amp;present=true" rel="noopener noreferrer">Open the pinned scene in Strata</a></div>
 
+The live call card is not available inside the embedded player. Watch it in the short above or open the pinned scene in Strata to see it there.
+
 **Before starting:** Save unrelated work and use a separate Strata project. The [original Mesa scene](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=2e3481b3e47eda46f8bcb6e2287ae8e6a6c9c39b&play=false) is the older rehearsal fixture, not the finished film. Use the linked base tutorial for complete Shell blocks that construct the original mapped site from an empty scene.
 
 ## 1. Build the site from Mesa GIS
