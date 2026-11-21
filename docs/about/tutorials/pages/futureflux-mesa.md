@@ -2,28 +2,28 @@
 slug: futureflux-mesa
 title: "FutureFlux: From a Mesa heat map to a tree-shade proposal"
 status: published
-description: "Build a one-minute Mesa heat tour in Strata: compare Landsat samples, stage tree shade, customize VRM walkers, retarget a BVH walk cycle, and add bilingual subtitles."
+description: "Build a Mesa heat tour in Strata: compare Landsat samples, stage tree shade, make VRM walkers in Look, customize their outfits, and retarget a BVH walk cycle."
 ---
 
 <div class="strata-tutorial-gis-walkway-shade"></div>
 <h1>FutureFlux: From a Mesa heat map to a tree-shade proposal</h1>
-<p class="tagline">Build a one-minute heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, animated walkers, and bilingual subtitles.</p>
+<p class="tagline">Build a two-minute heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, animated walkers, and bilingual subtitles.</p>
 
 [All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html)
 
-Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. No language model or speech tool is needed for steps 1–8.
+Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. Dub is optional if you export without narration.
 
-### Watch the one-minute short
+### Watch the extended cut
 
-<div class="wc-embed" title="FutureFlux Mesa one-minute short"><iframe src="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@ac27663268bd3c7105f3de25afea9c0dac86bb84/futureflux-mesa/" title="FutureFlux Mesa one-minute short in the Strata video player" loading="lazy" allow="fullscreen" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@ac27663268bd3c7105f3de25afea9c0dac86bb84/futureflux-mesa/" rel="noopener noreferrer">Open the short in Strata’s video player</a></div>
+<div class="wc-embed" title="FutureFlux Mesa extended cut"><iframe src="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2db2c1a258540a9e0fb139cbc181911923ac71be/futureflux-mesa-extended/" title="FutureFlux Mesa extended cut in the Strata video player" loading="lazy" allow="fullscreen" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2db2c1a258540a9e0fb139cbc181911923ac71be/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
 
-60 seconds, 1080p at 30 fps. Use the Strata player’s subtitle menu to switch between English and Español. [Download the MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-1min-v1/futureflux-mesa.mp4).
+2:01.5, 1080p at 30 fps. The narration speaks English and then Spanish in each cue. Use the Strata player’s subtitle menu to choose English or Español. [Download the MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the narration SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
 
 ### Explore the interactive scene
 
-<div class="wc-embed allow-popups" title="Interactive FutureFlux Mesa scene"><iframe src="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=5253c454ec669b952118c4982767c20ba162834f&amp;play=false&amp;present=true" title="Interactive FutureFlux Mesa scene in Strata" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=5253c454ec669b952118c4982767c20ba162834f&amp;play=false&amp;present=true" rel="noopener noreferrer">Open the pinned scene in Strata</a></div>
+<div class="wc-embed allow-popups" title="Interactive FutureFlux Mesa scene"><iframe src="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=4612f3d48b78f314eb810d5af468ea3cfa143708&amp;play=false&amp;present=true" title="Interactive FutureFlux Mesa scene in Strata" loading="lazy" allow="fullscreen" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=4612f3d48b78f314eb810d5af468ea3cfa143708&amp;play=false&amp;present=true" rel="noopener noreferrer">Open the pinned scene in Strata</a></div>
 
-The live call card is not available inside the embedded player. Watch it in the short above or open the pinned scene in Strata to see it there.
+The live call card is not available inside the embedded scene. Watch it in the film above or open the pinned scene in Strata to see it there.
 
 **Before starting:** Save unrelated work and use a separate Strata project. The [original Mesa scene](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=2e3481b3e47eda46f8bcb6e2287ae8e6a6c9c39b&play=false) is the older rehearsal fixture, not the finished film. Use the linked base tutorial for complete Shell blocks that construct the original mapped site from an empty scene.
 
@@ -67,9 +67,9 @@ Use two shared mesquite variants (`tree4` and `tree5`) for the eight baseline tr
 
 Use a separate shadow receiver over the Red Mountain heat surface so the colored layer does not wash out the tree shadows. The walkthrough uses an illustrative light setup, not a dated solar study. Put the qualitative shade-benefit indicator at the top of the walkway view, and turn it green as trees appear. Keep it separate from the historical temperature legend.
 
-Tree canopies block direct sunlight, so shaded pavement absorbs less solar energy and can stay cooler than pavement in full sun. Add a separate, progressively stronger green overlay and label it **Illustrative cooling · not measured**. A pale stone border above the heat layers helps viewers follow the path while leaving the pavement tint visible. Neither the border nor the overlay changes the Landsat data.
+Tree canopies block direct sunlight, so shaded pavement absorbs less solar energy and can stay cooler than pavement in full sun. Add a separate, progressively stronger green overlay and label it **Illustrative cooling · not measured**. Remove the separate walkway outline and tint alternating slabs pale blue-gray so viewers can follow the path under the heat overlay. Neither the slab colors nor the overlay changes the Landsat data.
 
-**Human check:** Compare 36 s and 45 s from the same walkway camera. There should be more visible shade at 45 s, but the Landsat layer and its 51.5 °C sample should be unchanged. The green indicator must not resemble a new temperature reading.
+**Human check:** Compare 1:19 and 1:42 from the same walkway camera. There should be more visible shade at 1:42, but the Landsat layer and its 51.5 °C sample should be unchanged. The green indicator must not resemble a new temperature reading.
 
 <figure><img src="./screenshots/futureflux-before.webp" alt="Red Mountain walkway and center before the proposed trees appear" width="1600" height="900"><figcaption>37 s · An earlier preview of the walkway before proposed planting.</figcaption></figure>
 <figure><img src="./screenshots/futureflux-shade.webp" alt="Same Red Mountain walkway with proposed mesquites along the left side" width="1600" height="900"><figcaption>45 s · An earlier preview after all 18 proposed mesquites appear. These two stills predate the final walkers and walkway border.</figcaption></figure>
@@ -78,22 +78,22 @@ Tree canopies block direct sunlight, so shaded pavement absorbs less solar energ
 
 In **Render → Video → Camera Sequence**, use a city opening camera, a comparison camera, and an eye-level walkway camera. Animate the city camera down toward Encanto while fading the city group. Match the first two cameras’ position, aim, and field of view at the handoff so the viewport does not jump even when it is not compositing the export fade.
 
-- **0–12 s:** Hold the city view, start the eased push-in at 4 s, fade the title and boundary from 5 to 9 s, and switch cameras at about 9 s. Settle over Encanto at 12 s.
-- **12–36 s:** Hold Encanto, pull back to show the first distance arrow, settle over Alta Mesa at 21 s, and pull back for the second arrow. Reach Red Mountain at 30 s, then descend from 32 to 36 s.
-- **36–48 s:** Glide forward at eye level without changing the lens. Reveal three proposed trees at 38 s, eight total at 41 s, and eighteen at 44 s.
+- **0:00–0:20:** Open over Mesa, then fade to the matched comparison camera at 0:14.5 and push in on Encanto.
+- **0:20–1:18:** Start the site close-ups at 0:20 (Encanto), 0:43 (Alta Mesa), and 1:05.5 (Red Mountain). Keep the site labels readable while both languages are spoken; pull back between sites to show the distance arrows.
+- **1:18–1:49.5:** Glide forward at eye level. Reveal three proposed trees at 1:26.5, eight total at 1:33, and eighteen at 1:40.
 
 **Human check:** Enable the timeline’s follow-camera checkbox and use **as render**. Scrub backward and forward across the first handoff and all three planting beats. The opening should restore on rewind, the camera should not snap at the switch, and the planting counts should agree with the indicator.
 
 ## 7. Import, customize, and animate the walkers
 
-1. Import the three `.vrm` files into Strata and name their root groups **Maya**, **Alex**, and **Jordan**. Remove the old placeholder bodies and heads only after checking that no timeline track targets them. Place the new roots within the stone borders at human scale.
+1. Make **Maya**, **Alex**, and **Jordan** in [Look (look.webcli.app)](https://look.webcli.app/). Start with a bundled base VRM or open your own, customize the character in Look, then export a `.vrm` for each walker. Import those three files into Strata, name the root groups, and place the walkers on the slabs at human scale. Remove the old placeholders only after checking that no timeline track targets them.
 2. In **Customize → Wardrobe**, select each avatar by name and use **Recolor** on the existing top and bottom. Maya wears rust and navy, Alex sage and brown, and Jordan blue and charcoal. Recolor the existing garments instead of adding new meshes that would need skin weights.
 3. Parse `walk-cycle.bvh` with Three.js `BVHLoader`. This file has 42 samples at about 24 fps. Map the source joints to the VRoid `J_Bip_` bones: `Hips` to `C_Hips`, `Ab` to `C_Spine`, `LeftShoulder` to `L_UpperArm`, and `LeftHip`, `LeftKnee`, and `LeftAnkle` to `L_UpperLeg`, `L_LowerLeg`, and `L_Foot`, with equivalent right-side mappings. Include spine, collar, head, elbow, and wrist rotation. In this scene the BVH faces +Z while the avatars face local −Z, so convert the rotations with a half-turn about Y. Do not copy the BVH’s joint offsets or its raw hip height over the VRM rest skeleton.
-4. Scale the source’s forward travel using each avatar’s leg length and direct it along the path. Offset the loop phases so their feet do not land together. Sample the shoe meshes when baking to calibrate root height to the pavement, then save the 19 bone-rotation tracks and two root-transform tracks per avatar. The finished clips use the source cycle from **36.25 to 48 seconds**; the closing card covers the motion hold after that. These clips were retargeted directly in Strata with the loader and saved as imported clips, not generated in the Customize tab.
+4. Scale the source’s forward travel using each avatar’s leg length and direct it along the path. Offset the loop phases so their feet do not land together. Sample the shoe meshes when baking to calibrate root height to the pavement, then save the 19 bone-rotation tracks and two root-transform tracks per avatar. The extended cut retimes those clips to the walkway dolly, from **1:18.25 to 1:49.5**. The motion was retargeted directly in Strata, not generated in Look or the Customize tab.
 
 The imported meshes initially repeated unreferenced vertices across material groups. Compact each indexed group without changing the geometry it draws, then store in-range facial morph deltas with normalized 16-bit integers. The subsequent optimization reduced character geometry in the saved scene from 64.7 MB to 41.5 MB without removing expressions, textures, or rigs.
 
-<figure><img src="./screenshots/futureflux-final-walkway.jpg" alt="Three walkers in rust, blue, and sage on the outlined Red Mountain path" width="960" height="540" loading="lazy"><figcaption>42 s · The final render shows the retargeted walkers, the stone border, and the illustrative cooling overlay.</figcaption></figure>
+<figure><img src="./screenshots/futureflux-final-walkway.jpg" alt="Three walkers in rust, blue, and sage on the Red Mountain walkway" width="960" height="540" loading="lazy"><figcaption>1:36 · Maya, Alex, and Jordan walk along the recolored slabs beside the illustrative cooling overlay.</figcaption></figure>
 
 **Human check:** Scrub several parts of the final shot and rewind. Check for moving knees, opposed arm swing, feet close to the pavement, distinct strides, and no walkers leaving the path. Reopen a copy and check that all three imported clips still target the correct bones.
 
@@ -101,9 +101,9 @@ The imported meshes initially repeated unreferenced vertices across material gro
 
 Open **Render → Subtitles** and import timed SRT cues. The bilingual format uses English first and Spanish second. The three historical samples are **137.3 °F, 120.4 °F, and 124.7 °F** in English and **58,5 °C, 49,1 °C, and 51,5 °C** in Spanish. Close by explaining that the proposed trees provide shade, not a measured temperature drop.
 
-Fade in Strata’s first-party call card and a dark backdrop after the last cue at 48 seconds. Hold the card in the authored timeline through **58 seconds**; Strata adds a **two-second render tail**, for exactly **60 seconds** in the export. The editor loads the current call card live; the offline render bakes that version into the film.
+After the final cue, keep the same walkway camera and crane up to a tight, directly overhead view. Lay Strata’s transparent call card flat on the roof like painted lettering, without a dark backing. Hold the top-down shot from **1:55.5** through the authored end at **1:59.5**. The two-second render tail brings the export to **2:01.5**. The editor loads the call card live; the offline render bakes it into the film.
 
-In **Render → Video**, leave **Skip First** at **None**. The one-minute export uses **1080p at 30 fps (1,800 frames)**. The embedded Strata video player offers separate English and Spanish subtitles from the scene’s timed cues. Leave the call card free of overlapping cues so viewers have time to scan the QR code.
+In **Render → Video**, leave **Skip First** at **None**. The extended export uses **1080p at 30 fps (3,645 frames)**. Use the retimed bilingual SRT for Dub: give each cue enough room for both spoken lines before the next cue starts. For the player, split the same timed text into selectable English and Spanish subtitle tracks. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
 
 **Human check:** Save and reopen a copy. Confirm the three camera beats, embedded textures, tree stages, and caption units. Read the map legend and credits at output size before exporting.
 

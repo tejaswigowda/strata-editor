@@ -69,7 +69,7 @@
 		"group": "Scenes",
 		"thumb": "screenshots/thumbs/futureflux-mesa.jpg",
 		"blurb": "Build a bilingual Mesa surface-heat tour from mapped geometry and Landsat observations, then stage proposed tree shade and animate the camera.",
-		"desc": "Build a Mesa heat tour in Strata: map the site, compare Landsat samples, stage tree shade, animate cameras, and add bilingual subtitles.",
+		"desc": "Build a Mesa heat tour in Strata: compare Landsat samples, stage tree shade, make VRM walkers in Look, customize their outfits, and retarget a BVH walk cycle.",
 		"contributors": [
 			{ "name": "Tejaswi Gowda", "role": "script", "url": "https://tejaswigowda.com/" },
 			{ "name": "Tejaswi Gowda", "role": "scene", "url": "https://tejaswigowda.com/" }
