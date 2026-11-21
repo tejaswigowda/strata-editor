@@ -10,6 +10,8 @@ image: asset:images/thumbs/segment-a-mesh.jpg
 
 # Cut an avocado into named parts, building the tool by hand
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <div class="wc-embed allow-popups" title="Cut an avocado into named parts, building the tool by hand: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&amp;file=avocado.json&amp;present=true">Open embed</a></div>
 
 <div class="note"><strong>The editor now has this tool built in.</strong> What this page builds by hand, a block called <code>CUT</code> here, ships in the editor as <code>SEG</code> (<code>SEG.describe</code>, <code>SEG.split</code>, <code>SEG.preview</code>, <code>SEG.restore</code>), with more checks: it refuses meshes it cannot cut safely (skinned, several materials, morph targets), reads the texture&#39;s own transform, welds on position and UV, and cuts in one undo step. To cut a model of your own, use the general tutorial, <a href="https://strataeditor.dev/about/tutorials/segment-any-mesh.html">Cut any textured mesh into named parts</a>, which uses <code>SEG</code>, and has this avocado as its quick example and a toy duck as its hard one. This page is kept because writing the tool once shows exactly what it does. It uses the name <code>CUT</code> so that it does not clash with the built-in <code>SEG</code>.</div>

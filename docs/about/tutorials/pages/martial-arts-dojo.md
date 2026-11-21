@@ -10,6 +10,8 @@ image: asset:images/thumbs/martial-arts-dojo.jpg
 
 # A martial-arts lesson, then a sparring match, in a bamboo dojo
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/dojo-lesson.png" alt="A student and a bald teacher face each other on a tatami mat inside an open bamboo hut with a calligraphy scroll and paper lanterns">&#10;		<figcaption>The finished scene, seen through the <code>cam-wide</code> camera at 30 s: the teacher demonstrates a kick while the student watches.</figcaption>&#10;	</figure>
 
 <p class="tagline">Two characters, one motion clip. A <strong>teacher</strong> performs a martial-arts routine in short chunks; after each chunk the <strong>student</strong>, who has been standing and watching, repeats it. Around them a bamboo hut with warm lanterns and a low sun, and four cameras that cut between over-the-shoulder, side and wide shots. Everything after the import is the JS Shell and the Render tab, and the finished scene is <a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=dojo.json&amp;branch=main"><code>dojo.json</code></a> in the <code>tejaswigowda/test1</code> repo.</p>

@@ -10,6 +10,8 @@ image: asset:images/thumbs/racing-circuit-scene.jpg
 
 # Build a labelled racing circuit with a script
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">A whole racing circuit from one short list of corner points: a road ribbon on rolling terrain, a harbour setting built from a handful of shared shapes, and — the part that matters to a game — every object given a name and classes <strong>at the moment it is created</strong>, so a game engine can find the start line, the checkpoints and the pickups by name. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order, or run the whole generator, <a href="https://strataeditor.dev/about/tutorials/circuit-build.js">circuit-build.js</a> (<a href="#run-all">step 8</a>).</p>
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/racing-circuit-aerial.jpg" alt="An aerial view of a racing circuit: a looping asphalt road with red and white kerbs on green rolling terrain, a grandstand and a pit garage, a harbour quay with stacked shipping containers and a crane along the bottom, and low hills behind.">&#10;		<figcaption>The finished circuit running in strata-play: 19,052 triangles, ten shared materials, 436 named nodes.</figcaption>&#10;	</figure>

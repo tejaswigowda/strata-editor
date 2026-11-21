@@ -10,6 +10,8 @@ image: asset:images/thumbs/bubble-shooter-scene.jpg
 
 # Build a bubble shooter scene
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">This scene deliberately stops short of gameplay: it builds a lane, a background, a sign — and exactly <strong>one</strong> bubble. Real bubble-shooter logic clones and recolors bubbles at runtime, so the scene&#39;s job is to hand that logic one well-formed, easy-to-find template rather than a whole pre-built grid. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/bubble-shooter-scene.png" alt="A lane bounded by two rails, a single pale translucent bubble resting on it, a wooden SCORE sign at the far end, framed by a rainforest of green trees under a misty canopy sky.">&#10;		<figcaption>The whole scene: a lane, one clonable Bubble, a wooden score sign, and a rainforest backdrop.</figcaption>&#10;	</figure>

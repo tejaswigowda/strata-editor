@@ -10,6 +10,8 @@ image: asset:images/thumbs/animate-a-character.jpg
 
 # Animate a finished character
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">One character, two baked clips and a timeline. Read what the file carries, start the body on cue, keep a camera on a character who walks, and check every claim by sampling the pose at a time and reading the numbers. It also says plainly where this scene stopped working.</p>
 
 <div class="note"><strong>Where the character comes from, and the credit.</strong> The character is made outside Strata, with three browser tools from the Web-CLI family, all of which run on your device (their pages say nothing leaves it). <strong>Character creation:</strong> <a href="https://portrait.webcli.app/" rel="noopener noreferrer">portrait.webcli.app</a> (portrait-webCLI: a photo in, a VRM out whose face blendshapes are driven from the face it read; the shape and colour matching is described on its page as a rough nudge, not a likeness) and <a href="https://look.webcli.app/" rel="noopener noreferrer">look.webcli.app</a> (look-webCLI: a VRM in, an edited VRM out, with its textures, colours, materials, outfits and accessories changed). <strong>Animation rigging:</strong> <a href="https://rig.webcli.app/" rel="noopener noreferrer">rig.webcli.app</a> (bodyrig-webCLI: retargets BVH, FBX or GLB motion, and ARKit-52 face records, onto a skinned character and exports one GLB with every animation as its own named track). This page starts where they stop: with the finished file open in Strata.</div>

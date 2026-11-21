@@ -10,6 +10,8 @@ image: asset:images/thumbs/two-character-dance.jpg
 
 # One dance, two characters
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <img width="100%" src="https://strataeditor.dev/about/tutorials/screenshots/1dance.gif" alt="Two characters dancing on a white stage">
 
 <p class="tagline">Two dancers on a blank white stage — a construct, if you like. <strong>Bruce</strong> starts a dance; <strong>The Boss</strong> picks it up three seconds later and copies it move for move, while a camera swings around so you see their faces for most of it. The characters are rigged and animated outside Strata with <a href="https://github.com/tejaswigowda/bodyrig-webCLI" rel="noopener noreferrer">bodyrig-webCLI</a> — it retargets one motion onto any skeleton and writes a single GLB with the animation baked in — then Strata stages and renders them. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>

@@ -7,19 +7,25 @@ description: "Build a Mesa heat tour in Strata: compare Landsat samples, stage t
 
 <div class="strata-tutorial-gis-walkway-shade"></div>
 <h1>FutureFlux: From a Mesa heat map to a tree-shade proposal</h1>
-<p class="tagline">Build a two-minute heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, animated walkers, and bilingual subtitles.</p>
+<p class="tagline">Build a two-minute heat tour in Strata, from Landsat observations to a tree-shade proposal with animated walkers and independently selectable English and Spanish narration and subtitles.</p>
 
 [All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html) · [Planner guide and shade results](./futureflux-mesa-planner.html)
 
 Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. Dub is optional if you export without narration.
 
-### Watch the extended cut
+<h3 id="watch-the-extended-cut">Watch in English or Español</h3>
 
+<<<<<<< HEAD
 This pinned film and scene predate the solar analysis below. Their lighting, narration about pavement shade, and green overlay are illustrative, not analysis results.
 
 <div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a39dd46a938551486bfd3b8193ce197d717b22f5/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
+=======
+**One film, two narration tracks.** In the player below, use **Audio** in the upper-right corner to switch between **English** and **Español**. Use the video’s **subtitles** control to choose either language or turn subtitles off. You can listen in Spanish while reading English, or the other way around.
+>>>>>>> a0f4026ded68b6f56f84206e354a9e7aea6132b1
 
-2:01.5, 1080p at 30 fps. The narration speaks English and then Spanish in each cue. Use the Strata player’s subtitle menu to choose English or Español. [Download the MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the narration SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
+<div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2f59f7f40d5e42977a842e13421157faa3f1a9d0/flux/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
+
+2:01.5, 1080p at 30 fps. The narration uses synthetic voices, and its qualitative shade descriptions are not measured cooling results. [Download the earlier combined-narration MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the source SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
 
 ### Explore the interactive scene
 
@@ -105,7 +111,7 @@ Open **Render → Subtitles** and import timed SRT cues. The bilingual format us
 
 After the final cue, keep the same walkway camera and crane up to a tight, directly overhead view. Lay Strata’s transparent call card flat on the roof like painted lettering, without a dark backing. Hold the top-down shot from **1:55.5** through the authored end at **1:59.5**. The two-second render tail brings the export to **2:01.5**. The editor loads the call card live; the offline render bakes it into the film.
 
-In **Render → Video**, leave **Skip First** at **None**. The extended export uses **1080p at 30 fps (3,645 frames)**. Use the retimed bilingual SRT for Dub: give each cue enough room for both spoken lines before the next cue starts. For the player, split the same timed text into selectable English and Spanish subtitle tracks. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
+In **Render → Video**, leave **Skip First** at **None**. The extended export uses **1080p at 30 fps (3,645 frames)**. Split the source SRT into two languages without changing the cue times. Make one WAV per language, check that each line fits its cue, and upload the English WAV and the Spanish WAV under **Narration audio**, with `es` as the alternate language. Add each SRT separately in the publish panel. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
 
 **Human check:** Save and reopen a copy. Confirm the three camera beats, embedded textures, tree stages, and caption units. Read the map legend and credits at output size before exporting.
 

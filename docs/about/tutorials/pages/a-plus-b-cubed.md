@@ -10,6 +10,8 @@ image: asset:images/thumbs/a-plus-b-cubed.jpg
 
 # Build the (a + b)³ proof in 3D
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <div class="wc-embed allow-popups" title="Build the (a + b)³ proof in 3D: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=a%2Bb-cubed.json&amp;present=true">Open embed</a></div>
 
 <p class="tagline">A 49-second visual proof that <em>(a + b)³ = a³ + 3a²b + 3ab² + b³</em>, with no numbers in it. It starts with the cube whole: a cube whose side is cut into a long part <em>a</em> and a short part <em>b</em>. The cube falls apart into eight blocks of four kinds, the blocks sort themselves by kind, and each kind lands under its own term of the expanded equation, each term in the colour of its blocks. Unlike the flat Pythagorean short, this one needs depth: solid blocks, shadows on a floor and a wall, a glass cube, five cameras that cut between each other, cutting planes, an x-ray that turns the other blocks to glass, and an equation that grows as the blocks arrive. It is built by hand with the JS Shell. Open the <a href="https://strataeditor.dev/">editor</a>, load an empty scene, open the <strong>Shell</strong> tab and paste each block in order, or open the finished scene, <a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=a%2Bb-cubed.json&amp;branch=main">a+b-cubed.json</a> (<a href="#open-finished">the last step</a>).</p>

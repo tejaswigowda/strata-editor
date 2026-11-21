@@ -10,6 +10,8 @@ image: asset:images/thumbs/makeshort.jpg
 
 # Make a Pythagorean-theorem short
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <div class="wc-video" title="Make a Pythagorean-theorem short: video demonstration"><a href="https://strataeditor.dev/about/tutorials/demos/pyth.mp4">Open video</a></div>
 
 <p class="tagline">A two-minute demonstration that 3² + 4² = 5², with subtitles: it checks three right triangles by counting tiles, and does not prove the theorem for every triangle. It starts with fifty tiles, one triangle and three labels; then the camera makes quarter turns to show two more triples, 5-12-13 and 8-15-17, and a last one to an end card. It is built entirely by hand, no AI, with the JS Shell and the Universal Timeline. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished scene, <a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=pyth.json&amp;branch=main">pyth.json</a> (<a href="#open-finished">step 13</a>).</p>

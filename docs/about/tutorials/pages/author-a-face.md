@@ -10,6 +10,8 @@ image: asset:images/thumbs/author-a-face.jpg
 
 # Authoring a face: gaze and idle
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">Two characters watch each other for 53 seconds. Most of the acting is <strong>where they look</strong> and <strong>not looking dead</strong> — both are timeline data you can edit.</p>
 
 <div class="note"><strong>The idea.</strong> A face is two keyed channels on the same track as the body clip: <em>expression</em> (continuous morph weights with easing and duration per key) and <em>gaze</em> (where the eyes and head aim), with a seeded <em>idle</em> layer underneath. They are versioned, diffable and agent-drivable like everything else. This is the animator&#39;s face — hand-keyed, on a stylized character — not a face-capture substitute.</div>

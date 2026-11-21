@@ -10,6 +10,8 @@ image: asset:images/thumbs/fight-arena-scene.jpg
 
 # Build a fighting-game arena scene
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">Two fighters, a stage, a health-bar HUD and a round timer — and no game logic. Like the <a href="https://strataeditor.dev/about/tutorials/paddle-table-view.html">paddle game</a> and <a href="https://strataeditor.dev/about/tutorials/bubble-shooter-scene.html">bubble shooter</a> tutorials, the scene&#39;s job is to hand later code well-named, class-tagged things to find and drive. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or just load the finished <a href="https://strataeditor.dev/about/tutorials/fight.json">fight.json</a> (File → Open, or drop it on the viewport).</p>
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/fight-arena.png" alt="A wooden-plank stage in a tavern courtyard: a red-robed fighter on the left and a larger purple-robed fighter on the right face each other beside a tall banner pole, with two health and mana bars and a 99 timer across the top.">&#10;		<figcaption>The whole scene: plank stage, tavern backdrop, two fighters, and a HUD with portraits, health and mana bars, and a round timer.</figcaption>&#10;	</figure>

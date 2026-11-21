@@ -10,6 +10,8 @@ image: asset:images/thumbs/render-camera-sequence.jpg
 
 # Add a static hero camera to a render sequence
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">Your main camera is animated for the whole timeline — but sometimes one moment (an explosion, a headlight beam, a reveal) deserves its own fixed, carefully-framed shot cut into the middle of the video. This tutorial adds a second, <em>non-animated</em> camera and schedules it in the <strong>Render</strong> tab&#39;s Camera Sequence. Open the <a href="https://strataeditor.dev/">editor</a>, load a scene with an existing timeline, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
 <div class="note"><strong>Why a second camera, not more keyframes.</strong> The Camera Sequence is a completely separate mechanism from animating <code>camera</code> itself: it&#39;s a list of <em>shots</em>, each naming a camera object and a start time, persisted on <code>scene.userData.renderShots</code>. A shot&#39;s camera does not need any keyframes at all — it can simply sit wherever you put it for the whole time it&#39;s on screen. That&#39;s the point: a hero shot is often better hand-framed once than animated.</div>

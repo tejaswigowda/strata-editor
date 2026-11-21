@@ -10,6 +10,8 @@ image: asset:images/thumbs/vrm-restyle-explorer.jpg
 
 # Restyle a VRM into an explorer with the JS Shell
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">A <code>.vrm</code> is a glTF binary with a humanoid skeleton and a set of facial blendshapes — which means Strata imports it like any other rigged GLB. This tutorial takes the free female base model from <a href="https://github.com/hinzka/52blendshapes-for-VRoid-face" rel="noopener noreferrer">hinzka/52blendshapes-for-VRoid-face</a> and restyles it as a generic ruins-exploring expedition explorer using nothing but the JS Shell: auburn hair and a tan, a sage-green crop top and sand shorts cut out of the existing clothes, a belt, a satchel, a canteen, wristbands and a headband attached to the skeleton, lowered arms and a smirk. The target is an original archetype, not a particular character — the same steps restyle the base model into anything you can describe. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/vrm-explorer.png" alt="An anime-style character with auburn hair and a red headband, a sage-green crop top, sand-coloured shorts, a belt, a satchel on one hip and a canteen on the other, standing with arms at her sides.">&#10;		<figcaption>The result of this tutorial — the VRoid base model after every block below, with the skeleton helpers hidden.</figcaption>&#10;	</figure>

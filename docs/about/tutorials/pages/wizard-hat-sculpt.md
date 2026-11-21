@@ -10,6 +10,8 @@ image: asset:images/thumbs/wizard-hat-sculpt.jpg
 
 # Build a wizard hat and sculpt a face into it
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">Two ideas in one scene. First, a floppy purple hat assembled from primitives — a lathe-turned brim, a three-section cone that bends, a band, a buckle and extruded stars. Then the part that is not a texture: a smiley face <strong>sculpted</strong> into the cone by pushing a dense mesh&#39;s surface outward along its normals, as one undoable step. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order — or open the finished hat, <a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=hat.json&amp;branch=main">hat.json</a> (<a href="#open-finished">step 7</a>).</p>
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/wizard-hat.png" alt="A purple wizard hat with a wide curled brim, a cone that bends at the tip, a dark band with a gold buckle, gold stars, and a raised smiley face sculpted into the front of the cone.">&#10;		<figcaption>The finished hat: lathe brim, bending cone, band and buckle, stars — and a relief smiley sculpted into the front.</figcaption>&#10;	</figure>
