@@ -157,9 +157,14 @@ export function encoderMatchesRendition( r, fps ) {
 
 }
 
-export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, captionTracks = [], audio = null, download = null, determinism, frameHashes = null, endCard = null, publication = null, masterText = null, audit = TIME_SOURCE_AUDIT } ) {
+export function buildRenderJson( { scene, render, renditions, files, poster = 'poster.jpg', captions = null, captionTracks = [], audio = null, alternateAudio = [], download = null, determinism, frameHashes = null, endCard = null, publication = null, masterText = null, audit = TIME_SOURCE_AUDIT } ) {
 
 	const durationS = render.durationS !== undefined ? render.durationS : render.frames / render.fps;
+	const audioRecord = a => ( {
+		name: a.name, language: a.language, codec: 'mp4a.40.2', sample_rate: a.sampleRate, channels: a.channels, bitrate_kbps: a.bitrateKbps,
+		playlist: a.playlist, segments: a.segments, max_segment_bytes: a.maxSegmentBytes, duration_s: Math.round( a.durationS * 1e6 ) / 1e6,
+		source: a.source, encoder_delay_samples: a.delaySamples,
+	} );
 	const out = {
 		version: RENDER_JSON_VERSION,
 		scene: { repo: scene.repo, file: scene.file, branch: scene.branch, commit: scene.commit || null, hash: scene.hash },
@@ -193,11 +198,8 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			caption_tracks: captionTracks,
 			manifest: { path: 'files.sha256', algorithm: 'sha256' },
 			...( frameHashes ? { frame_hashes: { path: frameHashes.path, count: frameHashes.count, algorithm: 'sha256', over: FRAME_HASH_OVER, root: frameHashes.root } } : {} ),
-			audio: audio ? {
-				name: audio.name, language: audio.language, codec: 'mp4a.40.2', sample_rate: audio.sampleRate, channels: audio.channels, bitrate_kbps: audio.bitrateKbps,
-				playlist: audio.playlist, segments: audio.segments, max_segment_bytes: audio.maxSegmentBytes, duration_s: Math.round( audio.durationS * 1e6 ) / 1e6,
-				source: audio.source, encoder_delay_samples: audio.delaySamples,
-			} : null,
+			audio: audio ? audioRecord( audio ) : null,
+			...( alternateAudio.length ? { alternate_audio: alternateAudio.map( audioRecord ) } : {} ),
 			// the silence is a recorded fact, not an absence: master_matches_audio (below) asserts the playlist agrees with it
 			audio_present: !! audio,
 			...( audio ? {} : { audio_absence: 'The scene has no narration: no renderAudio, nothing dubbed, no WAV chosen. The master declares no audio group and no audio codec.' } ),
@@ -208,12 +210,12 @@ export function buildRenderJson( { scene, render, renditions, files, poster = 'p
 			} } : {} ),
 		},
 		checks: {
-			segments_under_20mb: renditions.every( r => r.maxSegmentBytes < LIMITS.segmentBytes ),
+			segments_under_20mb: [ ...renditions, ...( audio ? [ audio, ...alternateAudio ] : [] ) ].every( r => r.maxSegmentBytes < LIMITS.segmentBytes ),
 			files_under_100mb: files.every( f => f.bytes < LIMITS.fileBytes ),
 			frame_count_matches_duration: render.frames === Math.round( durationS * render.fps ),
 			encoder_recorded_per_rendition: renditions.every( r => encoderMatchesRendition( r, render.fps ) ),
 			...( masterText === null ? {} : { master_matches_audio: masterAudioProblems( masterText, !! audio ).length === 0 } ),
-			...( audio ? { audio_duration_matches_video: Math.abs( audio.durationS - durationS ) < 0.05 } : {} ),
+			...( audio ? { audio_duration_matches_video: [ audio, ...alternateAudio ].every( a => Math.abs( a.durationS - durationS ) < 0.05 ) } : {} ),
 		},
 		...( publication ? { publication } : {} ),
 	};
@@ -310,11 +312,12 @@ export function validateRenderJson( j ) {
 	need( ! d.frames || ( o.frame_hashes && o.frame_hashes.count === r.frames ), 'determinism.frames is true only with a frame hash for every frame (outputs.frame_hashes.count == render.frames)' );
 	const ec = j.inputs && j.inputs.end_card;
 	if ( ec ) need( isStr( ec.path ) && /^sha256:[0-9a-f]{64}$/.test( ec.sha256 || '' ) && isInt( ec.bytes ) && ec.bytes > 0, 'inputs.end_card needs a path, a sha256 and its bytes' );
-	if ( o.audio !== null && o.audio !== undefined ) {
+	const alternates = Array.isArray( o.alternate_audio ) ? o.alternate_audio : [];
+	need( o.alternate_audio === undefined || ( Array.isArray( o.alternate_audio ) && !! o.audio ), 'outputs.alternate_audio requires a default audio track and a list of alternates' );
+	for ( const a of [ ...( o.audio ? [ o.audio ] : [] ), ...alternates ] ) {
 
-		const a = o.audio;
-		need( a.codec === 'mp4a.40.2' && isStr( a.playlist ) && isInt( a.segments ) && a.segments > 0 && isInt( a.max_segment_bytes ) && isPos( a.duration_s ) && isPos( a.sample_rate ) && isPos( a.channels ) && isPos( a.bitrate_kbps ), 'outputs.audio: codec, playlist, segments, max_segment_bytes, duration_s, sample_rate, channels and bitrate_kbps are required' );
-		need( a.source && isStr( a.source.path ) && /^sha256:[0-9a-f]{64}$/.test( a.source.sha256 || '' ), 'outputs.audio.source needs a path and a sha256' );
+		need( a && a.codec === 'mp4a.40.2' && isStr( a.playlist ) && isInt( a.segments ) && a.segments > 0 && isInt( a.max_segment_bytes ) && isPos( a.duration_s ) && isPos( a.sample_rate ) && isPos( a.channels ) && isPos( a.bitrate_kbps ), 'each audio rendition needs codec, playlist, segments, max_segment_bytes, duration_s, sample_rate, channels and bitrate_kbps' );
+		need( a && a.source && isStr( a.source.path ) && /^sha256:[0-9a-f]{64}$/.test( a.source.sha256 || '' ), 'each audio source needs a path and a sha256' );
 
 	}
 

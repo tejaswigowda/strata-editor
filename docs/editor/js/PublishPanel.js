@@ -15,12 +15,12 @@ import { transcodeLadder } from './export/ladder.js';
 import { planLadder, assemblePublishSet, defaultPublishPath, stalenessLine } from './export/publishSet.js';
 import { sceneSlug, planRelease, commitRelease, gateRelease, releaseBase, pinnedUrl, playerLink, shareBase, publicationOf, DELIVERY, ReleaseError, STORAGE } from './export/releases.js';
 import { addManifest, MANIFEST_NAME } from './export/filesManifest.js';
-import { cueTrack } from './export/captions.js';
+import { cueTrack, languageName, trackRecord, vttFile } from './export/captions.js';
 import { EXPORTER } from './export/renderJson.js';
 import { formatBytes } from './export/renderJson.js';
 import { buildAudioRendition, aacSupport, probeAudio } from './export/audio.js';
 import { openTool, toolFor } from './export/handoff.js';
-import { cuesToSrt } from './intelligence/subtitles.js';
+import { cuesToSrt, parseSrt } from './intelligence/subtitles.js';
 import { dubCues } from './export/dubCues.js';
 import { publishSource, commitPublishToRepo, fetchRepoFile, githubApi, defaultRendersRepo } from './Menubar.Git.js';
 
@@ -115,7 +115,23 @@ export function createPublishPanel( editor ) {
 	const voiceLine = el( 'div', 'display:flex;align-items:center;gap:6px;flex:1 1 100%;' );
 	voiceLine.append( el( 'span', 'opacity:0.7;font-size:11px;', 'Voice' ), dubVoice.dom );
 	dubRow.append( voiceLine, dubButton.dom );
-	narrationRow.append( el( 'div', 'font-weight:bold;', 'Narration audio' ), narrationText, upRow, dubRow );
+	const altFields = el( 'fieldset' );
+	altFields.append( el( 'legend', '', 'Alternate narration (optional)' ) );
+	const altLanguage = el( 'input', 'width:5em;' );
+	altLanguage.value = 'es';
+	const altFile = el( 'input' );
+	altFile.type = 'file';
+	altFile.accept = narrationFile.accept;
+	const primarySrt = el( 'input' ), alternateSrt = el( 'input' );
+	for ( const input of [ primarySrt, alternateSrt ] ) { input.type = 'file'; input.accept = '.srt'; }
+	for ( const [ label, input ] of [ [ 'Alternate language code', altLanguage ], [ 'Alternate narration audio', altFile ], [ 'Default subtitles (.srt)', primarySrt ], [ 'Alternate subtitles (.srt)', alternateSrt ] ] ) {
+
+		const field = el( 'label', FIELD, label );
+		field.append( input );
+		altFields.append( field );
+
+	}
+	narrationRow.append( el( 'div', 'font-weight:bold;', 'Narration audio' ), narrationText, upRow, dubRow, altFields );
 	root.appendChild( narrationRow );
 	uploadButton.onClick( () => narrationFile.click() );
 	let captionTracks = [];             // the cue-derived caption files of the set being prepared (captions.js)
@@ -461,7 +477,13 @@ export function createPublishPanel( editor ) {
 				return;
 
 			}
+			const alternate = altFile.files[ 0 ];
+			const language = ( info.audioRef && info.audioRef.language ) || 'en';
+			const otherLanguage = altLanguage.value.trim().toLowerCase();
+			if ( ( alternate || alternateSrt.files[ 0 ] ) && ( ! /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/.test( otherLanguage ) || otherLanguage === language.toLowerCase() ) ) throw new Error( 'Enter a valid alternate language code different from the default language.' );
 			const hasNarration = !! ( info.audioRef || narrationOverride );
+			if ( alternate && ! hasNarration ) throw new Error( 'Add the default narration before adding an alternate.' );
+			altFields.disabled = true;
 			const audioSupport = hasNarration ? await aacSupport() : { ok: true };
 			if ( ! audioSupport.ok ) { setStatus( 'This scene has narration, and ' + audioSupport.reason ); return; }
 
@@ -481,7 +503,7 @@ export function createPublishPanel( editor ) {
 			];
 
 			mp4Source.dom.innerHTML = '';
-			let audio = null;
+			const audio = [];
 			narrationBytes = null;
 			if ( hasNarration ) {
 
@@ -502,13 +524,27 @@ export function createPublishPanel( editor ) {
 				narrationBytes = bytes;
 				const built = await buildAudioRendition( { bytes, durationSeconds: info.frames / info.fps, videoStartsSeconds: starts, onProgress: ( f, text ) => setStatus( text, f ) } );
 				const chosenName = narrationFile.files && narrationFile.files[ 0 ] ? narrationFile.files[ 0 ].name : null;
-				audio = {
+				audio.push( {
 					packaged: built.packaged, name: ( info.audioRef && info.audioRef.label ) || 'English', language: ( info.audioRef && info.audioRef.language ) || 'en', delaySamples: built.delaySamples,
 					source: narrationSource
 						? { path: 'narration.wav', sha256: sha, tool: narrationSource.tool, voice: narrationSource.voice, model: narrationSource.model }
 						: { path: narrationOverride ? ( chosenName || 'narration.wav' ) : info.audioRef.src, sha256: sha },
 					wavBytes: narrationSource ? bytes : null,
-				};
+				} );
+				if ( alternate ) {
+
+					const bytes = new Uint8Array( await alternate.arrayBuffer() );
+					const length = info.frames / info.fps;
+					const { seconds } = await probeAudio( bytes );
+					if ( seconds > length + 0.05 ) throw new Error( `Alternate narration is ${ seconds.toFixed( 2 ) } s; the film is only ${ length.toFixed( 2 ) } s.` );
+					const built = await buildAudioRendition( { bytes, durationSeconds: length, videoStartsSeconds: starts, onProgress: ( f, text ) => setStatus( `${ languageName( otherLanguage ) }: ${ text }`, f ) } );
+					const digest = await crypto.subtle.digest( 'SHA-256', bytes );
+					audio.push( {
+						packaged: built.packaged, name: languageName( otherLanguage ), language: otherLanguage, delaySamples: built.delaySamples,
+						source: { path: alternate.name, sha256: 'sha256:' + Array.from( new Uint8Array( digest ), b => b.toString( 16 ).padStart( 2, '0' ) ).join( '' ) },
+					} );
+
+				}
 
 			}
 
@@ -535,7 +571,21 @@ export function createPublishPanel( editor ) {
 			const sceneRec = { repo: ( src && src.repo ) || t.repo, file: ( src && src.file ) || '', branch: ( src && src.branch ) || t.branch, commit: src && src.commit, hash: info.sceneHash };
 			// The captions are a projection of the scene's cue list, written with the cue ids as WebVTT identifiers and a NOTE saying what they were made from.
 			// A cue with a missing, malformed or duplicate id stops the publish here, with the cue named: nothing renumbers it.
-			captionTracks = info.cues.length ? [ await cueTrack( { cues: info.cues, language: ( info.audioRef && info.audioRef.language ) || 'en', scene: sceneRec, exporter: EXPORTER } ) ].filter( Boolean ) : [];
+			async function uploadedCaption( input, code, isDefault ) {
+
+				const upload = input.files[ 0 ];
+				if ( ! upload ) return null;
+				const cues = parseSrt( await upload.text() );
+				if ( ! cues.length || cues.some( c => c.end > info.frames / info.fps ) ) throw new Error( `${ upload.name }: provide subtitle cues that fit the film.` );
+				const file = await vttFile( { cues, language: code, source: 'manual', ids: false, exporter: EXPORTER } );
+				if ( ! file ) throw new Error( `${ upload.name }: no subtitle text was found.` );
+				const path = isDefault ? 'captions.vtt' : `captions.${ code }.vtt`;
+				return { path, text: file.text, language: code, default: isDefault, record: trackRecord( { path, language: code, source: 'manual', file, ids: false } ) };
+
+			}
+			const mainCaption = await uploadedCaption( primarySrt, language, true ) || await cueTrack( { cues: info.cues, language, scene: sceneRec, exporter: EXPORTER } );
+			const otherCaption = await uploadedCaption( alternateSrt, otherLanguage, ! mainCaption );
+			captionTracks = [ mainCaption, otherCaption ].filter( Boolean );
 			build = async ( download ) => addManifest( assemblePublishSet( {
 				path: t.path,
 				scene: sceneRec,
@@ -558,6 +608,7 @@ export function createPublishPanel( editor ) {
 		} finally {
 
 			busy = false;
+			altFields.disabled = false;
 			prepareButton.dom.disabled = false;
 			cancelButton.dom.style.display = 'none';
 			refreshCommit();
@@ -671,6 +722,7 @@ export function createPublishPanel( editor ) {
 	commitButton.onClick( commit );
 	for ( const c of [ repoInput, pathInput ] ) c.dom.addEventListener( 'input', () => { prepared = null; currentPlan = null; planLine.textContent = ''; review.style.display = 'none'; refreshCommit(); } );
 	branchSelect.onChange( () => { prepared = null; review.style.display = 'none'; refreshCommit(); } );
+	altFields.addEventListener( 'input', () => { prepared = null; review.style.display = 'none'; refreshCommit(); } );
 	modeSelect.onChange( layoutChanged );
 
 	return {
@@ -693,6 +745,7 @@ export function createPublishPanel( editor ) {
 			narrationBytes = null;
 			build = null;
 			narrationFile.value = '';
+			for ( const input of [ altFile, primarySrt, alternateSrt ] ) input.value = '';
 			// the Subtitles tab's Dub .srt button already spoke these very cues: use that narration rather than make the person do it again
 			const d = editor.lastDub;
 			if ( d && d.srt === cuesToSrt( info.cues ) ) { narrationOverride = d.wav; narrationSource = { tool: 'dub.webcli.app', voice: d.voice, model: d.model, summary: d.summary + ' (made in the Subtitles tab)' }; }

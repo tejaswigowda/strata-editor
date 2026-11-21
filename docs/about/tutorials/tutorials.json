@@ -51,7 +51,7 @@
 			},
 			{
 				"name": "whisper.webcli.app",
-				"licence": "not stated in the demo provenance; consult the app before redistributing its code",
+				"licence": "GPL-3.0",
 				"url": "https://whisper.webcli.app/",
 				"note": "Separate transcription app; its code is not copied into this tutorial."
 			},
@@ -98,7 +98,7 @@
 			{ "name": "Three.js", "licence": "MIT", "url": "https://threejs.org/" },
 			{ "name": "Playwright", "licence": "Apache-2.0", "url": "https://playwright.dev/" },
 			{ "name": "dub.webcli.app", "licence": "GPL-3.0", "url": "https://dub.webcli.app/" },
-			{ "name": "whisper.webcli.app", "licence": "not stated in the demo provenance", "url": "https://whisper.webcli.app/" },
+			{ "name": "whisper.webcli.app", "licence": "GPL-3.0", "url": "https://whisper.webcli.app/" },
 			{ "name": "Qwen2.5-Coder-1.5B-Instruct", "licence": "Apache-2.0", "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct" }
 		]
 	},

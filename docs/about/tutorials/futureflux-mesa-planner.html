@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FutureFlux Mesa: a planner’s guide to checking walkway shade</title>
+<meta name="description" content="A Mesa case study for participatory planning, co-design and public engagement. Check the Landsat evidence and compare modeled walkway shade before discussing a tree proposal.">
+<link rel="canonical" href="https://strataeditor.dev/about/tutorials/futureflux-mesa-planner.html">
+<link rel="stylesheet" href="./style.css">
+<script src="../brand.js" defer></script>
+</head>
+<body>
+<main><article>
+<header class="entry-header">
+<h1>FutureFlux Mesa: a planner’s guide to checking walkway shade</h1>
+</header>
+<div class="entry-content">
+<p>This prototype is for participatory planning, co-design and public engagement. It is a digital twin with no live data. <strong>No resident has used this tool yet.</strong> The rehearsal used a fixed script and synthetic speech; it is not evidence of engagement, endorsement or approval.</p>
+<h2>1. What does this scene claim?</h2>
+<p>It compares three samples of land-surface temperature (Encanto, Alta Mesa and Red Mountain) from one Landsat 9 Collection 2 Level-2 acquisition. The Thermal Infrared Sensor 2 observation was recorded on July 29, 2025, at 18:03:53.434497 UTC (11:03:53 in Mesa). A separate geometric check asks whether the proposed tree meshes block direct sun over the center walkway.</p>
+<h2>2. What does it not claim?</h2>
+<p>No air temperature, predicted cooling, walkable route, or result for an entire neighborhood. The arrows measure straight-line distance. The 3.3 m paths and 6 m building shell are assumptions, not as-built measurements. The study does not establish that tree cover caused the differences between the three samples.</p>
+<h2>3. How do I check it?</h2>
+<p>Open the <a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=flux.json&amp;commit=4612f3d48b78f314eb810d5af468ea3cfa143708&amp;play=false">pinned scene at commit 4612f3d</a> and the <a href="https://earth-search.aws.element84.com/v1/collections/landsat-c2-l2/items/LC09_L2SP_037037_20250729_02_T1">STAC item</a>. Use ST_B10 and QA_PIXEL in UTM zone 12N (EPSG:32612). The 17 × 17 product-grid windows start at these zero-based (column, row) offsets: Encanto (6475, 3007), Alta Mesa (6408, 2965), Red Mountain (6541, 3000). Exclude ST_B10 DN 0 and cells with any QA_PIXEL bit 0–5 set. The 30 m grid is not the native thermal resolution; its cells are not independent thermal measurements.</p>
+<p>The pinned scene and film are the earlier illustrative version. To reproduce the solar check against that geometry, follow the <a href="./futureflux-mesa.html#make-the-shade-visible-without-changing-the-observation">derived-sun setup</a> on a copy.</p>
+<h2>4. How do I disagree with it?</h2>
+<p>Fork the scene into your own repository, change a path or tree location, rerun the shade check, then send the new pinned commit link and the times you checked back to the person who shared this guide. If you have field measurements, identify which assumption they replace. Before sharing a new scene package publicly, confirm layer-level redistribution with Mesa Enterprise GIS and keep the City attribution.</p>
+<section id="shade">
+<h2>Separate analysis: direct shade on the center walkway</h2>
+<p><strong>At the exact acquisition instant, 0 of 827 sampled points were in tree shade, both before and after the proposal.</strong> A finer 0.2 m grid also returned zero (0 of 3,293). This rules out the illustrative overlay as evidence for shade on this walkway at that instant.</p>
+<p>In the July 29 hourly sweep, the existing trees shaded about 9% at 07:00 local time, unchanged by the proposal. All other whole-hour daylight samples from 06:00 through 19:00 returned zero. These snapshots do not establish the result between samples.</p>
+<p>At the same local acquisition hour (11:03:53), a monthly sweep using the same fixed tree shapes found these fractions:</p>
+<table>
+<caption>Fraction of sampled walkway points in direct tree shade in 2025</caption>
+<thead><tr><th scope="col">Date</th><th scope="col">Existing trees</th><th scope="col">Existing + proposed</th></tr></thead>
+<tbody>
+<tr><th scope="row">Jan 29</th><td>0%</td><td>46%</td></tr>
+<tr><th scope="row">Feb 28</th><td>0%</td><td>13%</td></tr>
+<tr><th scope="row">Mar 29</th><td>0%</td><td>0.2%</td></tr>
+<tr><th scope="row">Apr 29 to Aug 29, monthly</th><td>0%</td><td>0%</td></tr>
+<tr><th scope="row">Sep 29</th><td>0%</td><td>4%</td></tr>
+<tr><th scope="row">Oct 29</th><td>0%</td><td>28%</td></tr>
+<tr><th scope="row">Nov 29</th><td>0%</td><td>50%</td></tr>
+<tr><th scope="row">Dec 29</th><td>0%</td><td>53%</td></tr>
+</tbody>
+</table>
+<p>Method: ray test from a 0.4 m horizontal grid on the modeled walkway slabs to the computed sun. Any tree triangle blocks a sample; leaf translucency, seasonal foliage, growth, buildings and weather are outside this tree-only comparison. Night is not a shade result. No energy or cooling is calculated.</p>
+</section>
+</div>
+</article></main>
+</body>
+</html>

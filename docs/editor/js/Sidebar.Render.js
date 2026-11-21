@@ -12,6 +12,7 @@ import { SetSubtitlesCommand } from './commands/SetSubtitlesCommand.js';
 import { AddObjectCommand } from './commands/AddObjectCommand.js';
 import { renderBaseName, DEFAULT_VIDEO_TEMPLATE, DEFAULT_SNAPSHOT_TEMPLATE } from './intelligence/renderFileName.js';
 import { sourceFile } from './workState.js';
+import { applySceneSun } from './scene/solar.js';
 import { applyCameraMove, clearCameraMove, MOVE_PRESETS } from './intelligence/cameraMoveEdit.js';
 import { Mp4Muxer } from './export/Mp4Muxer.js';
 import { createPublishPanel } from './PublishPanel.js';
@@ -1659,6 +1660,17 @@ function SidebarRender( editor ) {
 
 		const is360 = kind === '360';
 		const S = is360 ? pano : flat; // this render's own settings: the 360° tab's, or the Video tab's
+
+		try {
+
+			applySceneSun( editor.scene );
+
+		} catch ( error ) {
+
+			setProgress( 0, `Cannot render: ${ error.message }` );
+			return;
+
+		}
 
 		const duration = timelineDuration();
 		if ( ! ( duration > 0 ) ) {

@@ -22,7 +22,7 @@
 // unlike HtmlEmbed's plain innerHTML-string approach, which can't run
 // scripts) and rasterizes the rendered iframe body with html2canvas.
 //
-// Storage: only a URL reference + width/height are persisted in userData —
+// Storage: the reference, dimensions, and optional ink filter persist in userData —
 // scene/serialize.js strips the baked texture before every toJSON() so scene
 // JSON (autosave, git commits) never carries a copy of the card's pixels.
 //
@@ -182,7 +182,18 @@ export function refreshCallcard( object ) {
 	return snapshotCallcard( pxWidth, pxHeight )
 		.then( function ( baked ) {
 
-			const canvas = baked.canvas;
+			let canvas = baked.canvas;
+			if ( object.userData.callcardFilter === 'invert' ) {
+
+				// Apply after html2canvas so the filter is baked into the texture and render hash.
+				canvas = document.createElement( 'canvas' );
+				canvas.width = baked.canvas.width;
+				canvas.height = baked.canvas.height;
+				const ctx = canvas.getContext( '2d' );
+				ctx.filter = 'invert(100%)';
+				ctx.drawImage( baked.canvas, 0, 0 );
+
+			}
 			const texture = new THREE.CanvasTexture( canvas );
 			texture.colorSpace = THREE.SRGBColorSpace;
 

@@ -140,17 +140,24 @@ await test( 'the publish set holds audio/ files, an audio group in master.m3u8, 
 		path: 'renders/x', scene: { repo: 'a/b', file: 'x.json', branch: 'main', commit: 'abcdef1', hash: 'sha256:' + 'ab'.repeat( 32 ) },
 		render: { mode: 'offline', renderer: 'WebGLRenderer', device: 'webgl2', encoder: 'software', fps: 30, frames: 400, frameRange: [ 0, 399 ], width: 320, height: 180, renderedAt: '2026-10-26T19:40:00Z' },
 		rungs: [ { rung: { name: '180p30', width: 320, height: 180, kbps: 300 }, encoder: encFor( 320, 180, 300, 30 ), packaged } ], poster: Uint8Array.of( 1 ),
-		audio: { packaged: audio, name: 'English', language: 'en', source: { path: 'audio/x.wav', sha256: 'sha256:' + 'cd'.repeat( 32 ) }, delaySamples: 2112 },
+		audio: [
+			{ packaged: packageAudio( { frames: frames.slice( 0, 625 ), asc: Uint8Array.of( 0x11, 0x90 ), videoStartsSeconds: [ 0, 6, 12 ] } ), name: 'English', language: 'en', source: { path: 'audio/x.wav', sha256: 'sha256:' + 'cd'.repeat( 32 ) }, delaySamples: 2112 },
+			{ packaged: audio, name: 'Español', language: 'es', source: { path: 'es.wav', sha256: 'sha256:' + 'ef'.repeat( 32 ) }, delaySamples: 2112 },
+		],
 		determinism: { mode: 'offline', encoder: 'software' },
 	} );
 	const paths = set.files.map( f => f.path );
 	for ( const p of [ 'audio/init.mp4', 'audio/seg00001.m4s', 'audio/seg00003.m4s', 'audio/index.m3u8' ] ) assert.ok( paths.includes( 'renders/x/' + p ), p );
 	const master = new TextDecoder().decode( set.files.find( f => f.path.endsWith( 'master.m3u8' ) ).bytes );
 	assert.match( master, /#EXT-X-MEDIA:TYPE=AUDIO/ );
+	assert.match( master, /NAME="English",DEFAULT=YES/ );
+	assert.match( master, /NAME="Español",DEFAULT=NO,AUTOSELECT=YES,LANGUAGE="es",URI="audio\/es\/index.m3u8"/ );
+	assert.ok( paths.includes( 'renders/x/audio/es/seg00003.m4s' ) );
 	assert.match( master, /CODECS="avc1\.64001f,mp4a\.40\.2",AUDIO="aud"/ );
 	assert.strictEqual( set.renderJson.outputs.audio.codec, 'mp4a.40.2' );
 	assert.strictEqual( set.renderJson.outputs.audio.source.path, 'audio/x.wav' );
-	assert.strictEqual( set.renderJson.checks.audio_duration_matches_video, false, 'a 1000-frame audio track is 21 s, not the 13.3 s video: the check says so' );
+	assert.strictEqual( set.renderJson.outputs.alternate_audio[ 0 ].language, 'es' );
+	assert.strictEqual( set.renderJson.checks.audio_duration_matches_video, false, 'a mismatch in the alternate alone fails the duration check' );
 	assert.deepStrictEqual( validateRenderJson( set.renderJson ), [] );
 
 } );

@@ -9,6 +9,7 @@ import { parseMaster, parseMediaPlaylist, audioFor, mergeFmp4, estimateBytes, fo
 const FETCH_TIMEOUT_MS = 6000, TTFB_MS = 6000, NATIVE_START_MS = 10000;
 const $ = id => document.getElementById( id );
 const video = $( 'video' ), qualityLabel = $( 'qualityLabel' ), quality = $( 'quality' );
+const audioLabel = $( 'audioLabel' ), audio = $( 'audio' );
 let hls = null;
 
 // Present mode: just the video (see presentMode in resolve.js). index.html decides it before first paint (the class is on <html>); decided again here on every hash change, since the hash can carry &present=true.
@@ -69,6 +70,8 @@ function teardown() {
 	video.removeAttribute( 'poster' );
 	qualityLabel.hidden = true;
 	quality.innerHTML = '';
+	audioLabel.hidden = true;
+	audio.replaceChildren();
 	$( 'meta' ).textContent = '';
 	$( 'warn' ).hidden = true;
 	setError( '' );
@@ -99,6 +102,26 @@ function levelChoices( h ) {
 	qualityLabel.hidden = h.levels.length < 2;
 
 }
+
+function audioChoices() {
+
+	const tracks = hls ? hls.audioTracks : Array.from( video.audioTracks || [] );
+	const active = hls ? hls.audioTrack : tracks.findIndex( track => track.enabled );
+	audio.replaceChildren( ...tracks.map( ( track, i ) => new Option( track.name || track.label || track.lang || track.language || `Track ${ i + 1 }`, String( i ) ) ) );
+	if ( active >= 0 ) audio.value = String( active );
+	audioLabel.hidden = tracks.length < 2;
+
+}
+
+audio.addEventListener( 'change', () => {
+
+	const index = Number( audio.value );
+	if ( hls ) hls.audioTrack = index;
+	else Array.from( video.audioTracks || [] ).forEach( ( track, i ) => { track.enabled = i === index; } );
+
+} );
+
+for ( const event of [ 'addtrack', 'removetrack', 'change' ] ) video.audioTracks?.addEventListener( event, () => { if ( ! hls ) audioChoices(); } );
 
 async function play( input ) {
 
@@ -202,7 +225,7 @@ async function play( input ) {
 			const timer = setTimeout( () => { if ( video.readyState === 0 ) move( `${ master } did not start in time.` ); }, tried.length < hosts.length ? NATIVE_START_MS : NATIVE_START_MS * 3 );
 			video.src = master;
 			if ( resume !== null ) video.addEventListener( 'loadedmetadata', () => { video.currentTime = resume; }, { once: true } );
-			video.addEventListener( 'loadedmetadata', () => { moved = true; clearTimeout( timer ); }, { once: true } );
+			video.addEventListener( 'loadedmetadata', () => { moved = true; clearTimeout( timer ); audioChoices(); }, { once: true } );
 			video.addEventListener( 'error', () => move( `The browser could not play ${ master }.` ), { once: true } );
 			return;
 
@@ -216,6 +239,11 @@ async function play( input ) {
 		hls = new window.Hls( { capLevelToPlayerSize: false, ...patience, ...( resume !== null ? { startPosition: resume } : {} ) } );
 		const mine = hls;
 		hls.on( window.Hls.Events.MANIFEST_PARSED, () => levelChoices( mine ) );
+		for ( const event of [ window.Hls.Events.AUDIO_TRACKS_UPDATED, window.Hls.Events.AUDIO_TRACK_SWITCHED ] ) {
+
+			mine.on( event, () => { if ( hls === mine ) audioChoices(); } );
+
+		}
 		hls.on( window.Hls.Events.ERROR, ( e, data ) => {
 
 			if ( hls !== mine ) return;

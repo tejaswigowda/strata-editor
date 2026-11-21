@@ -9,11 +9,13 @@ description: "Build a Mesa heat tour in Strata: compare Landsat samples, stage t
 <h1>FutureFlux: From a Mesa heat map to a tree-shade proposal</h1>
 <p class="tagline">Build a two-minute heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, animated walkers, and bilingual subtitles.</p>
 
-[All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html)
+[All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html) · [Planner guide and shade results](./futureflux-mesa-planner.html)
 
 Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. Dub is optional if you export without narration.
 
 ### Watch the extended cut
+
+This pinned film and scene predate the solar analysis below. Their lighting, narration about pavement shade, and green overlay are illustrative, not analysis results.
 
 <div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a39dd46a938551486bfd3b8193ce197d717b22f5/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
 
@@ -65,11 +67,11 @@ Use two shared mesquite variants (`tree4` and `tree5`) for the eight baseline tr
 
 ## 5. Make the shade visible without changing the observation
 
-Use a separate shadow receiver over the Red Mountain heat surface so the colored layer does not wash out the tree shadows. The walkthrough uses an illustrative light setup, not a dated solar study. Put the qualitative shade-benefit indicator at the top of the walkway view, and turn it green as trees appear. Keep it separate from the historical temperature legend.
+For a dated observation, use **derived sun** by default. Bind the directional key and the acquisition time label to the same `gisLayer.date` on the thermal layer. Strata computes the geometric sun locally with NOAA GML equations; store UTC, and format the display in `America/Phoenix`. The capture hour is the relevant light for evaluating the design at the capture hour. Use explicitly labelled **illustrative lighting** only when there is no data instant.
 
-Tree canopies block direct sunlight, so shaded pavement absorbs less solar energy and can stay cooler than pavement in full sun. Add a separate, progressively stronger green overlay and label it **Illustrative cooling · not measured**. Remove the separate walkway outline and tint alternating slabs pale blue-gray so viewers can follow the path under the heat overlay. Neither the slab colors nor the overlay changes the Landsat data.
+On a copy of the Mesa scene, import `./js/scene/futureFluxSun.js` relative to the editor root (`/editor/`) and call `configureFutureFluxSun(editor.scene)`. This disables the old illustrative directional fill and cooling graphics. Scrub past the last planting reveal, then call `analyzeFutureFluxShade(editor.scene, instants, 0.4)` with UTC instants for a day or for different dates at the same local hour. Inspect the results separately from the thermal legend. The solver samples the actual walkway slabs and checks for direct-sun occlusion by the modeled trees; it does not fetch irradiance. Revisit irradiance only before making claims about absorbed solar energy, mean radiant temperature, or cooling.
 
-**Human check:** Compare 1:19 and 1:42 from the same walkway camera. There should be more visible shade at 1:42, but the Landsat layer and its 51.5 °C sample should be unchanged. The green indicator must not resemble a new temperature reading.
+**Human check:** At the acquisition instant the key is about 65.12° up and 121.15° clockwise from north. A vertical post should cast a WNW shadow about 0.464 times its height. Check the [planner results](./futureflux-mesa-planner.html#shade), rather than assuming more trees must improve shade at this hour.
 
 <figure><img src="./screenshots/futureflux-before.webp" alt="Red Mountain walkway and center before the proposed trees appear" width="1600" height="900"><figcaption>37 s · An earlier preview of the walkway before proposed planting.</figcaption></figure>
 <figure><img src="./screenshots/futureflux-shade.webp" alt="Same Red Mountain walkway with proposed mesquites along the left side" width="1600" height="900"><figcaption>45 s · An earlier preview after all 18 proposed mesquites appear. These two stills predate the final walkers and walkway border.</figcaption></figure>
@@ -109,17 +111,18 @@ In **Render → Video**, leave **Skip First** at **None**. The extended export u
 
 ### Sources and credits
 
-- [City of Mesa Open Data Terms](https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/) — City of Mesa GIS, including Enterprise GIS building footprints. Preserve City credit and any dataset-specific notices.
+- [City of Mesa Open Data Terms](https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/) — Sections 3(e)–(f) permit redistribution of open-licensed data with City attribution. The [prior layer audit](https://github.com/tejaswigowda/test1/blob/5c50a8374659ce1f4c6d3ce48f74e1a35260e88e/demo/PROVENANCE.md) found no additional restriction on the paths and footprint. **Needs clarification for the full package:** confirm coverage for the boundary and neighborhood layers with Mesa Enterprise GIS before a new redistribution.
+- [Whisper WebCLI source and licence](https://github.com/tejaswigowda/whisper-webCLI) — GPL-3.0.
 - [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright) — separately attributed context under ODbL.
 - [USGS Landsat 9 Collection 2 Level-2](https://doi.org/10.5066/P9OGBGM6) — historical land-surface-temperature observations; not a cooling model.
 
-<section class="credits" id="credits"><h2>Credits and licences</h2><h3>People</h3><ul><li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script, scene)</span></li></ul><h3>Assets</h3><ul><li><a href="https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/">City of Mesa GIS</a>: City of Mesa GIS paths, Enterprise GIS building footprint, city boundary, and neighborhood records. <span class="lic">Licence: City of Mesa Data Terms of Use License Agreement; see dataset-specific notices.</span></li><li><a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>: © OpenStreetMap contributors; separately attributed context. <span class="lic">Licence: Open Database License (ODbL).</span></li><li><a href="https://doi.org/10.5066/P9OGBGM6">USGS Landsat 9 Collection 2 Level-2</a>: Historical land-surface-temperature observations; not a cooling model. <span class="lic">Licence: USGS public domain.</span></li></ul><h3>Tools</h3><ul><li><a href="https://threejs.org/">Three.js</a> <span class="lic">(MIT)</span></li><li><a href="https://playwright.dev/">Playwright</a> <span class="lic">(Apache-2.0)</span></li><li><a href="https://dub.webcli.app/">dub.webcli.app</a> <span class="lic">(GPL-3.0)</span></li><li><a href="https://whisper.webcli.app/">whisper.webcli.app</a> <span class="lic">(not stated in the demo provenance)</span></li><li><a href="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct">Qwen2.5-Coder-1.5B-Instruct</a> <span class="lic">(Apache-2.0)</span></li></ul></section>
+<section class="credits" id="credits"><h2>Credits and licences</h2><h3>People</h3><ul><li><a href="https://tejaswigowda.com/">Tejaswi Gowda</a> <span class="lic">(script, scene)</span></li></ul><h3>Assets</h3><ul><li><a href="https://data.mesaaz.gov/stories/s/Terms-of-Use-page/2dcd-j2nx/">City of Mesa GIS</a>: City of Mesa GIS paths, Enterprise GIS building footprint, city boundary, and neighborhood records. <span class="lic">Licence: City of Mesa Data Terms of Use License Agreement; see dataset-specific notices.</span></li><li><a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>: © OpenStreetMap contributors; separately attributed context. <span class="lic">Licence: Open Database License (ODbL).</span></li><li><a href="https://doi.org/10.5066/P9OGBGM6">USGS Landsat 9 Collection 2 Level-2</a>: Historical land-surface-temperature observations; not a cooling model. <span class="lic">Licence: USGS public domain.</span></li></ul><h3>Tools</h3><ul><li><a href="https://threejs.org/">Three.js</a> <span class="lic">(MIT)</span></li><li><a href="https://playwright.dev/">Playwright</a> <span class="lic">(Apache-2.0)</span></li><li><a href="https://dub.webcli.app/">dub.webcli.app</a> <span class="lic">(GPL-3.0)</span></li><li><a href="https://whisper.webcli.app/">whisper.webcli.app</a> <span class="lic">(GPL-3.0)</span></li><li><a href="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct">Qwen2.5-Coder-1.5B-Instruct</a> <span class="lic">(Apache-2.0)</span></li></ul></section>
 
 ## 9. Optional: Playwright harness for distributed decision-making and suggestions
 
-Here, **distributed** means different participants and components have different responsibilities. A resident defines the need. A model suggests an operation. The scene host determines what can be executed. The editor records the edit. The current rehearsal is single-operator browser automation, not multiplayer editing, voting, or community approval.
+Here, **distributed** means different participants and components have different responsibilities. In a future session a resident would define the need; in this rehearsal no resident participated. A fixed script and synthetic speech stand in for that role. The current rehearsal is single-operator browser automation, not multiplayer editing, voting, or community approval.
 
-- **Resident or facilitator:** State the need and clarify the location in your own words.
+- **Resident role (simulated):** The fixed script supplies the request and clarification; Dub speaks both lines.
 - **Dub and Whisper:** Dub makes synthetic speech for this rehearsal. Whisper transcribes the actual WAV; Playwright forwards that transcript, not the original script.
 - **Strata model:** Suggest a structured operation from a closed vocabulary, or refuse. It does not write geometry.
 - **FutureFlux host:** Enumerate visible tagged candidates, check operation and target, and either return a named refusal or apply an undoable edit.

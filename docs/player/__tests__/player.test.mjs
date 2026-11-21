@@ -15,14 +15,17 @@ async function player() {
 
 		if ( ! elements.has( id ) ) elements.set( id, {
 			textContent: '', innerHTML: '', hidden: true, paused: true, currentTime: 0,
-			addEventListener() {}, removeAttribute() {}, querySelectorAll: () => [], canPlayType: () => ''
+			events: {}, children: [],
+			addEventListener( type, handler ) { this.events[ type ] = handler; },
+			replaceChildren( ...children ) { this.children = children; },
+			removeAttribute() {}, querySelectorAll: () => [], canPlayType: () => ''
 		} );
 		return elements.get( id );
 
 	};
 	class Hls {
 
-		static Events = { ERROR: 'error', MANIFEST_PARSED: 'manifest' };
+		static Events = { ERROR: 'error', MANIFEST_PARSED: 'manifest', AUDIO_TRACKS_UPDATED: 'audioTracks', AUDIO_TRACK_SWITCHED: 'audioSwitched' };
 		static isSupported() { return true; }
 		constructor( config ) { this.config = config; this.handlers = {}; instances.push( this ); }
 		on( event, fn ) { this.handlers[ event ] = fn; }
@@ -38,6 +41,7 @@ async function player() {
 		...resolve, window, navigator: { userAgent: 'Chrome' }, location: { search: '', hash: '' },
 		document: { getElementById: element, documentElement: { classList: { toggle() {} }, style: { setProperty() {} } } },
 		innerHeight: 800, addEventListener() {}, URL, AbortSignal,
+		Option: class { constructor( text, value ) { Object.assign( this, { text, value } ); } },
 		fetch: async () => ( { ok: true, json: async () => ( {} ), text: async () => '' } ),
 		parseMaster: () => ( { renditions: [] } )
 	} );
@@ -46,6 +50,25 @@ async function player() {
 	return { instances, element };
 
 }
+
+test( 'audio is selectable only when multiple tracks are available', async () => {
+
+	const { instances: [ hls ], element } = await player();
+	const picker = element( 'audio' );
+	hls.audioTracks = [ { name: 'English' } ];
+	hls.audioTrack = 0;
+	hls.handlers.audioTracks();
+	assert.equal( element( 'audioLabel' ).hidden, true );
+	hls.audioTracks.push( { name: 'Español' } );
+	hls.handlers.audioTracks();
+	assert.equal( element( 'audioLabel' ).hidden, false );
+	assert.equal( picker.children[ 1 ].text, 'Español' );
+	picker.value = '1';
+	picker.events.change();
+	assert.equal( hls.audioTrack, 1 );
+	assert.equal( element( 'video' ).currentTime, 0 );
+
+} );
 
 test( 'a nonfatal missing segment immediately switches hosts and preserves the position', async () => {
 

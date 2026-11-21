@@ -17,6 +17,7 @@ import { findSharedMaterials } from './intelligence/editOps.js';
 import { validateCommand } from './intelligence/commandConstraints.js';
 import { assertLoadableScene, assertSceneGraph } from './intelligence/sceneValidation.js';
 import { withoutBakedTextures } from './scene/serialize.js';
+import { applySceneSun } from './scene/solar.js';
 import { applyStoredTheme } from './Theme.js';
 import { settleBakedOutline } from './toon/bakedOutlines.js';
 import { isRecordScene, canonicalForm, framing, FRAMING } from './export/records.js';
@@ -167,7 +168,13 @@ function Editor( { storageFree = false } = {} ) {
 	// A genuine (non-timeline) edit to an object's base pose/opacity should
 	// become the new compile baseline — every SetPosition/Rotation/Scale/
 	// Material command dispatches this signal (see their execute()/undo()).
-	this.signals.objectChanged.add( function ( object ) { invalidateRestState( object ); } );
+	this.signals.objectChanged.add( object => {
+
+		invalidateRestState( object );
+		const sun = this.scene.userData.sun;
+		if ( sun && ( object === this.scene || object.uuid === sun.source || object.uuid === sun.light ) ) applySceneSun( this.scene );
+
+	} );
 
 	this.config = new Config( storageFree ? null : undefined );
 	// Who drove each operation, kept beside the history and out of the scene (export/oplog.js, guides/ATTRIBUTION.md).
@@ -246,6 +253,7 @@ Editor.prototype = {
 		}
 
 		this.signals.sceneGraphChanged.active = true;
+		applySceneSun( this.scene );
 		this.signals.sceneGraphChanged.dispatch();
 
 		this.signals.sceneEnvironmentChanged.dispatch( this.environmentType, scene.environment );
@@ -943,6 +951,7 @@ Editor.prototype = {
 	toJSON: function () {
 
 		assertSceneGraph( this.scene ); // Three.js serializes children recursively.
+		applySceneSun( this.scene );
 		// scripts clean up
 
 		var scene = this.scene;

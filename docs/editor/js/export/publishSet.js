@@ -58,7 +58,7 @@ const bytesOf = v => typeof v === 'string' ? enc.encode( v ) : v;
  *   poster:      Uint8Array
  *   captionTracks: [{ path, language, default, text, record }]   from captions.js cueTrack(): the WebVTT files (written whenever the scene has cues, burned in or not), each with the
  *                  record render.json keeps of it and an HLS subtitle playlist in master.m3u8
- *   audio:       null | { packaged: packageAudio(), name, language, source: { path, sha256, tool?, voice?, model? }, delaySamples, wavBytes? }
+ *   audio:       null, one track, or an array of { packaged: packageAudio(), name, language, source: { path, sha256, tool?, voice?, model? }, delaySamples, wavBytes? }
  *                (wavBytes: the narration WAV, written as narration.wav when dub.webcli.app made it, so the set holds what the audio came from)
  *   download:    null | { name, bytes, command, audio: boolean, captions: boolean, videoFrom: 'master' | rung name }   the single-file MP4 made by ffmpeg.webcli.app
  *   determinism: { mode, encoder, hasEndCard, playbackWasRunning, verification }   (assessDeterminism's input)
@@ -103,30 +103,32 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 
 	}
 
-	let audioMeta = null;
-	if ( audio ) {
+	const tracks = Array.isArray( audio ) ? audio : audio ? [ audio ] : [];
+	if ( new Set( tracks.map( t => t.language.toLowerCase() ) ).size !== tracks.length || tracks.some( t => ! /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test( t.language ) || /["\r\n]/.test( t.name ) ) ) throw new Error( 'Audio rendition names must be safe for HLS and language codes must be valid and distinct.' );
+	if ( new Set( tracks.map( t => t.name ) ).size !== tracks.length ) throw new Error( 'Audio renditions must have distinct names.' );
+	const audioMeta = tracks.map( ( track, i ) => {
 
-		const a = audio.packaged;
-		add( 'audio/init.mp4', a.init );
-		for ( const s of a.segments ) add( `audio/${ s.name }`, s.data );
-		add( 'audio/index.m3u8', a.playlist );
-		if ( audio.wavBytes ) add( audio.source.path, audio.wavBytes );
-		audioMeta = {
-			name: audio.name, language: audio.language, bitrateKbps: 128, sampleRate: 48000, channels: 2, playlist: 'audio/index.m3u8', segments: a.segments.length,
-			maxSegmentBytes: a.maxSegmentBytes, durationS: a.durationSeconds, source: audio.source, delaySamples: audio.delaySamples,
+		const a = track.packaged, dir = i === 0 ? 'audio' : `audio/${ track.language }`;
+		add( `${ dir }/init.mp4`, a.init );
+		for ( const s of a.segments ) add( `${ dir }/${ s.name }`, s.data );
+		add( `${ dir }/index.m3u8`, a.playlist );
+		if ( track.wavBytes ) add( track.source.path, track.wavBytes );
+		return {
+			name: track.name, language: track.language, bitrateKbps: 128, sampleRate: 48000, channels: 2, playlist: `${ dir }/index.m3u8`, segments: a.segments.length,
+			maxSegmentBytes: a.maxSegmentBytes, durationS: a.durationSeconds, source: track.source, delaySamples: track.delaySamples,
 		};
 
-	}
+	} );
 
 	if ( download ) add( download.name, download.bytes );
 	const masterText = withSubtitles( masterPlaylist( rungs.map( ( { rung, packaged } ) => ( {
 		name: rung.name, width: rung.width, height: rung.height, playlist: `${ rung.name }/index.m3u8`,
 		codec: packaged.codec, bandwidth: packaged.bandwidth, averageBandwidth: packaged.averageBandwidth,
-	} ) ), render.fps, audio ? { groupId: 'aud', name: audio.name, language: audio.language, uri: 'audio/index.m3u8', codec: 'mp4a.40.2', bandwidth: audio.packaged.bandwidth, averageBandwidth: audio.packaged.averageBandwidth } : null  ), hlsTracks );
+	} ) ), render.fps, audioMeta.map( ( t, i ) => ( { groupId: 'aud', name: t.name, language: t.language, uri: t.playlist, codec: 'mp4a.40.2', bandwidth: tracks[ i ].packaged.bandwidth, averageBandwidth: tracks[ i ].packaged.averageBandwidth } ) ) ), hlsTracks );
 	add( 'master.m3u8', masterText );
 
 	const renderJson = buildRenderJson( {
-		masterText, scene, render, renditions, captions: captionRecords.length ? captionRecords[ 0 ].path : null, captionTracks: captionRecords, audio: audioMeta, download,
+		masterText, scene, render, renditions, captions: captionRecords.length ? captionRecords[ 0 ].path : null, captionTracks: captionRecords, audio: audioMeta[ 0 ] || null, alternateAudio: audioMeta.slice( 1 ), download,
 		determinism: assessDeterminism( { ...determinism, frameHashes: frameHashes ? { count: frameHashes.count, root: frameHashes.root } : null, endCard } ),
 		frameHashes: frameHashes ? { path: 'frame-hashes.txt', count: frameHashes.count, root: frameHashes.root } : null,
 		endCard: endCard ? { path: 'endcard.png', sha256: endCard.sha256, bytes: endCard.bytes.length, url: endCard.url, stamp: endCard.stamp, width: endCard.width, height: endCard.height } : null,
@@ -136,7 +138,7 @@ export function assemblePublishSet( { path, scene, render, rungs, poster, captio
 	files.unshift( { path: rel( 'render.json' ), bytes: enc.encode( JSON.stringify( renderJson, null, 2 ) + '\n' ) } );
 
 	const total = files.reduce( ( n, f ) => n + f.bytes.length, 0 );
-	const { errors, warnings } = sizeReport( files, total, audioMeta ? [ ...renditions, { name: 'audio', maxSegmentBytes: audioMeta.maxSegmentBytes } ] : renditions, renderJson.render.determinism, download );
+	const { errors, warnings } = sizeReport( files, total, [ ...renditions, ...audioMeta ], renderJson.render.determinism, download );
 	if ( publication && publication.storage === 'renders-repo' ) {
 
 		// the advice about a separate branch or repository is what this publish already does
