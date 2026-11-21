@@ -1631,9 +1631,10 @@ function Viewport( editor ) {
 
 			const stop = document.createElement( 'button' );
 			stop.type = 'button';
-			stop.textContent = 'Stop';
+			stop.textContent = '\u2715';
 			stop.title = 'Stop preview and return to solid shading';
-			stop.style.cssText = 'pointer-events:auto;cursor:pointer;font:inherit;min-height:24px;padding:0 8px;border:0;border-radius:6px;background:#fff;color:#392016;';
+			stop.setAttribute( 'aria-label', stop.title );
+			stop.style.cssText = 'pointer-events:auto;cursor:pointer;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:inherit;font:600 14px/1 sans-serif;';
 			stop.addEventListener( 'click', function () {
 
 				editor.setViewportShading( 'solid' );
