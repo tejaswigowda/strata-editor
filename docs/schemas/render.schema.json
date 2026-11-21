@@ -404,7 +404,7 @@
             "object",
             "null"
           ],
-          "description": "One AAC-LC audio rendition, referenced by every video rung through an HLS audio group.",
+          "description": "The default AAC-LC audio rendition in the HLS audio group shared by the video rungs.",
           "required": [
             "codec",
             "playlist",
@@ -478,6 +478,14 @@
                 }
               }
             }
+          }
+        },
+        "alternate_audio": {
+          "type": "array",
+          "description": "Additional language renditions in the same HLS audio group as the default.",
+          "items": {
+            "type": "object",
+            "$ref": "#/properties/outputs/properties/audio"
           }
         },
         "file": {

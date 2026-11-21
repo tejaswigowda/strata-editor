@@ -145,18 +145,21 @@ export function mediaPlaylist( segments, fps, { initName = 'init.mp4' } = {} ) {
 
 /**
  * The master playlist. `renditions`: [{ name, width, height, playlist, codec, bandwidth, averageBandwidth }], highest first.
- * `audio` (optional): { groupId, name, language, uri, codec, bandwidth, averageBandwidth }: one audio rendition that every rung references,
- * so each rung's CODECS lists the audio codec too (a player reading a video-only string will not even try the audio).
+ * Audio renditions share one group and codec; the first is the default.
  */
 export function masterPlaylist( renditions, fps, audio = null ) {
 
+	const tracks = Array.isArray( audio ) ? audio : audio ? [ audio ] : [];
+	const primary = tracks[ 0 ];
+	const peakAudio = Math.max( 0, ...tracks.map( t => t.bandwidth ) );
+	const meanAudio = Math.max( 0, ...tracks.map( t => t.averageBandwidth ) );
 	const lines = [ '#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS' ];
-	if ( audio ) lines.push( `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="${ audio.groupId }",NAME="${ audio.name }",DEFAULT=YES,AUTOSELECT=YES,LANGUAGE="${ audio.language }",URI="${ audio.uri }"` );
+	for ( const [ i, t ] of tracks.entries() ) lines.push( `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="${ t.groupId }",NAME="${ t.name }",DEFAULT=${ i === 0 ? 'YES' : 'NO' },AUTOSELECT=YES,LANGUAGE="${ t.language }",URI="${ t.uri }"` );
 	for ( const r of renditions ) {
 
-		const codecs = audio ? `${ r.codec },${ audio.codec }` : r.codec;
-		const tail = audio ? `,AUDIO="${ audio.groupId }"` : '';
-		lines.push( `#EXT-X-STREAM-INF:BANDWIDTH=${ r.bandwidth + ( audio ? audio.bandwidth : 0 ) },AVERAGE-BANDWIDTH=${ r.averageBandwidth + ( audio ? audio.averageBandwidth : 0 ) },RESOLUTION=${ r.width }x${ r.height },FRAME-RATE=${ fps.toFixed( 3 ) },CODECS="${ codecs }"${ tail }`, r.playlist );
+		const codecs = primary ? `${ r.codec },${ primary.codec }` : r.codec;
+		const tail = primary ? `,AUDIO="${ primary.groupId }"` : '';
+		lines.push( `#EXT-X-STREAM-INF:BANDWIDTH=${ r.bandwidth + peakAudio },AVERAGE-BANDWIDTH=${ r.averageBandwidth + meanAudio },RESOLUTION=${ r.width }x${ r.height },FRAME-RATE=${ fps.toFixed( 3 ) },CODECS="${ codecs }"${ tail }`, r.playlist );
 
 	}
 	lines.push( '' );

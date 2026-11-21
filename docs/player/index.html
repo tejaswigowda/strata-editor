@@ -20,6 +20,7 @@
 	button:disabled { opacity: .6; cursor: default; }
 	.stage { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; max-height: calc(100vh - 80px); max-height: calc(var(--app-h, 100dvh) - 80px); }   /* never taller than what can be seen, so its own controls are on screen */
 	video { width: 100%; height: 100%; display: block; background: #000; object-fit: contain; }
+	.audio-choice { position: absolute; top: 8px; right: 8px; z-index: 3; padding: 4px 6px; border-radius: 6px; background: rgba(0, 0, 0, .8); opacity: 1; }
 	.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 4px; }
 	h1 { font-size: 18px; margin: 0; font-weight: 600; flex: 1; min-width: 160px; }
 	label { font-size: 12px; opacity: .85; display: flex; align-items: center; gap: 6px; }
@@ -84,7 +85,7 @@
 		<input type="text" id="address" placeholder="https://strataeditor.dev/video/name/v1/" aria-label="Address of a published render" spellcheck="false" autocomplete="off">
 		<button type="submit">Play</button>
 	</form>
-	<div class="stage"><video id="video" controls playsinline crossorigin="anonymous" preload="metadata"></video><button type="button" class="bigplay" id="bigPlay" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button></div>
+	<div class="stage"><video id="video" controls playsinline crossorigin="anonymous" preload="metadata"></video><button type="button" class="bigplay" id="bigPlay" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button><label class="audio-choice" id="audioLabel" hidden>Audio <select id="audio"></select></label></div>
 	<div class="bar">
 		<h1 id="title">Paste the address of a published render</h1>
 		<label id="qualityLabel" hidden>Quality <select id="quality"></select></label>
