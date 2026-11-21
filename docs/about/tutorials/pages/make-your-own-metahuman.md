@@ -10,6 +10,8 @@ image: asset:images/thumbs/make-your-own-metahuman.jpg
 
 # Make your own MetaHuman
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">A <a href="https://www.unrealengine.com/metahuman" rel="noopener noreferrer">MetaHuman</a> is a photoreal rigged character — and <a href="https://github.com/creategamecharacters/metahuman-to-glb" rel="noopener noreferrer">metahuman-to-glb</a> is an open-source (MIT) pipeline that exports one from Unreal Engine 5.7 as a single web-ready <code>.glb</code> with all 51 ARKit face blendshapes. This tutorial loads one of its sample characters, Bruce, straight from the project&#39;s GitHub Pages URL, then makes him yours: no hair, a new skin tone and outfit, a smile posed from the blendshapes, selector-friendly classes on every part, and a still image from the Render tab. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/make-your-own-metahuman.png" alt="A bald man with a slight smile in a glossy blue jacket, shown from the chest up against a grey background.">&#10;		<figcaption>The result of this tutorial, captured with the Render tab&#39;s Take Snapshot — Bruce, bald, in a blue leather jacket, smiling.</figcaption>&#10;	</figure>

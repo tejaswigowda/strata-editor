@@ -10,6 +10,8 @@ image: asset:images/thumbs/molecule-shapes.jpg
 
 # Why molecules are shaped differently: electron-pair repulsion
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <div class="wc-embed allow-popups" title="Why molecules are shaped differently: electron-pair repulsion: interactive example"><a href="https://strataeditor.dev/#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&amp;file=molecule-shapes.json&amp;present=true">Open embed</a></div>
 
 <p class="tagline">A 93-second film that builds methane, ammonia and water from coloured spheres and bonds and asks why three molecules that all look like &quot;a central atom with hydrogens&quot; have three different shapes. The answer is one idea: the electron pairs around the central atom repel one another and spread out in space, and a lone pair, which has no atom on it, still takes up room. The film shows the flat drawing, lets the bonds swing out into three dimensions, orbits each molecule, and compares the three angles side by side. Built with the JS Shell.</p>

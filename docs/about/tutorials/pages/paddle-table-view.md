@@ -10,6 +10,8 @@ image: asset:images/thumbs/paddle-table-view.jpg
 
 # Build a table-view paddle game scene
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">A classic arcade paddle game is a flat vertical screen — both paddles the same distance from the camera, separated left/right. This tutorial builds the other kind: a physical table you stand at one end of, your own paddle close in the foreground and the opponent&#39;s paddle small in the distance — then swaps the generic arcade backdrop for a sunset desert without touching the table itself. The whole thing is one <code>Group</code> per section, assembled with plain <code>.add()</code> calls and added in a single undo step. Open the <a href="https://strataeditor.dev/">editor</a>, open the <strong>Shell</strong> tab, and paste each block in order.</p>
 
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/paddle-table-view.png" alt="A paddle game scene viewed from behind the player&#39;s blue paddle, looking down a green table toward a small red paddle at the far end, framed by a backdrop and two pillars.">&#10;		<figcaption>Standing at your own end of the table — the blue Player Paddle fills the foreground, the red Computer Paddle is small at the far end.</figcaption>&#10;	</figure>

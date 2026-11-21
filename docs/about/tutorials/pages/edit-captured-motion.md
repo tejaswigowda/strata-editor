@@ -10,6 +10,8 @@ image: asset:images/thumbs/edit-captured-motion.jpg
 
 # Editing captured motion as data
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">A two-performer capture runs <strong>170.17 s</strong> and has a <strong>53-second dead middle</strong>. Cut it to <strong>52.9 s</strong> with a few hundred bytes of edit list — the capture itself is never modified.</p>
 
 <div class="note"><strong>The idea.</strong> Motion is data you can edit. A cut is not a re-bake: it is an <em>edit list</em> — a handful of spans over the captured clip — stored on the timeline next to everything else. Clear the list and the full capture plays again, byte for byte. A generated video clip cannot do this; a captured, rigged performance can.</div>

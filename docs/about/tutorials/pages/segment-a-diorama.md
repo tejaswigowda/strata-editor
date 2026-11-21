@@ -10,6 +10,8 @@ image: asset:images/thumbs/segment-a-diorama.jpg
 
 # Name every part of a street-corner diorama
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">A furnished room was one mesh with 538 islands and 14 things worth naming. This model is the opposite problem: <strong>71 meshes, 141,802 triangles</strong>, and the one mesh that holds the city block has <strong>3,297 islands in 2,841 components</strong>. Naming an anchor for each is out of the question. What works is to <strong>look at the model, write down the regions you can see, and let each component go to the region that holds it</strong>, once per material. Every one of the 186 pieces that come out has a name, a class, and a place in the record. Built with the JS Shell.</p>
 
 <div class="note"><strong>Who named this.</strong> Every region, part name and class on this page is agent output: an AI agent, working from SEG&#39;s reports and the rendered views below, wrote the 22 region names, the 124 part names they produce, and the 62 names in step 10 — not a human. A human gave the instruction (&quot;segment and label every part&quot;) and ran the pasted commands; a human did not choose a single name. This is a standing fact about every tutorial on this site built with the JS Shell, stated here because this is the largest one.</div>

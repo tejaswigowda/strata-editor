@@ -10,6 +10,8 @@ image: asset:images/thumbs/segment-a-scene.jpg
 
 # Cut a scene into named parts
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <p class="tagline">An avocado has three texture islands and each one is a part. A furnished room is one mesh with 538 islands, most of them a few triangles of trim or the label on a prop, and no island is &quot;the bed&quot;. <code>SEG</code> handles the part of the job that needs no judgment: it joins the islands that touch into <strong>components</strong>, measures them in the <strong>world frame</strong>, places everything you did not name on the nearest thing you did, and checks the result. What is left for you, or for a model, is the one step that never reduced to a rule: <strong>naming the anchors</strong>. Built with the JS Shell.</p>
 
 <div class="note"><strong>Who named this.</strong> The anchor names on this page (<code>Dark_Console_Unit</code> and the rest) are agent output, not a human&#39;s: an AI agent read the component report and chose them. A human gave the instruction and ran the pasted commands, not the names. See <a href="https://strataeditor.dev/about/tutorials/segment-a-diorama.html">Name every part of a street-corner diorama</a> for the case where a short list of anchors is not possible at all.</div>

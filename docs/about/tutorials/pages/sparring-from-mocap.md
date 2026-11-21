@@ -10,6 +10,8 @@ image: asset:images/thumbs/sparring-from-mocap.jpg
 
 # A sparring match from a two-person motion capture
 
+[All tutorials](https://strataeditor.dev/about/tutorials/)
+
 <figure>&#10;		<img src="https://strataeditor.dev/about/tutorials/screenshots/dojo-sparring.png" alt="Two fighters sparring on a tatami mat inside an open bamboo hut">&#10;		<figcaption>The starting scene, <a href="https://strataeditor.dev/#repo=tejaswigowda/test1&amp;file=sparring.json&amp;branch=main"><code>sparring.json</code></a>, seen through <code>cam-wide</code> at 12 s.</figcaption>&#10;	</figure>
 
 <p class="tagline">Two people sparred for <strong>170 seconds</strong> in front of an optical motion-capture system. Here you turn that take into a <strong>53-second match</strong>: register the pair, cut it as data, check every frame for collisions, move the camera shots onto the new timeline, and give both fighters somewhere to look.</p>
