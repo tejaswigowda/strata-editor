@@ -25,7 +25,7 @@ The short cut also has a 720p compatibility version for VS Code’s Integrated B
 
 <h3 id="short-bilingual-cut">Explore the 1:10.5 bilingual cut in Strata</h3>
 
-[Open the shortened Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=5299b449f63df8e902fd0694ef24954239334538&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export.
+[Open the final Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=ef8f4a5705d49d9bba076f179bf1a94664f6c0db&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export.
 
 To shorten the cut without speeding up the voices, use the longer of the English and Spanish recordings to set each shared cue window, then retime the camera moves, character walks, and tree reveals to match. Each language has **12 cues, with no overlaps or overruns**; the tightest cue has **0.34 seconds** to spare. Both subtitle tracks use the same cue boundaries, and the last cue ends at **0:58.5**, as the walkway camera begins its move up to the rooftop call card.
 
@@ -111,7 +111,7 @@ The imported meshes initially repeated unreferenced vertices across material gro
 
 Open **Render → Subtitles** and import timed SRT cues. The bilingual format uses English first and Spanish second. The three historical samples are **137.3 °F, 120.4 °F, and 124.7 °F** in English and **58,5 °C, 49,1 °C, and 51,5 °C** in Spanish. Close by explaining that the proposed trees provide shade, not a measured temperature drop.
 
-After the final cue, keep the same walkway camera and crane up to a tight, directly overhead view. Lay Strata’s transparent call card flat on the roof like painted lettering, without a dark backing. Hold the top-down shot from **1:04.5** through the authored end at **1:08.5**. The two-second render tail brings the export to **1:10.5**. The editor loads the call card live; the offline render bakes it into the film.
+After the final cue, keep the same walkway camera and rise to a site-wide overhead view. Hold from **1:01.25 to 1:03.25** to show the illustrative green ground overlay and the tree shadows. Then move down to the roof, where the transparent call card reads like black lettering painted on the surface. Hold the close-up from **1:05.5** through the authored end at **1:08.5**. The two-second render tail brings the export to **1:10.5**. The editor loads the call card live; the offline render bakes it into the film.
 
 In **Render → Video**, leave **Skip First** at **None**. The short export uses **1080p at 30 fps (2,115 frames)**. Make one WAV and one SRT per language using the shared short-cut cue windows. Check that each spoken line fits its cue, then upload the English WAV and the Spanish WAV under **Narration audio**, with `es` as the alternate language. Add each SRT separately in the publish panel. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
 
