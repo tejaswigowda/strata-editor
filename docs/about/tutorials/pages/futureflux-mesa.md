@@ -15,17 +15,11 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 <h3 id="watch-the-extended-cut">Watch in English or Español</h3>
 
-<<<<<<< HEAD
-This pinned film and scene predate the solar analysis below. Their lighting, narration about pavement shade, and green overlay are illustrative, not analysis results.
-
-<div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@a39dd46a938551486bfd3b8193ce197d717b22f5/futureflux-mesa-extended/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
-=======
-**One film, two narration tracks.** In the player below, use **Audio** in the upper-right corner to switch between **English** and **Español**. Use the video’s **subtitles** control to choose either language or turn subtitles off. You can listen in Spanish while reading English, or the other way around.
->>>>>>> a0f4026ded68b6f56f84206e354a9e7aea6132b1
+**One film, two narration tracks on the same timeline.** Each English line and its Spanish counterpart use the same cue window, not one after the other. Use **Audio** in the upper-right corner to choose **English** or **Español**; only the selected track plays. Use the **subtitles** control to choose either language independently or turn subtitles off.
 
 <div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2f59f7f40d5e42977a842e13421157faa3f1a9d0/flux/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
 
-2:01.5, 1080p at 30 fps. The narration uses synthetic voices, and its qualitative shade descriptions are not measured cooling results. [Download the earlier combined-narration MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the source SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
+2:01.5, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling. [Download the earlier MP4 with consecutive English and Spanish narration](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the source SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
 
 ### Explore the interactive scene
 
