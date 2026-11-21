@@ -37,6 +37,6 @@
     }
   ],
   "customize": {
-    "css": "@media (min-width: 1100px) {\n  html:has(.strata-tutorial-bubble-shooter-scene) main {\n    box-sizing: border-box;\n    width: min(100%, 1160px);\n    max-width: 1160px;\n    padding-right: 320px;\n  }\n  main:has(.strata-tutorial-bubble-shooter-scene) .credits {\n    position: fixed;\n    top: 8vh;\n    right: max(24px, calc((100vw - 1160px) / 2 + 24px));\n    box-sizing: border-box;\n    width: 260px;\n    max-height: 84vh;\n    overflow-y: auto;\n    margin: 0;\n    padding: 1.2rem;\n    border: 1px solid rgba(127, 127, 127, .35);\n    border-radius: 8px;\n    background: rgba(127, 127, 127, .08);\n  }\n}"
+    "css": "@media (min-width: 1100px) { html:has(.credits) main { box-sizing: border-box; width: min(100%, 1160px); max-width: 1160px; padding-right: 320px; } main:has(.credits) .credits { position: fixed; top: 8vh; right: max(24px, calc((100vw - 1160px) / 2 + 24px)); box-sizing: border-box; width: 260px; max-height: 84vh; overflow-y: auto; margin: 0; padding: 1.2rem; border: 1px solid rgba(127, 127, 127, .35); border-radius: 8px; background: rgba(127, 127, 127, .08); } }"
   }
 }
