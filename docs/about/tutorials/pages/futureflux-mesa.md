@@ -7,17 +7,19 @@ description: "Build a Mesa heat tour in Strata: compare Landsat samples, stage t
 
 <div class="strata-tutorial-gis-walkway-shade"></div>
 <h1>FutureFlux: From a Mesa heat map to a tree-shade proposal</h1>
-<p class="tagline">Build a two-minute heat tour in Strata, from mapped geometry and Landsat observations to a proposed tree planting, animated walkers, and bilingual subtitles.</p>
+<p class="tagline">Build a two-minute heat tour in Strata, from Landsat observations to a tree-shade proposal with animated walkers and independently selectable English and Spanish narration and subtitles.</p>
 
 [All tutorials](https://strataeditor.dev/about/tutorials/) · [Build the base GIS scene by hand](https://strataeditor.dev/about/tutorials/gis-walkway-shade.html)
 
 Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigenerational Center in Mesa, Arizona. Start with mapped geometry, keep satellite observations separate from the design, and check each step before moving on. Dub is optional if you export without narration.
 
-### Watch the extended cut
+<h3 id="watch-the-extended-cut">Watch in English or Español</h3>
+
+**One film, two narration tracks.** In the player below, use **Audio** in the upper-right corner to switch between **English** and **Español**. Use the video’s **subtitles** control to choose either language or turn subtitles off. You can listen in Spanish while reading English, or the other way around.
 
 <div class="wc-embed" title="FutureFlux Mesa extended cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@2f59f7f40d5e42977a842e13421157faa3f1a9d0/flux/" rel="noopener noreferrer">Open the extended cut in Strata’s video player</a></div>
 
-2:01.5, 1080p at 30 fps. Choose **English** or **Español** in the Strata player’s **Audio** menu. Choose subtitles separately. The narration uses synthetic voices, and its qualitative shade descriptions are not measured cooling results. [Download the earlier combined-narration MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the source SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
+2:01.5, 1080p at 30 fps. The narration uses synthetic voices, and its qualitative shade descriptions are not measured cooling results. [Download the earlier combined-narration MP4](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa-extended.mp4) · [Download the source SRT](https://github.com/tejaswigowda/renders/releases/download/futureflux-mesa-extended-v1/futureflux-mesa.narration-retimed.en-es.srt).
 
 ### Explore the interactive scene
 
