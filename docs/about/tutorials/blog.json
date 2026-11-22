@@ -21,8 +21,14 @@
     "base": "https://raw.githubusercontent.com/{owner}/{repo}/{sha}/{path}",
     "repos": {
       "images": "tejaswigowda/strata-editor/docs/about/tutorials/screenshots",
-      "site": "tejaswigowda/strata-editor/docs"
+      "site": "tejaswigowda/strata-editor/docs",
+      "renders": "tejaswigowda/renders"
     }
+  },
+  "video": {
+    "player": "https://strataeditor.dev/player/",
+    "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{tag}/{slug}/",
+    "repos": { "videos": "tejaswigowda/renders" }
   },
   "favicon": "asset:site/favicon.svg",
   "cover": "asset:site/demo.png",
