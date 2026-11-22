@@ -17,17 +17,21 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 **One film, two narration tracks on the same timeline.** Each English line and its Spanish counterpart use the same cue window, not one after the other. Use **Audio** in the upper-right corner to choose **English** or **Español**; only the selected track plays. Use the **subtitles** control to choose either language independently or turn subtitles off.
 
-<div class="wc-embed" title="FutureFlux Mesa short bilingual cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@c8021bb34b5b1eb085d4e0684602a863dcf48ae7/flux/" rel="noopener noreferrer">Open the short cut in Strata’s video player</a></div>
+Both narrations were generated locally in [Dub WebCLI](https://dub.webcli.app/) using **Best · fp32**, the largest available Kokoro model file (326 MB): **Heart** for English and **Dora** for Spanish. Spanish uses Spanish phonemization, not an English voice reading Spanish text. WebGPU accelerates synthesis; these floating-point outputs are not claimed byte-identical across devices.
+
+<div class="wc-embed" title="FutureFlux Mesa short bilingual cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@eaa483aad25078a9bfa56b892d371103e030f256/flux/" rel="noopener noreferrer">Open the short cut in Strata’s video player</a></div>
 
 The short cut also has a 720p compatibility version for VS Code’s Integrated Browser, with the same audio and subtitle choices.
+
+[English timing report](https://cdn.jsdelivr.net/gh/tejaswigowda/renders@eaa483aad25078a9bfa56b892d371103e030f256/flux/narration/en.report.json) · [Spanish timing report](https://cdn.jsdelivr.net/gh/tejaswigowda/renders@eaa483aad25078a9bfa56b892d371103e030f256/flux/narration/es.report.json). Each report records the model revision, voice, audio hash, and measured cue durations.
 
 **1:10.5**, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling.
 
 <h3 id="short-bilingual-cut">Explore the 1:10.5 bilingual cut in Strata</h3>
 
-[Open the final Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=ef8f4a5705d49d9bba076f179bf1a94664f6c0db&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export.
+[Open the final Strata project](https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=6050967ede2e450fca3ffe32035531bcf73da605&play=false). The editable timeline runs **1:08.5**, plus a two-second hold on export.
 
-To shorten the cut without speeding up the voices, use the longer of the English and Spanish recordings to set each shared cue window, then retime the camera moves, character walks, and tree reveals to match. Each language has **12 cues, with no overlaps or overruns**; the tightest cue has **0.34 seconds** to spare. Both subtitle tracks use the same cue boundaries, and the last cue ends at **0:58.5**, just as the camera begins to rise.
+To shorten the cut without speeding up the voices, use the longer of the English and Spanish recordings to set each shared cue window, then retime the camera moves, character walks, and tree reveals to match. Each fp32 narration has **12 cues, with no overlaps or overruns**; the tightest cue has **0.225 seconds** to spare. Both subtitle tracks use the same cue boundaries, and the last cue ends at **0:58.5**, just as the camera begins to rise.
 
 ### Explore the interactive scene
 
@@ -109,11 +113,11 @@ The imported meshes initially repeated unreferenced vertices across material gro
 
 ## 8. Add bilingual subtitles, the call card, and export
 
-Open **Render → Subtitles** and import timed SRT cues. The bilingual format uses English first and Spanish second. The three historical samples are **137.3 °F, 120.4 °F, and 124.7 °F** in English and **58,5 °C, 49,1 °C, and 51,5 °C** in Spanish. Close by explaining that the proposed trees provide shade, not a measured temperature drop.
+Open **Render → Subtitles** and import timed SRT cues. Keep English and Spanish in separate SRT files with shared cue windows, not consecutive narration. The three historical samples are **137.3 °F, 120.4 °F, and 124.7 °F** in English and **58,5 °C, 49,1 °C, and 51,5 °C** in Spanish. Close by explaining that the proposed trees provide shade, not a measured temperature drop.
 
 After the final cue, keep the same walkway camera and rise to a site-wide overhead view. Hold from **1:01.25 to 1:03.25** to show the illustrative green ground overlay and the tree shadows. Then move down to the roof, where the transparent call card reads like black lettering painted on the surface. Hold the close-up from **1:05.5** through the authored end at **1:08.5**. The two-second render tail brings the export to **1:10.5**. The editor loads the call card live; the offline render bakes it into the film.
 
-In **Render → Video**, leave **Skip First** at **None**. The short export uses **1080p at 30 fps (2,115 frames)**. Make one WAV and one SRT per language using the shared short-cut cue windows. Check that each spoken line fits its cue, then upload the English WAV and the Spanish WAV under **Narration audio**, with `es` as the alternate language. Add each SRT separately in the publish panel. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
+In **Render → Video**, leave **Skip First** at **None**. The short export uses **1080p at 30 fps (2,115 frames)**. In Dub, load each language's SRT separately, select **Best · fp32** and **WebGPU**, and choose **Heart** (`af_heart`) or **Dora** (`ef_dora`). Download each WAV and timing report. Require zero collisions **and** zero overruns; a changed voice can outgrow a previously valid window. Then upload the English WAV and the Spanish WAV under **Narration audio**, with `es` as the alternate language. Add each SRT separately in the publish panel. Leave the rooftop shot free of cues so viewers have time to scan the QR code.
 
 **Human check:** Save and reopen a copy. Confirm the three camera beats, embedded textures, tree stages, and caption units. Read the map legend and credits at output size before exporting.
 
