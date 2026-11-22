@@ -19,11 +19,11 @@ Build a three-site heat tour and a tree-shade proposal for Red Mountain Multigen
 
 Both narrations were generated locally in [Dub WebCLI](https://dub.webcli.app/) using **Best · fp32**, the largest available Kokoro model file (326 MB): **Heart** for English and **Dora** for Spanish. Spanish uses Spanish phonemization, not an English voice reading Spanish text. WebGPU accelerates synthesis; these floating-point outputs are not claimed byte-identical across devices.
 
-<div class="wc-embed" title="FutureFlux Mesa short bilingual cut"><a href="https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/tejaswigowda/renders@eaa483aad25078a9bfa56b892d371103e030f256/flux/" rel="noopener noreferrer">Open the short cut in Strata’s video player</a></div>
+<div class="wc-embed" title="FutureFlux Mesa short bilingual cut"><a href="https://strataeditor.dev/player/#https://raw.githubusercontent.com/tejaswigowda/renders/eaa483aad25078a9bfa56b892d371103e030f256/flux/" rel="noopener noreferrer">Open the short cut in Strata’s video player</a></div>
 
 The short cut also has a 720p compatibility version for VS Code’s Integrated Browser, with the same audio and subtitle choices.
 
-[English timing report](https://cdn.jsdelivr.net/gh/tejaswigowda/renders@eaa483aad25078a9bfa56b892d371103e030f256/flux/narration/en.report.json) · [Spanish timing report](https://cdn.jsdelivr.net/gh/tejaswigowda/renders@eaa483aad25078a9bfa56b892d371103e030f256/flux/narration/es.report.json). Each report records the model revision, voice, audio hash, and measured cue durations.
+[English timing report](https://raw.githubusercontent.com/tejaswigowda/renders/eaa483aad25078a9bfa56b892d371103e030f256/flux/narration/en.report.json) · [Spanish timing report](https://raw.githubusercontent.com/tejaswigowda/renders/eaa483aad25078a9bfa56b892d371103e030f256/flux/narration/es.report.json). Each report records the model revision, voice, audio hash, and measured cue durations.
 
 **1:10.5**, 1080p at 30 fps. The synthetic narration and green overlay illustrate the proposal; they do not report the geometric shade analysis below or measured cooling.
 
