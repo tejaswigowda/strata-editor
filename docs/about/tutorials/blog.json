@@ -32,12 +32,11 @@
       "integrity": "sha384-5O8XaBxPv1co/+NcaeuovF6z71g68SUWbwDP2+n/7rn2XgwsDlfIoGBPugLvMuqr"
     },
     {
-      "src": "https://cdn.jsdelivr.net/gh/tejaswigowda/strata-editor@c7d219444c2fcdad0048c894dbcd5aecae97397a/docs/about/tutorials/tutorial-enhancements.js",
-      "integrity": "sha384-y1sh6hzXHZjzXM5Q2CYB8PNjm3NYzLLJ8hIAdWxgd1mZgsEU1VFdrcL3474EhSs8"
+      "src": "https://cdn.jsdelivr.net/gh/tejaswigowda/strata-editor@9f4ff1ac497c6513e42e6ba956cbc2f686ee13be/docs/about/tutorials/tutorial-enhancements.js",
+      "integrity": "sha384-Lxj/vbM3Pr2cYQvGrVV1AMg5/hGkZ366+sLyHTADAXPUQhX7u/6uVXlIpwuxlMF9"
     }
   ],
   "customize": {
-    "pageHeading": "Strata",
     "css": "@media (min-width: 1100px) { html:has(.credits) main { box-sizing: border-box; width: min(100%, 1160px); max-width: 1160px; padding-right: 320px; } main:has(.credits) .credits { position: fixed; top: 8vh; right: max(24px, calc((100vw - 1160px) / 2 + 24px)); box-sizing: border-box; width: 260px; max-height: 84vh; overflow-y: auto; margin: 0; padding: 1.2rem; border: 1px solid rgba(127, 127, 127, .35); border-radius: 8px; background: rgba(127, 127, 127, .08); } } .wc-embed > a { display: none; }"
   }
 }
