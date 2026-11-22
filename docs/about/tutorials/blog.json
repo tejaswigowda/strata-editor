@@ -28,7 +28,9 @@
   "video": {
     "player": "https://strataeditor.dev/player/",
     "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{tag}/{slug}/",
-    "repos": { "videos": "tejaswigowda/renders" }
+    "repos": {
+      "videos": "tejaswigowda/renders"
+    }
   },
   "favicon": "asset:site/favicon.svg",
   "cover": "asset:site/demo.png",
@@ -38,8 +40,8 @@
       "integrity": "sha384-5O8XaBxPv1co/+NcaeuovF6z71g68SUWbwDP2+n/7rn2XgwsDlfIoGBPugLvMuqr"
     },
     {
-      "src": "https://cdn.jsdelivr.net/gh/tejaswigowda/strata-editor@9f4ff1ac497c6513e42e6ba956cbc2f686ee13be/docs/about/tutorials/tutorial-enhancements.js",
-      "integrity": "sha384-Lxj/vbM3Pr2cYQvGrVV1AMg5/hGkZ366+sLyHTADAXPUQhX7u/6uVXlIpwuxlMF9"
+      "src": "https://cdn.jsdelivr.net/gh/tejaswigowda/strata-editor@4704c24d317f9ca6843b5763e316ae476615427f/docs/about/tutorials/tutorial-enhancements.js",
+      "integrity": "sha384-qZDOF74L/Vx7qlaZ58CInbejWGv+46H/YhHHNpgmBbEVXH46X1GnnlE64lNRjKzz"
     }
   ],
   "customize": {
